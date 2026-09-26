@@ -743,11 +743,11 @@ export default function PedagogicalAdvisorDashboard() {
         method: "PATCH", headers: authHeaders(), body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error((await r.json()).error || "Erreur");
-      toast.success(isEnLigne ? `${p.prospect_nom} transmis à l'Onboarding.` : `${p.prospect_nom} renvoyé à l'assistante pour finalisation.`);
+      toast.success(isEnLigne ? `${p.prospect_nom} transmis à l'Onboarding.` : `${p.prospect_nom} transmis à l'assistante pour finalisation.`);
       setProspectModal(prev => prev?.id === p.id ? { ...prev, routing_statut: body.routing_statut } : prev);
       setProspects(prev => prev.map(x => x.id === p.id ? { ...x, routing_statut: body.routing_statut } : x));
       fetchProspects();
-    } catch (e) { toast.error(e.message || "Erreur lors du routage"); }
+    } catch (e) { toast.error(e.message || "Erreur lors de la transmission"); }
     finally { setValidationLoading(false); setConfirmRouterTarget(null); }
   };
 
@@ -2914,12 +2914,12 @@ export default function PedagogicalAdvisorDashboard() {
                                 </div>
                               ) : p.type_coaching === "prive" && p.dossier_statut === "paiement_recu" && p.routing_statut ? (
                                 <span style={{ fontSize:10.5, fontWeight:700, padding:"4px 10px", borderRadius:99, background:"#f0fdf4", color:"#15803d", whiteSpace:"nowrap" }}>
-                                  ✅ Déjà routé{p.type_cours === "en_ligne" ? " → Onboarding" : " → Assistante"}
+                                  ✅ Transmis{p.type_cours === "en_ligne" ? " à l'Onboarding" : " à l'assistante"}
                                 </span>
                               ) : p.type_coaching === "prive" && p.dossier_statut === "paiement_recu" ? (
                                 <button onClick={e => { e.stopPropagation(); setConfirmRouterTarget(p); }} disabled={validationLoading || !peut("inscriptions","update")}
                                   style={{ padding:"6px 12px", borderRadius:8, border:"none", background:PA_COLOR, color:"#fff", fontWeight:700, fontSize:11, cursor: validationLoading?"wait":"pointer", whiteSpace:"nowrap" }}>
-                                  {p.type_cours === "en_ligne" ? "📥 Router → Onboarding" : "🏢 Router → Assistante"}
+                                  {p.type_cours === "en_ligne" ? "📥 Transmettre à l'Onboarding" : "🏢 Transmettre à l'assistante"}
                                 </button>
                               ) : (
                                 <span style={{ color:PA_COLOR, fontWeight:700, fontSize:12 }}>Voir →</span>
@@ -3010,17 +3010,17 @@ export default function PedagogicalAdvisorDashboard() {
               onClick={e => { if (e.target === e.currentTarget) setConfirmRouterTarget(null); }}>
               <div style={{ background:"#fff", borderRadius:14, padding:22, width:"100%", maxWidth:440 }}>
                 <div style={{ fontWeight:800, fontSize:15, color:"#0f172a", marginBottom:4 }}>
-                  {confirmRouterTarget.type_cours === "en_ligne" ? "📥 Router vers l'Onboarding" : "🏢 Router vers l'assistante"}
+                  {confirmRouterTarget.type_cours === "en_ligne" ? "📥 Transmettre à l'Onboarding" : "🏢 Transmettre à l'assistante"}
                 </div>
                 <div style={{ fontSize:12.5, color:"#64748b", marginBottom:18 }}>
-                  Confirmer le routage du dossier de <strong>{confirmRouterTarget.prospect_nom}</strong> {confirmRouterTarget.type_cours === "en_ligne" ? "vers l'Onboarding" : "vers son assistante"} pour finalisation (classe & coach) ?
+                  Confirmer la transmission du dossier de <strong>{confirmRouterTarget.prospect_nom}</strong> {confirmRouterTarget.type_cours === "en_ligne" ? "à l'Onboarding" : "à son assistante"} pour finalisation (classe & coach) ?
                 </div>
                 <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
                   <button onClick={() => setConfirmRouterTarget(null)} disabled={validationLoading}
                     style={{ padding:"8px 16px", borderRadius:8, border:"1.5px solid #e2e8f0", background:"#fff", color:"#64748b", fontWeight:700, fontSize:12.5, cursor:"pointer" }}>Annuler</button>
                   <button onClick={() => routerDossierPrive(confirmRouterTarget)} disabled={validationLoading}
                     style={{ padding:"8px 16px", borderRadius:8, border:"none", background:PA_COLOR, color:"#fff", fontWeight:700, fontSize:12.5, cursor: validationLoading?"wait":"pointer" }}>
-                    {validationLoading ? "⏳ Envoi…" : "Confirmer le routage"}
+                    {validationLoading ? "⏳ Envoi…" : "Confirmer la transmission"}
                   </button>
                 </div>
               </div>
@@ -10518,12 +10518,12 @@ export default function PedagogicalAdvisorDashboard() {
                         {p.dossier_statut === "paiement_recu" && (
                           p.routing_statut ? (
                             <span style={{ fontSize:12, fontWeight:700, padding:"6px 14px", borderRadius:8, background:"#f0fdf4", color:"#15803d", whiteSpace:"nowrap" }}>
-                              ✅ Déjà routé{p.type_cours === "en_ligne" ? " → Onboarding" : " → Assistante"}
+                              ✅ Transmis{p.type_cours === "en_ligne" ? " à l'Onboarding" : " à l'assistante"}
                             </span>
                           ) : (
                             <button onClick={() => setConfirmRouterTarget(p)} disabled={validationLoading}
                               style={{ padding:"7px 14px", borderRadius:8, border:"none", background:PA_COLOR, color:"#fff", fontWeight:700, fontSize:12, cursor: validationLoading?"wait":"pointer", whiteSpace:"nowrap" }}>
-                              {p.type_cours === "en_ligne" ? "📥 Router → Onboarding" : "🏢 Router → Assistante"}
+                              {p.type_cours === "en_ligne" ? "📥 Transmettre à l'Onboarding" : "🏢 Transmettre à l'assistante"}
                             </button>
                           )
                         )}
