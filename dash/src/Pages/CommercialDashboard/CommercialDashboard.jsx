@@ -15756,14 +15756,15 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                 onChange={e => setCpForm(p => ({ ...p, date_debut: e.target.value }))} />
             </div>
 
-            {/* Notes pour le PA */}
-            <div>
-              <label style={{ ...labelSt, color:"#6d28d9" }}>Notes pour le PA Advisor</label>
-              <textarea style={{ ...inputSt, height:55, resize:"vertical", border:"1.5px solid #c4b5fd" }}
-                placeholder="Objectifs, contraintes particulières, préférences du prospect..."
-                value={cpForm.notes_pa}
-                onChange={e => setCpForm(p => ({ ...p, notes_pa: e.target.value }))} />
-            </div>
+            {/* CHAMP « Notes pour le PA Advisor » RETIRÉ.
+                Il demandait « objectifs, contraintes, préférences du prospect » - c'est-à-dire
+                exactement ce que le champ « Objectif du client » recueille plus bas, de façon
+                explicite et affichée jusque chez le coach. Deux cases pour la même information
+                en laissent toujours une vide, et le PA ne sait plus laquelle lire.
+
+                `cpForm.notes_pa` reste dans l'état du formulaire et continue d'alimenter
+                `notes` à l'enregistrement : vidé de saisie, il vaut "" et part donc à null.
+                Le supprimer demanderait de toucher au corps de la requête pour rien. */}
 
             {/* Tarif recap */}
             {cpForm.type_coaching && (() => {
@@ -17311,10 +17312,17 @@ const TestForm = ({ initialData, onSave, onCancel }) => {
         </div>
       )}
 
+      {/* CE CHAMP NE SERT PLUS QU'À LA CORRECTION.
+          En saisie manuelle d'un test, « Notes / Observations » restait vide : le niveau CECRL
+          et le score disent déjà ce qu'il y a à dire, et l'objectif du prospect se saisit à
+          l'inscription. En correction en revanche, le correcteur a de vraies observations à
+          consigner sur la copie - c'est le même champ, mais pas le même usage. */}
+      {isCorrection && (
       <div style={{ marginBottom:12 }}>
-        <label style={labelSt}>{isCorrection ? "Observations de correction" : "Notes / Observations"}</label>
+        <label style={labelSt}>Observations de correction</label>
         <textarea style={{ ...inputSt, height:70 }} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Ex : bonne compréhension, difficultés à l'expression écrite…" />
       </div>
+      )}
 
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
         <button onClick={onCancel} style={btnSecondary}>Annuler</button>
