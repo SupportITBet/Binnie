@@ -557,6 +557,115 @@ export default function PedagogicalAdvisorDashboard() {
   const [preuvePaiementView,   setPreuvePaiementView]   = useState(null); // preuve_image (data URI ou lien) à afficher en grand
   const [confirmRouterTarget,  setConfirmRouterTarget]  = useState(null); // dossier en attente de confirmation "Router"
 
+  /* ── FICHE DE RECHERCHE DE COACH ────────────────────────────────────────────
+     Le PA reçoit un dossier privé et doit trouver le coach qui correspond. Il
+     diffuse donc ce document à PLUSIEURS coachs, dont un seul sera retenu.
+
+     L'OBJECTIF DU CLIENT A SA PROPRE SECTION, en tête et en toutes lettres :
+     c'est sur lui qu'un coach reconnaît un dossier pour lui. Noyé dans un
+     tableau à deux colonnes, il se lirait comme une ligne parmi quinze - alors
+     que tout le reste (niveau, rythme, lieu) ne sert qu'à confirmer un choix
+     déjà fait sur l'objectif.
+
+     LA FICHE PORTE L'IDENTITÉ DU PROSPECT, décision assumée : les coachs
+     prennent eux-mêmes contact. Elle devient donc un document diffusable
+     contenant des coordonnées personnelles - d'où la mention de
+     confidentialité en pied de page, et le nom du conseiller émetteur : un
+     document qui circule doit dire d'où il vient et à quoi il engage.
+  */
+  const exporterFicheRechercheCoachPDF = async (p) => {
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const sd  = p.suivi_demarrage || {};
+      const doc = new jsPDF();
+      const ref = `PRV-${String(p.id || "").replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+
+      doc.setFontSize(16); doc.setTextColor(15, 23, 42);
+      doc.text("Recherche de coach - dossier de coaching privé", 14, 16);
+      doc.setFontSize(10); doc.setTextColor(100);
+      doc.text(`Référence ${ref}  ·  généré le ${new Date().toLocaleDateString("fr-FR")}`, 14, 23);
+
+      let y = 30;
+      const section = (titre, couleur, corps) => {
+        const lignes = corps.filter(([, v]) => v !== null && v !== undefined && v !== "");
+        if (!lignes.length) return;
+        autoTable(doc, {
+          startY: y, head: [[titre, ""]], body: lignes, theme: "striped",
+          headStyles: { fillColor: couleur }, styles: { fontSize: 9 },
+          columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" } },
+        });
+        y = doc.lastAutoTable.finalY + 8;
+      };
+
+      /* L'objectif d'abord : un lecteur pressé lit la première section et décide. */
+      const objectif = (p.objectif_client || "").trim();
+      autoTable(doc, {
+        startY: y,
+        head: [["Objectif du client"]],
+        body: [[objectif || "NON RENSEIGNÉ - à obtenir auprès de l'assistante avant d'affecter un coach."]],
+        theme: "grid",
+        headStyles: { fillColor: objectif ? [109, 40, 217] : [180, 83, 9] },
+        styles: { fontSize: objectif ? 11 : 9.5, cellPadding: 5, textColor: objectif ? [15, 23, 42] : [146, 64, 14] },
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      const lieu = { cabinet: "Au cabinet", domicile: "À domicile", en_ligne: "En ligne" }[sd.lieu_coaching] || "-";
+      const centre = paCentresList.find(c => c.key === sd.centre_coaching)?.name || sd.centre_coaching || "";
+      const dsp = sd.disponibilites || {};
+      const hor = Array.isArray(dsp.horaires) && dsp.horaires.length ? dsp.horaires : [];
+      const leg = hor.length === 0 ? [...(dsp.jours || []), ...(dsp.creneaux || [])] : [];
+      const creneaux = hor.length
+        ? hor.map(h => `${h.jour} ${h.debut}${h.fin ? `-${h.fin}` : ""}`).join("  ·  ")
+        : (leg.length ? leg.join("  ·  ") : "Non renseignées");
+
+      section("Besoin pédagogique", [22, 163, 74], [
+        ["Niveau évalué",     sd.niveau_prospect || p.niveau_client || "-"],
+        ["Formation",         sd.formation_souhaitee || p.inscription_offre || "-"],
+        ["Rythme",            sd.type_coaching === "intensive"
+                                ? "Intensive - 5 séances/semaine"
+                                : "Classique - 3 séances x 2h/semaine"],
+        ["Durée",             sd.nb_seances_souhaitees ? `${sd.nb_seances_souhaitees} mois` : "-"],
+        ["Date de début",     (p.date_debut_formation || sd.date_debut_formation)
+                                ? new Date(p.date_debut_formation || sd.date_debut_formation).toLocaleDateString("fr-FR")
+                                : "-"],
+      ]);
+
+      section("Lieu et disponibilités", [217, 119, 6], [
+        ["Lieu du coaching",  lieu],
+        ["Centre",            sd.lieu_coaching === "cabinet"  ? (centre || "-") : ""],
+        ["Adresse",           sd.lieu_coaching === "domicile" ? (sd.adresse_coaching || "-") : ""],
+        ["Créneaux",          creneaux],
+      ]);
+
+      const estEnfant = p.profil_type === "enfant";
+      section("Apprenant", [8, 145, 178], [
+        ["Profil",            estEnfant ? "Enfant" : "Adulte"],
+        ["Nom",               estEnfant
+                                ? [p.prenom_enfant || sd.prenom_enfant, p.nom_enfant || sd.nom_enfant].filter(Boolean).join(" ") || p.prospect_nom || "-"
+                                : (p.prospect_nom || "-")],
+        ["Âge",               estEnfant ? (p.age_enfant || sd.age_enfant || "") : ""],
+        ["Classe",            estEnfant ? (p.niveau_classe_enfant || sd.niveau_classe_enfant || "") : ""],
+        ["Téléphone",         estEnfant ? (p.telephone_parent || p.prospect_telephone || "-") : (p.prospect_telephone || "-")],
+        ["E-mail",            estEnfant ? (p.email_parent || p.prospect_email || "-") : (p.prospect_email || "-")],
+        ["Contact parent",    estEnfant ? (p.nom_parent || "") : ""],
+      ]);
+
+      const emetteur = [profil?.prenom, profil?.nom].filter(Boolean).join(" ") || "Conseiller pédagogique";
+      doc.setFontSize(8); doc.setTextColor(120);
+      doc.text(
+        `Document interne BET - émis par ${emetteur}. Contient les coordonnées d'un prospect : à ne pas rediffuser hors du réseau de coachs.`,
+        14, Math.min(y + 4, 285), { maxWidth: 182 }
+      );
+
+      doc.save(`fiche-coach-${ref}.pdf`);
+      toast.success("Fiche générée ✓");
+    } catch (e) {
+      console.error("Fiche recherche coach:", e);
+      toast.error("Impossible de générer la fiche");
+    }
+  };
+
   const validerDossierPrive = async (p) => {
     if (validationLoading) return;
     setValidationLoading(true);
@@ -10350,6 +10459,17 @@ export default function PedagogicalAdvisorDashboard() {
                         </div>
                       </div>
                       <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        {/* Téléchargement offert à TOUS les statuts, pas seulement « en attente » :
+                            le PA cherche un coach avant de valider, mais il peut aussi avoir à
+                            renvoyer la fiche plus tard - un coach qui se désiste, un dossier qui
+                            change de main. Le restreindre à l'attente obligerait à rouvrir un
+                            dossier déjà traité pour en ressortir l'information. */}
+                        <button onClick={() => exporterFicheRechercheCoachPDF(p)}
+                          title="Fiche à transmettre aux coachs pour trouver celui qui correspond"
+                          style={{ padding:"7px 14px", borderRadius:8, border:`1.5px solid ${PA_COLOR}40`,
+                            background:"#fff", color:PA_COLOR, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                          📄 Fiche coach
+                        </button>
                         {p.dossier_statut === "en_attente_validation" && (
                           <>
                             <button onClick={() => setConfirmValiderTarget(p)} disabled={validationLoading}
@@ -10550,6 +10670,31 @@ export default function PedagogicalAdvisorDashboard() {
                               </div>
                             ))}
                           </div>
+
+                          {/* L'OBJECTIF DU CLIENT — le champ sur lequel le conseiller choisit un
+                              coach. Il manquait ici alors qu'il s'affiche déjà sur les dossiers de
+                              GROUPE (plus haut) : quand ce rendu-là a été ajouté, il a été écrit à
+                              part « pour ne rien changer au formulaire privé », et le privé est
+                              resté sans objectif — celui-là même où il compte le plus.
+
+                              Pleine largeur, pas une cinquième carte : une phrase d'objectif ne tient
+                              pas dans un quart de colonne et serait tronquée. Et ambre quand il manque,
+                              pour qu'une absence saute aux yeux AVANT le clic sur « Valider » plutôt
+                              que de passer pour une case vide de plus. */}
+                          <div style={{ background: p.objectif_client ? "#f5f3ff" : "#fffbeb",
+                            border:`1.5px solid ${p.objectif_client ? "#ddd6fe" : "#fde68a"}`,
+                            borderRadius:8, padding:"10px 12px" }}>
+                            <div style={{ fontSize:10, fontWeight:700, letterSpacing:".04em", textTransform:"uppercase",
+                              color: p.objectif_client ? "#6d28d9" : "#92400e", marginBottom:4 }}>
+                              🎯 Objectif du client
+                            </div>
+                            <div style={{ fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight: p.objectif_client ? 600 : 700,
+                              color: p.objectif_client ? "#0f172a" : "#92400e" }}>
+                              {p.objectif_client
+                                || "Non renseigné — demandez-le à l'assistante avant d'affecter un coach."}
+                            </div>
+                          </div>
+
                           {(() => {
                             const _dsp = sd.disponibilites || {};
                             const _hor = Array.isArray(_dsp.horaires) && _dsp.horaires.length > 0 ? _dsp.horaires : [];
