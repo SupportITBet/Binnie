@@ -3084,7 +3084,7 @@ router.post("/", authenticateAdmin, requirePermission("classes", "create"), asyn
 router.patch("/:id", authenticateAdmin, requirePermission("classes", "update"), async (req, res) => {
   try {
     const { id } = req.params;
-    const allowed = ["nom","niveau","filiere","type_cours","coach_id","centre_id","horaire","date_debut","date_fin","statut","capacite_max","created_by_nom"];
+    const allowed = ["nom","niveau","filiere","type_cours","coach_id","centre_id","horaire","date_debut","date_fin","statut","capacite_max","created_by_nom","is_prive"];
     // Un champ vidé dans un formulaire arrive en chaîne vide, que Postgres refuse sur une
     // colonne date ou uuid ("invalid input syntax for type date"). La création normalisait
     // déjà (date_fin || null) ; la modification, elle, recopiait tel quel - d'où l'échec
@@ -3097,9 +3097,24 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes", "update"), 
       updates[k] = (VIDE_VAUT_NULL.has(k) && v === "") ? null : v;
     });
 
-    const { data: ancien } = await supabase.from("groupes").select("coach_id,nom,statut").eq("id", id).single();
+    const { data: ancien } = await supabase.from("groupes").select("coach_id,nom,statut,capacite_max,is_prive").eq("id", id).single();
     if (!ancien) return res.status(404).json({ error: "Groupe introuvable" });
     if (ancien.statut === "cloture") return res.status(409).json({ error: "Classe clôturée - modification impossible" });
+
+    /* ── LE PIÈGE DE L'AUGMENTATION DE CAPACITÉ ──────────────────────────────────────
+       Avant que `is_prive` soit écrit, une classe privée ne se reconnaissait qu'à sa
+       capacité de 1. Passer cette capacité à 3 pour y loger une famille effaçait donc le
+       SEUL signal qui la disait privée : le badge disparaissait, et tous les écrans la
+       traitaient soudain comme une classe de groupe. C'est exactement ce que fait un
+       utilisateur qui vient d'apprendre qu'il peut inscrire un couple.
+
+       On marque donc la classe AVANT d'appliquer la modification : si elle était privée à
+       l'ancienne (capacité 1, `is_prive` jamais renseigné), elle le reste explicitement.
+       La donnée se répare ainsi d'elle-même au fil des modifications, sans reprise globale
+       et sans qu'aucun utilisateur ait à savoir que cette colonne existe. */
+    if (ancien.is_prive == null && ancien.capacite_max === 1 && updates.is_prive === undefined) {
+      updates.is_prive = true;
+    }
     const msgDelegueEdit = await refuserSiTitulaireDelegue(req.role === "coach" ? req.profil.id : null, id);
     if (msgDelegueEdit) return res.status(403).json({ error: msgDelegueEdit });
 
