@@ -1,0 +1,36 @@
+RACINE DU DOMAINE binniesenglish.com  —  NE PAS DÉPLOYER LE SITE BET ICI
+════════════════════════════════════════════════════════════════════════
+
+Ce dossier est « public_html », racine du domaine PRINCIPAL du compte
+cPanel « binniesenglish ».
+
+Vous êtes dans le dossier servi par  ▸  https://binniesenglish.com
+Site servi ici                       ▸  WebSuitePro
+Base de données associée             ▸  binniesenglish_websuitepro_db
+
+
+⚠  LE SITE PUBLIC BET NE VA PAS ICI
+────────────────────────────────────────────────────────────────────────
+Il va dans la racine propre de binniesenglish.net — un AUTRE dossier.
+Pour le retrouver :
+
+    uapi --user=binniesenglish DomainInfo list_domains
+
+Le dossier de binniesenglish.net contient un fichier
+« 0-RACINE-binniesenglish.net.txt » : c'est lui qui confirme qu'on est
+au bon endroit.
+
+
+CE QUI S'EST PASSÉ LE 26 SEPTEMBRE 2026
+────────────────────────────────────────────────────────────────────────
+Un déploiement du site BET a été lancé sur ce dossier en croyant viser
+binniesenglish.net. Le script recopie le nouveau contenu et supprime tout
+ce qui n'en fait pas partie : les fichiers de WebSuitePro ont été effacés.
+
+La base de données a survécu — un déploiement de fichiers n'y touche pas.
+Les fichiers ont été récupérés depuis la sauvegarde Hostinger du
+20 septembre 2026.
+
+Le script de déploiement refuse désormais d'écrire dans un dossier qui
+abrite visiblement autre chose. Ce garde-fou ne remplace pas la
+vérification ci-dessus : il n'attrape que ce qu'il sait reconnaître.

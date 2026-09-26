@@ -1,0 +1,82 @@
+<!doctype html>
+<!--
+  ╔════════════════════════════════════════════════════════════════════════╗
+  ║  RACINE DU DOMAINE  :  binniesenglish.net                              ║
+  ║  SITE ATTENDU ICI   :  Frontend BET (site public, application React)   ║
+  ║                                                                        ║
+  ║  Ce fichier est une page d'attente. Le déploiement du site public le   ║
+  ║  remplacera par son propre index.html — c'est normal.                  ║
+  ║                                                                        ║
+  ║  ⚠ NE PAS déployer le site BET dans « public_html » : ce dossier-là    ║
+  ║    est la racine de binniesenglish.COM, qui sert un site WebSuitePro.  ║
+  ║    Pour savoir quel dossier appartient à quel domaine :                ║
+  ║        uapi --user=binniesenglish DomainInfo list_domains              ║
+  ╚════════════════════════════════════════════════════════════════════════╝
+-->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binnie's English Training</title>
+<meta name="robots" content="noindex">
+<meta name="description" content="Binnie's English Training — notre site est en cours de mise en ligne.">
+<style>
+  :root{
+    --nuit:#011451; --nuit-clair:#0c33ac; --papier:#ffffff;
+    --encre:#111a33; --gris:#5a6480; --filet:#e4e8f4;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--nuit); color:var(--papier);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+    /* Le dégradé reste lisible si l'image de fond ne charge pas. */
+    background-image:radial-gradient(1100px 620px at 50% -10%, #0c33ac 0%, #011451 62%);
+  }
+  .carte{
+    width:100%; max-width:520px; background:var(--papier); color:var(--encre);
+    border-radius:18px; padding:44px 38px 34px; text-align:center;
+    box-shadow:0 26px 70px rgba(0,0,0,.34);
+  }
+  .logo{
+    width:84px; height:84px; object-fit:contain; display:block; margin:0 auto 18px;
+  }
+  /* Repli typographique : si le logo ne charge pas, son texte alternatif reste digne. */
+  .logo:not([src]),.logo[src=""]{display:none}
+  h1{
+    margin:0 0 6px; font-family:Georgia,"Times New Roman",serif;
+    font-size:27px; line-height:1.2; letter-spacing:-.01em; color:var(--nuit);
+    text-wrap:balance;
+  }
+  .domaine{
+    margin:0 0 22px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13px; letter-spacing:.04em; color:var(--nuit-clair); font-weight:600;
+  }
+  .filet{height:1px; background:var(--filet); margin:0 0 22px}
+  p.mot{margin:0 0 4px; font-size:15.5px; color:var(--encre)}
+  p.sous{margin:0; font-size:14px; color:var(--gris)}
+  footer{
+    margin-top:26px; padding-top:16px; border-top:1px solid var(--filet);
+    font-size:12px; color:var(--gris);
+  }
+  @media (max-width:420px){
+    .carte{padding:34px 24px 26px}
+    h1{font-size:23px}
+  }
+</style>
+</head>
+<body>
+  <main class="carte">
+    <img class="logo"
+         src="https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png"
+         alt="Binnie's English Training" width="84" height="84">
+    <h1>Binnie's English Training</h1>
+    <p class="domaine">binniesenglish.net</p>
+    <div class="filet"></div>
+    <p class="mot">Notre site est en cours de mise en ligne.</p>
+    <p class="sous">Merci de revenir dans quelques instants.</p>
+    <footer>Centre de formation en anglais · Côte d'Ivoire</footer>
+  </main>
+</body>
+</html>

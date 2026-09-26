@@ -55,14 +55,17 @@ fi
 MARQUEUR="$CIBLE/.deploiement-bet"
 etape "Identification du dossier cible"
 if [ -f "$MARQUEUR" ]; then
-  echo "  déjà un site BET — déployé le $(cat "$MARQUEUR" 2>/dev/null | head -1)"
+  echo "  racine déclarée du site BET — « $(head -1 "$MARQUEUR" 2>/dev/null) »"
 elif [ -f "$CIBLE/asset-manifest.json" ] && [ -d "$CIBLE/static" ]; then
   # Un build React antérieur à l'existence du marqueur.
   echo "  build React reconnu (asset-manifest.json + static/)"
 else
   # Ni marqueur, ni build : soit le dossier est vide, soit il abrite autre chose.
+  # `0-RACINE-*.txt` identifie la racine d'un domaine (voir deploiement/). C'est un
+  # repère, pas un site : il ne doit pas faire échouer une première publication.
   ETRANGERS=$(find "$CIBLE" -mindepth 1 -maxdepth 1 \
                 ! -name '.well-known' ! -name 'cgi-bin' ! -name '.htaccess' \
+                ! -name '0-RACINE-*' \
                 2>/dev/null | head -20)
   if [ -n "$ETRANGERS" ]; then
     rouge "✗ REFUS : ce dossier contient autre chose qu'un site BET."
@@ -165,10 +168,14 @@ PROPRIO=$(stat -c '%U:%G' "$CIBLE" 2>/dev/null || stat -f '%Su:%Sg' "$CIBLE")
 #                AutoSSL échoue et le certificat du domaine expire — trois mois plus tard,
 #                sans que rien n'ait l'air de s'être passé le jour du déploiement.
 #   cgi-bin      créé par cPanel à la création du compte.
+#   0-RACINE-*   le repère qui nomme le domaine servi par ce dossier. Il n'a d'utilité
+#                que s'il survit aux déploiements : c'est en le lisant dans la liste des
+#                fichiers, chez Hostinger, qu'on évite de confondre deux racines.
 rsync -a --delete \
       --exclude='.well-known/' \
       --exclude='cgi-bin/' \
       --exclude='.deploiement-bet' \
+      --exclude='0-RACINE-*' \
       build/ "$CIBLE/"
 date '+%F %H:%M:%S' > "$CIBLE/.deploiement-bet"
 git -C "$RACINE" log -1 --format='%h %s' >> "$CIBLE/.deploiement-bet"

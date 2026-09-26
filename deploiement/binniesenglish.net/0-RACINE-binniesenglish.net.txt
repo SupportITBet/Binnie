@@ -1,0 +1,28 @@
+RACINE DU DOMAINE binniesenglish.net
+════════════════════════════════════════════════════════════════════════
+
+Vous êtes dans le dossier servi par  ▸  https://binniesenglish.net
+Site attendu ici                     ▸  Frontend BET (site public React)
+
+Déployer ici, et nulle part ailleurs :
+
+    /opt/bet/scripts/deployer-frontend.sh <ce dossier>
+
+
+⚠  NE PAS DÉPLOYER LE SITE BET DANS « public_html »
+────────────────────────────────────────────────────────────────────────
+« public_html » est la racine du domaine PRINCIPAL du compte cPanel,
+c'est-à-dire binniesenglish.COM, qui sert un site WebSuitePro.
+
+Le 26 septembre 2026, un déploiement lancé sur « public_html » en croyant
+viser binniesenglish.net a effacé ce site : le script recopie le nouveau
+contenu et supprime tout ce qui n'en fait pas partie. La base de données
+a survécu, les fichiers non, et le serveur n'avait aucune sauvegarde.
+
+Avant tout déploiement, vérifier à quel domaine appartient un dossier :
+
+    uapi --user=binniesenglish DomainInfo list_domains
+
+
+Ce fichier est conservé par les déploiements (exclu de la synchronisation).
+Ne pas le supprimer : son nom seul évite de se tromper de dossier.
