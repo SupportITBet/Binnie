@@ -2088,7 +2088,7 @@ router.get("/mes-apprenants-coach", authenticateAdmin, async (req, res) => {
     // Tentative 1 : filtre JSON @> (contains) - plus fiable que ->> text
     let { data, error } = await supabase
       .from("assignations_parcours")
-      .select("id, prospect_nom, prospect_email, prospect_telephone, statut, routing_statut, suivi_demarrage, notes_coach, created_at, updated_at")
+      .select("id, prospect_nom, prospect_email, prospect_telephone, statut, routing_statut, suivi_demarrage, notes_coach, objectif_client, created_at, updated_at")
       .in("statut", ["converti", "en_cours"])
       .contains("suivi_demarrage", { coach_id: coachId });
 
@@ -2096,7 +2096,7 @@ router.get("/mes-apprenants-coach", authenticateAdmin, async (req, res) => {
     if ((error || !data?.length)) {
       const r2 = await supabase
         .from("assignations_parcours")
-        .select("id, prospect_nom, prospect_email, prospect_telephone, statut, routing_statut, suivi_demarrage, notes_coach, created_at, updated_at")
+        .select("id, prospect_nom, prospect_email, prospect_telephone, statut, routing_statut, suivi_demarrage, notes_coach, objectif_client, created_at, updated_at")
         .in("statut", ["converti", "en_cours"])
         .filter("suivi_demarrage->>coach_id", "eq", coachId);
       if (!r2.error && r2.data?.length) { data = r2.data; error = null; }
@@ -2106,7 +2106,7 @@ router.get("/mes-apprenants-coach", authenticateAdmin, async (req, res) => {
     if (!data?.length) {
       const r3 = await supabase
         .from("assignations_parcours")
-        .select("id, prospect_nom, prospect_email, prospect_telephone, statut, routing_statut, suivi_demarrage, notes_coach, created_at, updated_at")
+        .select("id, prospect_nom, prospect_email, prospect_telephone, statut, routing_statut, suivi_demarrage, notes_coach, objectif_client, created_at, updated_at")
         .in("routing_statut", ["onboarding_en_attente", "onboarding_affecte"])
         .in("statut", ["converti", "en_cours"]);
       if (!r3.error && r3.data?.length) {
@@ -2160,6 +2160,10 @@ router.get("/mes-apprenants-coach", authenticateAdmin, async (req, res) => {
         nb_seances:          sd.nb_seances_souhaitees  || null,
         disponibilites:      sd.disponibilites         || null,
         pack_coaching:       sd.pack_coaching          || null,
+        // L'OBJECTIF DU CLIENT, absent de cette route jusqu'au 26/09/2026 : le coach ne
+        // pouvait pas savoir ce que son apprenant attendait de ses séances, et devait le
+        // demander à l'assistante. Le champ vit sur l'assignation, pas dans suivi_demarrage.
+        objectif_client:     a.objectif_client         || null,
         created_at:        a.created_at,
         updated_at:        a.updated_at,
       };

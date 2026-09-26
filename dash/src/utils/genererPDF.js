@@ -26,6 +26,11 @@ export function genererPDF(htmlContent, titre = 'Document BET') {
       body { padding: 0; }
       .no-print { display: none !important; }
       @page { margin: 20mm 18mm; }
+      /* SANS CECI, LE DOCUMENT S'IMPRIME EN BLANC. Les navigateurs suppriment par défaut
+         les fonds et les images de fond à l'impression, pour économiser l'encre : l'en-tête
+         dégradé, les badges de couleur et le logo ci-dessous disparaissaient donc du PDF,
+         qui ne ressemblait plus à ce qu'on voyait à l'écran. */
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
     @media screen {
       body { padding: 24px; max-width: 860px; margin: 0 auto; }
@@ -36,8 +41,25 @@ export function genererPDF(htmlContent, titre = 'Document BET') {
     .btn-print { background: #0891B2; color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
 
     .doc-header { background: linear-gradient(135deg, #0F172A 0%, #0E4F6B 60%, #0891B2 100%); color: #fff; padding: 28px 32px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0; }
-    .doc-header-logo { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; }
-    .doc-header-sub  { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+    /* LE LOGO BET, POSÉ ICI ET NON DANS CHAQUE DOCUMENT.
+       Six tableaux de bord appellent ce gabarit ; ajouter l'image dans chacun d'eux aurait
+       demandé six modifications et garanti qu'un jour l'un d'eux soit oublié. Greffé en
+       pseudo-élément du logo textuel, il apparaît partout d'un coup, sans qu'aucun appelant
+       change. Le badge blanc est nécessaire : le logo est sombre, l'en-tête l'est aussi.
+       Attention en modifiant ce bloc : tout ce CSS vit dans un littéral de gabarit JS,
+       un accent grave y refermerait la chaîne. */
+    .doc-header-logo { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; display: flex; align-items: center; gap: 12px; }
+    .doc-header-logo::before {
+      content: '';
+      width: 42px; height: 42px; flex-shrink: 0;
+      background: #fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 30px 30px no-repeat;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+    /* margin-left = largeur du badge + son écart : les coordonnées s'alignent sous le nom,
+       pas sous le logo. Sans ça, l'en-tête part en escalier. */
+    .doc-header-sub  { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 2px; margin-left: 54px; }
     .doc-header-right { text-align: right; font-size: 11px; color: rgba(255,255,255,0.65); line-height: 1.6; }
     .doc-title-band { background: #0891B2; color: #fff; padding: 14px 32px; font-size: 16px; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 0; }
 

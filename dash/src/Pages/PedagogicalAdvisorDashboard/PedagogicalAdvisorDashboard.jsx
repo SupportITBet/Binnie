@@ -612,9 +612,9 @@ export default function PedagogicalAdvisorDashboard() {
         *{box-sizing:border-box}
         body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
         .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:20px;margin-bottom:28px}
-        .logo{font-size:28px;font-weight:900;color:#7c3aed;letter-spacing:-1px}
+        .logo{font-size:28px;font-weight:900;color:#7c3aed;letter-spacing:-1pxdisplay:flex;align-items:center;gap:11px}.logo::before{content:'';width:40px;height:40px;flex-shrink:0;background:#fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 28px 28px no-repeat;border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.14)}
         .logo span{color:#0f172a}
-        .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+        .logo-sub{font-size:11px;color:#6b7280;margin-top:4px;margin-left:51px}
         h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
         .num{font-size:11px;color:#6b7280;margin-top:2px}
         section{margin-bottom:20px}
@@ -8664,9 +8664,9 @@ export default function PedagogicalAdvisorDashboard() {
             *{box-sizing:border-box}
             body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
             .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:20px;margin-bottom:28px}
-            .logo{font-size:28px;font-weight:900;color:#7c3aed;letter-spacing:-1px}
+            .logo{font-size:28px;font-weight:900;color:#7c3aed;letter-spacing:-1pxdisplay:flex;align-items:center;gap:11px}.logo::before{content:'';width:40px;height:40px;flex-shrink:0;background:#fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 28px 28px no-repeat;border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.14)}
             .logo span{color:#0f172a}
-            .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+            .logo-sub{font-size:11px;color:#6b7280;margin-top:4px;margin-left:51px}
             h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
             .num{font-size:11px;color:#6b7280;margin-top:2px}
             section{margin-bottom:20px}
@@ -9272,102 +9272,120 @@ export default function PedagogicalAdvisorDashboard() {
           } finally { setSessionActionSaving(false); }
         };
 
-        const exporterFicheApprenantPDF = async () => {
+        /* FICHE APPRENANT — même gabarit que celles de la commerciale et de l'Onboarding.
+           Elle était la seule à sortir de jsPDF : tableaux bruts, sans en-tête BET, sans
+           bandeau de titre. Trois services produisant le même document ne peuvent pas le
+           produire sous trois apparences - un apprenant qui reçoit l'une puis l'autre y voit
+           deux entreprises. `genererPDF` (utils/genererPDF.js) porte la charte commune, et
+           ce fichier l'importait déjà sans s'en servir ici. */
+        const exporterFicheApprenantPDF = () => {
           try {
-            const { jsPDF } = await import("jspdf");
-            const autoTable = (await import("jspdf-autotable")).default;
-            const doc = new jsPDF();
-            doc.setFontSize(16); doc.setTextColor(15,23,42);
-            doc.text(`Fiche apprenant - ${a.prospect_nom || "-"}`, 14, 16);
-            doc.setFontSize(10); doc.setTextColor(100);
-            doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 14, 23);
-            let y = 30;
-            const section = (title, color, body) => {
-              if (!body.length) return;
-              autoTable(doc, { startY: y, head: [[title, ""]], body, theme:"striped", headStyles:{ fillColor:color }, styles:{ fontSize:9 } });
-              y = doc.lastAutoTable.finalY + 10;
+            const num = `BET-FA-${String(a.id || "").replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+            const infoRow = (lbl, val) => val == null || val === "" ? "" :
+              `<div class="info-row"><span class="info-label">${lbl}</span><span class="info-value">${val}</span></div>`;
+            const section = (titre, lignes) => {
+              const corps = lignes.filter(Boolean).join("");
+              return corps ? `<div class="section-title">${titre}</div><div class="info-grid">${corps}</div>` : "";
             };
+            const tableau = (titre, entetes, lignes) => {
+              if (!lignes.length) return "";
+              return `<div class="section-title">${titre}</div>
+                <table><thead><tr>${entetes.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+                <tbody>${lignes.map(l => `<tr>${l.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+            };
+            const objectif = (a.objectif_client || "").trim();
 
-            section("Informations personnelles", [8,145,178], [
-              ["Nom complet", a.prospect_nom || "-"],
-              ["Email", a.prospect_email || "-"],
-              ["Téléphone", a.prospect_telephone || "-"],
-              ["Niveau", sd.niveau_prospect || a.niveau_client || "-"],
-              ["Type de coaching", a.type_coaching === "prive" ? "Privé" : "Groupe"],
-            ]);
+            genererPDF(`
+              <div class="doc-header">
+                <div>
+                  <div class="doc-header-logo">BET Languages</div>
+                  <div class="doc-header-sub">Centre de langues - Abidjan, Côte d'Ivoire</div>
+                  <div class="doc-header-sub">📧 contact@binniesenglish.com · 📞 +225 27 22 40 71 99</div>
+                </div>
+                <div class="doc-header-right">
+                  N° ${num}<br/>Émise le ${fmtDatePDF(new Date().toISOString())}
+                </div>
+              </div>
+              <div class="doc-title-band">👤 FICHE APPRENANT - ${a.prospect_nom || ""}</div>
+              <div class="doc-body">
 
-            /* L'OBJECTIF DU CLIENT, dans sa propre section et sur toute la largeur.
-               C'est une phrase, pas une valeur : en deuxième colonne d'un tableau
-               libellé/valeur, elle se casse en lignes illisibles. Et c'est la seule
-               information de cette fiche qui dise POURQUOI la personne est là.
-               Absente jusqu'ici alors que la donnée était servie par l'API depuis
-               le début - un oubli d'affichage, pas de données. */
-            const objectifFiche = (a.objectif_client || "").trim();
-            if (objectifFiche) {
-              autoTable(doc, {
-                startY: y, head: [["Objectif du client"]], body: [[objectifFiche]],
-                theme: "striped", headStyles: { fillColor: [109, 40, 217] },
-                styles: { fontSize: 10, cellPadding: 4 },
-              });
-              y = doc.lastAutoTable.finalY + 10;
-            }
+                ${section("👤 Informations personnelles", [
+                  infoRow("Nom complet", a.prospect_nom),
+                  infoRow("Email", a.prospect_email),
+                  infoRow("Téléphone", a.prospect_telephone),
+                  infoRow("Niveau", sd.niveau_prospect || a.niveau_client),
+                  infoRow("Type de coaching", a.type_coaching === "prive" ? "Privé" : "Groupe"),
+                  infoRow("Conseiller PA", [profil?.prenom, profil?.nom].filter(Boolean).join(" ") || null),
+                ])}
 
-            section("Assiduité", [124,58,237], [
-              ["Séances effectuées", String(seancesCnt)],
-              ["Présences", String(presences)],
-              ["Absences", String(abs)],
-              ["Taux de présence", tauxPart !== null ? `${tauxPart}%` : "-"],
-            ]);
+                ${/* Pleine largeur, hors de la grille à deux colonnes : c'est une phrase,
+                      et la seule information de cette fiche qui dise POURQUOI la personne
+                      est là. Absent = signalé, pour qu'un oubli se voie. */
+                  objectif
+                    ? `<div class="section-title">🎯 Objectif du client</div>
+                       <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.65;color:#0F172A;white-space:pre-wrap">${objectif}</div>`
+                    : `<div class="section-title">🎯 Objectif du client</div>
+                       <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;font-size:12.5px;color:#92400E">Non renseigné — à demander à l'assistante commerciale.</div>`}
 
-            if (a.type_coaching === "prive" && paSeancesPrivees.length > 0) {
-              autoTable(doc, {
-                startY: y,
-                head: [["Date","Heure","Durée","Lieu","Statut","Notes"]],
-                body: [...paSeancesPrivees].sort((x,y2)=>y2.date_seance.localeCompare(x.date_seance)).map(s => [
-                  s.date_seance ? new Date(s.date_seance+"T12:00:00").toLocaleDateString("fr-FR") : "-",
-                  s.heure_debut ? s.heure_debut.slice(0,5) : "-",
-                  s.duree_h ? `${s.duree_h}h` : "-",
-                  s.lieu === "domicile" ? "Domicile" : s.lieu === "en_ligne" ? "En ligne" : "Cabinet",
-                  s.statut || "-",
-                  s.notes || "-",
-                ]),
-                theme:"striped", headStyles:{ fillColor:[124,58,237] }, styles:{ fontSize:8 },
-              });
-              y = doc.lastAutoTable.finalY + 10;
-            }
+                <div class="section-title">📅 Assiduité</div>
+                <div class="kpi-row">
+                  <div class="kpi-card"><div class="kpi-val">${seancesCnt}</div><div class="kpi-lbl">Séances</div></div>
+                  <div class="kpi-card"><div class="kpi-val">${presences}</div><div class="kpi-lbl">Présences</div></div>
+                  <div class="kpi-card"><div class="kpi-val">${abs}</div><div class="kpi-lbl">Absences</div></div>
+                  <div class="kpi-card"><div class="kpi-val">${tauxPart !== null ? tauxPart + "%" : "-"}</div><div class="kpi-lbl">Taux de présence</div></div>
+                </div>
 
-            section("Paiement", [217,119,6], [
-              ["Total plan", tranchesTotal ? `${tranchesTotal.toLocaleString("fr-FR")} F` : "-"],
-              ["Déjà payé", tranchesPaye ? `${tranchesPaye.toLocaleString("fr-FR")} F` : "-"],
-              ["Statut", isSolde ? "Soldé" : tranchesTotal ? "En cours" : "-"],
-            ]);
+                ${a.type_coaching === "prive"
+                  ? tableau("🗓 Détail des séances", ["Date","Heure","Durée","Lieu","Statut","Notes"],
+                      [...paSeancesPrivees]
+                        .sort((x, y2) => y2.date_seance.localeCompare(x.date_seance))
+                        .map(s => [
+                          s.date_seance ? fmtDatePDF(s.date_seance) : "-",
+                          s.heure_debut ? s.heure_debut.slice(0, 5) : "-",
+                          s.duree_h ? `${s.duree_h}h` : "-",
+                          s.lieu === "domicile" ? "Domicile" : s.lieu === "en_ligne" ? "En ligne" : "Cabinet",
+                          s.statut || "-",
+                          s.notes || "-",
+                        ]))
+                  : ""}
 
-            if (tranches.length > 0) {
-              autoTable(doc, {
-                startY: y,
-                head: [["Échéance","Montant","Statut"]],
-                body: tranches.map(t => [t.date_echeance ? new Date(t.date_echeance).toLocaleDateString("fr-FR") : "-", t.montant ? `${Number(t.montant).toLocaleString("fr-FR")} F` : "-", t.statut || "-"]),
-                theme:"striped", headStyles:{ fillColor:[217,119,6] }, styles:{ fontSize:8 },
-              });
-              y = doc.lastAutoTable.finalY + 10;
-            }
+                <div class="section-title">💰 Paiement</div>
+                <div class="kpi-row">
+                  <div class="kpi-card"><div class="kpi-val">${tranchesTotal ? tranchesTotal.toLocaleString("fr-FR") : 0}</div><div class="kpi-lbl">Total plan (FCFA)</div></div>
+                  <div class="kpi-card"><div class="kpi-val">${tranchesPaye ? tranchesPaye.toLocaleString("fr-FR") : 0}</div><div class="kpi-lbl">Déjà payé (FCFA)</div></div>
+                  <div class="kpi-card"><div class="kpi-val">${tranches.length}</div><div class="kpi-lbl">Échéances</div></div>
+                  <div class="kpi-card"><div class="kpi-val">${isSolde ? "Soldé" : tranchesTotal ? "En cours" : "-"}</div><div class="kpi-lbl">Statut</div></div>
+                </div>
 
-            if (appModalEvals.length > 0) {
-              autoTable(doc, {
-                startY: y,
-                head: [["Évaluation","Date","Note","Commentaire"]],
-                body: appModalEvals.map(ev => {
-                  const r = ev.resultat || {};
-                  return [ev.titre || "Évaluation", ev.date_evaluation ? new Date(ev.date_evaluation).toLocaleDateString("fr-FR") : "-", r.note!=null ? `${r.note}/${r.note_max ?? ev.note_max ?? "-"}` : "-", r.commentaire_coach || "-"];
-                }),
-                theme:"striped", headStyles:{ fillColor:[100,116,139] }, styles:{ fontSize:8 },
-              });
-              y = doc.lastAutoTable.finalY + 10;
-            }
+                ${tableau("💳 Échéances", ["Échéance","Montant","Statut"],
+                  tranches.map(t => [
+                    t.date_echeance ? fmtDatePDF(t.date_echeance) : "-",
+                    t.montant ? `${Number(t.montant).toLocaleString("fr-FR")} FCFA` : "-",
+                    t.statut || "-",
+                  ]))}
 
-            doc.save(`fiche-apprenant-${a.prospect_nom || "apprenant"}-${Date.now()}.pdf`);
-            toast.success("Fiche exportée en PDF");
-          } catch (e) { toast.error("Erreur lors de l'export PDF"); }
+                ${tableau("📝 Évaluations", ["Évaluation","Date","Note","Commentaire"],
+                  appModalEvals.map(ev => {
+                    const r = ev.resultat || {};
+                    return [
+                      ev.titre || "Évaluation",
+                      ev.date_evaluation ? fmtDatePDF(ev.date_evaluation) : "-",
+                      r.note != null ? `${r.note}/${r.note_max ?? ev.note_max ?? "-"}` : "-",
+                      r.commentaire_coach || "-",
+                    ];
+                  }))}
+
+                <div class="doc-footer">
+                  <span>BET Languages · Centre de langues agréé · Abidjan, Côte d'Ivoire</span>
+                  <span>contact@binniesenglish.com · +225 27 22 40 71 99</span>
+                </div>
+              </div>
+            `, `Fiche apprenant - ${a.prospect_nom || ""}`);
+            toast.success("Fiche apprenant exportée en PDF");
+          } catch (e) {
+            console.error("Fiche apprenant PA:", e);
+            toast.error("Erreur lors de l'export PDF");
+          }
         };
 
         return (

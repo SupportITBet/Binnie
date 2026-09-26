@@ -4804,9 +4804,9 @@ export default function CommercialDashboard() {
       *{box-sizing:border-box}
       body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
       .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:28px}
-      .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1px}
+      .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1pxdisplay:flex;align-items:center;gap:11px}.logo::before{content:'';width:40px;height:40px;flex-shrink:0;background:#fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 28px 28px no-repeat;border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.14)}
       .logo span{color:#0f172a}
-      .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+      .logo-sub{font-size:11px;color:#6b7280;margin-top:4px;margin-left:51px}
       h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
       .num{font-size:11px;color:#6b7280;margin-top:2px}
       section{margin-bottom:20px}
@@ -4899,9 +4899,9 @@ export default function CommercialDashboard() {
       *{box-sizing:border-box}
       body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
       .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:28px}
-      .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1px}
+      .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1pxdisplay:flex;align-items:center;gap:11px}.logo::before{content:'';width:40px;height:40px;flex-shrink:0;background:#fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 28px 28px no-repeat;border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.14)}
       .logo span{color:#0f172a}
-      .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+      .logo-sub{font-size:11px;color:#6b7280;margin-top:4px;margin-left:51px}
       h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
       .num{font-size:11px;color:#6b7280;margin-top:2px}
       section{margin-bottom:20px}
@@ -11376,9 +11376,9 @@ export default function CommercialDashboard() {
                         *{box-sizing:border-box}
                         body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
                         .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:28px}
-                        .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1px}
+                        .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1pxdisplay:flex;align-items:center;gap:11px}.logo::before{content:'';width:40px;height:40px;flex-shrink:0;background:#fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 28px 28px no-repeat;border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.14)}
                         .logo span{color:#0f172a}
-                        .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+                        .logo-sub{font-size:11px;color:#6b7280;margin-top:4px;margin-left:51px}
                         h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
                         .num{font-size:11px;color:#6b7280;margin-top:2px}
                         section{margin-bottom:20px}
@@ -14650,9 +14650,9 @@ export default function CommercialDashboard() {
               *{box-sizing:border-box}
               body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
               .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0891b2;padding-bottom:20px;margin-bottom:28px}
-              .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1px}
+              .logo{font-size:28px;font-weight:900;color:#0891b2;letter-spacing:-1pxdisplay:flex;align-items:center;gap:11px}.logo::before{content:'';width:40px;height:40px;flex-shrink:0;background:#fff url('https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png') center / 28px 28px no-repeat;border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.14)}
               .logo span{color:#0f172a}
-              .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+              .logo-sub{font-size:11px;color:#6b7280;margin-top:4px;margin-left:51px}
               h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
               .num{font-size:11px;color:#6b7280;margin-top:2px}
               section{margin-bottom:20px}

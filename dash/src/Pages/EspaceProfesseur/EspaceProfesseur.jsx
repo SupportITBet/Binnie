@@ -6284,6 +6284,25 @@ const messagesFiltres = useMemo(() => {
                 {priveTab === "infos" && (
                   <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
+                    {/* CE QUE L'APPRENANT ATTEND, en tête et avant la formation.
+                        Le coach de groupe l'avait déjà sur sa fiche ; le coach d'un apprenant
+                        PRIVÉ ne l'avait nulle part - alors que c'est en privé que le contenu
+                        des séances se décide séance par séance, donc là que l'objectif sert
+                        le plus. La route serveur ne l'envoyait même pas : corrigé le même jour
+                        dans parcours.js (/mes-apprenants-coach). */}
+                    {a.objectif_client && (
+                      <div style={{ background:"#f5f3ff", border:"1.5px solid #ddd6fe",
+                        borderRadius:12, padding:"13px 16px" }}>
+                        <div style={{ fontSize:10.5, fontWeight:800, color:"#6d28d9",
+                          letterSpacing:".06em", marginBottom:5 }}>
+                          🎯 CE QUE L'APPRENANT ATTEND
+                        </div>
+                        <div style={{ fontSize:13.5, lineHeight:1.65, color:"#0f172a", whiteSpace:"pre-wrap" }}>
+                          {a.objectif_client}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Formation suivie */}
                     <div style={{ background:"linear-gradient(135deg,#f5f3ff,#ede9fe)", borderRadius:12, padding:"16px 18px", border:"1.5px solid #c4b5fd" }}>
                       <div style={{ fontSize:10, fontWeight:700, color:BET, textTransform:"uppercase", letterSpacing:".06em", marginBottom:8 }}>📚 Formation suivie</div>

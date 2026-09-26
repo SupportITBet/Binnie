@@ -35,6 +35,7 @@ import { useGroupesChatUnreadTotal, useGroupesLibresNonLus } from "../../hooks/u
 
 import { uploadFichier, libelleLimite } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
+import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -9447,60 +9448,75 @@ export default function OnboardingDashboard() {
 
       {/* ══ MODAL DOSSIER APPRENANT ══ */}
       {showAppModal&&selectedApprenant&&(()=>{
-        const exporterFicheApprenantPDF = async () => {
+        /* FICHE APPRENANT — même gabarit que celles de la commerciale et du PA.
+           Elle sortait de jsPDF : tableaux bruts, sans en-tête BET ni bandeau de titre.
+           Trois services produisant le même document ne peuvent pas le produire sous trois
+           apparences. `genererPDF` (utils/genererPDF.js) porte la charte commune et le logo. */
+        const exporterFicheApprenantPDF = () => {
           try {
-            const { jsPDF } = await import("jspdf");
-            const autoTable = (await import("jspdf-autotable")).default;
-            const doc = new jsPDF();
-            doc.setFontSize(16); doc.setTextColor(15,23,42);
-            doc.text(`Dossier apprenant - ${selectedApprenant.nom}`, 14, 16);
-            doc.setFontSize(10); doc.setTextColor(100);
-            doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 14, 23);
+            const num = `BET-FA-${String(selectedApprenant.id || "").replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+            const infoRow = (lbl, val) => val == null || val === "" ? "" :
+              `<div class="info-row"><span class="info-label">${lbl}</span><span class="info-value">${val}</span></div>`;
+            const section = (titre, lignes) => {
+              const corps = lignes.filter(Boolean).join("");
+              return corps ? `<div class="section-title">${titre}</div><div class="info-grid">${corps}</div>` : "";
+            };
+            const objectif = (selectedApprenant.objectif || "").trim();
 
-            autoTable(doc, {
-              startY: 30,
-              head: [["Informations personnelles", ""]],
-              body: [
-                ["Nom complet", selectedApprenant.nom || "-"],
-                ["Email", selectedApprenant.email || "-"],
-                ["Téléphone", selectedApprenant.telephone || "-"],
-                ["Profil", selectedApprenant.profil || "-"],
-                ["Entreprise", selectedApprenant.entreprise || "Particulier"],
-              ],
-              theme:"striped", headStyles:{ fillColor:[8,145,178] }, styles:{ fontSize:9 },
-            });
+            genererPDF(`
+              <div class="doc-header">
+                <div>
+                  <div class="doc-header-logo">BET Languages</div>
+                  <div class="doc-header-sub">Centre de langues - Abidjan, Côte d'Ivoire</div>
+                  <div class="doc-header-sub">📧 contact@binniesenglish.com · 📞 +225 27 22 40 71 99</div>
+                </div>
+                <div class="doc-header-right">
+                  N° ${num}<br/>Émise le ${fmtDatePDF(new Date().toISOString())}
+                </div>
+              </div>
+              <div class="doc-title-band">🎓 FICHE APPRENANT - ${selectedApprenant.nom || ""}</div>
+              <div class="doc-body">
 
-            autoTable(doc, {
-              startY: doc.lastAutoTable.finalY + 10,
-              head: [["Formation assignée", ""]],
-              body: [
-                ["Offre", selectedApprenant.offre || "-"],
-                ["Niveau test", `${selectedApprenant.niveau || "-"} - ${NIVEAUX[selectedApprenant.niveau] || ""}`],
-                ["Coach", selectedApprenant.coach || "-"],
-                ["Conversion", formatDate(selectedApprenant.dateConversion)],
-              ],
-              theme:"striped", headStyles:{ fillColor:[124,58,237] }, styles:{ fontSize:9 },
-            });
+                ${section("👤 Informations personnelles", [
+                  infoRow("Nom complet", selectedApprenant.nom),
+                  infoRow("Email", selectedApprenant.email),
+                  infoRow("Téléphone", selectedApprenant.telephone),
+                  infoRow("Profil", selectedApprenant.profil),
+                  infoRow("Entreprise", selectedApprenant.entreprise || "Particulier"),
+                ])}
 
-            if (selectedApprenant.objectif) {
-              autoTable(doc, {
-                startY: doc.lastAutoTable.finalY + 10,
-                head: [["Objectif pédagogique"]],
-                body: [[selectedApprenant.objectif]],
-                theme:"striped", headStyles:{ fillColor:[217,119,6] }, styles:{ fontSize:9 },
-              });
-            }
+                ${/* Pleine largeur, hors grille : c'est une phrase, et la seule information
+                      de cette fiche qui dise POURQUOI la personne est là. Signalé quand il
+                      manque, pour qu'un oubli se voie au lieu de passer inaperçu. */
+                  objectif
+                    ? `<div class="section-title">🎯 Objectif du client</div>
+                       <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.65;color:#0F172A;white-space:pre-wrap">${objectif}</div>`
+                    : `<div class="section-title">🎯 Objectif du client</div>
+                       <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;font-size:12.5px;color:#92400E">Non renseigné — à demander à l'assistante commerciale.</div>`}
 
-            autoTable(doc, {
-              startY: doc.lastAutoTable.finalY + 10,
-              head: [["Envois Kick-off"]],
-              body: CHECKLIST_ITEMS.map(item => [item.label]),
-              theme:"striped", headStyles:{ fillColor:[100,116,139] }, styles:{ fontSize:9 },
-            });
+                ${section("🎓 Formation assignée", [
+                  infoRow("Offre", selectedApprenant.offre),
+                  infoRow("Niveau test", `${selectedApprenant.niveau || "-"}${NIVEAUX[selectedApprenant.niveau] ? " - " + NIVEAUX[selectedApprenant.niveau] : ""}`),
+                  infoRow("Coach", selectedApprenant.coach),
+                  infoRow("Conversion", formatDate(selectedApprenant.dateConversion)),
+                ])}
 
-            doc.save(`dossier-apprenant-${selectedApprenant.nom}-${Date.now()}.pdf`);
-            toast.success("Fiche exportée en PDF");
-          } catch (e) { toast.error("Erreur lors de l'export PDF"); }
+                <div class="section-title">📬 Envois Kick-off</div>
+                <table><thead><tr><th>Étape</th></tr></thead><tbody>
+                  ${CHECKLIST_ITEMS.map(item => `<tr><td>${item.label}</td></tr>`).join("")}
+                </tbody></table>
+
+                <div class="doc-footer">
+                  <span>BET Languages · Centre de langues agréé · Abidjan, Côte d'Ivoire</span>
+                  <span>contact@binniesenglish.com · +225 27 22 40 71 99</span>
+                </div>
+              </div>
+            `, `Fiche apprenant - ${selectedApprenant.nom || ""}`);
+            toast.success("Fiche apprenant exportée en PDF");
+          } catch (e) {
+            console.error("Fiche apprenant Onboarding:", e);
+            toast.error("Erreur lors de l'export PDF");
+          }
         };
         return (
         <Modal title={`🎓 Dossier - ${selectedApprenant.nom}`} onClose={()=>{ setShowAppModal(false); setSelectedApprenant(null); }} wide
