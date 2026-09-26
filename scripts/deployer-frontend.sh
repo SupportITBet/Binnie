@@ -171,11 +171,17 @@ PROPRIO=$(stat -c '%U:%G' "$CIBLE" 2>/dev/null || stat -f '%Su:%Sg' "$CIBLE")
 #   0-RACINE-*   le repère qui nomme le domaine servi par ce dossier. Il n'a d'utilité
 #                que s'il survit aux déploiements : c'est en le lisant dans la liste des
 #                fichiers, chez Hostinger, qu'on évite de confondre deux racines.
+#   api-bet/     RACINE DU VHOST api.binniesenglish.net. cPanel place les sous-domaines
+#                SOUS public_html, donc dans la cible de ce déploiement. Supprimé, le
+#                vhost de l'API perd sa racine documentaire et répond 500 à tout — sans
+#                rien écrire dans les journaux, ce qui rend la panne très difficile à
+#                relier au déploiement qui l'a causée.
 rsync -a --delete \
       --exclude='.well-known/' \
       --exclude='cgi-bin/' \
       --exclude='.deploiement-bet' \
       --exclude='0-RACINE-*' \
+      --exclude='api-bet/' \
       build/ "$CIBLE/"
 date '+%F %H:%M:%S' > "$CIBLE/.deploiement-bet"
 git -C "$RACINE" log -1 --format='%h %s' >> "$CIBLE/.deploiement-bet"
