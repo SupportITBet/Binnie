@@ -37,6 +37,66 @@ if [ ! -d "$CIBLE" ]; then
   exit 1
 fi
 
+# ── 0. À QUI EST CE DOSSIER ? ────────────────────────────────────────────────
+#
+# Le 26 septembre 2026, ce script a été lancé sur /home/binniesenglish/public_html
+# en croyant viser binniesenglish.net. Ce dossier était la racine du domaine PRINCIPAL
+# du compte cPanel — binniesenglish.com — et servait un site WebSuitePro. Le `rsync
+# --delete` de l'étape 6 l'a effacé. La base de données a survécu, les fichiers non.
+#
+# `public_html` n'appartient jamais à un domaine ajouté : c'est toujours la racine du
+# domaine principal. Un domaine ajouté reçoit son propre dossier — souvent
+# `public_html/<le-domaine>/`. Se tromper des deux est d'autant plus facile que les
+# deux chemins se ressemblent.
+#
+# Le contrôle ci-dessous refuse donc d'écrire dans un dossier qui abrite VISIBLEMENT
+# autre chose. Il ne prétend pas tout reconnaître : il reconnaît ce qu'un site BET
+# laisse derrière lui, et s'arrête devant tout le reste.
+MARQUEUR="$CIBLE/.deploiement-bet"
+etape "Identification du dossier cible"
+if [ -f "$MARQUEUR" ]; then
+  echo "  déjà un site BET — déployé le $(cat "$MARQUEUR" 2>/dev/null | head -1)"
+elif [ -f "$CIBLE/asset-manifest.json" ] && [ -d "$CIBLE/static" ]; then
+  # Un build React antérieur à l'existence du marqueur.
+  echo "  build React reconnu (asset-manifest.json + static/)"
+else
+  # Ni marqueur, ni build : soit le dossier est vide, soit il abrite autre chose.
+  ETRANGERS=$(find "$CIBLE" -mindepth 1 -maxdepth 1 \
+                ! -name '.well-known' ! -name 'cgi-bin' ! -name '.htaccess' \
+                2>/dev/null | head -20)
+  if [ -n "$ETRANGERS" ]; then
+    rouge "✗ REFUS : ce dossier contient autre chose qu'un site BET."
+    echo
+    echo "  $CIBLE"
+    printf '    %s\n' $(echo "$ETRANGERS" | xargs -n1 basename 2>/dev/null)
+    echo
+    echo "  L'étape 6 supprime tout ce qui ne figure pas dans le build. Si ce dossier"
+    echo "  est la racine d'un AUTRE site, il serait effacé — c'est arrivé une fois."
+    echo
+    echo "  Rappel : public_html est la racine du domaine PRINCIPAL du compte."
+    echo "  Un domaine ajouté a son propre dossier. Pour savoir lequel :"
+    echo "      uapi --user=<compte> DomainInfo list_domains"
+    echo
+    echo "  Si vous voulez réellement remplacer ce contenu, créez le marqueur"
+    echo "  vous-même, en connaissance de cause :"
+    echo "      touch $MARQUEUR"
+    exit 1
+  fi
+  echo "  dossier vide — première publication"
+fi
+
+# ── 0 bis. Une copie de l'existant, avant d'y toucher ────────────────────────
+# Douze mégaoctets de précaution contre une republication ratée. Le jour où le build
+# est incomplet malgré les contrôles, c'est ce fichier qui remet le site en ligne.
+if [ -n "$(ls -A "$CIBLE" 2>/dev/null)" ]; then
+  ARCHIVE="/root/avant-deploiement-$(basename "$CIBLE")-$(date +%F-%H%M%S).tar.gz"
+  if tar czf "$ARCHIVE" -C "$(dirname "$CIBLE")" "$(basename "$CIBLE")" 2>/dev/null; then
+    echo "  copie de sûreté : $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
+  else
+    rouge "  ⚠ copie de sûreté impossible — poursuite sans filet"
+  fi
+fi
+
 # ── 1. Le code ───────────────────────────────────────────────────────────────
 etape "Mise à jour du code"
 cd "$RACINE"
@@ -108,7 +168,10 @@ PROPRIO=$(stat -c '%U:%G' "$CIBLE" 2>/dev/null || stat -f '%Su:%Sg' "$CIBLE")
 rsync -a --delete \
       --exclude='.well-known/' \
       --exclude='cgi-bin/' \
+      --exclude='.deploiement-bet' \
       build/ "$CIBLE/"
+date '+%F %H:%M:%S' > "$CIBLE/.deploiement-bet"
+git -C "$RACINE" log -1 --format='%h %s' >> "$CIBLE/.deploiement-bet"
 chown -R "$PROPRIO" "$CIBLE"
 echo "  propriétaire rétabli : $PROPRIO"
 

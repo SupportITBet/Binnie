@@ -246,6 +246,29 @@ que le VPS est en place, pour ne pas envoyer deux fois les mêmes rappels.
 
 ---
 
+## ⚠️ `public_html` n'est pas la racine du site BET
+
+Le compte cPanel `binniesenglish` a pour domaine **principal** `binniesenglish.com`, qui
+hébergeait un site **WebSuitePro** (base `binniesenglish_websuitepro_db`, 52 tables). Sa
+racine est `/home/binniesenglish/public_html`.
+
+Le 26 septembre 2026, `scripts/deployer-frontend.sh` a été lancé sur ce dossier en croyant
+viser `binniesenglish.net`. Le `rsync --delete` a effacé les fichiers de WebSuitePro ; la
+base a survécu, les fichiers non, et la machine n'avait aucune sauvegarde.
+
+**La règle :** `public_html` appartient toujours au domaine principal. Un domaine ajouté
+reçoit son propre dossier, souvent `public_html/<le-domaine>/`. Avant tout déploiement :
+
+```bash
+uapi --user=binniesenglish DomainInfo list_domains
+```
+
+Le script refuse désormais d'écrire dans un dossier qui abrite visiblement autre chose, et
+archive l'existant dans `/root/avant-deploiement-*.tar.gz` avant d'y toucher. Ce garde-fou
+ne remplace pas la vérification ci-dessus : il n'attrape que ce qu'il sait reconnaître.
+
+---
+
 ## 7. La bascule, seulement quand tout répond
 
 Trois applications interrogent l'API. Pour chacune, changer `REACT_APP_API_URL`, puis
