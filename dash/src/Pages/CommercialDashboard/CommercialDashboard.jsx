@@ -9952,6 +9952,17 @@ export default function CommercialDashboard() {
                   infoRow("Source", a.source),
                 ])}
 
+                ${/* L'OBJECTIF DU CLIENT, en pleine largeur et non en ligne de tableau.
+                      C'est une phrase, pas une valeur : serrée dans une demi-colonne à côté
+                      d'un libellé, elle se casse en quatre lignes illisibles. Et c'est la
+                      seule information de cette fiche qui dise POURQUOI la personne est là -
+                      elle mérite d'être lue, pas survolée.
+                      Placée avant la formation : on lit l'intention, puis ce qui a été vendu. */
+                  (a.objectif_client || "").trim()
+                    ? `<div class="section-title">🎯 Objectif du client</div>
+                       <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:11px 14px;margin-bottom:18px;font-size:13px;line-height:1.6;color:#0f172a;white-space:pre-wrap">${a.objectif_client}</div>`
+                    : ""}
+
                 ${section("🎓 Formation", [
                   infoRow("Offre souscrite", offreEffective),
                   infoRow("Date de début", a.date_debut_formation ? fmtDatePDF(a.date_debut_formation) : null),

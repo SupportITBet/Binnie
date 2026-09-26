@@ -9296,6 +9296,22 @@ export default function PedagogicalAdvisorDashboard() {
               ["Type de coaching", a.type_coaching === "prive" ? "Privé" : "Groupe"],
             ]);
 
+            /* L'OBJECTIF DU CLIENT, dans sa propre section et sur toute la largeur.
+               C'est une phrase, pas une valeur : en deuxième colonne d'un tableau
+               libellé/valeur, elle se casse en lignes illisibles. Et c'est la seule
+               information de cette fiche qui dise POURQUOI la personne est là.
+               Absente jusqu'ici alors que la donnée était servie par l'API depuis
+               le début - un oubli d'affichage, pas de données. */
+            const objectifFiche = (a.objectif_client || "").trim();
+            if (objectifFiche) {
+              autoTable(doc, {
+                startY: y, head: [["Objectif du client"]], body: [[objectifFiche]],
+                theme: "striped", headStyles: { fillColor: [109, 40, 217] },
+                styles: { fontSize: 10, cellPadding: 4 },
+              });
+              y = doc.lastAutoTable.finalY + 10;
+            }
+
             section("Assiduité", [124,58,237], [
               ["Séances effectuées", String(seancesCnt)],
               ["Présences", String(presences)],
