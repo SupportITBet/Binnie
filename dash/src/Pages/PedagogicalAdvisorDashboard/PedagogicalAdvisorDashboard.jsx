@@ -9453,6 +9453,26 @@ export default function PedagogicalAdvisorDashboard() {
                       </div>
                     ))}
 
+                    {/* L'OBJECTIF DU CLIENT, avant les infos secondaires et sur toute la largeur.
+                        Il ne va pas dans la grille ci-dessous : c'est une phrase, pas une valeur,
+                        et une demi-colonne la casserait en lignes illisibles. Il vient AVANT parce
+                        qu'il dit pourquoi la personne est là, quand le reste dit comment on l'a
+                        organisée. Affiché pour le privé comme pour le groupe - un apprenant de
+                        groupe a un objectif tout autant, même si personne ne lui choisit de coach. */}
+                    <div style={{ background: a.objectif_client ? "#f5f3ff" : "#fffbeb",
+                      border:`1.5px solid ${a.objectif_client ? "#ddd6fe" : "#fde68a"}`,
+                      borderRadius:10, padding:"12px 16px" }}>
+                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:".05em", textTransform:"uppercase",
+                        color: a.objectif_client ? "#6d28d9" : "#92400e", marginBottom:5 }}>
+                        🎯 Objectif du client
+                      </div>
+                      <div style={{ fontSize:13.5, lineHeight:1.65, whiteSpace:"pre-wrap",
+                        fontWeight: a.objectif_client ? 600 : 700,
+                        color: a.objectif_client ? "#0f172a" : "#92400e" }}>
+                        {a.objectif_client || "Non renseigné — à demander à l'assistante commerciale."}
+                      </div>
+                    </div>
+
                     {/* Infos secondaires */}
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                       {[
