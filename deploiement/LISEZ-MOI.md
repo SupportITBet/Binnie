@@ -4,14 +4,19 @@ Le compte cPanel `binniesenglish` héberge **deux sites différents**, et leurs 
 se ressemblent assez pour qu'on les confonde. Ce dossier contient les fichiers qui rendent
 la confusion impossible — à condition qu'ils soient en place.
 
-| Domaine | Racine | Site servi |
-|---|---|---|
-| `binniesenglish.com` *(principal)* | `/home/binniesenglish/public_html` | WebSuitePro |
-| `binniesenglish.net` | sa racine propre, **jamais** `public_html` | Frontend BET |
+Depuis le 26 septembre 2026, **chaque site a son propre compte cPanel** — c'est ce qui rend
+la confusion structurellement impossible, plutôt que seulement improbable.
 
-La racine du `.net` se lit avec :
+| Domaine | Compte | Racine | Site servi |
+|---|---|---|---|
+| `binniesenglish.com` | `binniesenglish` | `/home/binniesenglish/public_html` | WebSuitePro |
+| `binniesenglish.net` | `betnet` | `/home/betnet/public_html` | Frontend BET |
+
+Deux comptes, deux propriétaires système, deux arborescences sans chemin commun. Une erreur
+de chemin ne mène plus au site de l'autre : elle ne mène nulle part. Pour vérifier :
 
 ```bash
+uapi --user=betnet         DomainInfo list_domains
 uapi --user=binniesenglish DomainInfo list_domains
 ```
 
@@ -45,9 +50,9 @@ d'œil que les deux domaines ne partagent plus la même racine. Le déploiement 
 remplacera par le vrai `index.html`, ce qui est normal.
 
 ```bash
-# Sur le VPS. Remplacer <RACINE-NET> par la racine réelle de binniesenglish.net,
-# obtenue avec list_domains — et qui n'est PAS public_html.
-RACINE_NET=<RACINE-NET>
+# Sur le VPS. C'est bien « public_html » — mais celui du compte betnet, qui n'a
+# rien de commun avec celui du compte binniesenglish.
+RACINE_NET=/home/betnet/public_html
 
 cp /opt/bet/deploiement/binniesenglish.net/index.html                      "$RACINE_NET/"
 cp /opt/bet/deploiement/binniesenglish.net/0-RACINE-binniesenglish.net.txt "$RACINE_NET/"
@@ -55,7 +60,7 @@ cp /opt/bet/deploiement/binniesenglish.net/0-RACINE-binniesenglish.net.txt "$RAC
 # Ce dossier est DÉSORMAIS la racine du site BET : on le déclare.
 echo "racine du site BET — page d'attente posée le $(date '+%F %H:%M')" > "$RACINE_NET/.deploiement-bet"
 
-chown binniesenglish:binniesenglish "$RACINE_NET"/index.html "$RACINE_NET"/0-RACINE-* "$RACINE_NET"/.deploiement-bet
+chown betnet:betnet "$RACINE_NET"/index.html "$RACINE_NET"/0-RACINE-* "$RACINE_NET"/.deploiement-bet
 chmod 644 "$RACINE_NET"/index.html "$RACINE_NET"/0-RACINE-*
 ```
 

@@ -2,26 +2,32 @@ RACINE DU DOMAINE binniesenglish.net
 ════════════════════════════════════════════════════════════════════════
 
 Vous êtes dans le dossier servi par  ▸  https://binniesenglish.net
+Chemin                               ▸  /home/betnet/public_html
+Compte cPanel                        ▸  betnet
 Site attendu ici                     ▸  Frontend BET (site public React)
 
-Déployer ici, et nulle part ailleurs :
+Déployer ici — et c'est bien « public_html », celui DE CE COMPTE :
 
     /opt/bet/scripts/deployer-frontend.sh <ce dossier>
 
 
-⚠  NE PAS DÉPLOYER LE SITE BET DANS « public_html »
+⚠  L'AUTRE SITE, CELUI QU'IL NE FAUT PAS TOUCHER
 ────────────────────────────────────────────────────────────────────────
-« public_html » est la racine du domaine PRINCIPAL du compte cPanel,
-c'est-à-dire binniesenglish.COM, qui sert un site WebSuitePro.
+WebSuitePro vit dans  /home/binniesenglish/public_html, sous le compte
+cPanel « binniesenglish » — un compte DIFFÉRENT de celui-ci.
 
-Le 26 septembre 2026, un déploiement lancé sur « public_html » en croyant
-viser binniesenglish.net a effacé ce site : le script recopie le nouveau
-contenu et supprime tout ce qui n'en fait pas partie. La base de données
-a survécu, les fichiers non, et le serveur n'avait aucune sauvegarde.
+Depuis le 26 septembre 2026, les deux sites ont chacun le leur : aucun
+chemin ne mène de l'un à l'autre, et c'est volontaire.
+
+Ce jour-là, un déploiement lancé sur /home/binniesenglish/public_html en
+croyant viser binniesenglish.net a effacé WebSuitePro : le script recopie
+le nouveau contenu et supprime tout ce qui n'en fait pas partie. La base
+de données a survécu, les fichiers non, et le serveur n'avait aucune
+sauvegarde. C'est cet accident qui a motivé la séparation des comptes.
 
 Avant tout déploiement, vérifier à quel domaine appartient un dossier :
 
-    uapi --user=binniesenglish DomainInfo list_domains
+    uapi --user=betnet DomainInfo list_domains
 
 
 Ce fichier est conservé par les déploiements (exclu de la synchronisation).

@@ -11,14 +11,13 @@ Base de données associée             ▸  binniesenglish_websuitepro_db
 
 ⚠  LE SITE PUBLIC BET NE VA PAS ICI
 ────────────────────────────────────────────────────────────────────────
-Il va dans la racine propre de binniesenglish.net — un AUTRE dossier.
-Pour le retrouver :
+Il va dans  ▸  /home/betnet/public_html
+             ▸  compte cPanel « betnet », domaine binniesenglish.net
 
-    uapi --user=binniesenglish DomainInfo list_domains
+Depuis le 26 septembre 2026, les deux sites ont chacun LEUR compte cPanel.
+Aucun chemin ne mène de celui-ci à l'autre. Pour le vérifier :
 
-Le dossier de binniesenglish.net contient un fichier
-« 0-RACINE-binniesenglish.net.txt » : c'est lui qui confirme qu'on est
-au bon endroit.
+    uapi --user=betnet DomainInfo list_domains
 
 
 CE QUI S'EST PASSÉ LE 26 SEPTEMBRE 2026
@@ -29,7 +28,8 @@ ce qui n'en fait pas partie : les fichiers de WebSuitePro ont été effacés.
 
 La base de données a survécu — un déploiement de fichiers n'y touche pas.
 Les fichiers ont été récupérés depuis la sauvegarde Hostinger du
-20 septembre 2026.
+20 septembre 2026, et le contenu des six jours manquants réinjecté
+depuis un dump pris juste avant la restauration.
 
 Le script de déploiement refuse désormais d'écrire dans un dossier qui
 abrite visiblement autre chose. Ce garde-fou ne remplace pas la
