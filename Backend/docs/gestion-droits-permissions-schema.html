@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schéma — Gestion des droits &amp; permissions</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,4.5vw,46px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15.5px; color:var(--texte-att); max-width:720px; line-height:1.65; }
+
+  nav.sommaire { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+  nav.sommaire a { font-size:11.5px; color:var(--texte-att); text-decoration:none; padding:6px 12px; border:1px solid var(--bordure); border-radius:20px; transition:all .15s; }
+  nav.sommaire a:hover { color:var(--or); border-color:var(--or); }
+
+  .flux { display:flex; flex-direction:column; gap:0; margin-bottom:56px; }
+  .etape { display:grid; grid-template-columns: 64px 1fr; gap:22px; position: relative; padding-bottom: 40px; }
+  .etape:last-child { padding-bottom: 0; }
+  .etape-rail { display:flex; flex-direction:column; align-items:center; }
+  .etape-num { width:46px; height:46px; border-radius:50%; background: var(--fond-carte2); border:2px solid var(--or); display:flex; align-items:center; justify-content:center; font-family: var(--serif); font-size:19px; color: var(--or); flex-shrink:0; }
+  .etape-ligne { width:2px; flex:1; background: linear-gradient(var(--bordure), var(--bordure)); margin-top:8px; min-height: 34px; }
+  .etape:last-child .etape-ligne { display:none; }
+
+  .etape-corps { background: linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%); border:1px solid var(--bordure); border-radius:16px; padding:22px 26px; }
+  .etape-tag { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--texte-att); font-weight:700; margin-bottom:6px; }
+  .etape-titre { font-family: var(--serif); font-size:21px; color:var(--texte); margin-bottom:10px; }
+  .etape-desc { font-size:13.5px; color:var(--texte-att); line-height:1.65; max-width: 720px; }
+
+  .acteurs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .acteur { font-size:11.5px; padding:5px 12px; border-radius:20px; border:1px solid; display:flex; align-items:center; gap:6px; }
+  .acteur.admin   { color:var(--cyan);   border-color: rgba(45,212,232,0.35);  background: rgba(45,212,232,0.08); }
+  .acteur.systeme { color:var(--texte-att); border-color: var(--bordure); background: rgba(255,255,255,0.03); }
+  .acteur.mort    { color:var(--rouge); border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.08); }
+
+  .verdict { font-size:11px; font-weight:800; padding:4px 11px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; margin-top:14px; margin-right:8px; }
+  .verdict.decoratif { color:var(--rouge); background: rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.3); }
+  .verdict.reel      { color:var(--vert);  background: rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); }
+  .verdict.risque    { color:var(--or-clair); background: rgba(240,184,75,0.12); border:1px solid rgba(240,184,75,0.3); }
+
+  .mini-note { margin-top:14px; font-size:12px; color:var(--rose); background: rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.25); padding:8px 12px; border-radius:10px; display:flex; gap:8px; align-items:flex-start; }
+  .mini-note.info { color:var(--cyan); background: rgba(45,212,232,0.08); border-color: rgba(45,212,232,0.25); }
+
+  .cas-special { margin: 18px 0 0; border-radius:16px; padding: 22px 26px; background: linear-gradient(160deg, rgba(248,113,113,0.07), rgba(240,184,75,0.05)); border: 1px solid rgba(240,184,75,0.35); }
+  .cas-special.grave { background: linear-gradient(160deg, rgba(248,113,113,0.12), rgba(248,113,113,0.03)); border-color: rgba(248,113,113,0.4); }
+  .cas-special.solution { background: linear-gradient(160deg, rgba(52,211,153,0.1), rgba(45,212,232,0.03)); border-color: rgba(52,211,153,0.35); }
+  .cas-special .etape-tag { color: var(--or-clair); }
+  .cas-special.grave .etape-tag { color: var(--rouge); }
+  .cas-special.solution .etape-tag { color: var(--vert); }
+  .cas-special .etape-titre { color: var(--texte); }
+  .droits-liste { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:10px; margin-top:14px; }
+  .droit-item { font-size:12.5px; color: var(--texte); background: rgba(0,0,0,0.2); border:1px solid var(--bordure); border-radius:10px; padding:10px 13px; display:flex; align-items:center; gap:8px; }
+  .droit-item .check { color: var(--vert); flex-shrink:0; }
+  .droit-item .croix { color: var(--rouge); flex-shrink:0; }
+
+  .section-titre2 { font-family:var(--serif); font-size:26px; margin: 0 0 8px; color:var(--texte); scroll-margin-top: 24px; }
+  .section-sous { font-size:13.5px; color:var(--texte-att); margin-bottom:22px; max-width:720px; line-height:1.6; }
+  .comparatif { display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom: 56px; }
+  .colonne { border-radius:16px; padding:22px 24px; border:1px solid var(--bordure); }
+  .colonne.avant { background: rgba(248,113,113,0.05); border-color: rgba(248,113,113,0.25); }
+  .colonne.apres { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.25); }
+  .colonne-entete { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px; }
+  .colonne.avant .colonne-entete { color: var(--rouge); }
+  .colonne.apres .colonne-entete { color: var(--vert); }
+  .colonne ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:9px; }
+  .colonne li { font-size:13px; color:var(--texte-att); line-height:1.55; }
+
+  .dataflow { background: var(--fond-carte); border:1px solid var(--bordure); border-radius:16px; padding: 26px 28px; margin-bottom: 20px; }
+  .df-row { display:flex; align-items:center; gap:14px; font-size:13px; padding: 10px 0; border-bottom: 1px dashed var(--bordure); }
+  .df-row:last-child { border-bottom:none; }
+  .df-tbl { font-family: var(--mono); color:var(--or-clair); background: rgba(0,0,0,0.25); padding:3px 9px; border-radius:7px; font-size:12px; white-space:nowrap; }
+  .df-arrow { color: var(--texte-att); }
+  .df-desc { color: var(--texte-att); flex:1; }
+
+  table.matrice { width:100%; border-collapse:collapse; font-size:12.5px; margin: 14px 0 6px; }
+  table.matrice th { text-align:left; color:var(--texte-att); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; font-size:10.5px; padding:8px 10px; border-bottom:1px solid var(--bordure); }
+  table.matrice td { padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--texte); vertical-align:top; }
+  table.matrice tr:last-child td { border-bottom:none; }
+  table.matrice code { font-family:var(--mono); font-size:11.5px; color:var(--or-clair); }
+
+  .sev { font-size:10px; font-weight:800; padding:2px 9px; border-radius:8px; white-space:nowrap; display:inline-block; }
+  .sev.critique { color:var(--rouge); background: rgba(248,113,113,0.15); }
+  .sev.eleve    { color:var(--or-clair); background: rgba(240,184,75,0.15); }
+  .sev.moyen    { color:var(--cyan); background: rgba(45,212,232,0.15); }
+  .sev.fait     { color:var(--vert); background: rgba(52,211,153,0.15); }
+
+  .owasp { font-family:var(--mono); font-size:10.5px; color:var(--violet); background: rgba(167,139,250,0.1); padding:2px 8px; border-radius:6px; white-space:nowrap; }
+
+  .roadmap { display:flex; flex-direction:column; gap:10px; margin-bottom:56px; }
+  .roadmap-item { display:grid; grid-template-columns: 90px 110px 1fr; gap:16px; align-items:start; background:var(--fond-carte); border:1px solid var(--bordure); border-radius:12px; padding:14px 18px; }
+  .roadmap-item .titre { font-size:13.5px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .roadmap-item .desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    .etape { grid-template-columns: 46px 1fr; gap:14px; }
+    .comparatif { grid-template-columns: 1fr; }
+    table.matrice { display:block; overflow-x:auto; }
+    .roadmap-item { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET E-Learning · Gestion des droits &amp; sécurité applicative</span>
+    <h1>Matrice de <em>permissions</em> — état des lieux &amp; modèle cible</h1>
+    <p class="sous-titre">
+      Comment l'admin BET accorde des droits à ses utilisateurs depuis l'écran "Gestion des
+      droits" aujourd'hui, ce qui ne tient pas la route côté sécurité, et le modèle recommandé
+      pour que la matrice affichée corresponde enfin à ce qui est réellement appliqué côté serveur.
+    </p>
+    <nav class="sommaire">
+      <a href="#constat">1 · Constat</a>
+      <a href="#flux-actuel">2 · Flux actuel</a>
+      <a href="#middleware">3 · Middleware fantôme</a>
+      <a href="#modele-cible">4 · Modèle cible</a>
+      <a href="#matrice-cible">5 · Matrice recommandée</a>
+      <a href="#durcissement">6 · Durcissement transverse</a>
+      <a href="#feuille-de-route">7 · Feuille de route</a>
+    </nav>
+  </header>
+
+  <!-- ── CONSTAT DE DÉPART ── -->
+  <div class="cas-special" id="constat">
+    <div class="etape-tag">⚠️ Constat avant tout le reste</div>
+    <div class="etape-titre">Trois implémentations indépendantes de cet écran existent — aucune n'est reliée au backend</div>
+    <div class="etape-desc">
+      <code style="color:var(--or-clair)">bet-elearning/src/pages/admin/GestionDroits.jsx</code> (celle qui correspond à la capture —
+      onglets Vue d'ensemble / Utilisateurs / Matrice des permissions / Sécurité, catégories
+      Admin/Pédagogie/Apprenants/Support), une deuxième dans <code style="color:var(--or-clair)">dash/src/Pages/GestionDroits/GestionDroits.jsx</code>
+      avec des modules différents (cours, étudiants, finances…), et une troisième intégrée
+      directement dans <code style="color:var(--or-clair)">SuperAdminDashboard.jsx</code>. Ce document porte
+      d'abord sur la <strong>première</strong> pour l'état des lieux, puis propose un modèle cible
+      valable pour <strong>toute la plateforme</strong> (dash et bet-elearning confondus), avec une
+      recommandation explicite de n'en garder qu'une seule au final.
+    </div>
+  </div>
+
+  <!-- ── FLUX ACTUEL ── -->
+  <h2 class="section-titre2" id="flux-actuel" style="margin-top:56px;">2 · Ce que fait l'écran aujourd'hui, action par action</h2>
+  <p class="section-sous">Vérifié en lisant le code réel, pas en devinant depuis l'UI — chaque étape indique si elle a un effet serveur ou non.</p>
+
+  <div class="flux">
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">1</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Chargement</div>
+        <div class="etape-titre">La matrice se recharge depuis une constante figée dans le code</div>
+        <div class="etape-desc">
+          <code style="color:var(--or-clair)">PERMISSIONS_MATRICE</code> est un tableau JS statique
+          (<code style="color:var(--or-clair)">bet-elearning/src/mock/usersInternes.js</code>), pas une table en base.
+          Forme inversée : chaque permission liste les rôles qui l'ont, plutôt qu'un rôle listant ses
+          permissions. À chaque rafraîchissement de page, la matrice repart de cette valeur figée —
+          toute modification précédente, même "sauvegardée", est perdue.
+        </div>
+        <span class="verdict decoratif">✗ Aucune donnée réelle</span>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">2</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Bascule d'un toggle</div>
+        <div class="etape-titre">Activer/désactiver une permission ne modifie que l'état React local</div>
+        <div class="etape-desc">
+          Cliquer sur un interrupteur (ex. "Évaluer professeurs" pour Manager BET) met à jour
+          <code style="color:var(--or-clair)">matriceLocale</code> dans le composant — rien n'est envoyé au serveur
+          à ce stade. C'est un brouillon en mémoire, propre à cet onglet de navigateur.
+        </div>
+        <span class="verdict decoratif">✗ Local uniquement</span>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">3</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Clic sur "💾 Sauvegarder"</div>
+        <div class="etape-titre">Aucun appel réseau n'est déclenché</div>
+        <div class="etape-desc">
+          <code style="color:var(--or-clair)">sauvegarderMatrice()</code> se contente d'afficher le badge
+          "✓ Sauvegardé" pendant 2,5 secondes puis de le faire disparaître. Aucun <code style="color:var(--or-clair)">fetch</code>,
+          aucune écriture en base. Un rechargement de page (F5) efface immédiatement tout changement,
+          "sauvegardé" ou non.
+        </div>
+        <div class="acteurs"><span class="acteur mort">💾 sauvegarderMatrice() — aucun fetch</span></div>
+        <span class="verdict decoratif">✗ Ne persiste rien, pour personne</span>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">4</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Clic sur "📋 Cloner des permissions"</div>
+        <div class="etape-titre">Le bouton n'a tout simplement pas de gestionnaire de clic</div>
+        <div class="etape-desc">
+          Dans la version bet-elearning (celle de la capture), ce bouton n'a <strong>aucun</strong>
+          <code style="color:var(--or-clair)">onClick</code>. Cliquer dessus ne fait rigoureusement rien.
+        </div>
+        <span class="verdict decoratif">✗ Bouton mort</span>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">5</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Clic sur "+ Inviter un utilisateur"</div>
+        <div class="etape-titre">Le nouvel utilisateur est créé sans aucun lien avec la matrice</div>
+        <div class="etape-desc">
+          La création réelle d'un compte (<code style="color:var(--or-clair)">POST /api/admin/utilisateurs</code>,
+          ceci fonctionne vraiment) n'envoie que <code style="color:var(--or-clair)">nom, prénom, email, role,
+          scope, département, actif</code> — jamais un objet de permissions. L'accès du nouvel
+          utilisateur dépend donc uniquement de la chaîne <code style="color:var(--or-clair)">role</code>, pas des
+          interrupteurs cochés dans l'onglet "Matrice des permissions" au moment de l'invitation.
+        </div>
+        <span class="verdict reel">✓ Création de compte réelle</span>
+        <span class="verdict decoratif">✗ Mais sans lien avec la matrice</span>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">6</div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Utilisation quotidienne</div>
+        <div class="etape-titre">Le contrôle d'accès réel se fait ailleurs, en tout ou rien</div>
+        <div class="etape-desc">
+          Ce qui décide vraiment si une requête passe ou échoue : <code style="color:var(--or-clair)">authenticateAdmin</code>
+          (le rôle appartient-il à la liste blanche des rôles admin ?) et <code style="color:var(--or-clair)">requireSuperAdmin</code>
+          (binaire : super_admin ou rien) sur 9 routes sensibles. Aucune route du backend ne consulte
+          jamais un module/action fin comme "Pédagogie → Évaluer professeurs". La granularité que
+          montre l'écran n'existe nulle part côté serveur.
+        </div>
+        <span class="verdict decoratif">✗ Granularité fictive</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── LE MIDDLEWARE FANTÔME ── -->
+  <div class="cas-special" id="middleware">
+    <div class="etape-tag">🔍 Le plus troublant : le code d'enforcement existe déjà — et n'est câblé nulle part</div>
+    <div class="etape-titre"><code style="font-size:16px;">requirePermission(module, action)</code></div>
+    <div class="etape-desc">
+      Défini dans <code style="color:var(--or-clair)">Backend/src/middlewares/requireAdmin.js:185-198</code>, ce
+      middleware fait exactement ce qu'on attendrait — il lit <code style="color:var(--or-clair)">req.profil.permissions[module][action]</code>
+      et bloque avec un 403 si c'est faux, avec un bypass automatique pour <code style="color:var(--or-clair)">super_admin</code>.
+      Il est importé une fois dans <code style="color:var(--or-clair)">adminRoutes.js</code> — puis jamais appelé sur
+      aucune route, dans tout le backend. Zéro occurrence de <code style="color:var(--or-clair)">requirePermission(</code>
+      en dehors de sa propre définition. Même chose pour <code style="color:var(--or-clair)">requireScope(centreId)</code>
+      (lignes 202-215) — écrit, jamais attaché.
+    </div>
+    <div class="droits-liste">
+      <div class="droit-item"><span class="check">✓</span> Logique d'enforcement écrite et correcte</div>
+      <div class="droit-item"><span class="croix">✗</span> Jamais attaché à une seule route</div>
+      <div class="droit-item"><span class="croix">✗</span> <code>utilisateurs.permissions</code> n'est ni lu ni écrit par aucun flux actif</div>
+      <div class="droit-item"><span class="check">✓</span> Bypass super_admin déjà correct, prêt à l'emploi</div>
+    </div>
+    <div class="mini-note">
+      <span>ℹ️</span>
+      <span>Une colonne <code>permissions</code> existe bien en base, mais sur <strong>profils_admin</strong> (table
+      legacy), via <code>PATCH /api/admin/profils/:id</code> — endpoint qu'aucune page du frontend n'appelle
+      aujourd'hui. Et une table <code>permissions_roles</code> distincte est exposée en lecture seule
+      (<code>GET /api/admin/permissions-matrice</code>), consultée uniquement par la 3ᵉ copie de l'écran dans
+      SuperAdminDashboard.jsx — jamais utilisée pour autoriser quoi que ce soit.</span>
+    </div>
+  </div>
+
+  <!-- ── CAS RÉEL DÉJÀ VÉCU ── -->
+  <div class="cas-special grave" style="margin-top:24px;">
+    <div class="etape-tag">🩹 Ce n'est pas théorique — ça s'est déjà produit</div>
+    <div class="etape-titre">Cas vécu : <code style="font-size:15px;">PATCH /api/remplacements/:id</code> sans aucun contrôle de rôle</div>
+    <div class="etape-desc">
+      Audité et corrigé plus tôt sur ce module : cette route n'avait <strong>aucune</strong> vérification
+      de rôle — n'importe quel compte "coach" authentifié pouvait s'auto-assigner comme remplaçant sur
+      la classe d'un autre coach, refuser la demande d'un collègue, ou clôturer un remplacement en
+      cours. La cause exacte : la route ne s'appuyait que sur <code style="color:var(--or-clair)">authenticateAdmin</code>
+      (authentification, pas autorisation) — <strong>exactement</strong> le même angle mort que celui
+      documenté ici pour l'écran "Gestion des droits" : le code sait qui est connecté, mais jamais ce
+      qu'il a le droit de faire. Ce précédent est la meilleure preuve que le problème documenté ici
+      n'est pas hypothétique — c'est un patron qui se répète à travers le backend tant qu'aucun
+      middleware de permission n'est systématiquement câblé.
+    </div>
+  </div>
+
+  <!-- ── MATRICE ACTUELLE (contenu réel de l'écran) ── -->
+  <h2 class="section-titre2" style="margin-top:56px;">Contenu actuel de la matrice (données statiques)</h2>
+  <div class="dataflow">
+    <table class="matrice">
+      <thead><tr><th>Catégorie</th><th>Permissions listées</th><th>Rôles concernés (exemple capture)</th></tr></thead>
+      <tbody>
+        <tr><td>🛡️ Admin</td><td>Lire tout · Modifier tout · Supprimer · Gestion des droits</td><td>admin_manager uniquement</td></tr>
+        <tr><td>📚 Pédagogie</td><td>Gérer professeurs · Évaluer professeurs · Gérer remplacements · Animer des sessions · Noter les apprenants · Gérer les présences · Accéder aux contenus · Voir le planning</td><td>variable selon rôle</td></tr>
+        <tr><td>🎓 Apprenants</td><td>Tests de niveau · Affecter apprenants · Gérer classes · Suivi programme · Gérer contenus</td><td>variable selon rôle</td></tr>
+        <tr><td>🎧 Support</td><td>Tickets support · Messagerie client · Voir clients</td><td>variable selon rôle</td></tr>
+        <tr><td>💼 Commercial <span style="color:var(--rouge);">(bug)</span></td><td>Voir clients · Créer devis · Suivi pipeline · Rapports CA · Modifier entreprises · Saisir paiements</td><td>présent dans les données, jamais affiché — la liste des catégories affichées ('Admin','Pédagogie','Apprenants','Support') a oublié 'Commercial'</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════════════════════ MODÈLE CIBLE ══════════════════════════ -->
+  <h2 class="section-titre2" id="modele-cible" style="margin-top:64px;">4 · Modèle de permissions recommandé</h2>
+  <p class="section-sous">Recommandations d'architecture de sécurité, fondées sur l'audit ci-dessus et sur les incidents réellement rencontrés sur cette plateforme (pas un modèle générique de manuel).</p>
+
+  <div class="cas-special solution">
+    <div class="etape-tag">✓ Principe directeur n°1</div>
+    <div class="etape-titre">Rôle = gabarit vivant, avec exceptions par utilisateur</div>
+    <div class="etape-desc">
+      Le document précédent laissait la question ouverte. Recommandation tranchée : <strong>quand
+      l'admin modifie les permissions d'un rôle, tous les utilisateurs actuels de ce rôle doivent
+      perdre ou gagner l'accès immédiatement</strong> — pas seulement les futurs comptes créés après
+      coup. C'est le principe de moindre privilège appliqué dans le temps : un accès révoqué au niveau
+      du rôle ne doit jamais rester actif "par accident" chez quelqu'un parce qu'il a été créé avant
+      la révocation. En parallèle, prévoir une table d'<strong>exceptions par utilisateur</strong>
+      (accorder ou retirer une permission précise à UNE personne sans toucher au reste de son rôle —
+      ex. un agent Onboarding ponctuellement autorisé sur les Contenus). Résolution à l'exécution :
+      <code style="color:var(--or-clair)">effectif = permissions_du_rôle</code>, puis appliquer les
+      exceptions utilisateur par-dessus (elles gagnent toujours).
+    </div>
+  </div>
+
+  <div class="cas-special solution">
+    <div class="etape-tag">✓ Principe directeur n°2</div>
+    <div class="etape-titre">Aucune permission implicite — refus par défaut</div>
+    <div class="etape-desc">
+      Un nouveau rôle créé démarre à <strong>zéro</strong> permission, jamais avec un jeu par défaut
+      "raisonnable" deviné par le code. C'est à l'admin de cocher explicitement chaque droit accordé.
+      Ça évite la dérive silencieuse où un rôle censé être limité (ex. Observateur) se retrouve avec
+      des droits d'écriture parce qu'un défaut trop généreux n'a jamais été audité.
+    </div>
+  </div>
+
+  <div class="cas-special solution">
+    <div class="etape-tag">✓ Principe directeur n°3</div>
+    <div class="etape-titre">Les permissions voyagent dans le token, pas requêtées à chaque appel</div>
+    <div class="etape-desc">
+      Pour éviter un aller-retour base de données sur <em>chaque</em> requête API (coût de latence sur
+      une plateforme déjà chargée de vérifications), résoudre les permissions effectives et les
+      embarquer dans <code style="color:var(--or-clair)">app_metadata</code> du JWT Supabase au moment
+      de la connexion — <code style="color:var(--or-clair)">authenticateAdmin</code> les lit alors
+      directement depuis <code style="color:var(--or-clair)">user.app_metadata</code>, déjà vérifié
+      côté serveur (non modifiable par le client). Contrepartie à assumer explicitement : une
+      modification de rôle ne prend effet qu'au prochain rafraîchissement de session (ou en forçant
+      une déconnexion ciblée de l'utilisateur concerné au moment du changement, ce qui est la
+      meilleure pratique pour une révocation urgente).
+    </div>
+  </div>
+
+  <!-- ── MATRICE CIBLE ── -->
+  <h2 class="section-titre2" id="matrice-cible" style="margin-top:56px;">5 · Matrice de permissions recommandée (modules réels de la plateforme)</h2>
+  <p class="section-sous">Construite à partir des fonctionnalités réellement présentes dans le code — pas les 4 catégories génériques actuelles ("Admin/Pédagogie/Apprenants/Support"), qui ne couvrent ni les remplacements, ni les suspensions définitives, ni les honoraires, ni l'audit.</p>
+  <div class="dataflow">
+    <table class="matrice">
+      <thead><tr><th>Module</th><th>Actions</th><th>Rôles typiquement concernés</th><th>Point de vigilance</th></tr></thead>
+      <tbody>
+        <tr><td>👥 Utilisateurs</td><td><code>voir</code> · <code>créer</code> · <code>modifier</code> · <code>désactiver</code> · <code>gérer_droits</code></td><td>super_admin, manager</td><td><code>gérer_droits</code> doit rester distinct de <code>modifier</code> — pouvoir éditer un profil ne doit pas donner le pouvoir de s'auto-élever en super_admin.</td></tr>
+        <tr><td>🏫 Classes &amp; groupes</td><td><code>voir</code> · <code>créer</code> · <code>modifier</code> · <code>clôturer</code> · <code>suspendre_coach</code></td><td>onboarding, manager, superviseur</td><td><code>suspendre_coach</code> (suspension définitive) doit rester une permission séparée et rare — c'est une décision lourde, jamais un sous-effet de <code>modifier</code>.</td></tr>
+        <tr><td>🔄 Remplacements</td><td><code>voir</code> · <code>assigner</code> · <code>refuser</code> · <code>clôturer</code></td><td>pedagogical_advisor, onboarding, manager</td><td>Cas déjà corrigé : sans <code>requirePermission</code> câblé ici, un simple coach peut s'auto-assigner (voir encart ci-dessus).</td></tr>
+        <tr><td>✅ Présences</td><td><code>saisir</code> · <code>consulter</code> · <code>corriger</code></td><td>coach titulaire/remplaçant, superviseur</td><td><code>corriger</code> (modifier une présence déjà saisie) doit être audité systématiquement — c'est un vecteur de fraude aux honoraires.</td></tr>
+        <tr><td>📁 Contenus &amp; fichiers</td><td><code>créer</code> · <code>publier</code> · <code>modifier</code> · <code>supprimer</code></td><td>coach titulaire, admin_contenus</td><td>Un remplaçant temporaire ne doit jamais avoir <code>créer</code>/<code>modifier</code> sur le programme du titulaire (déjà tranché fonctionnellement dans le module Remplacements — le modèle de permissions doit le refléter explicitement, pas dépendre d'une vérification ad hoc dans chaque route.</td></tr>
+        <tr><td>📝 Devoirs &amp; évaluations</td><td><code>créer</code> · <code>noter</code> · <code>valider</code></td><td>coach titulaire, PA advisor</td><td><code>valider</code> (note définitive) réservé au titulaire, jamais à un remplaçant — même logique que ci-dessus.</td></tr>
+        <tr><td>💰 Honoraires &amp; paiements</td><td><code>calculer</code> · <code>valider</code> · <code>exporter</code> · <code>voir</code></td><td>rh_paie, comptable, manager</td><td>Séparation des tâches recommandée : la personne qui <code>calcule</code> ne devrait pas être la même qui <code>valide</code> — sinon un seul compte compromis peut détourner un virement de bout en bout.</td></tr>
+        <tr><td>🔔 Notifications</td><td><code>envoyer_role</code> · <code>diffuser_masse</code></td><td>manager, super_admin</td><td><code>diffuser_masse</code> (à tous les apprenants/coachs) doit être rare et loggée — vecteur de spam ou de désinformation interne si un compte est compromis.</td></tr>
+        <tr><td>🕵️ Audit logs</td><td><code>consulter</code> · <code>exporter</code></td><td>super_admin, manager</td><td>Jamais <code>modifier</code>/<code>supprimer</code> — un journal d'audit altérable ne sert à rien. Actuellement déjà append-only en pratique, à garder ainsi explicitement.</td></tr>
+        <tr><td>🏢 Entreprises &amp; contrats</td><td><code>voir</code> · <code>créer</code> · <code>modifier</code> · <code>voir_finances</code></td><td>admin_commercial, manager, comptable</td><td><code>voir_finances</code> (montants de contrat) séparé de <code>voir</code> (infos générales) — pas tout le monde qui touche à une entreprise n'a besoin de voir ses montants.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="mini-note info">
+    <span>ℹ️</span>
+    <span>Chaque module garde un <code>voir</code> distinct des actions d'écriture — c'est ce qui permet, par
+    exemple, à un Observateur d'avoir un accès en lecture seule réel plutôt qu'un rôle sans aucune utilité
+    (cas actuel : "Observateur" a 0 permission dans la matrice existante, donc ne peut littéralement
+    rien consulter — probablement pas l'intention).</span>
+  </div>
+
+  <!-- ══════════════════════════ DURCISSEMENT TRANSVERSE ══════════════════════════ -->
+  <h2 class="section-titre2" id="durcissement" style="margin-top:64px;">6 · Durcissement sécurité transverse</h2>
+  <p class="section-sous">Au-delà de la matrice de permissions elle-même — trouvé en auditant l'authentification, le stockage de session et la configuration serveur de bet-elearning et du Backend partagé.</p>
+
+  <div class="dataflow">
+    <div class="df-row">
+      <span class="sev critique">Critique</span>
+      <span class="df-desc"><strong style="color:var(--texte)">Jetons d'authentification dispersés sur 3 clés incohérentes</strong> — <code>admin_token</code>, <code>bet_access_token</code>, <code>coach_token</code> coexistent dans le même <code>localStorage</code> par navigateur, avec des replis en cascade (<code>coach_token || admin_token</code>, <code>admin_token || bet_access_token</code>) selon les fichiers. Conséquence directe déjà observée sur ce projet : une action effectuée dans l'app coach s'est retrouvée attribuée à un compte onboarding connecté dans un autre onglet du même navigateur, parce que le jeton le plus récemment écrit "gagnait" silencieusement. Recommandation : une seule clé de token par rôle fonctionnel, stockée en <code>sessionStorage</code> (isolé par onglet) plutôt que <code>localStorage</code> partagé — au minimum, arrêter la prolifération des clés et des replis en cascade.</span>
+    </div>
+    <div class="df-row">
+      <span class="sev eleve">Élevé</span>
+      <span class="df-desc"><strong style="color:var(--texte)">Aucun rate-limiting</strong> — ni sur <code>/api/auth/login</code>, ni sur aucune route sensible (signalement d'absence, réinitialisation de mot de passe...). Un compte peut être bruteforcé sans ralentissement, et le "spam de notifications" déjà signalé comme risque mineur sur le module Remplacements n'a aucun garde-fou technique.</span>
+    </div>
+    <div class="df-row">
+      <span class="sev eleve">Élevé</span>
+      <span class="df-desc"><strong style="color:var(--texte)">Politique de mot de passe quasi inexistante</strong> — seule règle serveur trouvée : longueur minimale de 6 caractères, aucune exigence de complexité, à la création de compte comme au changement de mot de passe.</span>
+    </div>
+    <div class="df-row">
+      <span class="sev eleve">Élevé</span>
+      <span class="df-desc"><strong style="color:var(--texte)">2FA optionnel même pour super_admin/manager</strong> — le mécanisme existe et fonctionne (vérification réelle du niveau d'assurance MFA Supabase), mais rien ne le rend obligatoire selon le rôle. Un compte à privilèges maximaux peut rester protégé par mot de passe seul.</span>
+    </div>
+    <div class="df-row">
+      <span class="sev moyen">Moyen</span>
+      <span class="df-desc"><strong style="color:var(--texte)">CORS permissif en développement, non verrouillé explicitement</strong> — tout <code>http://localhost:*</code> est autorisé sans restriction de port, en plus d'une liste d'origines via variable d'environnement. À figer strictement en production (liste blanche exacte des domaines BET, aucun joker localhost hors environnement de dev).</span>
+    </div>
+    <div class="df-row">
+      <span class="sev moyen">Moyen</span>
+      <span class="df-desc"><strong style="color:var(--texte)">Pas d'en-têtes de sécurité HTTP</strong> — ni <code>helmet</code> ni équivalent (CSP, HSTS, X-Frame-Options, X-Content-Type-Options) sur le Backend Express.</span>
+    </div>
+    <div class="df-row">
+      <span class="sev moyen">Moyen</span>
+      <span class="df-desc"><strong style="color:var(--texte)"><code>scope</code> (périmètre centre/national) appliqué de façon incohérente</strong> — <code>requireScope</code> existe mais n'est jamais câblé ; le champ <code>utilisateurs.scope</code> n'est filtré qu'au cas par cas dans certaines routes (leads, messages, inscriptions...) quand l'auteur y a pensé, jamais garanti de façon centralisée.</span>
+    </div>
+    <div class="df-row">
+      <span class="sev fait">Déjà correct</span>
+      <span class="df-desc"><strong style="color:var(--texte)">Pas de surface d'injection SQL trouvée</strong> — tout l'accès base passe par les requêtes paramétrées Supabase-js (<code>.eq()</code>, <code>.select()</code>...), aucune concaténation de SQL brut détectée. Rien à corriger ici, à préserver en gardant cette discipline pour tout nouveau code.</span>
+    </div>
+  </div>
+
+  <!-- ── AVANT / APRÈS ── -->
+  <h2 class="section-titre2">Ce qui devrait changer pour que l'écran soit réel</h2>
+  <div class="comparatif">
+    <div class="colonne avant">
+      <div class="colonne-entete">✗ Aujourd'hui</div>
+      <ul>
+        <li>La matrice est une constante JS, jamais lue depuis la base et jamais écrite dedans.</li>
+        <li>"Sauvegarder" ne fait aucun appel réseau — tout brouillon disparaît au rechargement.</li>
+        <li>"Cloner des permissions" n'a pas de gestionnaire de clic dans la version utilisée.</li>
+        <li>Un nouvel utilisateur invité n'hérite d'aucune permission de la matrice — seul son <code>role</code> compte.</li>
+        <li><code>requirePermission</code> existe, fonctionne, mais n'est attaché à aucune route — 100% des permissions affichées sont décoratives côté serveur.</li>
+        <li>4 catégories génériques, aucune ne couvre remplacements, suspension définitive, honoraires ou audit.</li>
+        <li>Trois implémentations différentes de cet écran coexistent, aucune connectée à une source de vérité commune.</li>
+        <li>Jetons d'auth dispersés sur 3 clés avec repli en cascade, pas de rate-limiting, mot de passe faible autorisé, 2FA jamais imposé.</li>
+      </ul>
+    </div>
+    <div class="colonne apres">
+      <div class="colonne-entete">✓ Flux cible</div>
+      <ul>
+        <li>La matrice se charge depuis une vraie table (<code>permissions_roles</code>, déjà en base — juste jamais écrite) via <code>GET</code>, et s'enregistre via un vrai <code>PUT/PATCH</code>.</li>
+        <li>"Sauvegarder" écrit en base et affiche une confirmation seulement après succès réseau confirmé.</li>
+        <li>"Cloner des permissions" copie réellement un jeu de permissions d'un rôle vers un autre, en base, avec entrée d'audit.</li>
+        <li>Rôle = gabarit vivant (changement propagé immédiatement à tous les utilisateurs du rôle) + table d'exceptions par utilisateur.</li>
+        <li><code>requirePermission(module, action)</code> attaché sur les 10 modules réels listés en section 5, bypass super_admin déjà écrit et correct.</li>
+        <li>Matrice alignée sur les modules réels de la plateforme (remplacements, suspension, honoraires, audit inclus).</li>
+        <li>Une seule implémentation de référence, les deux autres retirées.</li>
+        <li>Un seul jeton d'auth par session, rate-limiting sur login/signalement, mot de passe renforcé, 2FA obligatoire pour super_admin/manager.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── DONNÉES ── -->
+  <h2 class="section-titre2">Ce qui existe déjà et peut être réutilisé</h2>
+  <div class="dataflow" style="margin-bottom:56px;">
+    <div class="df-row"><span class="df-tbl">permissions_roles</span><span class="df-arrow">→</span><span class="df-desc">table réelle déjà en base — colonnes <code>role, module, peut_lire, peut_creer, peut_modifier, peut_supprimer, peut_gerer</code>. Lue par <code>GET /api/admin/permissions-matrice</code>. Il manque uniquement le PUT/PATCH pour l'écrire.</span></div>
+    <div class="df-row"><span class="df-tbl">requirePermission()</span><span class="df-arrow">→</span><span class="df-desc">middleware déjà écrit et correct dans <code>requireAdmin.js</code> — bypass super_admin inclus. Il ne manque que son attachement effectif sur les routes.</span></div>
+    <div class="df-row"><span class="df-tbl">requireScope()</span><span class="df-arrow">→</span><span class="df-desc">même situation — écrit, jamais attaché. À centraliser plutôt que les filtres <code>scope</code> ad hoc actuels dispersés dans plusieurs routes.</span></div>
+    <div class="df-row"><span class="df-tbl">2FA (Supabase MFA)</span><span class="df-arrow">→</span><span class="df-desc">mécanisme de vérification déjà fonctionnel (<code>adminRoutes.js:226-257</code>) — il ne manque qu'une règle serveur qui le rend obligatoire selon le rôle plutôt qu'un simple toggle optionnel.</span></div>
+    <div class="df-row"><span class="df-tbl">audit_logs</span><span class="df-arrow">→</span><span class="df-desc">déjà en place et déjà utilisé de façon cohérente sur les modules audités cette session (remplacements, suspensions) — bonne base à étendre systématiquement à tout endpoint protégé par <code>requirePermission</code>.</span></div>
+    <div class="df-row"><span class="df-tbl">POST /api/admin/utilisateurs</span><span class="df-arrow">→</span><span class="df-desc">création de compte déjà fonctionnelle — à étendre pour résoudre et embarquer les permissions effectives du rôle choisi dans le JWT au moment de la création/connexion.</span></div>
+  </div>
+
+  <!-- ── FEUILLE DE ROUTE ── -->
+  <h2 class="section-titre2" id="feuille-de-route">7 · Feuille de route, par priorité</h2>
+  <div class="roadmap">
+    <div class="roadmap-item">
+      <span class="sev critique">1 · Critique</span>
+      <span class="owasp">OWASP A01</span>
+      <div><div class="titre">Câbler <code>requirePermission</code> sur les 10 modules réels</div><div class="desc">Sans ça, tout le reste de ce document reste cosmétique. Commencer par les modules déjà en position de risque connu : Remplacements, Suspension de coach, Honoraires.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev critique">2 · Critique</span>
+      <span class="owasp">OWASP A02</span>
+      <div><div class="titre">Unifier le stockage des jetons d'authentification</div><div class="desc">Une clé par rôle fonctionnel, migration vers <code>sessionStorage</code> pour limiter la contamination croisée entre onglets/rôles déjà observée en pratique.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev eleve">3 · Élevé</span>
+      <span class="owasp">OWASP A04</span>
+      <div><div class="titre">Écrire le PUT/PATCH sur <code>permissions_roles</code> + brancher "Sauvegarder" et "Cloner"</div><div class="desc">Rendre l'écran réellement fonctionnel, avec le modèle rôle-vivant + exceptions décrit en section 4.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev eleve">4 · Élevé</span>
+      <span class="owasp">OWASP A07</span>
+      <div><div class="titre">Rendre le 2FA obligatoire pour super_admin/manager</div><div class="desc">Le mécanisme existe déjà et fonctionne — ne manque qu'une règle serveur qui bloque la connexion sans MFA activé pour ces rôles.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev eleve">5 · Élevé</span>
+      <span class="owasp">OWASP A05</span>
+      <div><div class="titre">Rate-limiting sur login et endpoints de signalement</div><div class="desc"><code>express-rate-limit</code> (ou équivalent) sur <code>/api/auth/login</code> en priorité, puis sur toute route qui déclenche des notifications de masse.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev moyen">6 · Moyen</span>
+      <span class="owasp">OWASP A05</span>
+      <div><div class="titre">Ajouter <code>helmet</code>, verrouiller CORS en production, renforcer la politique de mot de passe</div><div class="desc">Trois correctifs indépendants et rapides, aucun ne dépend des autres.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev moyen">7 · Moyen</span>
+      <span class="owasp">OWASP A01</span>
+      <div><div class="titre">Câbler <code>requireScope</code> de façon centralisée</div><div class="desc">Remplacer les filtres <code>scope</code> ad hoc dispersés dans plusieurs routes par un middleware systématique.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev moyen">8 · Moyen</span>
+      <span class="owasp">—</span>
+      <div><div class="titre">Réintégrer la catégorie Commercial dans l'affichage, retirer les 2 implémentations dupliquées</div><div class="desc">Nettoyage — une seule source de vérité pour cet écran sur toute la plateforme (dash + bet-elearning).</div></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>BET E-Learning — Gestion des droits &amp; permissions</span>
+    <span>Document interne — usage privé</span>
+  </footer>
+
+</div>
+</body>
+</html>

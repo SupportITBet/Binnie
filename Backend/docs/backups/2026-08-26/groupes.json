@@ -1,0 +1,969 @@
+[
+  {
+    "id": "97fa0ed9-4f74-4a1c-9b03-f167cf2aa7e3",
+    "nom": "Coaching privé — Adja Sanou B2",
+    "niveau": "B2",
+    "filiere": "Coaching Privé Enfants & Ados — En ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "09:30",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "09:30",
+        "jour": "Mar",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T21:44:48.086694+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "d7b91f9d-7a1e-4e00-836b-2a876afd1d99",
+    "nom": "Coaching groupe A1",
+    "niveau": "A1",
+    "filiere": "Coaching de groupe",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-15",
+    "date_fin": "2026-09-06",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-13T00:28:53.23476+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "c57f9f97-48c6-4b71-86e3-b8dd2256e45a",
+    "nom": "Anglais Pro A12",
+    "niveau": "A1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      "Lundi 08:00–10:00",
+      "Mardi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-14",
+    "date_fin": "2026-08-30",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-12T23:48:02.762907+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "179e973f-0a08-463d-8715-8e2e54870d32",
+    "nom": "Coaching A2",
+    "niveau": "A2",
+    "filiere": "Coaching de groupe",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-13",
+    "date_fin": "2026-11-13",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-13T15:54:18.386905+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "eaa7968e-1b5e-47b7-9d62-834954914994",
+    "nom": "Enfant A1 - soir",
+    "niveau": "A1",
+    "filiere": "Enfants & Ados — Groupe en ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-15",
+    "date_fin": "2026-11-13",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-13T17:43:19.303824+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "703e4e64-5797-4d0b-8405-9d766dd5ea4b",
+    "nom": "Enfant B1 ",
+    "niveau": "B1",
+    "filiere": "Enfants & Ados — Groupe en ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": "2026-12-18",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-13T20:49:36.114241+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "5e3ac80b-01b4-4828-a33f-01585964fc3c",
+    "nom": "Coaching privé — Presley Elvis",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mer",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-15",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-13T23:56:46.648379+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "7df654b2-879b-4e23-9901-d5c5d1b85aa7",
+    "nom": "Coaching privé — pascal elfazo",
+    "niveau": "C2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "11:00",
+        "jour": "Lun",
+        "debut": "09:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      },
+      {
+        "fin": "15:00",
+        "jour": "Mer",
+        "debut": "13:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Sam",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T00:33:48.53232+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "455eb782-70ae-4b79-869e-37d6664b7adf",
+    "nom": "Coaching privé — franck coulibaly",
+    "niveau": "A2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T11:11:55.967109+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "c650c6e8-36e9-4982-849a-bbbced8fb324",
+    "nom": "Coaching privé — frank Kouamé A1",
+    "niveau": "A1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "4bbe9f83-4f2c-4a0b-bac7-a16cf907ffda",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T11:38:39.639597+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "f06fb423-de77-4654-853c-4a7d3d3e51b6",
+    "nom": "Coaching privé — Tanoh Eric A2",
+    "niveau": "A2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T14:26:54.928918+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "1bcfea9a-10a2-47ad-9998-23c7d4288b1d",
+    "nom": "Coaching privé — aziz Tanoh enfant ",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T15:36:47.904265+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "d9978709-06b0-40dc-93d0-d7d420f72f26",
+    "nom": "Coaching privé Soir C1",
+    "niveau": "C1",
+    "filiere": "Coaching privé",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T21:09:09.409647+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "69563def-70ee-4810-b2ce-870fd64837ba",
+    "nom": "Coaching privé — Leo Kouadio A1",
+    "niveau": "A1",
+    "filiere": "Coaching privé",
+    "type_cours": "en_ligne",
+    "coach_id": "4bbe9f83-4f2c-4a0b-bac7-a16cf907ffda",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mer",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-16",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-14T23:26:45.054785+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "437196ae-2fa6-44e4-a723-32b1e06d7282",
+    "nom": "Anglais B2 soir",
+    "niveau": "B2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      "Mardi 08:00–10:00",
+      "Jeudi 08:00–10:00",
+      "Samedi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-17",
+    "date_fin": "2026-11-06",
+    "statut": "actif",
+    "capacite_max": 8,
+    "created_at": "2026-08-15T20:34:23.994754+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "327a27b3-fade-47e6-984a-bfdd9ad0bd82",
+    "nom": "Enfant A1",
+    "niveau": "A1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      "Mardi 08:00–10:00",
+      "Samedi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-17",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 8,
+    "created_at": "2026-08-15T21:37:40.603889+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "16483208-4801-4054-a4ad-d68c1d6c783c",
+    "nom": "Coaching privé — sdfghj sdfg A1",
+    "niveau": "A1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-17",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-15T22:32:02.937238+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "b19d9164-676c-403b-acbf-33286dd57663",
+    "nom": "Coaching privé — crespo Azert A1RTY",
+    "niveau": "A1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Ven",
+        "debut": "08:00"
+      },
+      "Lundi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-17",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-15T22:42:33.935649+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "169d7953-0713-4de4-9498-0f23411b71f5",
+    "nom": "Coaching privé — sidiki Traoré A2",
+    "niveau": "A2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Sam",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-17",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-15T23:04:01.319862+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "7cf4237b-cdca-4a14-a6dc-d51890502a6f",
+    "nom": "Coaching privé — ERTY Doum B2",
+    "niveau": "B2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-17",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-15T23:16:15.713337+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "4561904c-af80-4e49-ae27-adda459763f7",
+    "nom": "Coaching privé — DFGH Soum A1",
+    "niveau": "A1",
+    "filiere": "Coaching Privé Enfants & Ados — En ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "4bbe9f83-4f2c-4a0b-bac7-a16cf907ffda",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "09:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      },
+      {
+        "fin": "09:30",
+        "jour": "Mer",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-19",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-17T11:51:28.94666+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "264de6c0-3638-4786-9224-18bfbd0bd5a2",
+    "nom": "Coaching privé — Doumbia Noura A2",
+    "niveau": "A2",
+    "filiere": "Coaching privé",
+    "type_cours": "en_ligne",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": null,
+    "horaire": [
+      {
+        "jour": "Lun",
+        "debut": "14:00"
+      },
+      {
+        "jour": "Mar",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-19",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-17T12:24:01.970739+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "1ba62b3e-bdea-4bf3-b541-fd32bf22b664",
+    "nom": "Coaching privé — piz pitare B1",
+    "niveau": "B1",
+    "filiere": "Coaching Privé Enfants & Ados — En ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": null,
+    "horaire": [
+      {
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "jour": "Sam",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-19",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-17T14:29:15.020947+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "41946788-907d-4fe1-a01f-51ee18bc13b9",
+    "nom": "Anglais B1",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "en_ligne",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-23",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 5,
+    "created_at": "2026-08-17T20:28:13.990308+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "14bef3de-e329-4ba1-9429-da319ba5cfcc",
+    "nom": "Présentiel matin A2",
+    "niveau": "A2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      "Jeudi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-24",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 12,
+    "created_at": "2026-08-23T17:21:23.679609+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "068d4a95-5184-4c02-ade1-6d5d1c1871e4",
+    "nom": "Presentiel morning B1",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "hybride",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      "Lundi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-25",
+    "date_fin": "2026-10-25",
+    "statut": "actif",
+    "capacite_max": 8,
+    "created_at": "2026-08-25T14:42:55.192794+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "0c50eb3c-bb54-4db0-bce6-d58faab5b008",
+    "nom": "Anglais B1 morning ",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "hybride",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      "Dimanche 09:01–10:00"
+    ],
+    "date_debut": null,
+    "date_fin": "2026-12-25",
+    "statut": "actif",
+    "capacite_max": 8,
+    "created_at": "2026-08-25T14:48:08.867175+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "6f07cd69-24d9-4635-abb0-592d96f87fcd",
+    "nom": "Anglais B1 soir ",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "hybride",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": "angre",
+    "horaire": [
+      "Lundi 20:00–22:00"
+    ],
+    "date_debut": "2026-08-28",
+    "date_fin": "2026-10-29",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-25T15:08:42.06633+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "4514de49-d4d2-4819-8461-08445c8da00e",
+    "nom": "azaza b1",
+    "niveau": "B1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      "Vendredi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-28",
+    "date_fin": "2026-11-21",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-25T15:42:39.485253+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "eeba596a-1b2d-4ed2-919c-739c17a61cd4",
+    "nom": "Coaching privé — kkk",
+    "niveau": "A1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "4bbe9f83-4f2c-4a0b-bac7-a16cf907ffda",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-27",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-25T16:31:58.217017+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "78b2edbe-1ce6-4a68-bf37-5a563aa2b466",
+    "nom": "Coaching privé — Tana Kouakou",
+    "niveau": "A2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "fin": "10:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-27",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-25T16:34:45.502959+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "437da661-d8fe-4871-b7c2-f69d8815ebdc",
+    "nom": "Coaching privé — junior pele",
+    "niveau": "C1",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-27",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-25T16:45:19.036262+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  },
+  {
+    "id": "0d703611-1a40-47d9-898f-f005faed23e7",
+    "nom": "A2 enfant",
+    "niveau": "A2",
+    "filiere": "Enfants & Ados — Groupe en ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "10:00",
+        "jour": "Lun",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-25",
+    "date_fin": "2026-10-31",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-25T17:09:59.386093+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "96935200-4e47-41b4-be62-bca09c0e5805",
+    "nom": "Coaching privé — Loue Doumss A2",
+    "niveau": "A2",
+    "filiere": "Coaching Privé Enfants & Ados — En ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "0ddc61d4-90cb-412d-9a25-137301da1bdc",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "09:00",
+        "jour": "Mar",
+        "debut": "08:00"
+      },
+      {
+        "fin": "09:00",
+        "jour": "Jeu",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-29",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-25T17:18:12.537562+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "7a672e07-eb84-4611-a880-5434acc489a3",
+    "nom": "Coaching privé — ibra Konaté A1",
+    "niveau": "A1",
+    "filiere": "Coaching Privé Enfants & Ados — En ligne",
+    "type_cours": "en_ligne",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": null,
+    "horaire": [
+      {
+        "fin": "17:29",
+        "jour": "Lun",
+        "debut": "08:00"
+      },
+      {
+        "jour": "Ven",
+        "debut": "08:00"
+      },
+      {
+        "jour": "Dim",
+        "debut": "08:00"
+      }
+    ],
+    "date_debut": "2026-08-27",
+    "date_fin": null,
+    "statut": "actif",
+    "capacite_max": 1,
+    "created_at": "2026-08-25T17:29:22.807269+00:00",
+    "created_by": "526fe0a1-40df-45d8-87a6-746f27ee7995",
+    "created_by_nom": "Nadia Konaté",
+    "is_prive": false
+  },
+  {
+    "id": "9ab79e02-f8a4-43d3-9d91-ec2aa60f7415",
+    "nom": "Anglais Mardi/Jeudi",
+    "niveau": "C2",
+    "filiere": "Anglais Pro",
+    "type_cours": "presentiel",
+    "coach_id": "dc09924d-4ece-4455-af9d-b7eef73a0a65",
+    "centre_id": "angre",
+    "horaire": [
+      "Lundi 08:00–10:00"
+    ],
+    "date_debut": "2026-08-28",
+    "date_fin": "2026-12-26",
+    "statut": "actif",
+    "capacite_max": 20,
+    "created_at": "2026-08-26T09:05:51.646917+00:00",
+    "created_by": "1ecd7abc-ebd8-403e-b766-931c4fa8a214",
+    "created_by_nom": "Nadège Kacou",
+    "is_prive": false
+  }
+]

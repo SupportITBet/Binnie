@@ -1,0 +1,81 @@
+export const COULEURS = {
+  // Primaires BET
+  navy:        '#0F172A',
+  cyan:        '#0891B2',
+  cyanFonce:   '#0E7490',
+  cyanClair:   '#E0F2FE',
+  rouge:       '#DC2626',
+  // Neutres
+  blanc:       '#FFFFFF',
+  gris50:      '#F8FAFC',
+  gris100:     '#F1F5F9',
+  gris200:     '#E2E8F0',
+  gris400:     '#94A3B8',
+  gris600:     '#475569',
+  gris900:     '#0F172A',
+  // États
+  succes:      '#16A34A',
+  attention:   '#D97706',
+  erreur:      '#DC2626',
+  // Interface Enfant (gamifiée 6-12 ans)
+  jauneEnfant:  '#FCD34D',
+  violetEnfant: '#7C3AED',
+  vertEnfant:   '#10B981',
+  orangeEnfant: '#F97316',
+};
+
+export const STYLES_COMMUNS = {
+  carte: {
+    background: '#FFFFFF',
+    borderRadius: 12,
+    padding: 24,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    border: '1px solid #E2E8F0',
+  },
+  boutonPrimaire: {
+    background: '#0891B2',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: 8,
+    padding: '10px 20px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: '"Plus Jakarta Sans", sans-serif',
+  },
+  boutonSecondaire: {
+    background: 'transparent',
+    color: '#0891B2',
+    border: '1.5px solid #0891B2',
+    borderRadius: 8,
+    padding: '10px 20px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: '"Plus Jakarta Sans", sans-serif',
+  },
+  badge: {
+    display: 'inline-block',
+    padding: '2px 10px',
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  sidebar: {
+    width: 260,
+    minHeight: '100vh',
+    background: '#0F172A',
+    display: 'flex',
+    flexDirection: 'column',
+    padding: '24px 0',
+    flexShrink: 0,
+  },
+  input: {
+    width: '100%',
+    padding: '10px 14px',
+    borderRadius: 8,
+    border: '1.5px solid #E2E8F0',
+    fontSize: 14,
+    fontFamily: '"Plus Jakarta Sans", sans-serif',
+    outline: 'none',
+    boxSizing: 'border-box',
+  },
+};

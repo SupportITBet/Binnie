@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Comparaison — Espace Apprenant (dash) vs Dashboard Apprenant (bet-elearning)</title>
+<style>
+  :root {
+    --fond:#0B1220; --fond-carte:#121B2E; --fond-carte2:#16213A; --bordure:#223052;
+    --or:#F0B84B; --or-clair:#FDE4A8; --cyan:#2DD4E8; --texte:#EDF1F7; --texte-att:#A9B4C9;
+    --vert:#34D399; --rose:#F472B6; --violet:#A78BFA; --rouge:#F87171;
+    --serif:Georgia,'Iowan Old Style','Palatino Linotype',Palatino,serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:'SF Mono',Menlo,Consolas,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fond); color:var(--texte); font-family:var(--sans); }
+  .page { max-width:1180px; margin:0 auto; padding:60px 24px 90px; }
+  code { font-family:var(--mono); font-size:0.92em; background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px; color:var(--or-clair); }
+
+  header.hero { margin-bottom:34px; }
+  .eyebrow { display:inline-block; font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--cyan); margin-bottom:14px; }
+  h1 { font-family:var(--serif); font-size:38px; font-weight:600; line-height:1.2; margin:0 0 14px; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15.5px; line-height:1.65; color:var(--texte-att); max-width:920px; margin:0 0 20px; }
+  .meta-chips { display:flex; flex-wrap:wrap; gap:10px; }
+  .chip { font-size:12px; padding:6px 12px; border-radius:20px; border:1px solid var(--bordure); color:var(--texte-att); background:var(--fond-carte); }
+  .chip.statut { border-color:var(--or); color:var(--or-clair); }
+
+  .verdict { display:flex; gap:14px; align-items:flex-start; background:var(--fond-carte); border:1px solid var(--bordure); border-left:3px solid var(--or); border-radius:10px; padding:18px 20px; margin:0 0 46px; }
+  .verdict .ic { font-size:20px; line-height:1; }
+  .verdict .txt { font-size:14px; line-height:1.65; color:var(--texte); }
+
+  section { margin-bottom:52px; }
+  .section-titre2 { font-family:var(--serif); font-size:22px; font-weight:600; margin:0 0 8px; color:var(--texte); }
+  .section-desc { font-size:13.5px; color:var(--texte-att); line-height:1.6; margin:0 0 20px; max-width:900px; }
+
+  .canaux, .comparatif, .check-grille { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+
+  .comparatif .colonne { background:var(--fond-carte); border:1px solid var(--bordure); border-radius:10px; padding:18px 20px; }
+  .colonne-entete { font-weight:700; font-size:13.5px; margin-bottom:12px; }
+  .colonne.betel { border-top:3px solid var(--violet); }
+  .colonne.betel .colonne-entete { color:var(--violet); }
+  .colonne.dash { border-top:3px solid var(--vert); }
+  .colonne.dash .colonne-entete { color:var(--vert); }
+  .comparatif ul { margin:0; padding-left:18px; font-size:13px; line-height:1.75; color:var(--texte-att); }
+  .comparatif li strong, .comparatif li code { color:var(--texte); }
+
+  .table-wrap { overflow-x:auto; border:1px solid var(--bordure); border-radius:10px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--texte-att); background:var(--fond-carte2); padding:10px 14px; border-bottom:1px solid var(--bordure); }
+  tbody td { padding:11px 14px; border-bottom:1px solid var(--bordure); vertical-align:top; color:var(--texte); }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background:rgba(255,255,255,0.02); }
+
+  .statut-tag { display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+  .statut-tag.existe { background:rgba(52,211,153,0.14); color:var(--vert); }
+  .statut-tag.creer { background:rgba(248,113,113,0.14); color:var(--rouge); }
+  .statut-tag.betel-only { background:rgba(167,139,250,0.14); color:var(--violet); }
+  .statut-tag.dash-only { background:rgba(52,211,153,0.14); color:var(--vert); }
+  .statut-tag.commun { background:rgba(45,212,232,0.14); color:var(--cyan); }
+  .statut-tag.mock { background:rgba(240,184,75,0.16); color:var(--or-clair); }
+
+  .check-grille { grid-template-columns:1fr 1fr; }
+  .check-item { display:flex; gap:12px; background:var(--fond-carte); border:1px solid var(--bordure); border-radius:10px; padding:14px 16px; }
+  .check-ic { font-size:15px; line-height:1.4; flex-shrink:0; }
+  .check-item.non .check-ic { color:var(--rouge); }
+  .check-item.oui .check-ic { color:var(--vert); }
+  .check-txt-titre { font-size:13.5px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .check-txt-desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  .mini-note { font-size:12px; line-height:1.55; padding:9px 12px; border-radius:8px; margin-top:12px; }
+  .mini-note.ok { background:rgba(52,211,153,0.1); color:var(--vert); }
+  .mini-note.build { background:rgba(240,184,75,0.1); color:var(--or-clair); }
+  .mini-note.default { background:rgba(255,255,255,0.05); color:var(--texte-att); }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    .canaux, .comparatif, .check-grille { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">dash vs bet-elearning · Comparaison des espaces apprenant</span>
+    <h1><em>Espace Apprenant</em> (dash) vs <em>Dashboard Apprenant</em> (bet-elearning)</h1>
+    <p class="sous-titre">
+      Deux implémentations indépendantes du même rôle (l'apprenant), sur deux modèles
+      métier distincts : dash = coaching individuel/groupe (<code>groupes_apprenants</code>,
+      <code>assignations_parcours</code>), bet-elearning = classes e-learning B2B
+      (<code>classes_elearning_apprenants</code>). Aucune fusion prévue — ce document sert
+      uniquement à vérifier les écarts d'onglets, de données et de mocks restants.
+    </p>
+    <div class="meta-chips">
+      <span class="chip">dash/src/Pages/EspaceApprenant/EspaceApprenant.jsx — ~4913 lignes</span>
+      <span class="chip">bet-elearning/src/pages/apprenant/DashboardApprenant.jsx — ~4450 lignes</span>
+      <span class="chip statut">4 zones encore mockées côté dash</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <span class="ic">🔎</span>
+    <span class="txt">
+      Les deux dashboards ne se recouvrent que partiellement : dash a des onglets propres au
+      coaching (Planning, Examens, Boutique, Paiement, Témoignage), bet-elearning a des onglets
+      propres au e-learning gamifié (Mini-jeux, Badges, Dictionnaire, Classement, Exercices &
+      devoirs). Sur les onglets communs, les sources de données divergent presque toujours
+      (endpoint Express côté dash, requête Supabase directe côté bet-elearning). Point le plus
+      actionnable : <strong><code>MES_OBJECTIFS</code> est encore un tableau 100% mocké</strong>
+      dans l'onglet Objectifs de dash — rien n'est lu depuis le backend.
+    </span>
+  </div>
+
+  <!-- ── INVENTAIRE DES ONGLETS ── -->
+  <section>
+    <h2 class="section-titre2">Inventaire des onglets</h2>
+    <p class="section-desc">Regroupés par tabs déclarés côté dash (<code>TABS_COMMUNS</code>, <code>TABS_GROUPE</code>, <code>TABS_PRIVE</code>, lignes 1176-1220) et par sections routées côté bet-elearning (<code>CHEMIN_VERS_SECTION</code>, lignes 29-44).</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Onglet / Section</th><th>dash</th><th>bet-elearning</th><th>Statut</th></tr></thead>
+        <tbody>
+          <tr><td>Tableau de bord / Dashboard</td><td>✓ (ligne 1727)</td><td>✓ <code>tableau_bord</code> (1306)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Mon profil</td><td>✓ (1831)</td><td>— (profil géré via nav globale)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Onboarding / vidéos d'accueil</td><td>✓ (1910) — <span class="statut-tag mock">mock</span></td><td>✓ <code>onboarding</code> (1180)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Cours</td><td>✓ (1936)</td><td>✓ <code>cours</code> (3205)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Exercices & devoirs</td><td>— (pas d'onglet dédié)</td><td>✓ <code>exercices_devoirs</code> (1423)</td><td><span class="statut-tag betel-only">bet-elearning seulement</span></td></tr>
+          <tr><td>Présences</td><td>✓ (2002)</td><td>✓ <code>presences</code> (3073)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Notifications</td><td>✓ (2117)</td><td>via composant partagé (nav globale)</td><td><span class="statut-tag dash-only">dash seulement (onglet dédié)</span></td></tr>
+          <tr><td>Planning</td><td>✓ (2280)</td><td>— (fusionné dans séances live/cours)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Session live</td><td>✓ (3477)</td><td>✓ <code>session_live</code> (1584)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Ressources</td><td>✓ (2602)</td><td>✓ <code>fichiers</code> (3276)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Examens</td><td>✓ (2721)</td><td>— (couvert par résultats/progression)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Résultats</td><td>✓ (3044)</td><td>✓ <code>resultats</code> (2108)</td><td><span class="statut-tag commun">commun</span></td></tr>
+          <tr><td>Progression</td><td>— (pas d'onglet dédié, dispersé)</td><td>✓ <code>progression</code> (1879)</td><td><span class="statut-tag betel-only">bet-elearning seulement</span></td></tr>
+          <tr><td>Objectifs</td><td>✓ (3143) — <span class="statut-tag mock">mock</span></td><td>— (pas d'équivalent direct)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Certifications</td><td>✓ (3176)</td><td>— (pas d'équivalent direct)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Badges</td><td>— (pas d'onglet dédié)</td><td>✓ <code>badges</code> (2280)</td><td><span class="statut-tag betel-only">bet-elearning seulement</span></td></tr>
+          <tr><td>Mini-jeux</td><td>— (aucun équivalent)</td><td>✓ <code>minijeux</code> (2336)</td><td><span class="statut-tag betel-only">bet-elearning seulement</span></td></tr>
+          <tr><td>Dictionnaire</td><td>— (aucun équivalent)</td><td>✓ <code>dictionnaire</code> (3033)</td><td><span class="statut-tag betel-only">bet-elearning seulement</span></td></tr>
+          <tr><td>Classement</td><td>— (aucun équivalent)</td><td>✓ <code>classement</code> (3035)</td><td><span class="statut-tag betel-only">bet-elearning seulement</span></td></tr>
+          <tr><td>Contacts admin</td><td>✓ (3196) — <span class="statut-tag mock">mock (menu)</span></td><td>— (contact via messagerie/nav)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Boutique</td><td>✓ (3255)</td><td>— (aucun équivalent)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Messages</td><td>✓ (3314)</td><td>via messagerie globale (contexte partagé)</td><td><span class="statut-tag commun">commun (implémentations différentes)</span></td></tr>
+          <tr><td>Paiement</td><td>✓ (3775)</td><td>— (facturation gérée côté entreprise, pas apprenant)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+          <tr><td>Témoignage</td><td>✓ (3951)</td><td>— (aucun équivalent)</td><td><span class="statut-tag dash-only">dash seulement</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── ARCHITECTURE / AUTH ── -->
+  <section>
+    <h2 class="section-titre2">Architecture & authentification</h2>
+    <div class="comparatif">
+      <div class="colonne dash">
+        <div class="colonne-entete">🟢 dash</div>
+        <ul>
+          <li>Auth JWT custom, token dans <code>localStorage.user_token</code>.</li>
+          <li>Données via endpoint Express dédié : <code>GET /api/apprenants/mon-espace</code> — un seul appel serveur qui agrège tout.</li>
+          <li>Pas de nav partagée : header/tabs codés directement dans le fichier (comme <code>CommercialDashboard.jsx</code>).</li>
+          <li>Style : tout en inline styles, palette codée en dur localement.</li>
+          <li>Fichier monolithique unique, aucun découpage en sous-composants pour les onglets.</li>
+        </ul>
+      </div>
+      <div class="colonne betel">
+        <div class="colonne-entete">🟣 bet-elearning</div>
+        <ul>
+          <li>Auth Supabase (<code>supabase.auth.signInWithPassword()</code>), session via <code>useAuth()</code> / <code>AuthContext.jsx</code>, token <code>bet_access_token</code>.</li>
+          <li>Données majoritairement via requêtes Supabase directes côté frontend (appels aux lignes 890, 913, 917, 923, 935, 944, 953, 962) — pas d'endpoint d'agrégation unique.</li>
+          <li>Nav partagée : <code>TopNavLayout.jsx</code>, réutilisé aussi par les dashboards prof/admin/parent.</li>
+          <li>Style : également inline styles, mais avec support thème (<code>ThemeContext</code>).</li>
+          <li>Même pattern monolithique (fichier unique ~4450 lignes, pas de sous-composants par section).</li>
+        </ul>
+      </div>
+    </div>
+    <div class="mini-note default">Aucune passerelle entre les deux modèles d'auth — attendu et voulu, dash et bet-elearning restent deux produits indépendants.</div>
+  </section>
+
+  <!-- ── AUDIT DES DONNÉES MOCKÉES CÔTÉ DASH ── -->
+  <section>
+    <h2 class="section-titre2">Données encore mockées côté dash — à vérifier / corriger</h2>
+    <p class="section-desc">C'est la partie la plus actionnable de cette comparaison : ce qui reste en dur dans <code>EspaceApprenant.jsx</code> alors que bet-elearning a déjà l'équivalent branché sur de vraies données.</p>
+    <div class="check-grille">
+      <div class="check-item non">
+        <span class="check-ic">✕</span>
+        <div>
+          <div class="check-txt-titre">MES_OBJECTIFS — tableau 100% mocké (lignes 159-163, rendu 3143-3154)</div>
+          <div class="check-txt-desc">L'onglet Objectifs affiche un tableau fixe défini en dur dans le composant, jamais remplacé par un fetch. Aucun endpoint <code>/api/apprenants/.../objectifs</code> n'existe côté Backend pour l'instant.</div>
+        </div>
+      </div>
+      <div class="check-item non">
+        <span class="check-ic">✕</span>
+        <div>
+          <div class="check-txt-titre">ONBOARDING_VIDEOS — mock (lignes 80-84)</div>
+          <div class="check-txt-desc">Les vidéos d'accueil affichées dans l'onglet Onboarding (1910) sont une liste statique, non liée à une table ou un CMS. bet-elearning gère sa section <code>onboarding</code> (1180) avec un contenu réellement piloté.</div>
+        </div>
+      </div>
+      <div class="check-item non">
+        <span class="check-ic">✕</span>
+        <div>
+          <div class="check-txt-titre">CONTACTS_ADMIN — mock (lignes 86-91)</div>
+          <div class="check-txt-desc">Le menu déroulant de la modal "Contacter un admin" (onglet Contacts, 3196) liste des contacts fixes plutôt que des comptes admin réels issus de <code>utilisateurs</code>.</div>
+        </div>
+      </div>
+      <div class="check-item non">
+        <span class="check-ic">✕</span>
+        <div>
+          <div class="check-txt-titre">MON_PROFIL — champs de repli mockés (lignes 54-78), notamment dateInscription</div>
+          <div class="check-txt-desc">Certains champs du profil (dont <code>dateInscription</code>) tombent sur des valeurs par défaut codées en dur si l'API ne les renvoie pas, plutôt que d'afficher un état "non renseigné" explicite.</div>
+        </div>
+      </div>
+      <div class="check-item oui">
+        <span class="check-ic">✓</span>
+        <div>
+          <div class="check-txt-titre">Présences, cours, résultats, ressources — déjà branchés</div>
+          <div class="check-txt-desc">Ces onglets utilisent bien <code>GET /api/apprenants/mon-espace</code>, pas de mock résiduel identifié.</div>
+        </div>
+      </div>
+      <div class="check-item oui">
+        <span class="check-ic">✓</span>
+        <div>
+          <div class="check-txt-titre">Paiement — nettoyé lors d'une passe précédente</div>
+          <div class="check-txt-desc">Le statut de paiement et le header ont déjà été corrigés dans une session antérieure pour retirer les données mockées identifiées à l'époque.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FONCTIONNALITÉS UNIQUES ── -->
+  <section>
+    <h2 class="section-titre2">Fonctionnalités notables propres à chaque côté</h2>
+    <div class="comparatif">
+      <div class="colonne dash">
+        <div class="colonne-entete">🟢 Propre à dash</div>
+        <ul>
+          <li>Boutique intégrée (onglet dédié).</li>
+          <li>Suivi de paiement apprenant (onglet Paiement).</li>
+          <li>Dépôt de témoignage.</li>
+          <li>Certifications, Objectifs, Examens comme onglets séparés (plus granulaire côté coaching).</li>
+        </ul>
+      </div>
+      <div class="colonne betel">
+        <div class="colonne-entete">🟣 Propre à bet-elearning</div>
+        <ul>
+          <li>Gamification complète : Badges, Mini-jeux, Classement.</li>
+          <li>Dictionnaire intégré.</li>
+          <li>Exercices & devoirs comme onglet dédié (dash n'a pas d'équivalent direct).</li>
+          <li>Progression comme onglet dédié agrégeant plusieurs signaux (dash disperse ça entre Résultats/Examens).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Schéma comparatif — Espace Apprenant (dash) vs Dashboard Apprenant (bet-elearning)</span>
+    <span>Document interne — usage privé</span>
+  </footer>
+
+</div>
+</body>
+</html>

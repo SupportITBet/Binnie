@@ -1,0 +1,712 @@
+<title>Cartographie des parcours — BET</title>
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --bg-raised: #ffffff;
+    --ink: #0d1526;
+    --ink-soft: #4a5268;
+    --ink-faint: #8891a5;
+    --line: rgba(13, 21, 38, 0.11);
+    --line-strong: rgba(13, 21, 38, 0.22);
+    --navy: #0c33ac;
+    --navy-ink: #011451;
+    --navy-wash: #eef1fc;
+    --cyan: #0891b2;
+    --cyan-wash: #e8f6f9;
+    --violet: #6b3fa0;
+    --violet-wash: #f3ecf9;
+    --slate: #5b6478;
+    --slate-wash: #f0f1f4;
+    --coral: #d6284a;
+    --coral-wash: #fdeef0;
+    --code-bg: #f4f2ec;
+    --code-ink: #6a3d0a;
+    --shadow: 0 1px 2px rgba(13,21,38,0.04), 0 8px 24px -12px rgba(13,21,38,0.18);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0b0f1a;
+    --bg-raised: #121829;
+    --ink: #e8ecf5;
+    --ink-soft: #aab2c8;
+    --ink-faint: #6b7690;
+    --line: rgba(232, 236, 245, 0.11);
+    --line-strong: rgba(232, 236, 245, 0.2);
+    --navy: #7d9bff;
+    --navy-ink: #c3d1ff;
+    --navy-wash: rgba(125, 155, 255, 0.13);
+    --cyan: #4fd2e8;
+    --cyan-wash: rgba(79, 210, 232, 0.12);
+    --violet: #b895e0;
+    --violet-wash: rgba(184, 149, 224, 0.13);
+    --slate: #9aa3b8;
+    --slate-wash: rgba(154, 163, 184, 0.11);
+    --coral: #ff7a8f;
+    --coral-wash: rgba(255, 122, 143, 0.13);
+    --code-bg: #1c1a12;
+    --code-ink: #e0b167;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f1a;
+      --bg-raised: #121829;
+      --ink: #e8ecf5;
+      --ink-soft: #aab2c8;
+      --ink-faint: #6b7690;
+      --line: rgba(232, 236, 245, 0.11);
+      --line-strong: rgba(232, 236, 245, 0.2);
+      --navy: #7d9bff;
+      --navy-ink: #c3d1ff;
+      --navy-wash: rgba(125, 155, 255, 0.13);
+      --cyan: #4fd2e8;
+      --cyan-wash: rgba(79, 210, 232, 0.12);
+      --violet: #b895e0;
+      --violet-wash: rgba(184, 149, 224, 0.13);
+      --slate: #9aa3b8;
+      --slate-wash: rgba(154, 163, 184, 0.11);
+      --coral: #ff7a8f;
+      --coral-wash: rgba(255, 122, 143, 0.13);
+      --code-bg: #1c1a12;
+      --code-ink: #e0b167;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+  }
+
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.86em;
+    white-space: nowrap;
+  }
+
+  /* ── Header ── */
+  header.hero {
+    margin-bottom: 52px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 36px;
+  }
+  .eyebrow {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--navy);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;
+    font-size: 38px;
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .lede {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 26px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    padding: 5px 10px 5px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: var(--bg-raised);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Section ── */
+  section { margin-bottom: 54px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  h2 {
+    font-family: Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;
+    font-size: 23px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .section-note {
+    font-size: 13px;
+    color: var(--ink-faint);
+    max-width: 40ch;
+  }
+
+  /* ── Flow card ── */
+  .flow {
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 22px 24px 24px;
+    margin-bottom: 16px;
+  }
+  .flow-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 15.5px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .flow-title .src {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    color: var(--ink-faint);
+    font-weight: 500;
+  }
+  .flow-desc {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin: 6px 0 16px;
+    max-width: 68ch;
+  }
+
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    align-items: stretch;
+  }
+  .pipe-step {
+    position: relative;
+    padding: 12px 16px 12px 14px;
+    border-left: 1px solid var(--line);
+  }
+  .pipe-step:first-child { border-left: none; padding-left: 0; }
+  .pipe-step::before {
+    content: "→";
+    position: absolute;
+    left: -9px;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--ink-faint);
+    font-size: 13px;
+    background: var(--bg-raised);
+    width: 16px;
+    text-align: center;
+  }
+  .pipe-step:first-child::before { content: none; }
+  .pipe-label {
+    font-size: 10.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .pipe-value {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .pipe-value code { white-space: normal; }
+  .pipe-dest {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .variants {
+    margin-top: 14px;
+    border-top: 1px dashed var(--line);
+    padding-top: 12px;
+    display: grid;
+    gap: 8px;
+  }
+  .variant-row {
+    display: grid;
+    grid-template-columns: 168px 1fr;
+    gap: 12px;
+    font-size: 12.5px;
+    align-items: baseline;
+  }
+  .variant-row .vlabel { color: var(--ink-faint); font-weight: 600; }
+  .variant-row .vval { color: var(--ink-soft); }
+
+  @media (max-width: 760px) {
+    .pipeline { grid-template-columns: 1fr; }
+    .pipe-step { border-left: none; padding-left: 0; border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 10px; }
+    .pipe-step:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+    .pipe-step::before { content: "↓"; left: 0; top: -4px; transform: none; }
+    .pipe-step:first-child::before { content: none; }
+    .variant-row { grid-template-columns: 1fr; gap: 2px; }
+  }
+
+  /* ── State table (routing_statut) ── */
+  .states {
+    display: grid;
+    gap: 10px;
+  }
+  .state-row {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: 18px;
+    padding: 14px 18px;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    align-items: start;
+  }
+  .state-row .schip {
+    display: inline-block;
+    width: fit-content;
+  }
+  .state-detail { font-size: 13px; color: var(--ink-soft); }
+  .state-detail b { color: var(--ink); font-weight: 700; }
+  @media (max-width: 640px) {
+    .state-row { grid-template-columns: 1fr; }
+  }
+
+  /* ── Reference table ── */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raised); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.8px; min-width: 880px; }
+  th {
+    text-align: left;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 700;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  td {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-soft);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { color: var(--ink); font-weight: 600; }
+  td .dest-pill { font-weight: 700; }
+
+  /* ── Isolated systems ── */
+  .isolated-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .isolated-card {
+    background: var(--slate-wash);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .isolated-card h3 {
+    font-size: 14.5px;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+  .isolated-card p { font-size: 13px; color: var(--ink-soft); margin: 0; }
+  @media (max-width: 640px) { .isolated-grid { grid-template-columns: 1fr; } }
+
+  /* dashboard color utility classes */
+  .c-commercial { background: var(--navy-wash); color: var(--navy); }
+  .c-pa { background: var(--cyan-wash); color: var(--cyan); }
+  .c-onboarding { background: var(--violet-wash); color: var(--violet); }
+  .c-corporate { background: var(--slate-wash); color: var(--slate); }
+  .c-external { background: var(--coral-wash); color: var(--coral); }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="eyebrow">BET Languages · Architecture des flux</div>
+    <h1>De la demande à l'assignation — où atterrit chaque prospect</h1>
+    <p class="lede">Cartographie de bout en bout : chaque point d'entrée public (site vitrine, tunnels d'inscription, test de niveau) tracé jusqu'au dashboard et à l'onglet où un membre du staff le traite en premier, avec les mécanismes de transfert entre rôles.</p>
+    <div class="legend">
+      <span class="legend-item"><span class="dot" style="background:var(--navy)"></span>Commercial</span>
+      <span class="legend-item"><span class="dot" style="background:var(--cyan)"></span>PA Advisor</span>
+      <span class="legend-item"><span class="dot" style="background:var(--violet)"></span>Onboarding</span>
+      <span class="legend-item"><span class="dot" style="background:var(--slate)"></span>Corporate (isolé)</span>
+      <span class="legend-item"><span class="dot" style="background:var(--coral)"></span>Hors dash/ (bet-elearning)</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <h2>Les 5 tunnels publics</h2>
+      <div class="section-note">Chaque carte suit le même parcours : formulaire → endpoint → table → destinataire</div>
+    </div>
+
+    <!-- Particulier -->
+    <div class="flow">
+      <div class="flow-title">🧑 Particulier <span class="src">ParcoursModal.jsx</span></div>
+      <p class="flow-desc">Le point d'entrée le plus riche : cinq combinaisons canal × formule, chacune router vers un pool d'assistantes différent selon qu'il s'agit d'un cours de groupe ou d'un coaching privé.</p>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-label">Formulaire</div>
+          <div class="pipe-value">En ligne / présentiel / domicile<br>× groupe ou privé</div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Endpoint</div>
+          <div class="pipe-value"><code>POST /api/parcours/assignation</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Table</div>
+          <div class="pipe-value"><code>assignations_parcours</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Reçu par</div>
+          <div class="pipe-value">
+            <span class="pipe-dest c-commercial">● Commercial</span> <span style="color:var(--ink-faint)">(groupe)</span><br><br>
+            <span class="pipe-dest c-pa">● PA Advisor</span> <span style="color:var(--ink-faint)">(privé)</span>
+          </div>
+        </div>
+      </div>
+      <div class="variants">
+        <div class="variant-row"><span class="vlabel">Groupe (en ligne/présentiel)</span><span class="vval">Pool <code>assistantes-ligne</code> / <code>assistantes-presentiel</code> → assistante b2c ou b2b, visible dans <b>CommercialDashboard → Prospects parcours</b></span></div>
+        <div class="variant-row"><span class="vlabel">Privé (tout canal, + domicile)</span><span class="vval">Pool <code>assistantes-pa</code> (<code>type_coaching:"prive"</code>) → assistante de profil <code>pa</code>, visible dans <b>PedagogicalAdvisorDashboard → Prospects parcours</b></span></div>
+      </div>
+    </div>
+
+    <!-- Enfant -->
+    <div class="flow">
+      <div class="flow-title">🧒 J'inscris mon enfant <span class="src">EnfantParcoursModal.jsx</span></div>
+      <p class="flow-desc">Même endpoint que le flux particulier, mais jamais de branche coaching privé — <code>type_coaching</code> reste fixé à <code>"standard"</code>.</p>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-label">Formulaire</div>
+          <div class="pipe-value">En ligne ou présentiel<br><code>profil_type:"enfant"</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Endpoint</div>
+          <div class="pipe-value"><code>POST /api/parcours/assignation</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Table</div>
+          <div class="pipe-value"><code>assignations_parcours</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Reçu par</div>
+          <div class="pipe-value"><span class="pipe-dest c-commercial">● Commercial</span><br><span style="color:var(--ink-faint);font-size:12px">Prospects parcours</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Entreprise -->
+    <div class="flow">
+      <div class="flow-title">🏢 Devis entreprise <span class="src">EntrepriseParcoursModal.jsx</span></div>
+      <p class="flow-desc">Double écriture : un simulateur de devis et une pré-assignation à une commerciale B2B — même si le format demandé est "individuel", l'assistante vient toujours du pool B2B, jamais du pool PA.</p>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-label">Formulaire</div>
+          <div class="pipe-value">Simulateur + format/groupe<br><code>source:"devis_entreprise"</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Endpoints</div>
+          <div class="pipe-value"><code>POST /simulateur/submit</code><br><code>POST /parcours/assignation</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Tables</div>
+          <div class="pipe-value"><code>simulateurs_formation</code><br><code>assignations_parcours</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Reçu par</div>
+          <div class="pipe-value"><span class="pipe-dest c-commercial">● Commercial</span><br><span style="color:var(--ink-faint);font-size:12px">Prospects parcours + Demandes B2B</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test de niveau -->
+    <div class="flow">
+      <div class="flow-title">📝 Test de niveau gratuit <span class="src">FreeLevelTest.jsx</span></div>
+      <p class="flow-desc">Écrit dans deux tables sans clé étrangère entre elles : le résultat du test d'un côté, l'assignation commerciale de l'autre — reliées seulement par email.</p>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-label">Formulaire</div>
+          <div class="pipe-value">Quiz CECRL en ligne<br><code>source:"test_niveau"</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Endpoints</div>
+          <div class="pipe-value"><code>POST /level-test/submit</code><br><code>POST /parcours/assignation</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Tables</div>
+          <div class="pipe-value"><code>level_test_results</code><br><code>assignations_parcours</code></div>
+        </div>
+        <div class="pipe-step">
+          <div class="pipe-label">Reçu par</div>
+          <div class="pipe-value"><span class="pipe-dest c-commercial">● Commercial</span><br><span style="color:var(--ink-faint);font-size:12px">Onglets Tests + Prospects parcours</span></div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Ce qui se passe après l'arrivée chez le commercial</h2>
+      <div class="section-note">Deux mécanismes de transfert vers le PA Advisor</div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-title">① Pool partagé — coaching privé confirmé</div>
+      <p class="flow-desc">À la finalisation, si l'offre est du coaching privé, <b>aucun PA n'est désigné à l'affichage</b> (le prospect/parent voit juste "vous serez contacté par un PA Advisor") — tous les PA actifs sont notifiés, et n'importe lequel peut prendre le dossier en charge lui-même.</p>
+      <div class="variants" style="margin-top:0;border-top:none;padding-top:0">
+        <div class="variant-row"><span class="vlabel">Déclenché par</span><span class="vval">Sans assistante pré-désignée (<code>isDirectCommerciale && type_coaching==="prive"</code>) dans <code>POST /parcours/assignation</code></span></div>
+        <div class="variant-row"><span class="vlabel">Écrit</span><span class="vval"><code>notifyRole("pedagogical_advisor")</code> à la création — puis <code>PATCH /assignations/:id</code> → <code>pa_advisor_id</code> quand un PA clique "🙋 Prendre en charge" depuis Prospects parcours</span></div>
+        <div class="variant-row"><span class="vlabel">Destination</span><span class="vval">Visible de tous les PA dans <b>Prospects parcours</b> jusqu'à prise en charge ; une fois <code>pa_advisor_id</code> posé (au clic "Converti"), bascule dans <b>Mes apprenants</b> du PA qui l'a pris</span></div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-title">② Signalement automatique — canal croisé</div>
+      <p class="flow-desc">Construit récemment : si un prospect obtient une seconde assistante sur un canal différent de sa première assignation, le serveur alerte les PA sans jamais bloquer la nouvelle demande.</p>
+      <div class="variants" style="margin-top:0;border-top:none;padding-top:0">
+        <div class="variant-row"><span class="vlabel">Déclenché par</span><span class="vval"><code>POST /parcours/assignation</code>, détection automatique côté serveur</span></div>
+        <div class="variant-row"><span class="vlabel">Écrit</span><span class="vval">Notification <code>notifyRole("pedagogical_advisor")</code> avec <code>meta.assignation_id</code></span></div>
+        <div class="variant-row"><span class="vlabel">Destination</span><span class="vval"><span class="pipe-dest c-pa">● PA Advisor</span> → onglet <b>Dossiers à réaffecter</b>, résolution via <code>PATCH assistante_id</code></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Les deux clés de routage stable</h2>
+      <div class="section-note"><code>routing_statut</code> n'est qu'un indicateur d'étape ; ce sont ces deux champs qui filtrent réellement l'accès</div>
+    </div>
+    <div class="states">
+      <div class="state-row">
+        <span class="schip"><code>pa_advisor_id</code></span>
+        <span class="state-detail">Posé quand un PA clique "Prendre en charge" (pool ①) ou au moment du "Converti". Lu par <code>GET /mes-apprenants-pa</code>, filtré strictement <b>égal</b> à l'ID du PA connecté — c'est la seule vraie porte d'entrée de l'onglet "Mes apprenants" du PA.</span>
+      </div>
+      <div class="state-row">
+        <span class="schip"><code>onboarding_id</code></span>
+        <span class="state-detail">Figé <b>dès la création</b> de l'assignation, recopié depuis la fiche de l'assistante assignée. Peut être réécrit plus tard par le commercial ou le PA. Lu par <code>mes-apprenants-onboarding</code> avec un triple repli (assistante → JSON de secours → filtrage mémoire) si la donnée est absente.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>États de <code style="font-size:0.7em">routing_statut</code></h2>
+      <div class="section-note">Une machine à états UI — ne restreint l'accès SQL que pour l'onboarding</div>
+    </div>
+    <div class="states">
+      <div class="state-row">
+        <span class="schip"><code>centre_assigne</code></span>
+        <span class="state-detail">Posé par le commercial (présentiel) après affectation à une classe — bascule l'UI vers "prêt à transmettre".</span>
+      </div>
+      <div class="state-row">
+        <span class="schip"><code>pa_en_attente</code></span>
+        <span class="state-detail">Posé automatiquement dès la création si aucune assistante n'est pré-désignée (pool ①). Rend le dossier visible dans les badges du PA — <b>pas</b> de filtre SQL dédié, c'est <code>pa_advisor_id</code> qui fait le vrai filtrage.</span>
+      </div>
+      <div class="state-row">
+        <span class="schip"><code>pa_affecte</code></span>
+        <span class="state-detail">Posé par le PA une fois un coach affecté au dossier. Étape intermédiaire avant transmission à l'onboarding.</span>
+      </div>
+      <div class="state-row">
+        <span class="schip"><code>onboarding_en_attente</code></span>
+        <span class="state-detail">Le seul état avec un <b>vrai filtre SQL</b> (<code>eq</code> strict). Alimente directement <span class="pipe-dest c-onboarding" style="font-size:12px">● OnboardingDashboard → Nouveaux apprenants</span>. Déclenche désormais une notification (<code>notifyUser</code> si <code>onboarding_id</code> connu, sinon <code>notifyRole("onboarding")</code>) — jusqu'ici l'onboarding ne découvrait un dossier transmis qu'en rafraîchissant sa liste par hasard.</span>
+      </div>
+      <div class="state-row">
+        <span class="schip"><code>onboarding_affecte</code></span>
+        <span class="state-detail">Posé par l'onboarding une fois la classe créée et l'apprenant réellement inscrit dans <code>groupes_apprenants</code> (<code>confirmerAffectation</code>). Déclenche une notification au <code>pa_advisor_id</code> du dossier — même trou que ci-dessus, corrigé côté <code>PATCH /assignations/:id</code>.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Le piège identité enfant ↔ parent</h2>
+      <div class="section-note">Root cause récurrente de nombreux bugs de dossiers "orphelins"</div>
+    </div>
+    <div class="flow">
+      <p class="flow-desc" style="margin-bottom:0">
+        Pour un <code>profil_type:"enfant"</code>, <code>prospect_email</code>/<code>prospect_telephone</code> sur <code>assignations_parcours</code> sont ceux du <b>parent</b> (c'est lui qui remplit le formulaire) — jamais ceux de l'enfant. Tout code qui retrouve un dossier par correspondance d'email/téléphone entre <code>assignations_parcours.prospect_email</code> et <code>groupes_apprenants.email_apprenant</code> (l'identifiant technique réel de connexion de l'enfant, généré <code>&lt;nom&gt;@betacademy.app</code> ou <code>tel.&lt;numéro&gt;.&lt;nom&gt;@betacademy.app</code>) <b>échoue systématiquement</b> pour ce cas — ces deux valeurs ne sont jamais égales.
+      </p>
+      <div class="variants">
+        <div class="variant-row"><span class="vlabel">Symptômes observés</span><span class="vval">Infos parent absentes du profil, paiement/présences/séances introuvables, "Aucun compte créé" alors que l'accès existe, test de niveau du parent recopié sur le dossier de l'enfant (et vice-versa), classes invisibles dans "Mes classes" côté commerciale/PA.</span></div>
+        <div class="variant-row"><span class="vlabel">Lien fiable</span><span class="vval"><code>groupes_apprenants.note</code> (JSON) contient <code>assignation_id</code>, posé une seule fois à la création de la classe (<code>confirmerAffectation</code> / "Assigner classe &amp; coach"). C'est la seule clé qui doit servir à relier les deux tables pour un profil enfant — jamais l'email.</span></div>
+        <div class="variant-row"><span class="vlabel">Corrigé (partout où trouvé)</span><span class="vval">Onboarding/Commercial/PA : modals détail apprenant, onglets Accès/Parent/Présences/Paiements/Séances, filtrage des classes par assistante (<code>GET /api/groupes</code>), auto-remplissage du niveau (<code>level-test/submit</code> via <code>assignation_id</code> explicite plutôt qu'un matching par email).</span></div>
+        <div class="variant-row"><span class="vlabel">Prévention à la création</span><span class="vval"><code>email_apprenant</code>/<code>telephone</code> ne sont plus jamais pré-remplis avec les coordonnées du parent pour un profil enfant (laissés vides → identifiant technique généré), pour ne pas "occuper" ces coordonnées et bloquer la création d'un compte parent séparé.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Table <code style="font-size:0.7em">seances</code> unifiée</h2>
+      <div class="section-note">Remplace progressivement groupes_cours, seances_privees et sessions_live</div>
+    </div>
+    <div class="flow">
+      <p class="flow-desc" style="margin-bottom:0">
+        Les coachs enregistrent désormais leurs séances (groupe <b>et</b> privé) dans une table unique <code>seances</code> (colonne <code>circuit</code> : <code>groupe</code>/<code>prive</code>/<code>live</code>, liée par <code>groupe_id</code>), qui alimente aussi le calcul des honoraires. Les anciennes tables (<code>groupes_cours</code>, <code>seances_privees</code>, <code>sessions_live</code>) restent lues en repli pour les données historiques, mais toute vue (Onboarding, PA, apprenant, parent) doit interroger <code>seances</code> par <code>groupe_id</code> en priorité — sinon des séances bien réelles (et comptées dans les honoraires du coach) n'apparaissent nulle part côté suivi pédagogique.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Systèmes isolés</h2>
+      <div class="section-note">Aucun pont de code vers <code>assignations_parcours</code></div>
+    </div>
+    <div class="isolated-grid">
+      <div class="isolated-card">
+        <h3>🏛️ CorporateDashboard</h3>
+        <p>CRM B2B entièrement manuel — <code>prospects_b2b</code>, <code>documents_b2b</code>, <code>factures_b2b</code>. Tout protégé par authentification staff ; aucune route publique. Les devis du tunnel <code>EntrepriseParcoursModal</code> n'y arrivent jamais automatiquement.</p>
+      </div>
+      <div class="isolated-card">
+        <h3>🎓 Test de placement bet-elearning</h3>
+        <p><code>TestNiveau.jsx</code> (app séparée) — envoyé par lien à un apprenant <b>déjà inscrit</b>, pour du placement post-inscription. Traité par l'agent Placement dans <code>bet-elearning/DashboardAdmin.jsx</code>, hors de <code>dash/</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Tableau de référence</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Point d'entrée</th>
+            <th>Endpoint(s)</th>
+            <th>Table(s)</th>
+            <th>Reçu en premier par</th>
+            <th>Étape suivante</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Particulier — groupe</td>
+            <td><code>assistantes-ligne/presentiel</code> → <code>assignation</code></td>
+            <td><code>assignations_parcours</code></td>
+            <td><span class="dest-pill" style="color:var(--navy)">Commercial</span></td>
+            <td>Routing → Onboarding</td>
+          </tr>
+          <tr>
+            <td>Particulier — privé</td>
+            <td><code>assistantes-pa</code> → <code>assignation</code></td>
+            <td><code>assignations_parcours</code></td>
+            <td><span class="dest-pill" style="color:var(--cyan)">PA Advisor</span></td>
+            <td>Affecte coach → Onboarding</td>
+          </tr>
+          <tr>
+            <td>Enfant</td>
+            <td><code>assistantes-ligne/presentiel</code> → <code>assignation</code></td>
+            <td><code>assignations_parcours</code></td>
+            <td><span class="dest-pill" style="color:var(--navy)">Commercial</span></td>
+            <td>Routing → Onboarding</td>
+          </tr>
+          <tr>
+            <td>Entreprise (devis B2B)</td>
+            <td><code>simulateur/submit</code> + <code>assignation</code></td>
+            <td><code>simulateurs_formation</code>, <code>assignations_parcours</code></td>
+            <td><span class="dest-pill" style="color:var(--navy)">Commercial B2B</span></td>
+            <td>Traitement manuel</td>
+          </tr>
+          <tr>
+            <td>Test de niveau gratuit</td>
+            <td><code>level-test/submit</code> + <code>assignation</code></td>
+            <td><code>level_test_results</code>, <code>assignations_parcours</code></td>
+            <td><span class="dest-pill" style="color:var(--navy)">Commercial</span></td>
+            <td>Contact → conversion</td>
+          </tr>
+          <tr>
+            <td>Transmission coaching privé</td>
+            <td><code>PATCH assignations/:id</code></td>
+            <td><code>assignations_parcours</code></td>
+            <td><span class="dest-pill" style="color:var(--cyan)">PA Advisor désigné</span></td>
+            <td>Affecte coach → Onboarding</td>
+          </tr>
+          <tr>
+            <td>Signalement hors canal</td>
+            <td>notification automatique</td>
+            <td><code>notifications</code></td>
+            <td><span class="dest-pill" style="color:var(--cyan)">PA Advisor (tous)</span></td>
+            <td>Réaffectation manuelle</td>
+          </tr>
+          <tr>
+            <td>Devis saisi en interne</td>
+            <td><code>/api/corporate/*</code></td>
+            <td><code>prospects_b2b</code></td>
+            <td><span class="dest-pill" style="color:var(--slate)">Équipe Corporate</span></td>
+            <td>Gestion contractuelle</td>
+          </tr>
+          <tr>
+            <td>Placement post-inscription</td>
+            <td><code>tests-niveau/:id/resultat</code></td>
+            <td>table dédiée bet-elearning</td>
+            <td><span class="dest-pill" style="color:var(--coral)">Agent Placement</span></td>
+            <td>Affectation classe e-learning</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Cartographie établie par lecture directe du code — <code>Frontend/src/Pages/Parcours/*</code>, <code>Backend/src/routes/parcours.js</code>, <code>levelTest.js</code>, <code>corporate.js</code>, et les dashboards <code>dash/src/Pages/{Commercial,PedagogicalAdvisor,Onboarding,Corporate}Dashboard</code>.
+  </footer>
+
+</div>

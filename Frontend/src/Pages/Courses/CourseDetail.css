@@ -1,0 +1,412 @@
+.course-detail-page {
+  background: #f8fafc;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.course-hero {
+  background-size: cover;
+  background-position: center;
+  height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+
+.course-hero-content h1 {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.course-hero-content p {
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+  opacity: 0.9;
+}
+
+.btn-cta {
+  background: white;
+  color: #0b2a4a;
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: 40px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+
+.btn-cta:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+.course-container {
+  max-width: 1200px;
+  margin: -3rem auto 2rem;
+  background: white;
+  border-radius: 48px;
+  padding: 2rem 2rem 3rem;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+  position: relative;
+  z-index: 2;
+}
+
+.course-description {
+  display: flex;
+  gap: 3rem;
+  margin-bottom: 4rem;
+  flex-wrap: wrap;
+}
+
+.desc-text {
+  flex: 2;
+}
+
+.desc-text h2 {
+  font-size: 2rem;
+  color: #0b2a4a;
+  margin-bottom: 1rem;
+}
+
+.desc-text p {
+  line-height: 1.6;
+  color: #334155;
+}
+
+.desc-advantages {
+  flex: 1;
+  background: #f1f5f9;
+  padding: 1.5rem;
+  border-radius: 28px;
+}
+
+.desc-advantages h3 {
+  margin-bottom: 1rem;
+  color: #0b2a4a;
+}
+
+.desc-advantages ul {
+  list-style: none;
+  padding: 0;
+}
+
+.desc-advantages li {
+  margin-bottom: 0.8rem;
+  color: #1e293b;
+}
+
+.course-formats h2, .course-testimonials h2, .course-faq h2 {
+  font-size: 2rem;
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #0b2a4a;
+}
+
+.formats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.format-card {
+  background: white;
+  border-radius: 32px;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 15px 30px rgba(0,0,0,0.05);
+  border: 1px solid #e2e8f0;
+  transition: transform 0.3s;
+}
+
+.format-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 25px 35px rgba(0,0,0,0.1);
+}
+
+.format-card h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #0f3b6d;
+}
+
+.format-price {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #0b2a4a;
+  margin: 1rem 0;
+}
+
+.format-duration {
+  color: #475569;
+  font-weight: 500;
+}
+
+.format-details {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.btn-select {
+  background: linear-gradient(90deg, #0b2a4a, #0f3b6d);
+  color: white;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-select:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(11,42,74,0.3);
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.testimonial-card {
+  background: #f8fafc;
+  padding: 1.8rem;
+  border-radius: 28px;
+  text-align: center;
+}
+
+.testimonial-avatar {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+.testimonial-card p {
+  font-style: italic;
+  color: #334155;
+  margin: 1rem 0;
+}
+
+.testimonial-card h4 {
+  color: #0b2a4a;
+}
+
+.faq-list {
+  max-width: 800px;
+  margin: 0 auto 3rem;
+}
+
+details {
+  background: #f1f5f9;
+  border-radius: 20px;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+summary {
+  font-weight: 700;
+  cursor: pointer;
+  color: #0b2a4a;
+}
+
+details p {
+  margin-top: 1rem;
+  padding-left: 1rem;
+  border-left: 3px solid #0f3b6d;
+  color: #475569;
+}
+
+.course-cta-bottom {
+  text-align: center;
+  padding: 2rem;
+  background: linear-gradient(135deg, #f1f5f9, #ffffff);
+  border-radius: 40px;
+  margin-top: 2rem;
+}
+
+.course-cta-bottom h3 {
+  font-size: 1.8rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-cta-large {
+  background: linear-gradient(90deg, #0b2a4a, #0f3b6d);
+  color: white;
+  border: none;
+  padding: 1rem 2.5rem;
+  border-radius: 50px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 0 0.5rem;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 2px solid #0b2a4a;
+  color: #0b2a4a;
+  padding: 0.9rem 2rem;
+  border-radius: 50px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.course-not-found {
+  text-align: center;
+  padding: 4rem;
+  font-size: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .course-hero-content h1 {
+    font-size: 2.2rem;
+  }
+  .course-container {
+    padding: 1.5rem;
+    margin-top: -2rem;
+  }
+  .course-description {
+    flex-direction: column;
+  }
+  .btn-cta-large, .btn-secondary {
+    display: block;
+    width: 80%;
+    margin: 0.5rem auto;
+  }
+}
+/* Modal devis gratuit */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.quote-modal-container {
+  background: white;
+  border-radius: 32px;
+  width: 90%;
+  max-width: 550px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+  position: relative;
+  box-shadow: 0 30px 50px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.quote-modal-container h2 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ff2945, #0c33ac);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.quote-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.quote-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.quote-form label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.quote-form input,
+.quote-form textarea {
+  padding: 0.8rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.quote-form input:focus,
+.quote-form textarea:focus {
+  outline: none;
+  border-color: #0c33ac;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.btn-submit {
+  background: linear-gradient(135deg, #ff2945, #0c33ac);
+  color: white;
+  border: none;
+  padding: 0.8rem;
+  border-radius: 40px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s;
+  margin-top: 0.5rem;
+}
+
+.btn-submit:hover {
+  transform: translateY(-2px);
+}
+
+.form-success {
+  background: #dcfce7;
+  color: #166534;
+  padding: 0.6rem;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.form-error {
+  background: #fee2e2;
+  color: #cc1530;
+  padding: 0.6rem;
+  border-radius: 16px;
+  text-align: center;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 480px) {
+  .quote-modal-container {
+    padding: 1.5rem;
+  }
+  .quote-modal-container h2 {
+    font-size: 1.4rem;
+  }
+}

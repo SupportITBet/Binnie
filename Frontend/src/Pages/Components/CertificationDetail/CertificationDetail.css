@@ -1,0 +1,425 @@
+.certification-detail {
+  background: #f8fafc;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.cert-hero {
+  background-size: cover;
+  background-position: center;
+  height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+
+.cert-hero-content h1 {
+  font-size: 4rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.cert-hero-content p {
+  font-size: 1.2rem;
+  opacity: 0.9;
+  margin-bottom: 1rem;
+}
+
+.cert-badge {
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(8px);
+  display: inline-block;
+  padding: 0.4rem 1.2rem;
+  border-radius: 40px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.cert-container {
+  max-width: 1200px;
+  margin: -3rem auto 2rem;
+  background: white;
+  border-radius: 48px;
+  padding: 2rem 2rem 3rem;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+  position: relative;
+  z-index: 2;
+}
+
+.cert-intro {
+  display: flex;
+  gap: 3rem;
+  margin-bottom: 3rem;
+  flex-wrap: wrap;
+}
+
+.cert-description {
+  flex: 2;
+}
+
+.cert-description h2 {
+  font-size: 2rem;
+  color: #0b2a4a;
+  margin-bottom: 1rem;
+}
+
+.cert-description p {
+  line-height: 1.6;
+  color: #334155;
+  margin-bottom: 1.5rem;
+}
+
+.cert-price-block {
+  background: #f1f5f9;
+  padding: 1rem 1.5rem;
+  border-radius: 28px;
+  display: inline-block;
+}
+
+.price-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: #64748b;
+  display: block;
+}
+
+.price {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #0b2a4a;
+}
+
+.duration {
+  font-size: 0.9rem;
+  color: #475569;
+  margin-left: 0.5rem;
+}
+
+.cert-benefits {
+  flex: 1;
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  padding: 1.5rem;
+  border-radius: 32px;
+}
+
+.cert-benefits h3 {
+  margin-bottom: 1rem;
+  color: #0b2a4a;
+}
+
+.cert-benefits ul {
+  list-style: none;
+  padding: 0;
+}
+
+.cert-benefits li {
+  margin-bottom: 0.8rem;
+  font-size: 0.95rem;
+  color: #1e293b;
+}
+
+.cert-structure h2, .cert-preparation h2, .cert-why h2 {
+  font-size: 1.8rem;
+  text-align: center;
+  margin: 2.5rem 0 1.5rem;
+  color: #0b2a4a;
+}
+
+.structure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.structure-card {
+  background: #f8fafc;
+  padding: 1.2rem;
+  border-radius: 24px;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
+.structure-card:hover {
+  transform: translateY(-5px);
+}
+
+.structure-card h4 {
+  color: #0f3b6d;
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.structure-card p {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.cert-preparation {
+  background: #f1f5f9;
+  border-radius: 32px;
+  padding: 1rem 2rem 2rem;
+  margin: 2rem 0;
+}
+
+.prep-card {
+  text-align: center;
+}
+
+.prep-stats {
+  display: flex;
+  justify-content: center;
+  gap: 3rem;
+  margin: 1.5rem 0;
+}
+
+.prep-stat {
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #0b2a4a;
+  display: block;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.btn-inscription {
+  background: linear-gradient(90deg, #0b2a4a, #0f3b6d);
+  color: white;
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: 40px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+  transition: transform 0.2s;
+}
+
+.btn-inscription:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(11,42,74,0.3);
+}
+
+.why-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  padding: 1.8rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.03);
+}
+
+.why-card p {
+  line-height: 1.6;
+  color: #334155;
+}
+
+.cert-cta {
+  text-align: center;
+  margin-top: 3rem;
+  padding: 2rem;
+  background: linear-gradient(135deg, #f1f5f9, #ffffff);
+  border-radius: 40px;
+}
+
+.cert-cta h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.cta-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, #0b2a4a, #0f3b6d);
+  color: white;
+  border: none;
+  padding: 0.8rem 1.8rem;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 2px solid #0b2a4a;
+  color: #0b2a4a;
+  padding: 0.8rem 1.8rem;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cert-not-found {
+  text-align: center;
+  padding: 4rem;
+}
+
+@media (max-width: 768px) {
+  .cert-hero-content h1 {
+    font-size: 2.5rem;
+  }
+  .cert-container {
+    padding: 1.5rem;
+  }
+  .cert-intro {
+    flex-direction: column;
+  }
+  .cert-price-block {
+    text-align: center;
+  }
+  .prep-stats {
+    gap: 1.5rem;
+  }
+  .cta-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+/* Modal devis gratuit */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.quote-modal-container {
+  background: white;
+  border-radius: 32px;
+  width: 90%;
+  max-width: 550px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+  position: relative;
+  box-shadow: 0 30px 50px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.quote-modal-container h2 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ff2945, #0c33ac);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.quote-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.quote-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.quote-form label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.quote-form input,
+.quote-form textarea {
+  padding: 0.8rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.quote-form input:focus,
+.quote-form textarea:focus {
+  outline: none;
+  border-color: #0c33ac;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.quote-form input[readonly] {
+  background-color: #f1f5f9;
+  cursor: default;
+}
+
+.btn-submit {
+  background: linear-gradient(135deg, #ff2945, #0c33ac);
+  color: white;
+  border: none;
+  padding: 0.8rem;
+  border-radius: 40px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s;
+  margin-top: 0.5rem;
+}
+
+.btn-submit:hover {
+  transform: translateY(-2px);
+}
+
+.form-success {
+  background: #dcfce7;
+  color: #166534;
+  padding: 0.6rem;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.form-error {
+  background: #fee2e2;
+  color: #cc1530;
+  padding: 0.6rem;
+  border-radius: 16px;
+  text-align: center;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 480px) {
+  .quote-modal-container {
+    padding: 1.5rem;
+  }
+  .quote-modal-container h2 {
+    font-size: 1.4rem;
+  }
+}

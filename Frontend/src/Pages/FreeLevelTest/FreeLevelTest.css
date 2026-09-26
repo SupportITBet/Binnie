@@ -1,0 +1,248 @@
+.level-test-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #eef2f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.level-test-card {
+  max-width: 750px;
+  width: 100%;
+  background: white;
+  border-radius: 32px;
+  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.1);
+  padding: 2rem 2rem 2.5rem;
+  transition: all 0.3s ease;
+}
+
+.level-test-card h1 {
+  font-size: 1.9rem;
+  color: #0c33ac;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.subtitle {
+  text-align: center;
+  color: #4b5563;
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+
+/* Formulaire */
+.capture-form .form-group {
+  margin-bottom: 1.2rem;
+}
+
+.capture-form label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+  color: #1f2937;
+}
+
+.capture-form input[type="text"],
+.capture-form input[type="email"],
+.capture-form input[type="tel"] {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 40px;
+  font-size: 1rem;
+  transition: border 0.2s;
+}
+
+.capture-form input:focus {
+  outline: none;
+  border-color: #0c33ac;
+  box-shadow: 0 0 0 3px rgba(30,58,138,0.1);
+}
+
+.checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: normal;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #0c33ac;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 40px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0f2b5c;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 12px rgba(0,0,0,0.1);
+}
+
+.btn-primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.legal {
+  font-size: 0.7rem;
+  text-align: center;
+  color: #6b7280;
+  margin-top: 1rem;
+}
+
+/* Quiz */
+.quiz-progress {
+  background: #e5e7eb;
+  border-radius: 40px;
+  padding: 0.4rem 1rem;
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: #1f2937;
+}
+
+.question-card {
+  background: #f9fafb;
+  border-radius: 24px;
+  padding: 1.2rem;
+  margin-bottom: 1.2rem;
+  border: 1px solid #e5e7eb;
+}
+
+.question-text {
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+  color: #0c33ac;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.option-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: white;
+  padding: 0.4rem 1rem;
+  border-radius: 40px;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.option-label:hover {
+  background: #eef2ff;
+  border-color: #0c33ac;
+}
+
+.option-label input {
+  margin: 0;
+}
+
+/* Résultat */
+.result-section {
+  text-align: center;
+}
+
+.level-badge {
+  background: linear-gradient(135deg, #0c33ac, #3355cc);
+  color: white;
+  font-size: 2rem;
+  font-weight: 700;
+  padding: 1rem 2rem;
+  border-radius: 80px;
+  display: inline-block;
+  margin: 1rem 0;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+.result-text {
+  margin: 1.5rem 0;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.result-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn-secondary {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #059669;
+  transform: translateY(-2px);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid #0c33ac;
+  color: #0c33ac;
+  padding: 0.7rem 1.5rem;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-outline:hover {
+  background: #0c33ac;
+  color: white;
+}
+
+.share-text {
+  margin-top: 2rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.share-icons {
+  margin-left: 0.5rem;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .level-test-card {
+    padding: 1.5rem;
+  }
+  .level-test-card h1 {
+    font-size: 1.5rem;
+  }
+  .options {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .result-actions {
+    flex-direction: column;
+  }
+  .btn-secondary, .btn-outline {
+    width: 100%;
+  }
+}

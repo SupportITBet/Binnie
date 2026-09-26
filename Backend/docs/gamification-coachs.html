@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gamification Coachs — BET E-Learning</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--fond);
+    color: var(--texte);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 90px; }
+
+  /* ── En-tête ── */
+  header.hero {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 18px;
+    padding-bottom: 40px; margin-bottom: 48px;
+    border-bottom: 1px solid var(--bordure);
+  }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--or); font-weight: 600;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.05; margin: 0; font-weight: 400;
+    text-wrap: balance;
+    color: var(--texte);
+  }
+  h1 em { color: var(--or); font-style: normal; }
+  .sous-titre {
+    font-size: 16px; color: var(--texte-att); max-width: 680px; line-height: 1.6;
+  }
+  .meta-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .chip {
+    font-size: 12px; padding: 6px 12px; border-radius: 20px;
+    background: var(--fond-carte2); border: 1px solid var(--bordure); color: var(--texte-att);
+  }
+  .chip.statut { color: var(--or); border-color: rgba(240,184,75,0.4); background: rgba(240,184,75,0.08); }
+
+  /* ── Sections ── */
+  section { margin-bottom: 56px; }
+  .section-titre {
+    display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px;
+  }
+  .section-titre h2 {
+    font-family: var(--serif); font-weight: 400; font-size: 26px; margin: 0;
+    color: var(--texte);
+  }
+  .section-titre .num {
+    font-family: var(--serif); font-size: 15px; color: var(--or); opacity: 0.85;
+  }
+  .section-desc { color: var(--texte-att); font-size: 14px; max-width: 760px; line-height: 1.6; margin: -12px 0 24px; }
+
+  /* ── Sources de données ── */
+  .sources-grille { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .source-carte {
+    background: var(--fond-carte); border: 1px solid var(--bordure); border-radius: 14px; padding: 18px 20px;
+  }
+  .source-carte .tag {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--cyan); margin-bottom: 6px; display: block;
+  }
+  .source-carte h3 { font-size: 15px; margin: 0 0 6px; font-weight: 700; color: var(--texte); }
+  .source-carte p { font-size: 13px; margin: 0; color: var(--texte-att); line-height: 1.6; }
+
+  /* ── Table économie de points ── */
+  .table-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--bordure); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+  thead th {
+    text-align: left; padding: 14px 18px; background: var(--fond-carte2);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--texte-att);
+    border-bottom: 1px solid var(--bordure);
+  }
+  tbody td { padding: 14px 18px; border-bottom: 1px solid var(--bordure); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(240,184,75,0.04); }
+  .pts { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--or); white-space: nowrap; font-family: var(--mono); }
+  .pts.neg { color: var(--rouge); }
+  .src-nom { font-weight: 600; color: var(--texte); }
+  .src-desc { color: var(--texte-att); font-size: 13px; margin-top: 2px; }
+  .plafond-tag {
+    display: inline-block; margin-top: 6px; font-size: 11px; color: var(--rose);
+    background: rgba(244,114,182,0.1); border: 1px solid rgba(244,114,182,0.3);
+    padding: 2px 8px; border-radius: 10px;
+  }
+
+  /* ── Paliers ── */
+  .paliers-grille { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .palier-carte {
+    border-radius: 16px; padding: 22px 20px; border: 1px solid var(--bordure);
+    background: var(--fond-carte); position: relative; overflow: hidden;
+  }
+  .palier-carte::before {
+    content: ''; position: absolute; top: -30%; right: -20%; width: 120px; height: 120px;
+    border-radius: 50%; background: radial-gradient(circle, var(--halo, transparent), transparent 70%); opacity: .5;
+  }
+  .palier-nom { font-family: var(--serif); font-size: 20px; margin: 0 0 4px; }
+  .palier-pts { font-size: 12px; color: var(--texte-att); font-family: var(--mono); margin-bottom: 14px; }
+  .palier-cond { font-size: 12.5px; color: var(--texte-att); line-height: 1.55; margin-bottom: 14px; min-height: 78px; }
+  .palier-recompenses { display: flex; flex-direction: column; gap: 6px; }
+  .palier-recompenses li { list-style: none; font-size: 12px; color: var(--texte); display: flex; gap: 7px; }
+  .palier-recompenses li::before { content: '✦'; color: var(--or); flex-shrink: 0; }
+  .palier-carte.bronze { --halo: rgba(154,154,154,0.35); }
+  .palier-carte.bronze .palier-nom { color: #c8c2b6; }
+  .palier-carte.argent { --halo: rgba(196,196,210,0.4); }
+  .palier-carte.argent .palier-nom { color: #d7d7e4; }
+  .palier-carte.or { --halo: rgba(240,184,75,0.5); border-color: rgba(240,184,75,0.45); }
+  .palier-carte.or .palier-nom { color: var(--or); }
+  .palier-carte.platine { --halo: rgba(167,139,250,0.45); border-color: rgba(167,139,250,0.4); }
+  .palier-carte.platine .palier-nom { color: var(--violet); }
+
+  /* ── Badges ── */
+  .categorie-bloc { margin-bottom: 40px; }
+  .categorie-entete { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .categorie-entete .pastille {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .categorie-entete h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700;
+    margin: 0; color: var(--texte);
+  }
+  .categorie-entete .compte { font-size: 12px; color: var(--texte-att); }
+
+  .badge-grille {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px;
+  }
+  .badge-carte {
+    background: linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%);
+    border: 1px solid var(--bordure); border-radius: 16px; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+    position: relative; overflow: hidden;
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .badge-carte::before {
+    content: ''; position: absolute; top: -40%; right: -30%;
+    width: 140px; height: 140px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(240,184,75,0.14), transparent 70%);
+  }
+  .badge-carte:hover { transform: translateY(-2px); border-color: rgba(240,184,75,0.4); }
+  .badge-icone {
+    font-size: 30px; width: 52px; height: 52px; border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(240,184,75,0.1); border: 1px solid rgba(240,184,75,0.25);
+  }
+  .badge-nom { font-size: 15px; font-weight: 700; color: var(--texte); }
+  .badge-desc { font-size: 12.5px; color: var(--texte-att); line-height: 1.5; flex: 1; }
+  .badge-condition {
+    font-size: 11px; color: var(--or-clair); font-family: var(--mono);
+    background: rgba(0,0,0,0.25); padding: 5px 9px; border-radius: 8px; width: fit-content;
+  }
+
+  /* ── Classement ── */
+  .classement-carte {
+    background: var(--fond-carte); border: 1px solid var(--bordure); border-radius: 16px;
+    padding: 28px 30px; display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start;
+  }
+  .classement-texte { flex: 1; min-width: 260px; }
+  .classement-texte p { color: var(--texte-att); font-size: 14px; line-height: 1.7; margin: 8px 0 0; }
+  .classement-demo { flex: 1; min-width: 260px; }
+  .rang-ligne {
+    display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px;
+    margin-bottom: 6px; background: var(--fond-carte2); border: 1px solid var(--bordure);
+  }
+  .rang-ligne.or { border-color: rgba(240,184,75,0.5); background: rgba(240,184,75,0.08); }
+  .rang-num {
+    width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; background: var(--fond); color: var(--texte-att); flex-shrink: 0;
+  }
+  .rang-ligne.or .rang-num { background: var(--or); color: #1a1400; }
+  .rang-nom { flex: 1; font-size: 13.5px; color: var(--texte); }
+  .rang-nom .rang-palier { display: block; font-size: 11px; color: var(--texte-att); margin-top: 1px; }
+  .rang-pts { font-size: 13px; font-weight: 700; color: var(--or); font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  /* ── Garde-fous ── */
+  .garde-fous { display: flex; flex-direction: column; gap: 10px; }
+  .garde-fou {
+    display: flex; gap: 14px; align-items: flex-start; background: var(--fond-carte);
+    border: 1px solid var(--bordure); border-left: 3px solid var(--rouge); border-radius: 10px; padding: 14px 18px;
+  }
+  .garde-fou .num { font-family: var(--mono); color: var(--rouge); font-size: 12px; flex-shrink: 0; margin-top: 2px; }
+  .garde-fou strong { display: block; font-size: 13.5px; color: var(--texte); margin-bottom: 3px; }
+  .garde-fou p { margin: 0; font-size: 13px; color: var(--texte-att); line-height: 1.6; }
+
+  /* ── Décisions ouvertes ── */
+  .decisions { display: flex; flex-direction: column; gap: 12px; }
+  .decision {
+    background: rgba(240,184,75,0.06); border: 1px solid rgba(240,184,75,0.3); border-radius: 12px;
+    padding: 14px 18px;
+  }
+  .decision strong { color: var(--or); font-size: 13.5px; display: block; margin-bottom: 4px; }
+  .decision .defaut { font-size: 13px; color: var(--texte); margin: 0 0 4px; }
+  .decision .raison { font-size: 12.5px; color: var(--texte-att); margin: 0; }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 70px; padding-top: 26px; border-top: 1px solid var(--bordure);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    font-size: 12px; color: var(--texte-att);
+  }
+
+  @media (max-width: 900px) {
+    .paliers-grille { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 620px) {
+    .page { padding: 40px 18px 70px; }
+    .classement-carte { flex-direction: column; }
+    .sources-grille, .paliers-grille { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET E-Learning · Système de motivation — Coachs</span>
+    <h1>Gamification — <em>paliers</em>, badges &amp; récompenses</h1>
+    <p class="sous-titre">
+      Catalogue complet du système de reconnaissance des coachs : comment le score est calculé à
+      partir des notes déjà collectées, les 4 paliers et leurs récompenses, les 21 badges à débloquer,
+      et le classement mensuel. Aucune nouvelle saisie n'est demandée à qui que ce soit — tout part
+      des rapports d'observation et des avis parents déjà transmis.
+    </p>
+    <div class="meta-chips">
+      <span class="chip">9 sources de points</span>
+      <span class="chip">4 paliers</span>
+      <span class="chip">21 badges · 6 catégories</span>
+      <span class="chip statut">Document de travail — à valider avant code</span>
+    </div>
+  </header>
+
+  <!-- ── SOURCES DE DONNÉES ── -->
+  <section>
+    <div class="section-titre"><span class="num">00</span><h2>Ce que le système lit déjà</h2></div>
+    <p class="section-desc">
+      Le moteur de points ne collecte rien de nouveau : il relit chaque mois deux flux déjà en place
+      dans l'application, plus deux signaux opérationnels existants.
+    </p>
+    <div class="sources-grille">
+      <div class="source-carte">
+        <span class="tag">Terrain</span>
+        <h3>Rapports Superviseur / Deputy</h3>
+        <p>5 critères par observation transmise (ponctualité, préparation, pédagogie, gestion de classe,
+        respect du programme) — table <code>rapports_observation</code>, déjà affichée dans l'onglet
+        Rapports Superviseur.</p>
+      </div>
+      <div class="source-carte">
+        <span class="tag">Parents</span>
+        <h3>Avis des parents</h3>
+        <p>5 critères mensuels (clarté, disponibilité, adaptation, dynamisme, progression) — déjà
+        affichés dans l'onglet Évaluations.</p>
+      </div>
+      <div class="source-carte">
+        <span class="tag">Conformité</span>
+        <h3>Anomalies superviseur</h3>
+        <p>Table <code>anomalies_superviseur</code> déjà en place — sert de garde-fou : une anomalie
+        ouverte bloque l'accès aux paliers Or et Platine.</p>
+      </div>
+      <div class="source-carte">
+        <span class="tag">Opérationnel</span>
+        <h3>Remplacements &amp; honoraires</h3>
+        <p>Modules Remplacements et Honoraires &amp; Validation déjà existants — un remplacement
+        d'urgence honoré ou des honoraires validés sans litige nourrissent des bonus ponctuels.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ÉCONOMIE DE POINTS ── -->
+  <section>
+    <div class="section-titre"><span class="num">01</span><h2>Économie de points</h2></div>
+    <p class="section-desc">
+      Chaque note ou événement crée une transaction dans le livre de points du coach. Le score de
+      palier est la somme glissante sur 3 mois — jamais modifié à la main, jamais recalculé sur une
+      note retouchée après transmission (les notes transmises sont gelées côté backend).
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Source</th><th>Points</th><th>Détail</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="src-nom">Rapport superviseur ≥ 4,5/5</span><div class="src-desc">Note globale d'un rapport transmis au PA</div></td>
+            <td class="pts">+30</td>
+            <td>Versé à la transmission (<code>statut = transmis_pa</code>), jamais à la soumission brute.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Rapport superviseur 3,5 – 4,49/5</span></td>
+            <td class="pts">+15</td>
+            <td>Palier intermédiaire pour ne pas tout concentrer sur les notes parfaites.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Rapport superviseur &lt; 2,5/5</span></td>
+            <td class="pts neg">−10</td>
+            <td>Signal explicite qu'une observation faible pèse, pas seulement l'absence de bonus.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Avis parent ≥ 4,5/5</span></td>
+            <td class="pts">+20</td>
+            <td>Calculé sur la moyenne des 5 critères de l'évaluation mensuelle.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Avis parent 3,5 – 4,49/5</span></td>
+            <td class="pts">+10</td>
+            <td>Même logique de palier intermédiaire que côté superviseur.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Régularité — 3 mois consécutifs ≥ 4,5/5</span><div class="src-desc">Bonus de constance sur le score composite</div></td>
+            <td class="pts">+50</td>
+            <td>Versé une fois par fenêtre de 3 mois glissante, pas cumulable en boucle sur le même trimestre.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Mois sans anomalie ouverte</span></td>
+            <td class="pts">+10</td>
+            <td>Vérifié sur <code>anomalies_superviseur</code> à la clôture du mois.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Remplacement d'urgence honoré</span><div class="src-desc">Accepté et assuré en moins de 24h</div></td>
+            <td class="pts">+25</td>
+            <td><span class="plafond-tag">Plafond 2 / mois</span> — évite de sur-pondérer un mois chargé en aléas.</td>
+          </tr>
+          <tr>
+            <td><span class="src-nom">Honoraires validés sans litige</span></td>
+            <td class="pts">+5</td>
+            <td>Un mois entier sans contestation sur l'onglet Honoraires &amp; Validation.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── PALIERS & RÉCOMPENSES ── -->
+  <section>
+    <div class="section-titre"><span class="num">02</span><h2>Paliers &amp; récompenses</h2></div>
+    <p class="section-desc">
+      Le score glissant sur 3 mois place chaque coach dans un palier. Passer un palier débloque des
+      récompenses cumulatives — rien n'est retiré en cas de stagnation, mais un palier peut être perdu
+      si le score retombe en dessous du seuil au recalcul mensuel.
+    </p>
+    <div class="paliers-grille">
+      <div class="palier-carte bronze">
+        <div class="palier-nom">Bronze</div>
+        <div class="palier-pts">0 – 39 pts</div>
+        <div class="palier-cond">Palier par défaut, dès la première note reçue. Aucune condition de qualité.</div>
+        <ul class="palier-recompenses">
+          <li>Visible dans le classement</li>
+        </ul>
+      </div>
+      <div class="palier-carte argent">
+        <div class="palier-nom">Argent</div>
+        <div class="palier-pts">40 – 64 pts</div>
+        <div class="palier-cond">Score composite moyen ≥ 3,5/5 sur la période glissante.</div>
+        <ul class="palier-recompenses">
+          <li>Badge palier sur le profil</li>
+          <li>Accès formations avancées</li>
+        </ul>
+      </div>
+      <div class="palier-carte or">
+        <div class="palier-nom">Or</div>
+        <div class="palier-pts">65 – 84 pts</div>
+        <div class="palier-cond">Score composite moyen ≥ 4,2/5, aucune anomalie superviseur ouverte.</div>
+        <ul class="palier-recompenses">
+          <li>Mise en avant « Coach du mois »</li>
+          <li>Priorité d'affectation</li>
+          <li>Bonus honoraires (%)</li>
+        </ul>
+      </div>
+      <div class="palier-carte platine">
+        <div class="palier-nom">Platine</div>
+        <div class="palier-pts">85 – 100 pts</div>
+        <div class="palier-cond">Score composite moyen ≥ 4,6/5 pendant 3 mois consécutifs, volume minimum de notes respecté.</div>
+        <ul class="palier-recompenses">
+          <li>Certificat mensuel téléchargeable</li>
+          <li>Bonus honoraires majoré</li>
+          <li>Premier choix classes premium</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── BADGES ── -->
+  <section>
+    <div class="section-titre"><span class="num">03</span><h2>Catalogue des badges</h2></div>
+    <p class="section-desc">
+      21 badges répartis en 6 catégories. Chaque badge n'est débloqué qu'une seule fois et déclenche
+      une notification immédiate au coach.
+    </p>
+
+    <div class="categorie-bloc">
+      <div class="categorie-entete"><span class="pastille" style="background:var(--cyan)"></span><h3>Démarrage</h3><span class="compte">2 badges</span></div>
+      <div class="badge-grille">
+        <div class="badge-carte"><div class="badge-icone">📋</div><div class="badge-nom">Premier rapport</div><div class="badge-desc">Première note reçue via un rapport d'observation transmis.</div><div class="badge-condition">1ᵉʳ rapport transmis</div></div>
+        <div class="badge-carte"><div class="badge-icone">👨‍👩‍👧</div><div class="badge-nom">Premier avis parent</div><div class="badge-desc">Premier avis parent reçu sur l'espace parent.</div><div class="badge-condition">1ᵉʳ avis parent</div></div>
+      </div>
+    </div>
+
+    <div class="categorie-bloc">
+      <div class="categorie-entete"><span class="pastille" style="background:var(--or)"></span><h3>Excellence terrain</h3><span class="compte">5 badges</span></div>
+      <div class="badge-grille">
+        <div class="badge-carte"><div class="badge-icone">💯</div><div class="badge-nom">Sans faute</div><div class="badge-desc">Note globale de 5/5 sur un rapport d'observation.</div><div class="badge-condition">note = 5/5</div></div>
+        <div class="badge-carte"><div class="badge-icone">🔥</div><div class="badge-nom">Régulier</div><div class="badge-desc">3 rapports consécutifs notés ≥ 4,5/5.</div><div class="badge-condition">3 rapports ≥ 4,5</div></div>
+        <div class="badge-carte"><div class="badge-icone">🛡️</div><div class="badge-nom">Zéro anomalie</div><div class="badge-desc">6 mois consécutifs sans anomalie superviseur ouverte.</div><div class="badge-condition">6 mois sans anomalie</div></div>
+        <div class="badge-carte"><div class="badge-icone">⏰</div><div class="badge-nom">Toujours à l'heure</div><div class="badge-desc">Critère ponctualité à 5/5 sur 5 rapports consécutifs.</div><div class="badge-condition">ponctualité=5 × 5</div></div>
+        <div class="badge-carte"><div class="badge-icone">🎓</div><div class="badge-nom">Pédagogue confirmé</div><div class="badge-desc">Critère pédagogie ≥ 4,5/5 en moyenne sur 10 rapports.</div><div class="badge-condition">pédagogie ≥ 4,5 / 10 rapports</div></div>
+      </div>
+    </div>
+
+    <div class="categorie-bloc">
+      <div class="categorie-entete"><span class="pastille" style="background:var(--rose)"></span><h3>Excellence parents</h3><span class="compte">4 badges</span></div>
+      <div class="badge-grille">
+        <div class="badge-carte"><div class="badge-icone">❤️</div><div class="badge-nom">Coup de cœur parents</div><div class="badge-desc">Avis parent noté 5/5 sur les 5 critères.</div><div class="badge-condition">avis parent = 5/5</div></div>
+        <div class="badge-carte"><div class="badge-icone">📈</div><div class="badge-nom">Progrès reconnu</div><div class="badge-desc">Critère « progression » ≥ 4,5/5 sur 3 mois consécutifs.</div><div class="badge-condition">progression ≥ 4,5 / 3 mois</div></div>
+        <div class="badge-carte"><div class="badge-icone">📞</div><div class="badge-nom">Toujours disponible</div><div class="badge-desc">Critère « disponibilité » à 5/5 sur 5 avis parents.</div><div class="badge-condition">disponibilité=5 × 5</div></div>
+        <div class="badge-carte"><div class="badge-icone">🌟</div><div class="badge-nom">Constant</div><div class="badge-desc">Moyenne des avis parents ≥ 4,5/5 sur 6 mois glissants.</div><div class="badge-condition">moyenne ≥ 4,5 / 6 mois</div></div>
+      </div>
+    </div>
+
+    <div class="categorie-bloc">
+      <div class="categorie-entete"><span class="pastille" style="background:var(--violet)"></span><h3>Fidélité</h3><span class="compte">3 badges</span></div>
+      <div class="badge-grille">
+        <div class="badge-carte"><div class="badge-icone">🗓️</div><div class="badge-nom">6 mois d'engagement</div><div class="badge-desc">6 mois d'ancienneté en tant que coach actif.</div><div class="badge-condition">ancienneté ≥ 6 mois</div></div>
+        <div class="badge-carte"><div class="badge-icone">🏠</div><div class="badge-nom">Un an avec BET</div><div class="badge-desc">1 an d'ancienneté, toujours actif.</div><div class="badge-condition">ancienneté ≥ 1 an</div></div>
+        <div class="badge-carte"><div class="badge-icone">🏛️</div><div class="badge-nom">Vétéran coach</div><div class="badge-desc">2 ans d'ancienneté, toujours actif.</div><div class="badge-condition">ancienneté ≥ 2 ans</div></div>
+      </div>
+    </div>
+
+    <div class="categorie-bloc">
+      <div class="categorie-entete"><span class="pastille" style="background:var(--vert)"></span><h3>Terrain &amp; disponibilité</h3><span class="compte">3 badges</span></div>
+      <div class="badge-grille">
+        <div class="badge-carte"><div class="badge-icone">🆘</div><div class="badge-nom">Dépanneur</div><div class="badge-desc">2 remplacements d'urgence acceptés et honorés.</div><div class="badge-condition">2 remplacements urgents</div></div>
+        <div class="badge-carte"><div class="badge-icone">💪</div><div class="badge-nom">Increvable</div><div class="badge-desc">10 remplacements assurés au total, tous motifs confondus.</div><div class="badge-condition">10 remplacements</div></div>
+        <div class="badge-carte"><div class="badge-icone">✅</div><div class="badge-nom">Zéro absence</div><div class="badge-desc">Aucune séance manquée sur un trimestre complet.</div><div class="badge-condition">0 absence / trimestre</div></div>
+      </div>
+    </div>
+
+    <div class="categorie-bloc">
+      <div class="categorie-entete"><span class="pastille" style="background:var(--cyan)"></span><h3>Paliers &amp; leadership</h3><span class="compte">4 badges</span></div>
+      <div class="badge-grille">
+        <div class="badge-carte"><div class="badge-icone">🥈</div><div class="badge-nom">Palier Argent atteint</div><div class="badge-desc">Premier passage au palier Argent.</div><div class="badge-condition">palier ≥ Argent</div></div>
+        <div class="badge-carte"><div class="badge-icone">🥇</div><div class="badge-nom">Palier Or atteint</div><div class="badge-desc">Premier passage au palier Or.</div><div class="badge-condition">palier ≥ Or</div></div>
+        <div class="badge-carte"><div class="badge-icone">💎</div><div class="badge-nom">Palier Platine atteint</div><div class="badge-desc">Premier passage au palier Platine.</div><div class="badge-condition">palier = Platine</div></div>
+        <div class="badge-carte"><div class="badge-icone">🏆</div><div class="badge-nom">Coach du mois</div><div class="badge-desc">1ᵉʳ au classement mensuel, tous coachs confondus.</div><div class="badge-condition">rang = 1 / mois</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CLASSEMENT ── -->
+  <section>
+    <div class="section-titre"><span class="num">04</span><h2>Classement</h2></div>
+    <div class="classement-carte">
+      <div class="classement-texte">
+        <h3 style="margin:0;font-size:15px;color:var(--texte)">Classement mensuel des coachs</h3>
+        <p>
+          Reprend et formalise le classement déjà affiché dans l'onglet Rapports Superviseur : chaque
+          coach est classé par score glissant sur 3 mois, avec son palier affiché sous son nom. Le
+          classement reste consultable par le Superviseur Général et le PA Advisor — à trancher si le
+          coach lui-même y a accès (voir décisions ouvertes ci-dessous).
+        </p>
+      </div>
+      <div class="classement-demo">
+        <div class="rang-ligne or"><span class="rang-num">1</span><span class="rang-nom">Thierry Fodé<span class="rang-palier">💎 Platine · 91 pts</span></span><span class="rang-pts">91 pts</span></div>
+        <div class="rang-ligne"><span class="rang-num">2</span><span class="rang-nom">Pascal Doubai<span class="rang-palier">🥇 Or · 78 pts</span></span><span class="rang-pts">78 pts</span></div>
+        <div class="rang-ligne"><span class="rang-num">3</span><span class="rang-nom">Badra Ali<span class="rang-palier">🥈 Argent · 52 pts</span></span><span class="rang-pts">52 pts</span></div>
+        <div class="rang-ligne"><span class="rang-num">4</span><span class="rang-nom">Freddy Freddy<span class="rang-palier">🥉 Bronze · 24 pts</span></span><span class="rang-pts">24 pts</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── GARDE-FOUS ── -->
+  <section>
+    <div class="section-titre"><span class="num">05</span><h2>Garde-fous anti-triche</h2></div>
+    <div class="garde-fous">
+      <div class="garde-fou">
+        <span class="num">01</span>
+        <div><strong>Volume minimum avant classement</strong><p>Un coach avec une seule note à 5/5 ne dépasse pas un coach avec dix notes à 4,3/5 — le score exige un nombre minimum de rapports par période (proposé : 3 rapports / trimestre).</p></div>
+      </div>
+      <div class="garde-fou">
+        <span class="num">02</span>
+        <div><strong>Notes gelées après transmission</strong><p>Déjà vrai côté backend : une note transmise au PA (<code>transmis_pa</code>) n'est plus modifiable, donc pas de retouche a posteriori sur un score déjà versé.</p></div>
+      </div>
+      <div class="garde-fou">
+        <span class="num">03</span>
+        <div><strong>Exclusion si anomalie ouverte</strong><p>Un coach avec une anomalie superviseur non résolue (<code>anomalies_superviseur</code>) ne peut pas atteindre Or ou Platine, quel que soit son score.</p></div>
+      </div>
+      <div class="garde-fou">
+        <span class="num">04</span>
+        <div><strong>Plafonds sur les bonus événementiels</strong><p>Le bonus « remplacement d'urgence » est plafonné à 2 par mois pour éviter qu'un mois chaotique en aléas ne devienne la meilleure stratégie de score.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DÉCISIONS OUVERTES ── -->
+  <section>
+    <div class="section-titre"><span class="num">06</span><h2>Décisions à valider avant le code</h2></div>
+    <div class="decisions">
+      <div class="decision">
+        <strong>Bonus honoraires — inclus par défaut dans ce document</strong>
+        <p class="defaut">Défaut proposé : +5 % d'honoraires le mois suivant au palier Or, +10 % au palier Platine.</p>
+        <p class="raison">Raison : c'est le levier le plus motivant, mais il touche la paie — à faire valider par qui gère les honoraires avant tout code, montant et modalité inclus.</p>
+      </div>
+      <div class="decision">
+        <strong>Visibilité du classement — coach lui-même inclus par défaut</strong>
+        <p class="defaut">Défaut proposé : le coach voit son propre palier, son score et son rang ; il ne voit pas le détail des scores des autres coachs.</p>
+        <p class="raison">Raison : motivant sans exposer les coachs entre eux — mais change l'interface à construire côté espace coach, qui n'existe pas encore pour cette vue.</p>
+      </div>
+      <div class="decision">
+        <strong>Pondération superviseur / parents — 60 / 40 par défaut</strong>
+        <p class="defaut">Défaut proposé : poids fixe, non ajustable par le PA dans une première version.</p>
+        <p class="raison">Raison : un curseur ajustable complique l'implémentation et la lisibilité pour un gain incertain — à revoir une fois le système en usage réel.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Gamification Coachs — BET E-Learning</span>
+    <span>Document interne — aucune ligne de code liée à ce système n'a encore été écrite</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,630 @@
+<title>Du cahier à la base</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    /* Palette prise du classeur lui-même : sa légende oppose le vert (disponible,
+       présent) au gris (occupé, manquant). C'est la grammaire visuelle que les coachs
+       lisent déjà — on la reprend pour dire couvert / partiel / absent. */
+    --encre:        #12232E;
+    --encre-douce:  #44585F;
+    --encre-pale:   #7C8D92;
+    --fond:         #FBFCFB;
+    --surface:      #FFFFFF;
+    --surface-2:    #F1F5F3;
+    --trait:        #D8E0DC;
+    --trait-fort:   #B4C1BB;
+
+    --couvert:      #1E7A4F;
+    --couvert-fond: #E4F2EA;
+    --partiel:      #A9690A;
+    --partiel-fond: #FBF0DC;
+    --absent:       #A72B22;
+    --absent-fond:  #FAE7E4;
+
+    --serif: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+    --sans:  'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --encre:        #E7EDEA;
+      --encre-douce:  #AEBDB8;
+      --encre-pale:   #7C8D92;
+      --fond:         #0E1618;
+      --surface:      #152024;
+      --surface-2:    #1B282C;
+      --trait:        #2C3B40;
+      --trait-fort:   #435459;
+
+      --couvert:      #5FC28C;
+      --couvert-fond: #14302250;
+      --partiel:      #E0A64B;
+      --partiel-fond: #3A2C0F50;
+      --absent:       #F08076;
+      --absent-fond:  #3A1C1850;
+    }
+  }
+  :root[data-theme="dark"]{
+    --encre:        #E7EDEA;
+    --encre-douce:  #AEBDB8;
+    --encre-pale:   #7C8D92;
+    --fond:         #0E1618;
+    --surface:      #152024;
+    --surface-2:    #1B282C;
+    --trait:        #2C3B40;
+    --trait-fort:   #435459;
+
+    --couvert:      #5FC28C;
+    --couvert-fond: #14302250;
+    --partiel:      #E0A64B;
+    --partiel-fond: #3A2C0F50;
+    --absent:       #F08076;
+    --absent-fond:  #3A1C1850;
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    margin: 0;
+    background: var(--fond);
+    color: var(--encre);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page{ max-width: 980px; margin: 0 auto; padding: 44px 24px 90px; }
+
+  /* ── Tête ─────────────────────────────────────────────── */
+  .eyebrow{
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--encre-pale); margin: 0 0 12px;
+  }
+  h1{
+    font-family: var(--serif); font-weight: 600; font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.12; margin: 0 0 14px; text-wrap: balance; letter-spacing: -.015em;
+  }
+  .chapeau{
+    font-size: 17px; line-height: 1.6; color: var(--encre-douce);
+    max-width: 62ch; margin: 0 0 30px;
+  }
+  .chapeau strong{ color: var(--encre); font-weight: 600; }
+
+  h2{
+    font-family: var(--serif); font-weight: 600; font-size: 24px; line-height: 1.25;
+    margin: 52px 0 6px; letter-spacing: -.01em; text-wrap: balance;
+  }
+  h2 .num{
+    font-family: var(--mono); font-size: 13px; color: var(--encre-pale);
+    font-weight: 400; margin-right: 10px; letter-spacing: .06em;
+  }
+  h3{ font-family: var(--sans); font-weight: 700; font-size: 15.5px; margin: 26px 0 4px; }
+  p{ margin: 0 0 14px; max-width: 68ch; }
+  .sous{ color: var(--encre-douce); font-size: 14px; margin-top: -2px; margin-bottom: 20px; max-width: 68ch; }
+  code{ font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+
+  hr.regle{ border: 0; border-top: 1px solid var(--trait); margin: 46px 0 0; }
+
+  /* ── Compteurs ────────────────────────────────────────── */
+  .compteurs{
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 1px; background: var(--trait); border: 1px solid var(--trait);
+    border-radius: 6px; overflow: hidden; margin: 26px 0 0;
+  }
+  .compteur{ background: var(--surface); padding: 15px 16px; }
+  .compteur .v{
+    font-family: var(--mono); font-size: 25px; font-weight: 500;
+    font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: -.02em;
+  }
+  .compteur .l{ font-size: 12px; color: var(--encre-douce); margin-top: 5px; line-height: 1.4; }
+
+  /* ── Figures ──────────────────────────────────────────── */
+  figure{ margin: 30px 0 34px; }
+  .cadre{
+    background: var(--surface); border: 1px solid var(--trait);
+    border-radius: 6px; padding: 22px 20px 12px; overflow-x: auto;
+  }
+  .cadre svg{ display: block; width: 100%; height: auto; min-width: 680px; }
+  figcaption{
+    font-size: 13px; color: var(--encre-douce); margin-top: 12px;
+    padding-left: 2px; max-width: 72ch;
+  }
+
+  .legende{ display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 18px; }
+  .cle{ display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--encre-douce); }
+  .pastille{ width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+  /* ── Tableaux ─────────────────────────────────────────── */
+  .table-enveloppe{ overflow-x: auto; border: 1px solid var(--trait); border-radius: 6px; margin: 22px 0 8px; }
+  table{ width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; background: var(--surface); }
+  th{
+    text-align: left; font-family: var(--mono); font-weight: 500; font-size: 11px;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--encre-pale);
+    padding: 11px 14px; border-bottom: 1px solid var(--trait-fort); white-space: nowrap;
+    background: var(--surface-2);
+  }
+  td{ padding: 11px 14px; border-bottom: 1px solid var(--trait); vertical-align: top; }
+  tr:last-child td{ border-bottom: 0; }
+  td.num, th.num{ text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.src{ font-weight: 600; }
+  td .cible{ font-family: var(--mono); font-size: 12.5px; }
+
+  .etat{
+    display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .03em;
+    padding: 2px 8px; border-radius: 3px; white-space: nowrap;
+  }
+  .e-couvert{ color: var(--couvert); background: var(--couvert-fond); }
+  .e-partiel{ color: var(--partiel); background: var(--partiel-fond); }
+  .e-absent { color: var(--absent);  background: var(--absent-fond); }
+
+  /* ── Écarts ───────────────────────────────────────────── */
+  .ecart{
+    border-left: 3px solid var(--trait-fort);
+    padding: 2px 0 2px 20px; margin: 0 0 28px;
+  }
+  .ecart.critique{ border-left-color: var(--absent); }
+  .ecart.moyen{ border-left-color: var(--partiel); }
+  .ecart-tete{ display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; margin-bottom: 3px; }
+  .ecart-num{
+    font-family: var(--mono); font-size: 12px; color: var(--encre-pale);
+    font-variant-numeric: tabular-nums;
+  }
+  .ecart-titre{ font-weight: 700; font-size: 16px; }
+  .ecart p{ margin: 6px 0 0; font-size: 14.5px; }
+  .preuve{
+    font-family: var(--mono); font-size: 12.5px; color: var(--encre-douce);
+    background: var(--surface-2); border-radius: 4px; padding: 9px 13px;
+    margin-top: 11px; line-height: 1.7;
+  }
+  .preuve b{ color: var(--encre); font-weight: 500; }
+  .reprise{ font-size: 13.5px; color: var(--encre-douce); margin-top: 10px; }
+  .reprise b{ color: var(--encre); font-weight: 600; }
+
+  .note{
+    background: var(--surface-2); border: 1px solid var(--trait);
+    border-radius: 6px; padding: 15px 18px; margin: 24px 0; font-size: 14px;
+    color: var(--encre-douce);
+  }
+  .note b{ color: var(--encre); }
+
+  ul{ margin: 0 0 14px; padding-left: 20px; max-width: 68ch; }
+  li{ margin-bottom: 7px; }
+
+  .pied{
+    margin-top: 58px; padding-top: 18px; border-top: 1px solid var(--trait);
+    font-size: 12.5px; color: var(--encre-pale); font-family: var(--mono);
+  }
+  @media (max-width: 620px){
+    .page{ padding: 32px 16px 64px; }
+    .ecart{ padding-left: 15px; }
+  }
+</style>
+
+<div class="page">
+
+  <p class="eyebrow">BET · Analyse de l'existant · 21 septembre 2026</p>
+  <h1>Du cahier à la base</h1>
+  <p class="chapeau">
+    Le cahier de bord des coachs — un classeur de <strong>19 onglets</strong> tenu à la main — contre
+    le schéma de la plateforme. Ce que la base reprend déjà, ce qu'elle laisse tomber, et
+    ce qu'il faudrait pour que ce fichier cesse d'être nécessaire.
+  </p>
+
+  <div class="compteurs">
+    <div class="compteur"><div class="v">17</div><div class="l">contrats suivis</div></div>
+    <div class="compteur"><div class="v">50</div><div class="l">apprenants en fiche</div></div>
+    <div class="compteur"><div class="v">84</div><div class="l">mois ouverts <span style="color:var(--encre-pale)">/ 204</span></div></div>
+    <div class="compteur"><div class="v">816</div><div class="l">jours de leçon datés</div></div>
+    <div class="compteur"><div class="v">48</div><div class="l">grilles de présence</div></div>
+    <div class="compteur"><div class="v">53</div><div class="l">arrêts de formation</div></div>
+  </div>
+
+  <hr class="regle">
+
+  <h2><span class="num">01</span>Ce que contient le classeur</h2>
+  <p class="sous">
+    Un onglet par contrat, et dans chaque onglet <b>douze blocs mensuels identiques</b> empilés sur
+    environ 1 950 lignes. Le bloc mensuel est l'unité réelle : c'est lui qui se répète, et c'est lui
+    qu'il faut savoir reproduire.
+  </p>
+
+  <div class="legende">
+    <span class="cle"><span class="pastille" style="background:var(--couvert)"></span>La base le porte déjà</span>
+    <span class="cle"><span class="pastille" style="background:var(--partiel)"></span>Partiellement porté</span>
+    <span class="cle"><span class="pastille" style="background:var(--absent)"></span>Rien en base</span>
+  </div>
+
+  <figure>
+    <div class="cadre">
+      <svg viewBox="0 0 900 486" role="img" aria-label="Anatomie d'un bloc mensuel du cahier coach : sept sections, dont deux entièrement couvertes par la base, trois partiellement, et deux sans aucune destination.">
+        <defs>
+          <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="currentColor"/>
+          </marker>
+          <marker id="fl-abs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="#A72B22"/>
+          </marker>
+        </defs>
+
+        <text x="16" y="18" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".55" letter-spacing="1.2">LE BLOC MENSUEL</text>
+        <text x="560" y="18" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity=".55" letter-spacing="1.2">DESTINATION EN BASE</text>
+
+        <!-- 1 -->
+        <rect x="16" y="30" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="30" width="4" height="52" fill="#1E7A4F"/>
+        <text x="34" y="51" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">En-tête de contrat</text>
+        <text x="34" y="69" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">statut · coach · niveau · lieu · lien · effectifs · dates</text>
+        <line x1="446" y1="56" x2="552" y2="56" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+        <text x="562" y="60" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="#1E7A4F">groupes</text>
+
+        <!-- 2 -->
+        <rect x="16" y="92" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="92" width="4" height="52" fill="#A9690A"/>
+        <text x="34" y="113" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Fiches apprenants</text>
+        <text x="34" y="131" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">nom · occupation · niveau actuel → suivant · régularité · forces</text>
+        <line x1="446" y1="118" x2="552" y2="118" stroke="currentColor" stroke-opacity=".45" stroke-dasharray="5 4" marker-end="url(#fl)"/>
+        <text x="562" y="114" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="currentColor">apprenants</text>
+        <text x="562" y="130" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#A9690A">5 champs sur 9</text>
+
+        <!-- 3 -->
+        <rect x="16" y="154" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="154" width="4" height="52" fill="#A72B22"/>
+        <text x="34" y="175" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Renouvellement</text>
+        <text x="34" y="193" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">a renouvelé ? · montant attendu · motif du refus · mois n/6</text>
+        <line x1="446" y1="180" x2="552" y2="180" stroke="#A72B22" stroke-dasharray="3 5" marker-end="url(#fl-abs)"/>
+        <text x="562" y="184" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="#A72B22">∅  aucune table</text>
+
+        <!-- 4 -->
+        <rect x="16" y="216" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="216" width="4" height="52" fill="#1E7A4F"/>
+        <text x="34" y="237" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Journal des leçons</text>
+        <text x="34" y="255" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">jour · date · statut (tenue / absent / rattrapage)</text>
+        <line x1="446" y1="242" x2="552" y2="242" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+        <text x="562" y="238" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="#1E7A4F">seances</text>
+        <text x="562" y="254" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#A9690A">sauf « rattrapage »</text>
+
+        <!-- 5 -->
+        <rect x="16" y="278" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="278" width="4" height="52" fill="#A9690A"/>
+        <text x="34" y="299" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Contenu de la leçon</text>
+        <text x="34" y="317" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">objectifs · grammaire apprise · thème de discussion</text>
+        <line x1="446" y1="304" x2="552" y2="304" stroke="currentColor" stroke-opacity=".45" stroke-dasharray="5 4" marker-end="url(#fl)"/>
+        <text x="562" y="300" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="currentColor">seances.objectif</text>
+        <text x="562" y="316" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#A9690A">vide · 2 colonnes manquantes</text>
+
+        <!-- 6 -->
+        <rect x="16" y="340" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="340" width="4" height="52" fill="#A9690A"/>
+        <text x="34" y="361" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Grille de présence</text>
+        <text x="34" y="379" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">apprenant × jour · 1 présent / 0 absent · + révision, examen</text>
+        <line x1="446" y1="366" x2="552" y2="366" stroke="currentColor" stroke-opacity=".45" stroke-dasharray="5 4" marker-end="url(#fl)"/>
+        <text x="562" y="362" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="currentColor">presences</text>
+        <text x="562" y="378" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#A9690A">table construite · 0 ligne</text>
+
+        <!-- 7 -->
+        <rect x="16" y="402" width="420" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+        <rect x="16" y="402" width="4" height="52" fill="#A72B22"/>
+        <text x="34" y="423" font-family="IBM Plex Sans, sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Bilan de classe du mois</text>
+        <text x="34" y="441" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".62">4 questions · meilleur et plus faible élève · résultats</text>
+        <line x1="446" y1="428" x2="552" y2="428" stroke="#A72B22" stroke-dasharray="3 5" marker-end="url(#fl-abs)"/>
+        <text x="562" y="432" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="#A72B22">∅  aucune table</text>
+
+        <text x="16" y="474" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".5">Ce bloc se répète 12 fois par onglet, 17 onglets — 204 blocs possibles, 84 réellement ouverts.</text>
+      </svg>
+    </div>
+    <figcaption>
+      Anatomie d'un bloc mensuel. Deux sections seulement arrivent entières en base. Les trois
+      sections en trait interrompu y arrivent amputées ; les deux en rouge n'ont aucune destination.
+    </figcaption>
+  </figure>
+
+  <hr class="regle">
+
+  <h2><span class="num">02</span>La chaîne de présence est construite, mais vide</h2>
+  <p class="sous">
+    C'est la découverte la plus coûteuse de cette analyse, et la moins chère à corriger : rien
+    n'est à développer.
+  </p>
+
+  <figure>
+    <div class="cadre">
+      <svg viewBox="0 0 900 200" role="img" aria-label="La chaîne de la présence : le coach saisit sur papier, la table presences reste vide, et dix écrans qui savent la lire n'affichent donc rien.">
+        <defs>
+          <marker id="f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <rect x="14" y="52" width="176" height="62" rx="5" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+        <text x="102" y="79" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="currentColor">Le coach relève</text>
+        <text x="102" y="97" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".6">48 grilles, sur papier</text>
+
+        <line x1="196" y1="83" x2="266" y2="83" stroke="#A72B22" stroke-width="1.4" stroke-dasharray="4 5"/>
+        <line x1="222" y1="70" x2="240" y2="96" stroke="#A72B22" stroke-width="1.8"/>
+        <line x1="240" y1="70" x2="222" y2="96" stroke="#A72B22" stroke-width="1.8"/>
+        <text x="231" y="120" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#A72B22">rien ne remonte</text>
+
+        <rect x="272" y="52" width="176" height="62" rx="5" fill="none" stroke="#A72B22" stroke-dasharray="5 4"/>
+        <text x="360" y="79" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="currentColor">presences</text>
+        <text x="360" y="97" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="#A72B22">0 ligne</text>
+
+        <line x1="454" y1="83" x2="524" y2="83" stroke="currentColor" stroke-opacity=".45" marker-end="url(#f2)"/>
+        <text x="489" y="74" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="10.5" fill="currentColor" opacity=".55">lue par</text>
+
+        <rect x="530" y="52" width="164" height="62" rx="5" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+        <text x="612" y="79" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600" fill="currentColor">10 écrans</text>
+        <text x="612" y="97" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor" opacity=".6">PA · Onboarding · Parent…</text>
+
+        <line x1="700" y1="83" x2="756" y2="83" stroke="currentColor" stroke-opacity=".45" marker-end="url(#f2)"/>
+
+        <rect x="762" y="52" width="124" height="62" rx="5" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+        <text x="824" y="72" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="12" font-weight="600" fill="currentColor">Décisions</text>
+        <text x="824" y="89" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="10.5" fill="currentColor" opacity=".6">blocage d'accès</text>
+        <text x="824" y="103" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="10.5" fill="currentColor" opacity=".6">relances · bilans</text>
+
+        <text x="14" y="166" font-family="IBM Plex Sans, sans-serif" font-size="12" fill="currentColor" opacity=".62">Tout le tuyau existe. Seul le premier maillon manque — celui de la saisie.</text>
+      </svg>
+    </div>
+    <figcaption>
+      La table <code>presences</code> et les écrans qui la lisent sont en place depuis longtemps.
+      Faute de saisie, les décisions qui devraient s'appuyer sur l'assiduité — blocage d'accès,
+      relance, bilan mensuel — se prennent sans donnée.
+    </figcaption>
+  </figure>
+
+  <hr class="regle">
+
+  <h2><span class="num">03</span>Correspondance détaillée</h2>
+
+  <div class="table-enveloppe">
+    <table>
+      <thead>
+        <tr><th>Bloc du classeur</th><th>Table / colonne</th><th>État</th><th>Ce qui manque</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="src">En-tête de contrat</td>
+          <td class="cible">groupes</td>
+          <td><span class="etat e-couvert">Couvert</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td class="src">Arrêt de formation</td>
+          <td class="cible">groupes_apprenants</td>
+          <td><span class="etat e-couvert">Couvert</span></td>
+          <td>La base va plus loin : fenêtre d'accès aux contenus, neutralisation de la facturation</td>
+        </tr>
+        <tr>
+          <td class="src">Disponibilité du coach</td>
+          <td class="cible">coach_disponibilites</td>
+          <td><span class="etat e-couvert">Couvert</span></td>
+          <td>630 lignes en base — déjà alimenté</td>
+        </tr>
+        <tr>
+          <td class="src">Journal des leçons</td>
+          <td class="cible">seances</td>
+          <td><span class="etat e-partiel">Partiel</span></td>
+          <td>Le statut <code>rattrapage</code> n'existe pas</td>
+        </tr>
+        <tr>
+          <td class="src">Fiches apprenants</td>
+          <td class="cible">apprenants · groupes_apprenants</td>
+          <td><span class="etat e-partiel">Partiel</span></td>
+          <td>Occupation, niveau suivant, régularité, forces, faiblesses</td>
+        </tr>
+        <tr>
+          <td class="src">Contenu de la leçon</td>
+          <td class="cible">seances.objectif</td>
+          <td><span class="etat e-partiel">Partiel</span></td>
+          <td>Colonne vide partout ; grammaire et thème n'ont pas de colonne</td>
+        </tr>
+        <tr>
+          <td class="src">Grille de présence</td>
+          <td class="cible">presences</td>
+          <td><span class="etat e-partiel">Vide</span></td>
+          <td>Rien à construire — la saisie n'existe pas</td>
+        </tr>
+        <tr>
+          <td class="src">Renouvellement</td>
+          <td class="cible">—</td>
+          <td><span class="etat e-absent">Absent</span></td>
+          <td>Table entière</td>
+        </tr>
+        <tr>
+          <td class="src">Bilan de classe du mois</td>
+          <td class="cible">—</td>
+          <td><span class="etat e-absent">Absent</span></td>
+          <td>Table entière</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="regle">
+
+  <h2><span class="num">04</span>Les six écarts, par coût d'inaction</h2>
+
+  <div class="ecart critique">
+    <div class="ecart-tete"><span class="ecart-num">01</span><span class="ecart-titre">L'assiduité n'est mesurée nulle part</span></div>
+    <p>
+      Le coach remplit 48 grilles à la main. La plateforme sait les stocker et les lire, mais
+      personne ne les y saisit. Toutes les décisions qui dépendent de l'assiduité se prennent donc
+      à l'aveugle.
+    </p>
+    <div class="preuve">
+      <b>presences</b> — colonnes <b>seance_id, apprenant_id, statut, commentaire</b> · <b>0 ligne</b><br>
+      référencée dans <b>10 fichiers</b> : SuperAdmin, PA, Onboarding, Commercial, Parent, Espace Apprenant…
+    </div>
+    <p class="reprise"><b>Reprise :</b> aucun développement. Une décision d'usage — qui pointe, et à quel moment.</p>
+  </div>
+
+  <div class="ecart critique">
+    <div class="ecart-tete"><span class="ecart-num">02</span><span class="ecart-titre">Le signal de non-renouvellement n'est pas capté</span></div>
+    <p>
+      Chaque bloc mensuel demande au coach si l'apprenant a renouvelé, combien il attend, et sinon
+      pourquoi. C'est l'alerte de départ la plus précoce dont dispose BET — et la seule qui arrive
+      avant que l'apprenant ne parte. Elle ne quitte jamais le tableur.
+    </p>
+    <div class="preuve">
+      <b>84 blocs</b> renseignés · champs : <b>a renouvelé ?</b> · <b>montant attendu</b> · <b>motif</b> · <b>mois n/6</b> · nouvelles dates
+    </div>
+    <p class="reprise"><b>Reprise :</b> une table, un formulaire mensuel côté coach, un tableau de relance côté commercial.</p>
+  </div>
+
+  <div class="ecart moyen">
+    <div class="ecart-tete"><span class="ecart-num">03</span><span class="ecart-titre">Le bilan mensuel de classe n'a pas de table</span></div>
+    <p>
+      Quatre questions posées chaque mois : pourquoi les absences, quel est le meilleur et le plus
+      faible élève et que comptez-vous faire, quels problèmes dans la classe, quels résultats en
+      fin de mois. Saisies 84 fois, lues par personne d'autre que celui qui les écrit.
+    </p>
+    <p class="reprise"><b>Reprise :</b> une table de bilan rattachée au couple classe × mois, et sa remontée au conseil pédagogique.</p>
+  </div>
+
+  <div class="ecart moyen">
+    <div class="ecart-tete"><span class="ecart-num">04</span><span class="ecart-titre">La trace pédagogique s'arrête à la date</span></div>
+    <p>
+      Le coach note, leçon par leçon, le point de grammaire travaillé et le thème de discussion.
+      C'est exactement la matière que le superviseur réclame en observation — et elle n'a pas de
+      colonne. La colonne prévue pour l'objectif existe, mais n'est jamais remplie.
+    </p>
+    <div class="preuve">
+      <b>816 jours</b> de leçon datés dans le classeur · <b>seances.objectif</b> renseigné sur <b>0</b> séance
+    </div>
+    <p class="reprise"><b>Reprise :</b> deux colonnes sur <code>seances</code>, et les rendre visibles dans le rapport d'observation.</p>
+  </div>
+
+  <div class="ecart moyen">
+    <div class="ecart-tete"><span class="ecart-num">05</span><span class="ecart-titre">Le profil apprenant est plus riche sur papier qu'en base</span></div>
+    <p>
+      La base ne retient que nom, prénom, e-mail, téléphone et centre. Le classeur suit en plus
+      l'occupation, le niveau visé, la régularité, les forces et les faiblesses — c'est-à-dire tout
+      ce qui permet de préparer un cours pour quelqu'un plutôt que pour un effectif.
+    </p>
+    <p class="reprise"><b>Reprise :</b> cinq champs, et l'écran de classe du coach pour les tenir à jour.</p>
+  </div>
+
+  <div class="ecart">
+    <div class="ecart-tete"><span class="ecart-num">06</span><span class="ecart-titre">La séance de rattrapage n'existe pas comme statut</span></div>
+    <p>
+      Le classeur distingue <em>tenue</em>, <em>apprenant absent</em> et <em>rattrapage</em>.
+      La base n'utilise que <code>planifiee</code> et <code>realisee</code> : un rattrapage y devient
+      une séance ordinaire, et l'heure supplémentaire disparaît du décompte.
+    </p>
+    <p class="reprise"><b>Reprise :</b> une valeur de statut, et sa prise en compte dans le calcul des honoraires.</p>
+  </div>
+
+  <hr class="regle">
+
+  <h2><span class="num">05</span>Ce que le classeur abîme lui-même</h2>
+  <p class="sous">
+    À retenir avant toute reprise de données : ces défauts se transporteraient tels quels dans la base.
+  </p>
+
+  <ul>
+    <li><b>386 cellules</b> affichent <code>1520 month(s) and 22 day(s)</code> — la formule « mois passés »
+      tourne sur des dates de début vides, dans chaque ligne d'apprenant non remplie de chaque onglet.</li>
+    <li>L'en-tête de la grille de présence va <code>D1 … D6</code> puis <code>7, 8, 9, 10, 11, 12, 12, 14…</code> :
+      <b>le 12 apparaît deux fois, le 13 manque</b>. Deux jours différents portent la même étiquette,
+      dans les 48 grilles.</li>
+    <li>Sur les 53 arrêts de formation, <b>8 n'ont aucun contact</b> et 21 pas d'occupation. Les
+      téléphones mélangent quatre formats — <code>0142388444</code>, <code>+225 0789589076</code>,
+      <code>2250758467970</code>, et deux numéros dans une même cellule.</li>
+    <li>Plusieurs onglets gardent les libellés du modèle (« Write the contract's group name here »,
+      coach « Taylor ») : un bloc jamais rempli ressemble exactement à un bloc rempli.</li>
+  </ul>
+
+  <div class="note">
+    <b>Une correction à mon analyse initiale.</b> J'avais d'abord classé la disponibilité des coachs
+    parmi les écarts. C'était faux : j'avais interrogé <code>disponibilites_coach</code>, une table
+    homonyme vide et inutilisée. La vraie table est <code>coach_disponibilites</code>, et elle
+    contient <b>630 lignes</b>. L'onglet <em>MY AVAILABILITY</em> est donc déjà couvert.
+  </div>
+
+  <hr class="regle">
+
+  <h2><span class="num">06</span>Volumes par contrat</h2>
+  <p class="sous">Pour chiffrer une reprise de données onglet par onglet.</p>
+
+  <div class="table-enveloppe">
+    <table>
+      <thead>
+        <tr>
+          <th>Contrat</th>
+          <th class="num">Apprenants</th>
+          <th class="num">Mois ouverts</th>
+          <th class="num">Jours saisis</th>
+          <th class="num">Grilles présence</th>
+        </tr>
+      </thead>
+      <tbody id="lignes-volumes"></tbody>
+    </table>
+  </div>
+
+  <p class="pied">
+    Source : classeur Google Sheets du coach, export XLSX du 21 septembre 2026 — 19 onglets, 3,8 Mo.
+    Chiffres relevés par lecture programmatique du fichier ; état de la base vérifié par requête directe.
+  </p>
+</div>
+
+<script>
+  /* Les volumes sont des DONNÉES, pas de la mise en page : les garder en tableau permet de
+     les retrier et de les recouper plus tard sans repasser dans le balisage. */
+  const VOLUMES = [
+    ["CONT 1B YOP EVENING", 11, 9, 111, 6],
+    ["CONT 1A YOP MORNING", 2, 9, 112, 5],
+    ["BRASSIVOIRE", 3, 8, 79, 4],
+    ["SERVIER", 4, 8, 70, 7],
+    ["WAVE Abdoul Karim", 1, 6, 29, 4],
+    ["WAVE Beh", 1, 6, 32, 4],
+    ["WAVE Mathieu", 1, 6, 27, 2],
+    ["INDUSTRAP", 1, 5, 58, 1],
+    ["Weekend Group", 9, 5, 51, 3],
+    ["OULAI Landry", 2, 5, 60, 3],
+    ["Home Tuto_Kids (Break)", 2, 5, 28, 4],
+    ["TOEL Sheila", 1, 4, 44, 2],
+    ["CONT 7 CFAOMIPA", 9, 3, 23, 1],
+    ["CONT 6 TOEFL NOUHR", 1, 2, 26, 1],
+    ["Mrs Saran", 1, 2, 40, 1],
+    ["CONT 6 IELTS CAROLINE", 1, 1, 14, 0],
+    ["CONT 4", 0, 0, 12, 0],
+  ];
+
+  const corps = document.getElementById("lignes-volumes");
+  const totaux = [0, 0, 0, 0];
+
+  for (const [nom, ...n] of VOLUMES) {
+    n.forEach((v, i) => { totaux[i] += v; });
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.className = "src";
+    td.textContent = nom;
+    tr.appendChild(td);
+    n.forEach(v => {
+      const c = document.createElement("td");
+      c.className = "num";
+      // Un zéro se distingue d'un chiffre réel : il dit « rien n'a été saisi ici ».
+      c.textContent = v;
+      if (v === 0) c.style.opacity = ".4";
+      tr.appendChild(c);
+    });
+    corps.appendChild(tr);
+  }
+
+  const tr = document.createElement("tr");
+  tr.style.borderTop = "1px solid var(--trait-fort)";
+  const td = document.createElement("td");
+  td.className = "src";
+  td.textContent = "17 contrats";
+  td.style.fontFamily = "var(--mono)";
+  td.style.fontSize = "12.5px";
+  tr.appendChild(td);
+  totaux.forEach(v => {
+    const c = document.createElement("td");
+    c.className = "num";
+    c.style.fontWeight = "700";
+    c.textContent = v;
+    tr.appendChild(c);
+  });
+  corps.appendChild(tr);
+</script>

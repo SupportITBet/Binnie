@@ -1,0 +1,38 @@
+export const MOCK_REMPLACEMENTS = [
+  {
+    id: 'rp-01',
+    absent: 'Marie Dupont',     absent_id: 'teacher-001',
+    remplacant: 'Sophie Leclerc', remplacant_id: 'teacher-003',
+    groupe: 'Enfants Débutants A - TLG', groupe_id: 'grp-001',
+    debut: '2026-06-03', fin: '2026-06-20', nb_sessions: 2,
+    statut: 'en_cours', motif: 'Maladie',
+    sessions_ids: ['ses-008'],
+  },
+  {
+    id: 'rp-02',
+    absent: 'Pierre Martin',    absent_id: 'teacher-002',
+    remplacant: 'Issouf Koné',  remplacant_id: 'teacher-006',
+    groupe: 'Adolescents Avancés - TLG', groupe_id: 'grp-003',
+    debut: '2026-06-03', fin: '2026-06-10', nb_sessions: 4,
+    statut: 'en_cours', motif: 'Congé personnel',
+    sessions_ids: ['ses-011', 'ses-012'],
+  },
+  {
+    id: 'rp-03',
+    absent: 'Marie Dupont',     absent_id: 'teacher-001',
+    remplacant: null,            remplacant_id: null,
+    groupe: 'Enfants Débutants A - TLG', groupe_id: 'grp-001',
+    debut: '2026-06-15', fin: '2026-06-20', nb_sessions: 3,
+    statut: 'planifie', motif: 'Formation',
+    sessions_ids: [],
+  },
+  {
+    id: 'rp-04',
+    absent: 'Aurélie Bernard',  absent_id: 'teacher-004',
+    remplacant: null,            remplacant_id: null,
+    groupe: 'Adolescents Intermédiaires - TLG', groupe_id: 'grp-002',
+    debut: '2026-06-10', fin: '2026-06-12', nb_sessions: 2,
+    statut: 'a_pourvoir', motif: 'Congé maternité',
+    sessions_ids: [],
+  },
+];

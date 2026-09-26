@@ -1,0 +1,23 @@
+# Secrets — jamais dans git (clés API, service keys, tokens)
+.env
+.env.local
+.env.production
+.env.vercel
+.env.*.local
+!.env.example
+
+# Dépendances / builds
+node_modules/
+build/
+dist/
+
+# Système
+.DS_Store
+.vercel
+.env*
+
+# Configuration locale des outils de developpement
+.claude/
+
+# Fichiers systeme macOS
+.DS_Store

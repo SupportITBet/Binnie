@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>État des lieux — Dashboards dash (mocks &amp; connexions réelles)</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:40px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(28px,4.2vw,42px); line-height:1.1; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15px; color:var(--texte-att); max-width:760px; line-height:1.65; }
+
+  .kpis { display:grid; grid-template-columns: repeat(4,1fr); gap:14px; margin: 24px 0 48px; }
+  .kpi { background: var(--fond-carte); border:1px solid var(--bordure); border-radius:14px; padding:18px 20px; }
+  .kpi .n { font-family: var(--serif); font-size:34px; }
+  .kpi .l { font-size:12px; color:var(--texte-att); margin-top:4px; }
+  .kpi.reel .n { color:var(--vert); }
+  .kpi.partiel .n { color:var(--or-clair); }
+  .kpi.mock .n { color:var(--rouge); }
+  .kpi.total .n { color:var(--cyan); }
+
+  h2.section-titre { font-family:var(--serif); font-size:24px; margin: 48px 0 6px; scroll-margin-top:24px; display:flex; align-items:center; gap:10px; }
+  .section-sous { font-size:13px; color:var(--texte-att); margin-bottom:18px; max-width:760px; line-height:1.6; }
+
+  table.suivi { width:100%; border-collapse:collapse; font-size:13px; background:var(--fond-carte); border:1px solid var(--bordure); border-radius:14px; overflow:hidden; }
+  table.suivi th { text-align:left; color:var(--texte-att); font-weight:700; text-transform:uppercase; letter-spacing:0.04em; font-size:10.5px; padding:11px 14px; border-bottom:1px solid var(--bordure); background: rgba(255,255,255,0.02); }
+  table.suivi td { padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:top; }
+  table.suivi tr:last-child td { border-bottom:none; }
+  table.suivi code { font-family:var(--mono); font-size:11.5px; color:var(--or-clair); }
+  .fichier { font-family:var(--mono); font-size:12px; color:var(--cyan); white-space:nowrap; }
+  .detail { color:var(--texte-att); font-size:12.5px; line-height:1.55; }
+
+  .statut { font-size:11px; font-weight:800; padding:4px 11px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .statut.afaire   { color:var(--rouge);    background: rgba(248,113,113,0.14); border:1px solid rgba(248,113,113,0.3); }
+  .statut.encours  { color:var(--or-clair); background: rgba(240,184,75,0.14);  border:1px solid rgba(240,184,75,0.3); }
+  .statut.fait     { color:var(--vert);     background: rgba(52,211,153,0.14); border:1px solid rgba(52,211,153,0.3); }
+
+  .gravite { font-size:10px; font-weight:800; padding:2px 9px; border-radius:8px; white-space:nowrap; display:inline-block; margin-bottom:4px; }
+  .gravite.critique { color:var(--rouge);    background: rgba(248,113,113,0.15); }
+  .gravite.eleve    { color:var(--or-clair); background: rgba(240,184,75,0.15); }
+  .gravite.moyen    { color:var(--cyan);     background: rgba(45,212,232,0.15); }
+
+  .legende { display:flex; gap:16px; flex-wrap:wrap; margin: 18px 0 30px; font-size:12px; color:var(--texte-att); }
+  .legende span { display:flex; align-items:center; gap:6px; }
+
+  .note-maj { margin-top:60px; padding:16px 20px; background: rgba(45,212,232,0.06); border:1px solid rgba(45,212,232,0.25); border-radius:12px; font-size:12.5px; color:var(--texte-att); line-height:1.6; }
+  .note-maj strong { color:var(--cyan); }
+
+  footer { margin-top:60px; padding-top:24px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 36px 16px 60px; }
+    .kpis { grid-template-columns: repeat(2,1fr); }
+    table.suivi { display:block; overflow-x:auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET dash — Suivi de connexion des dashboards</span>
+    <h1>État des lieux — <em>mocks &amp; données réelles</em>, dashboard par dashboard</h1>
+    <p class="sous-titre">
+      Inventaire de tous les dashboards du dossier <code style="color:var(--or-clair)">dash/src/Pages</code> :
+      lesquels sont déjà réellement connectés au backend, lesquels sont entièrement mockés (données en dur,
+      jamais lues/écrites en base), et — le cas le plus dangereux — lesquels ont l'air de fonctionner
+      (bouton "Enregistrer", toast de succès) mais ne persistent en réalité rien du tout. À mettre à jour
+      manuellement (colonne Statut) au fur et à mesure des corrections.
+    </p>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi total"><div class="n">20</div><div class="l">Dashboards actifs (7 supprimés)</div></div>
+    <div class="kpi reel"><div class="n">11</div><div class="l">✅ Réels &amp; connectés</div></div>
+    <div class="kpi partiel"><div class="n">4</div><div class="l">⚠️ Partiels — "faux save" à corriger</div></div>
+    <div class="kpi mock"><div class="n">5</div><div class="l">❌ Entièrement mockés</div></div>
+  </div>
+
+  <div class="legende">
+    <span><span class="statut afaire">✗ À faire</span> rien de corrigé pour ce dashboard</span>
+    <span><span class="statut encours">◐ En cours</span> correction commencée, pas terminée</span>
+    <span><span class="statut fait">✓ Corrigé</span> vraiment branché sur le backend et vérifié</span>
+  </div>
+
+  <!-- ══════════════════ PARTIELLEMENT MOCKÉS — LE PLUS URGENT ══════════════════ -->
+  <h2 class="section-titre" id="partiels">⚠️ Partiellement mockés — "faux save" (le plus dangereux)</h2>
+  <p class="section-sous">Ces écrans ont l'air fonctionnels — bouton "Enregistrer"/"Confirmer", toast de succès — mais l'action ne persiste rien en base. C'est le cas le plus trompeur : contrairement à un écran clairement vide, celui-ci donne une fausse impression que l'action a eu lieu.</p>
+  <table class="suivi">
+    <thead><tr><th style="width:170px">Dashboard</th><th>Ce qui ne persiste pas</th><th style="width:110px">Gravité</th><th style="width:120px">Statut</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><div class="fichier">AdminDashboard.jsx</div></td>
+        <td class="detail">Matrice de permissions (<code>savePermissions</code>, <code>clonePermissions</code>), <code>toggleUserStatus</code> (activer/désactiver un compte), <code>revokeSession</code>, <code>handleDemande</code> (approuver/refuser une inscription) — tout mute uniquement le state local.</td>
+        <td><span class="gravite critique">Critique</span></td>
+        <td><span class="statut afaire">✗ À faire</span></td>
+      </tr>
+      <tr>
+        <td><div class="fichier">SuperAdminDashboard.jsx</div></td>
+        <td class="detail">Onglet Matrice permissions (<code>permSubTab==="matrice"</code>) : charge les vraies données au chargement, mais <code>savePermissions</code>/<code>clonePermissions</code> ne réécrivent rien — toute modif perdue au rechargement. Liste de modules aussi désynchronisée des vraies clés backend.</td>
+        <td><span class="gravite critique">Critique</span></td>
+        <td><span class="statut afaire">✗ À faire</span></td>
+      </tr>
+      <tr>
+        <td><div class="fichier">GestionDroits.jsx</div></td>
+        <td class="detail">Écran entier mock (voir section ❌ ci-dessous) — listé aussi ici car c'est la 3ᵉ implémentation de la même fonctionnalité que les deux au-dessus.</td>
+        <td><span class="gravite critique">Critique</span></td>
+        <td><span class="statut afaire">✗ À faire</span></td>
+      </tr>
+      <tr>
+        <td><div class="fichier">ResponsableDashboard.jsx</div></td>
+        <td class="detail">Tout le moteur classes/affectation : <code>handleConfirmWizard</code> (créer une classe), <code>handleConfirmAffectation</code> (affecter un apprenant), <code>confirmerAbsence</code>, <code>confirmerTransfertDefinitif</code> (transfert définitif de coach) — actions RH/pédagogiques lourdes, aucune persistée.</td>
+        <td><span class="gravite critique">Critique</span></td>
+        <td><span class="statut afaire">✗ À faire</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ══════════════════ ENTIÈREMENT MOCKÉS ══════════════════ -->
+  <h2 class="section-titre" id="mocks">❌ Entièrement mockés</h2>
+  <p class="section-sous">Aucune donnée métier réelle chargée depuis le backend (au mieux le profil/avatar via <code>/api/admin/me</code>). Toutes les listes affichées sont des constantes JS figées dans le fichier.</p>
+  <table class="suivi">
+    <thead><tr><th style="width:170px">Dashboard</th><th>Données mockées</th><th style="width:120px">Statut</th></tr></thead>
+    <tbody>
+      <tr><td><div class="fichier">GestionDroits.jsx</div></td><td class="detail">Matrice permissions, utilisateurs, audit, sécurité, demandes — <code>PERMISSIONS_INIT</code>/<code>USERS_INIT</code>/<code>AUDIT_INIT</code>/<code>SECURITE_INIT</code>/<code>DEMANDES_INIT</code>.</td><td><span class="statut afaire">✗ À faire</span></td></tr>
+      <tr><td><div class="fichier">ComptableDashboard.jsx</div></td><td class="detail">Paiements/honoraires (<code>INIT_PAIEMENTS</code>/<code>INIT_HONORAIRES</code>). <code>handleVirement</code> et "marquer réglé" ne persistent rien.</td><td><span class="statut afaire">✗ À faire</span></td></tr>
+      <tr><td><div class="fichier">DataCollectorDashboard.jsx</div></td><td class="detail">Clients/Prospects/Historique (<code>INIT_CLIENTS</code>/<code>INIT_PROSPECTS</code>/<code>INIT_HISTORIQUE</code>) — CRUD et import de fichiers ne persistent rien.</td><td><span class="statut afaire">✗ À faire</span></td></tr>
+      <tr><td><div class="fichier">GestionnaireDashboard.jsx</div></td><td class="detail">Dossiers/Paiements/Requêtes/Inscriptions (<code>INIT_DOSSIERS</code>/<code>INIT_PAIEMENTS</code>/<code>INIT_REQUETES</code>/<code>INIT_INSCRIPTIONS</code>).</td><td><span class="statut afaire">✗ À faire</span></td></tr>
+      <tr><td><div class="fichier">PlacementTestDashboard.jsx</div></td><td class="detail">Candidats (<code>INIT_TESTS</code>/<code>QUESTIONS_MOCK</code>). <code>handleValider</code> (validation de niveau + notification) ne persiste ni ne notifie réellement.</td><td><span class="statut afaire">✗ À faire</span></td></tr>
+    </tbody>
+  </table>
+
+  <!-- ══════════════════ RÉELS & CONNECTÉS ══════════════════ -->
+  <h2 class="section-titre" id="reels">✅ Réels &amp; connectés (vérifiés)</h2>
+  <p class="section-sous">Aucune action requise — listés ici pour mémoire, à titre de référence de ce à quoi un dashboard "corrigé" doit ressembler.</p>
+  <table class="suivi">
+    <thead><tr><th style="width:220px">Dashboard</th><th>Preuve de connexion réelle</th></tr></thead>
+    <tbody>
+      <tr><td><div class="fichier">CorporateDashboard.jsx</div></td><td class="detail">CRUD complet Entreprises/Prospects/Documents/Factures via <code>/api/corporate/*</code>.</td></tr>
+      <tr><td><div class="fichier">CustomerCareDashboard.jsx</div></td><td class="detail">Plaintes chargées et mises à jour via <code>/api/plaintes</code>.</td></tr>
+      <tr><td><div class="fichier">OnboardingDashboard.jsx</div></td><td class="detail">80 appels fetch réels ; migration explicite hors des anciens mocks (commentaires "plus de mock…").</td></tr>
+      <tr><td><div class="fichier">PedagogicalAdvisorDashboard.jsx</div></td><td class="detail">78 appels fetch réels, honoraires/évaluations/remplacements branchés cette session.</td></tr>
+      <tr><td><div class="fichier">RHPaieDashboard.jsx</div></td><td class="detail">Honoraires-mois réellement chargés et le paiement persiste via <code>PATCH /api/seances/honoraires-mois/:id/statut</code>.</td></tr>
+      <tr><td><div class="fichier">SuperviseurDashboard.jsx</div></td><td class="detail">31 appels fetch réels ; les constantes <code>_INIT</code> ne sont que des formulaires vierges, pas des données.</td></tr>
+      <tr><td><div class="fichier">AssistantElearningDashboard.jsx</div></td><td class="detail">Coachs/messages chargés réellement.</td></tr>
+      <tr><td><div class="fichier">EspaceProfesseur.jsx</div></td><td class="detail">Vérifié en profondeur cette session — aucun mock, tout branché.</td></tr>
+      <tr><td><div class="fichier">EspaceApprenant.jsx</div></td><td class="detail">Vérifié cette session.</td></tr>
+      <tr><td><div class="fichier">ParentDashboard.jsx</div></td><td class="detail">Vérifié et testé de bout en bout cette session (présences, résultats, avis coach…).</td></tr>
+      <tr><td><div class="fichier">CommercialDashboard.jsx</div></td><td class="detail">Corrigé cette session — le pipeline Leads/Devis/Dossiers (code mort, jamais persisté) a été entièrement retiré plutôt que réparé (KPI et carte associées supprimés). <code>handleDeleteInscription</code> appelle maintenant réellement <code>DELETE /api/inscriptions/:type/:id</code> (nouvelle route), avec rollback visuel si la suppression échoue côté serveur.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-titre" id="supprimes">🗑️ Supprimés cette session</h2>
+  <p class="section-sous">Fichiers morts retirés du dossier <code>dash/src/Pages</code> plutôt que corrigés — routes déjà inaccessibles ou jamais branchées, aucune perte de fonctionnalité réelle.</p>
+  <table class="suivi">
+    <thead><tr><th style="width:260px">Fichier</th><th>Raison</th></tr></thead>
+    <tbody>
+      <tr><td><div class="fichier">DRH Entreprise/DRHPage.jsx</div></td><td class="detail">Mock complet, jamais connecté (contenait aussi l'export nommé <code>ManagerPage</code> utilisé par la route <code>/managers</code>).</td></tr>
+      <tr><td><div class="fichier">DRH Entreprise/ManagerPage.jsx</div></td><td class="detail">Fichier en double, jamais importé nulle part — mort dès l'origine.</td></tr>
+      <tr><td><div class="fichier">DRH Entreprise/RHDashboard.jsx</div></td><td class="detail">Mock complet, jamais connecté.</td></tr>
+      <tr><td><div class="fichier">Dashboard/DashboardCoach.jsx</div></td><td class="detail">Route déjà commentée dans App.js — inaccessible.</td></tr>
+      <tr><td><div class="fichier">Dashboard/DashboardApprenant.jsx</div></td><td class="detail">Route déjà commentée dans App.js — inaccessible.</td></tr>
+      <tr><td><div class="fichier">Dashboard/Dashboardsbundle.jsx</div></td><td class="detail">3 dashboards legacy (Commercial/Gestionnaire/RH) pilotés par du mock — routes déjà commentées dans App.js.</td></tr>
+      <tr><td><div class="fichier">Dashboard/Dashboardshared.jsx</div></td><td class="detail">Composants partagés (dont le <code>ScheduleModal</code> cassé) — plus aucun fichier ne l'importait après suppression de Dashboardsbundle.jsx.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note-maj">
+    <strong>ℹ️ Comment utiliser ce document</strong> — après chaque correction, rouvrir ce fichier HTML et changer
+    la pastille <code>&lt;span class="statut afaire"&gt;</code> de la ligne concernée en
+    <code>encours</code> ou <code>fait</code> (classes CSS déjà prêtes, juste changer le texte et la classe).
+    Une fois un dashboard "Partiellement mocké" entièrement corrigé, le déplacer dans le tableau ✅ du bas.
+  </div>
+
+  <footer>
+    <span>BET dash — État des lieux mocks &amp; connexions réelles</span>
+    <span>Document de suivi interne — généré le 28/07/2026</span>
+  </footer>
+
+</div>
+</body>
+</html>

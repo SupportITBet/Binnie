@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journal — Déploiement purepro-group.com sur VPS Hostinger</title>
+<style>
+  :root{
+    --bg:#F6F7FB; --surface:#FFFFFF; --surface-2:#EEF0F7; --border:#DFE2EE;
+    --text:#14182B; --text-mute:#5B6178; --text-faint:#8B90A6;
+    --accent:#4F46E5;
+    --vps:#B4650A; --vps-bg:#FDF0DF;
+    --static:#0F9D6E; --static-bg:#E7F7F0;
+    --ok:#0F9D6E; --ok-bg:#E7F7F0;
+    --warn:#C2540A; --warn-bg:#FDF0DF;
+    --shadow: 0 1px 2px rgba(20,24,43,.04), 0 8px 24px -12px rgba(20,24,43,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0B0F1A; --surface:#121729; --surface-2:#1A2036; --border:#262E48;
+      --text:#E8EAF5; --text-mute:#A8AEC6; --text-faint:#6E7495;
+      --accent:#8B85F5;
+      --vps:#F0A94E; --vps-bg:#2E2210;
+      --static:#3FD69B; --static-bg:#0F2A22;
+      --ok:#3FD69B; --ok-bg:#0F2A22;
+      --warn:#F0A94E; --warn-bg:#2E2210;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -12px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0B0F1A; --surface:#121729; --surface-2:#1A2036; --border:#262E48;
+    --text:#E8EAF5; --text-mute:#A8AEC6; --text-faint:#6E7495;
+    --accent:#8B85F5;
+    --vps:#F0A94E; --vps-bg:#2E2210;
+    --static:#3FD69B; --static-bg:#0F2A22;
+    --ok:#3FD69B; --ok-bg:#0F2A22;
+    --warn:#F0A94E; --warn-bg:#2E2210;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -12px rgba(0,0,0,.55);
+  }
+
+  * { box-sizing: border-box; }
+  html, body{
+    margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family: ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace; }
+  .wrap{ max-width:920px; margin:0 auto; padding:56px 24px 96px; }
+
+  .eyebrow{ font-size:11.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text-faint); margin-bottom:10px; }
+  h1{ font-size:clamp(26px,4vw,36px); font-weight:800; letter-spacing:-.01em; margin:0 0 12px; text-wrap:balance; }
+  .lede{ font-size:15.5px; color:var(--text-mute); max-width:66ch; margin:0; }
+
+  .status-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
+  .status{ display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:20px; }
+  .status.ok{ background:var(--ok-bg); color:var(--ok); }
+  .status.warn{ background:var(--warn-bg); color:var(--warn); }
+  .status-dot{ width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
+
+  figure{ margin:40px 0 48px; }
+  .diagram-frame{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 16px 8px; box-shadow:var(--shadow); overflow-x:auto; }
+  svg{ display:block; width:100%; height:auto; max-width:100%; }
+  figcaption{ font-size:12.5px; color:var(--text-faint); margin-top:10px; padding:0 4px; }
+
+  h2{ font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-faint); margin:44px 0 16px; }
+
+  .entry{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:10px; display:flex; gap:14px; }
+  .entry-mark{ width:26px; height:26px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; }
+  .entry-mark.ok{ background:var(--ok-bg); color:var(--ok); }
+  .entry-mark.warn{ background:var(--warn-bg); color:var(--warn); }
+  .entry-title{ font-size:14px; font-weight:700; margin:0 0 4px; }
+  .entry-body{ font-size:13px; color:var(--text-mute); margin:0; line-height:1.55; }
+  .inline-code{ background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1px 6px; font-size:.92em; font-family: ui-monospace, monospace; }
+
+  table.state{ width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  table.state th, table.state td{ text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); }
+  table.state th{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); font-weight:700; background:var(--surface-2); }
+  table.state tr:last-child td{ border-bottom:none; }
+  table.state td.mono{ font-size:12.5px; }
+  .tbl-wrap{ overflow-x:auto; border-radius:10px; }
+
+  footer.note{ margin-top:56px; padding-top:20px; border-top:1px solid var(--border); font-size:12.5px; color:var(--text-faint); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="eyebrow">Journal de déploiement — réalisé</div>
+  <h1>purepro-group.com, en production sur Hostinger</h1>
+  <p class="lede">
+    Trace de ce qui a été fait, dans l'ordre, pour faire tourner le Frontend et dash sur un
+    VPS Hostinger unique — y compris les incidents rencontrés en cours de route et comment
+    ils ont été résolus. bet-elearning n'a volontairement pas été déployé cette fois.
+  </p>
+
+  <div class="status-row">
+    <span class="status ok"><span class="status-dot"></span>Frontend — purepro-group.com</span>
+    <span class="status ok"><span class="status-dot"></span>dash — dash.purepro-group.com</span>
+    <span class="status ok"><span class="status-dot"></span>Backend — api.purepro-group.com</span>
+    <span class="status warn"><span class="status-dot"></span>bet-elearning — non déployé (reporté)</span>
+  </div>
+
+  <figure>
+    <div class="diagram-frame">
+      <svg viewBox="0 0 1000 400" role="img" aria-label="Le dépôt GitHub Binnie part vers l'unique VPS Hostinger d'adresse 191.215.41.58. Sur ce VPS, Frontend et dash sont buildés en fichiers statiques et le Backend tourne en process PM2 permanent. Nginx, avec trois blocs serveur et un certificat SSL Let's Encrypt commun, sert purepro-group.com et www vers le build du Frontend, dash.purepro-group.com vers le build de dash, et api.purepro-group.com en reverse proxy vers le process PM2. Les enregistrements DNS de type A pour l'arobase, dash et api pointent tous vers la même adresse IP du VPS.">
+        <defs>
+          <marker id="arrowJ" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <rect x="340" y="16" width="320" height="50" rx="10" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        <text x="500" y="46" text-anchor="middle" font-size="13" font-weight="700" fill="var(--text)">github.com/DOUMBISSS/Binnie</text>
+
+        <line x1="500" y1="66" x2="500" y2="92" stroke="currentColor" stroke-width="1.5" color="var(--text-faint)" marker-end="url(#arrowJ)"/>
+
+        <rect x="60" y="96" width="880" height="196" rx="14" fill="none" stroke="var(--vps)" stroke-width="2"/>
+        <text x="500" y="120" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--vps)">VPS Hostinger KVM 1 — 191.215.41.58</text>
+
+        <g font-family="ui-monospace,monospace" font-size="11" fill="var(--text)">
+          <rect x="90" y="136" width="255" height="50" rx="9" fill="var(--static-bg)" stroke="var(--static)" stroke-width="1.3"/>
+          <text x="217" y="157" text-anchor="middle" font-weight="700">Frontend/build</text>
+          <text x="217" y="174" text-anchor="middle" fill="var(--text-mute)">statique</text>
+
+          <rect x="372" y="136" width="255" height="50" rx="9" fill="var(--static-bg)" stroke="var(--static)" stroke-width="1.3"/>
+          <text x="499" y="157" text-anchor="middle" font-weight="700">dash/build</text>
+          <text x="499" y="174" text-anchor="middle" fill="var(--text-mute)">statique</text>
+
+          <rect x="654" y="136" width="255" height="50" rx="9" fill="var(--vps-bg)" stroke="var(--vps)" stroke-width="1.3"/>
+          <text x="781" y="157" text-anchor="middle" font-weight="700">Backend — pm2</text>
+          <text x="781" y="174" text-anchor="middle" fill="var(--text-mute)">:5001</text>
+        </g>
+
+        <line x1="217" y1="186" x2="217" y2="206" stroke="currentColor" stroke-width="1.3" color="var(--text-faint)" marker-end="url(#arrowJ)"/>
+        <line x1="499" y1="186" x2="499" y2="206" stroke="currentColor" stroke-width="1.3" color="var(--text-faint)" marker-end="url(#arrowJ)"/>
+        <line x1="781" y1="186" x2="781" y2="206" stroke="currentColor" stroke-width="1.3" color="var(--text-faint)" marker-end="url(#arrowJ)"/>
+
+        <rect x="90" y="210" width="820" height="66" rx="10" fill="var(--surface)" stroke="var(--border)" stroke-width="1.3"/>
+        <text x="110" y="230" font-size="10.5" font-weight="700" letter-spacing=".5" fill="var(--text-faint)">NGINX + SSL LET'S ENCRYPT (3 BLOCS SERVEUR)</text>
+        <g font-family="ui-monospace,monospace" font-size="10.8" fill="var(--text)">
+          <text x="110" y="252">purepro-group.com · www</text>
+          <text x="380" y="252">dash.purepro-group.com</text>
+          <text x="630" y="252">api.purepro-group.com</text>
+          <text x="110" y="266" fill="var(--text-mute)">→ Frontend/build</text>
+          <text x="380" y="266" fill="var(--text-mute)">→ dash/build</text>
+          <text x="630" y="266" fill="var(--text-mute)">→ proxy :5001</text>
+        </g>
+
+        <line x1="500" y1="292" x2="500" y2="316" stroke="currentColor" stroke-width="1.5" color="var(--text-faint)" marker-end="url(#arrowJ)"/>
+
+        <rect x="230" y="320" width="540" height="56" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.3"/>
+        <text x="500" y="340" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="1" fill="var(--text-faint)">DNS</text>
+        <text x="500" y="360" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="var(--text)">A · @ · dash · api → 191.215.41.58</text>
+
+        <line x1="500" y1="376" x2="500" y2="394" stroke="currentColor" stroke-width="1.3" color="var(--text-faint)"/>
+      </svg>
+    </div>
+    <figcaption>
+      État réel au moment de la rédaction : Frontend et dash servis en statique par Nginx,
+      Backend en process PM2 permanent, les trois derrière un unique certificat SSL et
+      trois enregistrements DNS pointant tous vers la même IP.
+    </figcaption>
+  </figure>
+
+  <h2>Ce qui a été fait, dans l'ordre</h2>
+
+  <div class="entry">
+    <div class="entry-mark ok">1</div>
+    <div>
+      <p class="entry-title">Achat domaine + VPS</p>
+      <p class="entry-body"><span class="inline-code">purepro-group.com</span> et un VPS <span class="inline-code">KVM 1</span> (1 vCPU, 4 Go RAM) chez Hostinger, OS installé en <span class="inline-code">Plain OS → Ubuntu 24.04 LTS</span>.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark ok">2</div>
+    <div>
+      <p class="entry-title">Connexion SSH</p>
+      <p class="entry-body">Le premier essai en ligne de commande locale a échoué (mot de passe root altéré lors d'un copier-coller depuis un fichier de notes de l'éditeur). Résolu en utilisant le <strong>terminal navigateur intégré</strong> de hPanel, qui contourne tout problème de terminal local.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark ok">3</div>
+    <div>
+      <p class="entry-title">Installation système</p>
+      <p class="entry-body"><span class="inline-code">curl ... setup_20.x | bash</span> puis <span class="inline-code">apt install nodejs git nginx</span> — Node v20.20.2 installé.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark warn">4</div>
+    <div>
+      <p class="entry-title">Clone du repo — dépôt privé</p>
+      <p class="entry-body"><span class="inline-code">git clone</span> en HTTPS a échoué (GitHub n'accepte plus les mots de passe de compte, et le repo est privé). Contourné en rendant le repo temporairement public le temps du clone, puis remis en privé juste après.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark ok">5</div>
+    <div>
+      <p class="entry-title">Backend en production</p>
+      <p class="entry-body"><span class="inline-code">.env</span> recréé sur le VPS avec les vraies valeurs, lancé via <span class="inline-code">pm2 start src/server.js --name bet-backend</span>, <span class="inline-code">pm2 save</span> + <span class="inline-code">pm2 startup</span> pour la résilience au reboot.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark warn">6</div>
+    <div>
+      <p class="entry-title">Build dash — mémoire insuffisante</p>
+      <p class="entry-body"><span class="inline-code">JavaScript heap out of memory</span> pendant <span class="inline-code">npm run build</span> (4 Go de RAM ne suffisaient pas pour ce build webpack, avec le Backend déjà actif en parallèle). Résolu en ajoutant 4 Go de swap : <span class="inline-code">fallocate</span> + <span class="inline-code">mkswap</span> + <span class="inline-code">swapon</span> + entrée <span class="inline-code">/etc/fstab</span>.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark warn">7</div>
+    <div>
+      <p class="entry-title">Dépendances manquantes dans dash</p>
+      <p class="entry-body">Le build a révélé deux trous entre le code et <span class="inline-code">package.json</span> (invisibles en local car <span class="inline-code">node_modules</span> y était déjà rempli manuellement) :</p>
+      <p class="entry-body" style="margin-top:8px"><strong>react-toastify</strong> — importé dans 6 fichiers sans jamais être déclaré. Remplacé partout par <span class="inline-code">react-hot-toast</span> (déjà la vraie librairie de toasts de l'app) ; 3 des 6 fichiers (<span class="inline-code">AuthRoute.js</span>, <span class="inline-code">RegisterMiddleware.js</span>, <span class="inline-code">AuthMiddleware.js</span>) se sont avérés être du code mort jamais importé nulle part — supprimés.</p>
+      <p class="entry-body" style="margin-top:8px"><strong>redux</strong> — le store était branché à la racine (<span class="inline-code">index.js</span>) mais aucun composant n'utilisait <span class="inline-code">useSelector</span>/<span class="inline-code">useDispatch</span>. Scaffolding entièrement supprimé (<span class="inline-code">src/Redux/</span>, <span class="inline-code">react-redux</span>).</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark warn">8</div>
+    <div>
+      <p class="entry-title">git pull bloqué par package-lock.json local</p>
+      <p class="entry-body">Chaque <span class="inline-code">npm install</span> exécuté sur le VPS régénérait légèrement <span class="inline-code">package-lock.json</span>, ce qui bloquait les <span class="inline-code">git pull</span> suivants ("local changes would be overwritten"). Résolu avec <span class="inline-code">git checkout -- package-lock.json</span> avant chaque pull.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark ok">9</div>
+    <div>
+      <p class="entry-title">Nginx — 3 blocs serveur</p>
+      <p class="entry-body">Un fichier par sous-domaine dans <span class="inline-code">/etc/nginx/sites-available/</span> (frontend, dash, api), activés via des liens symboliques dans <span class="inline-code">sites-enabled/</span>.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark ok">10</div>
+    <div>
+      <p class="entry-title">DNS + SSL</p>
+      <p class="entry-body">3 enregistrements <span class="inline-code">A</span> (<span class="inline-code">@</span>, <span class="inline-code">dash</span>, <span class="inline-code">api</span>) vers <span class="inline-code">191.215.41.58</span> chez Hostinger. Certificat Let's Encrypt obtenu en une commande pour les 4 domaines (<span class="inline-code">certbot --nginx -d purepro-group.com -d www... -d dash... -d api...</span>) — déployé automatiquement dans les 3 blocs Nginx.</p>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-mark ok">11</div>
+    <div>
+      <p class="entry-title">Rebuild avec les vraies URLs</p>
+      <p class="entry-body"><span class="inline-code">Frontend/.env.production</span> et <span class="inline-code">dash/.env.production</span> mis à jour (<span class="inline-code">REACT_APP_API_URL=https://api.purepro-group.com</span>, à la place de l'ancien backend Vercel), rebuild sur le VPS. <span class="inline-code">Backend/.env</span> mis à jour avec <span class="inline-code">FRONTEND_URL</span>, <span class="inline-code">DASHBOARD_URL</span>, <span class="inline-code">BACKEND_URL</span> et <span class="inline-code">ALLOWED_ORIGINS</span> réels, puis <span class="inline-code">pm2 restart bet-backend</span>.</p>
+    </div>
+  </div>
+
+  <h2>État final</h2>
+  <div class="tbl-wrap">
+    <table class="state">
+      <thead><tr><th>Adresse</th><th>Sert</th><th>SSL</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">https://purepro-group.com</td><td>Frontend</td><td>✅ Let's Encrypt</td></tr>
+        <tr><td class="mono">https://dash.purepro-group.com</td><td>dash</td><td>✅ Let's Encrypt</td></tr>
+        <tr><td class="mono">https://api.purepro-group.com</td><td>Backend (PM2)</td><td>✅ Let's Encrypt</td></tr>
+        <tr><td class="mono">bet-elearning</td><td>non déployé</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="note">
+    Voir aussi <span class="inline-code">deploiement-domaine-vps-schema.html</span> pour le plan initial générique (avant exécution). Ce fichier-ci documente ce qui a réellement été fait.
+  </footer>
+
+</div>
+</body>
+</html>

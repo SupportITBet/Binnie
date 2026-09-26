@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ══════════════════════════════════════════════════════════
+    // BET (dash) — messagerie interne historique
+    // ══════════════════════════════════════════════════════════
+    match /chats/{convId} {
+      allow read, write: if true;
+      match /messages/{msgId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /presence/{userId} {
+      allow read, write: if true;
+    }
+
+    match /notifications/{userId} {
+      allow read, write: if true;
+      match /items/{itemId} {
+        allow read, write: if true;
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // BET E-LEARNING — collections séparées (isolées de BET/dash)
+    // ══════════════════════════════════════════════════════════
+    match /chats_elearning/{convId} {
+      allow read, write: if true;
+      match /messages/{msgId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Chat de groupe d'une classe (coach ↔ apprenants), utilisé par
+    // DashboardProfesseur.jsx et PageMessages.jsx — aucune règle n'existait pour
+    // cette collection, bloquée par le refus implicite de Firestore depuis toujours.
+    match /classe_chats/{classeId} {
+      allow read, write: if true;
+      match /messages/{msgId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /presence_elearning/{userId} {
+      allow read, write: if true;
+    }
+
+    match /notifications_elearning/{userId} {
+      allow read, write: if true;
+      match /items/{itemId} {
+        allow read, write: if true;
+      }
+    }
+
+  }
+}

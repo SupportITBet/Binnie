@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schéma — Traduction FR/EN multi-sites (Weglot)</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(28px,4.5vw,44px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15px; color:var(--texte-att); max-width:760px; line-height:1.65; }
+
+  .diagramme-carte { background:linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%); border:1px solid var(--bordure); border-radius:18px; padding:28px; margin-bottom:20px; overflow-x:auto; }
+  svg text { font-family: var(--sans); }
+
+  .legende { display:flex; gap:24px; flex-wrap:wrap; margin-top:18px; padding-top:18px; border-top:1px dashed var(--bordure); }
+  .legende-item { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--texte-att); }
+  .puce { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+
+  h2 { font-family:var(--serif); font-size:22px; font-weight:400; color:var(--texte); margin:0 0 14px; }
+  .section { margin-bottom:48px; }
+  .desc { font-size:14px; color:var(--texte-att); line-height:1.75; max-width:760px; }
+  .desc code { background:rgba(255,255,255,0.06); padding:1px 7px; border-radius:5px; color:var(--cyan); font-size:13px; }
+  .desc b { color:var(--texte); }
+
+  figcaption { font-size:12.5px; color:var(--texte-att); margin-top:10px; line-height:1.6; }
+
+  table.cmp { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+  table.cmp th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--texte-att); font-weight:700; padding:10px 14px; border-bottom:2px solid var(--bordure); }
+  table.cmp td { padding:11px 14px; border-bottom:1px solid var(--bordure); color:var(--texte); }
+  table.cmp tr.recommande td { background:rgba(240,184,75,0.08); }
+  table.cmp .num { font-variant-numeric: tabular-nums; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10.5px; font-weight:700; letter-spacing:.02em; }
+  .tag-or { background:rgba(240,184,75,0.15); color:var(--or-clair); border:1px solid rgba(240,184,75,0.4); }
+
+  .callout { background:var(--fond-carte2); border:1px solid var(--or); border-left:4px solid var(--or); border-radius:10px; padding:20px 24px; margin-top:20px; }
+  .callout h3 { margin:0 0 8px; font-family:var(--serif); font-weight:400; font-size:17px; color:var(--or-clair); }
+  .callout p { margin:0 0 10px; font-size:13.5px; color:var(--texte-att); line-height:1.7; }
+  .callout p:last-child { margin-bottom:0; }
+  .callout b { color:var(--texte); }
+
+  footer { margin-top:60px; padding-top:24px; border-top:1px solid var(--bordure); font-size:12px; color:var(--texte-att); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET · Internationalisation FR/EN</span>
+    <h1>Traduire les <em>3 applications</em> sans réécrire chaque page</h1>
+    <p class="sous-titre">État actuel des 3 mécanismes de traduction incompatibles (Frontend, dash, bet-elearning), et proposition d'unification sous un seul abonnement Weglot multisite. Généré le 24 août 2026.</p>
+  </header>
+
+  <div class="section">
+    <h2>1. État actuel — trois mécanismes qui ne se parlent pas</h2>
+    <p class="desc">Chaque application a été équipée séparément, à des moments différents : <b style="color:var(--rose)">Frontend</b> utilise react-i18next mais seul le Footer est réellement traduit, <b style="color:var(--violet)">dash</b> a un dictionnaire fait main qui ne couvre que les pages de connexion, et <b style="color:var(--vert)">bet-elearning</b> est déjà sur Weglot (traduction automatique). Aucun des trois ne partage sa configuration avec les autres.</p>
+
+    <figure class="diagramme-carte">
+      <svg viewBox="0 0 1120 420" role="img" aria-label="Trois applications BET avec trois mécanismes de traduction séparés et incompatibles : react-i18next quasi-inutilisé sur Frontend, dictionnaire maison partiel sur dash, Weglot déjà actif sur bet-elearning" style="width:100%; height:auto;">
+        <defs>
+          <marker id="fx1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#F87171"/>
+          </marker>
+        </defs>
+
+        <!-- Frontend -->
+        <g>
+          <rect x="40" y="60" width="300" height="300" rx="14" fill="#16213A" stroke="#F472B6" stroke-width="1.5"/>
+          <text x="190" y="94" text-anchor="middle" fill="#F472B6" font-size="13" font-weight="700" letter-spacing="0.04em">FRONTEND</text>
+          <text x="190" y="112" text-anchor="middle" fill="#A9B4C9" font-size="10.5">Site public / marketing</text>
+          <line x1="64" y1="126" x2="316" y2="126" stroke="#223052" stroke-width="1"/>
+          <text x="64" y="152" fill="#EDF1F7" font-size="11.5" font-weight="700">Mécanisme</text>
+          <text x="64" y="172" fill="#A9B4C9" font-size="11">react-i18next + json</text>
+          <text x="64" y="190" fill="#A9B4C9" font-size="11">fr.json / en.json</text>
+          <text x="64" y="222" fill="#EDF1F7" font-size="11.5" font-weight="700">Couverture réelle</text>
+          <rect x="64" y="234" width="252" height="10" rx="5" fill="#223052"/>
+          <rect x="64" y="234" width="10" height="10" rx="5" fill="#F87171"/>
+          <text x="64" y="262" fill="#F87171" font-size="19" font-weight="900">~2%</text>
+          <text x="64" y="280" fill="#A9B4C9" font-size="10.5">1 seul composant (Footer) traduit</text>
+          <text x="64" y="330" fill="#A9B4C9" font-size="10.5">Aucun sélecteur FR/EN visible</text>
+        </g>
+
+        <!-- dash -->
+        <g>
+          <rect x="410" y="60" width="300" height="300" rx="14" fill="#16213A" stroke="#A78BFA" stroke-width="1.5"/>
+          <text x="560" y="94" text-anchor="middle" fill="#A78BFA" font-size="13" font-weight="700" letter-spacing="0.04em">DASH</text>
+          <text x="560" y="112" text-anchor="middle" fill="#A9B4C9" font-size="10.5">19 dashboards staff BET</text>
+          <line x1="434" y1="126" x2="686" y2="126" stroke="#223052" stroke-width="1"/>
+          <text x="434" y="152" fill="#EDF1F7" font-size="11.5" font-weight="700">Mécanisme</text>
+          <text x="434" y="172" fill="#A9B4C9" font-size="11">Contexte maison + dictionnaire JS</text>
+          <text x="434" y="190" fill="#A9B4C9" font-size="11">translations.js (585 lignes)</text>
+          <text x="434" y="222" fill="#EDF1F7" font-size="11.5" font-weight="700">Couverture réelle</text>
+          <rect x="434" y="234" width="252" height="10" rx="5" fill="#223052"/>
+          <rect x="434" y="234" width="25" height="10" rx="5" fill="#F0B84B"/>
+          <text x="434" y="262" fill="#F0B84B" font-size="19" font-weight="900">~10%</text>
+          <text x="434" y="280" fill="#A9B4C9" font-size="10.5">4 pages de connexion + fraction d'AdminDashboard</text>
+          <text x="434" y="300" fill="#A9B4C9" font-size="10.5">Les 14 autres dashboards : 100% figés en français</text>
+          <text x="434" y="330" fill="#A9B4C9" font-size="10.5">Bouton FR/EN existe mais n'affecte pas ces pages</text>
+        </g>
+
+        <!-- bet-elearning -->
+        <g>
+          <rect x="780" y="60" width="300" height="300" rx="14" fill="#16213A" stroke="#34D399" stroke-width="1.5"/>
+          <text x="930" y="94" text-anchor="middle" fill="#34D399" font-size="13" font-weight="700" letter-spacing="0.04em">BET-ELEARNING</text>
+          <text x="930" y="112" text-anchor="middle" fill="#A9B4C9" font-size="10.5">Espace apprenant</text>
+          <line x1="804" y1="126" x2="1056" y2="126" stroke="#223052" stroke-width="1"/>
+          <text x="804" y="152" fill="#EDF1F7" font-size="11.5" font-weight="700">Mécanisme</text>
+          <text x="804" y="172" fill="#A9B4C9" font-size="11">Weglot (traduction auto de page)</text>
+          <text x="804" y="190" fill="#A9B4C9" font-size="11">déjà en production</text>
+          <text x="804" y="222" fill="#EDF1F7" font-size="11.5" font-weight="700">Couverture réelle</text>
+          <rect x="804" y="234" width="252" height="10" rx="5" fill="#223052"/>
+          <rect x="804" y="234" width="252" height="10" rx="5" fill="#34D399"/>
+          <text x="804" y="262" fill="#34D399" font-size="19" font-weight="900">100%</text>
+          <text x="804" y="280" fill="#A9B4C9" font-size="10.5">Toute la page auto-traduite, sans clé manuelle</text>
+          <text x="804" y="330" fill="#A9B4C9" font-size="10.5">Seule app déjà viable en l'état</text>
+        </g>
+
+        <!-- X marks between boxes showing no shared config -->
+        <text x="375" y="220" text-anchor="middle" fill="#F87171" font-size="22" font-weight="900">✕</text>
+        <text x="745" y="220" text-anchor="middle" fill="#F87171" font-size="22" font-weight="900">✕</text>
+        <text x="375" y="245" text-anchor="middle" fill="#A9B4C9" font-size="9.5">config séparée</text>
+        <text x="745" y="245" text-anchor="middle" fill="#A9B4C9" font-size="9.5">config séparée</text>
+      </svg>
+      <figcaption>Trois configurations indépendantes, trois abonnements/outils potentiels, et ~90% du contenu de <code>dash</code> reste non traduisible en l'état.</figcaption>
+    </figure>
+  </div>
+
+  <div class="section">
+    <h2>2. Proposition — un seul compte Weglot, multisite</h2>
+    <p class="desc">Weglot traduit automatiquement tout le texte affiché à l'écran, sans avoir à extraire une clé par phrase — ce qui absorbe le volume de <code>dash</code> sans travail de développement par composant. Un plan multisite (à partir de <b>Pro</b>) permet de gérer les 3 sites sous un seul abonnement.</p>
+
+    <figure class="diagramme-carte">
+      <svg viewBox="0 0 1120 380" role="img" aria-label="Un seul compte Weglot multisite alimentant les traductions FR/EN des trois applications Frontend, dash et bet-elearning" style="width:100%; height:auto;">
+        <defs>
+          <marker id="fx2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#2DD4E8"/>
+          </marker>
+        </defs>
+
+        <!-- Weglot account -->
+        <rect x="410" y="30" width="300" height="90" rx="14" fill="#16213A" stroke="#2DD4E8" stroke-width="2"/>
+        <text x="560" y="66" text-anchor="middle" fill="#2DD4E8" font-size="15" font-weight="700" letter-spacing="0.03em">1 COMPTE WEGLOT</text>
+        <text x="560" y="88" text-anchor="middle" fill="#A9B4C9" font-size="11">Plan Pro/Advanced · multisite (3 projets)</text>
+        <text x="560" y="104" text-anchor="middle" fill="#A9B4C9" font-size="10.5">FR ↔ EN, sans clé manuelle</text>
+
+        <!-- arrows down -->
+        <line x1="560" y1="120" x2="190" y2="200" stroke="#2DD4E8" stroke-width="1.5" marker-end="url(#fx2)"/>
+        <line x1="560" y1="120" x2="560" y2="200" stroke="#2DD4E8" stroke-width="1.5" marker-end="url(#fx2)"/>
+        <line x1="560" y1="120" x2="930" y2="200" stroke="#2DD4E8" stroke-width="1.5" marker-end="url(#fx2)"/>
+
+        <!-- Frontend -->
+        <rect x="40" y="210" width="300" height="130" rx="14" fill="#16213A" stroke="#F472B6" stroke-width="1.5"/>
+        <text x="190" y="244" text-anchor="middle" fill="#F472B6" font-size="13" font-weight="700">FRONTEND</text>
+        <text x="190" y="266" text-anchor="middle" fill="#34D399" font-size="18" font-weight="900">100%</text>
+        <text x="190" y="286" text-anchor="middle" fill="#A9B4C9" font-size="10.5">traduisible dès l'activation</text>
+        <text x="190" y="322" text-anchor="middle" fill="#A9B4C9" font-size="10">Aucun code à modifier</text>
+
+        <!-- dash -->
+        <rect x="410" y="210" width="300" height="130" rx="14" fill="#16213A" stroke="#A78BFA" stroke-width="1.5"/>
+        <text x="560" y="244" text-anchor="middle" fill="#A78BFA" font-size="13" font-weight="700">DASH</text>
+        <text x="560" y="266" text-anchor="middle" fill="#34D399" font-size="18" font-weight="900">100%</text>
+        <text x="560" y="286" text-anchor="middle" fill="#A9B4C9" font-size="10.5">les 19 dashboards, sans réécriture</text>
+        <text x="560" y="322" text-anchor="middle" fill="#A9B4C9" font-size="10">Remplace le dictionnaire maison</text>
+
+        <!-- bet-elearning -->
+        <rect x="780" y="210" width="300" height="130" rx="14" fill="#16213A" stroke="#34D399" stroke-width="1.5"/>
+        <text x="930" y="244" text-anchor="middle" fill="#34D399" font-size="13" font-weight="700">BET-ELEARNING</text>
+        <text x="930" y="266" text-anchor="middle" fill="#34D399" font-size="18" font-weight="900">100%</text>
+        <text x="930" y="286" text-anchor="middle" fill="#A9B4C9" font-size="10.5">déjà actif, rattaché au même compte</text>
+        <text x="930" y="322" text-anchor="middle" fill="#A9B4C9" font-size="10">Aucun changement nécessaire</text>
+      </svg>
+      <figcaption>Un seul abonnement, une seule facture, une seule interface de correction manuelle des traductions pour les 3 apps.</figcaption>
+    </figure>
+  </div>
+
+  <div class="section">
+    <h2>3. Comparatif des plans Weglot</h2>
+    <p class="desc">Seuls les plans <b>Pro</b> et au-dessus incluent le multisite (plusieurs projets sous un même abonnement). Le vrai risque est le volume de mots de <code>dash</code>, inconnu tant qu'il n'a pas été mesuré en conditions réelles.</p>
+    <table class="cmp">
+      <thead>
+        <tr><th>Plan</th><th>Prix / mois (annuel)</th><th class="num">Mots traduits</th><th class="num">Langues</th><th class="num">Projets (sites)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Starter</td><td class="num">15 €</td><td class="num">10 000</td><td class="num">1</td><td class="num">1</td></tr>
+        <tr><td>Business</td><td class="num">29 €</td><td class="num">50 000</td><td class="num">3</td><td class="num">1</td></tr>
+        <tr class="recommande"><td>Pro <span class="tag tag-or">multisite</span></td><td class="num">79 €</td><td class="num">200 000</td><td class="num">5</td><td class="num">3</td></tr>
+        <tr><td>Advanced</td><td class="num">299 €</td><td class="num">1 000 000</td><td class="num">10</td><td class="num">10</td></tr>
+        <tr><td>Extended</td><td class="num">699 €</td><td class="num">5 000 000</td><td class="num">20</td><td class="num">20</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>4. Comparatif des plans GTranslate</h2>
+    <p class="desc">GTranslate se licencie <b>par domaine</b> (pas de multisite natif) et ne plafonne pas le nombre de mots — seulement le nombre de langues et le niveau d'édition/indexation SEO. Les sources publiques divergent légèrement sur les tarifs exacts (8-50 $ selon la source consultée) : chiffres à reconfirmer sur gtranslate.io avant engagement.</p>
+    <table class="cmp">
+      <thead>
+        <tr><th>Plan</th><th>Prix / mois / domaine (annuel)</th><th class="num">Mots traduits</th><th>SEO / indexation</th><th>Édition manuelle</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Free</td><td class="num">0 $</td><td class="num">Illimité</td><td>Non</td><td>Non</td></tr>
+        <tr><td>Custom</td><td class="num">~10 $</td><td class="num">Illimité</td><td>Non</td><td>Limitée</td></tr>
+        <tr><td>Startup</td><td class="num">~17-20 $</td><td class="num">Illimité</td><td>Oui</td><td>Oui</td></tr>
+        <tr><td>Business</td><td class="num">~25-30 $</td><td class="num">Illimité</td><td>Oui</td><td>Oui + URL traduites</td></tr>
+        <tr><td>Enterprise</td><td class="num">~33-42 $</td><td class="num">Illimité</td><td>Oui</td><td>Complète</td></tr>
+      </tbody>
+    </table>
+    <p class="desc" style="margin-top:8px">Pour couvrir les 3 sites en plan Business (recommandé pour le SEO) : <b>~75-90 $/mois au total</b>, répartis sur 3 abonnements séparés (un par domaine).</p>
+  </div>
+
+  <div class="section">
+    <h2>5. Weglot vs GTranslate — synthèse</h2>
+    <p class="desc">Les deux outils ne facturent pas selon la même logique : Weglot plafonne le nombre de mots traduits (risque de dépassement vu la taille de <code>dash</code>), GTranslate facture par domaine et par langue, sans plafond de mots.</p>
+    <table class="cmp">
+      <thead>
+        <tr><th>Critère</th><th>Weglot (Pro, multisite)</th><th>GTranslate (3 domaines)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Modèle de facturation</td><td>Au volume de mots + langues</td><td>Par domaine + par langue</td></tr>
+        <tr><td>Coût pour les 3 sites</td><td class="num">79 €/mois (1 seul abonnement)</td><td class="num">~30-90 $/mois (3 abonnements distincts)</td></tr>
+        <tr><td>Plafond de mots</td><td><span class="tag" style="background:rgba(248,113,113,0.15);color:#F87171;border:1px solid rgba(248,113,113,0.4)">200 000 mots — risque de dépassement</span></td><td><span class="tag" style="background:rgba(52,211,153,0.15);color:#34D399;border:1px solid rgba(52,211,153,0.4)">Aucun plafond</span></td></tr>
+        <tr><td>Un seul abonnement pour tout</td><td><span class="tag" style="background:rgba(52,211,153,0.15);color:#34D399;border:1px solid rgba(52,211,153,0.4)">Oui (multisite inclus)</span></td><td><span class="tag" style="background:rgba(248,113,113,0.15);color:#F87171;border:1px solid rgba(248,113,113,0.4)">Non (1 abonnement par domaine)</span></td></tr>
+        <tr><td>Qualité d'édition / correction manuelle</td><td>Interface mature, glossaire, mémoire de traduction</td><td>Plus limitée, jugée en retrait</td></tr>
+        <tr><td>Déjà utilisé chez BET</td><td><span class="tag tag-or">Oui — bet-elearning</span></td><td>Non</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>6. Les 3 propositions</h2>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+
+      <div class="diagramme-carte" style="margin-bottom:0; padding:20px;">
+        <span class="tag tag-or">Proposition A</span>
+        <h3 style="font-family:var(--serif); font-weight:400; font-size:16px; margin:10px 0 6px; color:var(--or-clair)">Weglot Pro — tout-en-un</h3>
+        <p style="font-size:20px; font-weight:900; margin:0 0 8px; color:var(--texte)">79 €/mois</p>
+        <p style="font-size:12.5px; color:var(--texte-att); line-height:1.6; margin:0 0 10px">1 seul abonnement, les 3 sites, 200 000 mots, 5 langues (dont FR/EN).</p>
+        <p style="font-size:11.5px; color:var(--vert); margin:0">✓ Le plus simple à gérer</p>
+        <p style="font-size:11.5px; color:var(--rouge); margin:4px 0 0">✕ Risque de dépassement si dash est trop volumineux</p>
+      </div>
+
+      <div class="diagramme-carte" style="margin-bottom:0; padding:20px;">
+        <span class="tag" style="background:rgba(45,212,232,0.15);color:var(--cyan);border:1px solid rgba(45,212,232,0.4)">Proposition B</span>
+        <h3 style="font-family:var(--serif); font-weight:400; font-size:16px; margin:10px 0 6px; color:var(--cyan)">Weglot Advanced — marge large</h3>
+        <p style="font-size:20px; font-weight:900; margin:0 0 8px; color:var(--texte)">299 €/mois</p>
+        <p style="font-size:12.5px; color:var(--texte-att); line-height:1.6; margin:0 0 10px">1 seul abonnement, les 3 sites, 1 000 000 mots, 10 langues, 10 projets.</p>
+        <p style="font-size:11.5px; color:var(--vert); margin:0">✓ Aucun risque de dépassement</p>
+        <p style="font-size:11.5px; color:var(--rouge); margin:4px 0 0">✕ Coût 4x plus élevé que le plan A</p>
+      </div>
+
+      <div class="diagramme-carte" style="margin-bottom:0; padding:20px;">
+        <span class="tag" style="background:rgba(167,139,250,0.15);color:var(--violet);border:1px solid rgba(167,139,250,0.4)">Proposition C</span>
+        <h3 style="font-family:var(--serif); font-weight:400; font-size:16px; margin:10px 0 6px; color:var(--violet)">GTranslate — 3 abonnements</h3>
+        <p style="font-size:20px; font-weight:900; margin:0 0 8px; color:var(--texte)">~75-90 $/mois</p>
+        <p style="font-size:12.5px; color:var(--texte-att); line-height:1.6; margin:0 0 10px">3 abonnements Business séparés (1 par domaine), aucun plafond de mots.</p>
+        <p style="font-size:11.5px; color:var(--vert); margin:0">✓ Aucun risque de dépassement, coût prévisible</p>
+        <p style="font-size:11.5px; color:var(--rouge); margin:4px 0 0">✕ 3 factures/comptos à gérer, édition moins mature</p>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="callout">
+    <h3>Recommandation</h3>
+    <p><b>Étape 1</b> — tester le plan gratuit de Weglot sur une seule dashboard (ex: CommercialDashboard) pour mesurer le vrai nombre de mots détectés, avant d'engager un abonnement payant.</p>
+    <p><b>Étape 2</b> — si le total des 3 sites reste sous ~200 000 mots : <b style="color:var(--or-clair)">Proposition A (Weglot Pro, 79 €/mois)</b>. Si <code>dash</code> dépasse largement ce seuil (probable vu sa taille) : <b style="color:var(--cyan)">Proposition B (Weglot Advanced, 299 €/mois)</b>.</p>
+    <p><b>Si le budget prime sur la simplicité de gestion</b> — <b style="color:var(--violet)">Proposition C (GTranslate, ~75-90 $/mois au total)</b> élimine le risque de plafond mais demande de gérer 3 abonnements séparés.</p>
+  </div>
+
+  <footer>BET · Schéma généré automatiquement — internationalisation FR/EN, comparatif Weglot/GTranslate.</footer>
+</div>
+</body>
+</html>

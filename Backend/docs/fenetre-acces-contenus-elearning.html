@@ -1,0 +1,468 @@
+<title>Fenêtre d'accès aux contenus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --encre:      #16202E;
+    --encre-doux: #4A5766;
+    --papier:     #F4F6F8;
+    --surface:    #FFFFFF;
+    --trait:      #DCE3E9;
+    --trait-fort: #C2CCD6;
+    --accent:     #0E7490;
+    --accent-pale:#E4F2F6;
+
+    --ouvert:     #15803D;
+    --ouvert-fond:#E8F6EC;
+    --avant:      #5A6876;
+    --avant-fond: #EDF0F3;
+    --apres:      #B3261E;
+    --apres-fond: #FBEAE9;
+    --sequence:   #A35709;
+    --seq-fond:   #FBF0E2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --encre:      #E7ECF1;
+      --encre-doux: #A2AFBC;
+      --papier:     #10161E;
+      --surface:    #172230;
+      --trait:      #2A3746;
+      --trait-fort: #3C4C5E;
+      --accent:     #56C2DB;
+      --accent-pale:#12303A;
+
+      --ouvert:     #6EE7A0;
+      --ouvert-fond:#12301F;
+      --avant:      #9AA8B6;
+      --avant-fond: #202B38;
+      --apres:      #F5A19B;
+      --apres-fond: #341A1A;
+      --sequence:   #F0B667;
+      --seq-fond:   #33240F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --encre:      #E7ECF1;
+    --encre-doux: #A2AFBC;
+    --papier:     #10161E;
+    --surface:    #172230;
+    --trait:      #2A3746;
+    --trait-fort: #3C4C5E;
+    --accent:     #56C2DB;
+    --accent-pale:#12303A;
+    --ouvert:     #6EE7A0;
+    --ouvert-fond:#12301F;
+    --avant:      #9AA8B6;
+    --avant-fond: #202B38;
+    --apres:      #F5A19B;
+    --apres-fond: #341A1A;
+    --sequence:   #F0B667;
+    --seq-fond:   #33240F;
+  }
+
+  body {
+    background: var(--papier);
+    color: var(--encre);
+    font-family: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+  .page { max-width: 1000px; margin: 0 auto; padding: 56px 24px 96px; }
+  .prose { max-width: 68ch; }
+
+  h1, h2, h3 { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; text-wrap: balance; }
+  h1 { font-size: clamp(30px, 4.2vw, 42px); font-weight: 700; letter-spacing: -.02em; margin: 0 0 10px; line-height: 1.12; }
+  h2 { font-size: 21px; font-weight: 700; letter-spacing: -.01em; margin: 56px 0 14px; padding-top: 18px; border-top: 2px solid var(--trait); }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 30px 0 8px; }
+  p  { margin: 0 0 14px; }
+  strong { font-weight: 600; }
+
+  .eyebrow {
+    font-family: Archivo, sans-serif; font-size: 11.5px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px;
+  }
+  .chapeau { font-size: 18px; color: var(--encre-doux); max-width: 62ch; margin: 0 0 8px; }
+  .meta { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--encre-doux); margin-top: 22px; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .88em; }
+  code { background: var(--accent-pale); color: var(--accent); padding: 1px 5px; border-radius: 4px; }
+
+  figure { margin: 30px 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 13px; color: var(--encre-doux); margin-top: 10px; max-width: 68ch; }
+
+  .cadre { background: var(--surface); border: 1px solid var(--trait); border-radius: 12px; padding: 20px 22px; }
+  .defile { overflow-x: auto; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--trait); vertical-align: top; }
+  th { font-family: Archivo, sans-serif; font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--encre-doux); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .pastille { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+  .p-ouvert   { background: var(--ouvert-fond);  color: var(--ouvert); }
+  .p-avant    { background: var(--avant-fond);   color: var(--avant); }
+  .p-apres    { background: var(--apres-fond);   color: var(--apres); }
+  .p-sequence { background: var(--seq-fond);     color: var(--sequence); }
+
+  .encart { border-left: 3px solid var(--accent); background: var(--surface); padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 24px 0; }
+  .encart .titre { font-family: Archivo, sans-serif; font-weight: 600; font-size: 14px; margin-bottom: 5px; }
+  .encart p:last-child { margin-bottom: 0; }
+
+  pre { background: var(--surface); border: 1px solid var(--trait); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-family: "JetBrains Mono", monospace; font-size: 12.5px; line-height: 1.75; margin: 16px 0; }
+
+  ul { margin: 0 0 14px; padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  .legende { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--encre-doux); margin-top: 12px; }
+  .legende span { display: inline-flex; align-items: center; gap: 7px; }
+  .puce { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+</style>
+
+<div class="page">
+
+  <p class="eyebrow">BET · Plateforme e-learning</p>
+  <h1>Fenêtre d'accès aux contenus</h1>
+  <p class="chapeau">
+    Qui voit quel cours, et pourquoi. Le modèle retenu pour des classes où des apprenants
+    partent et d'autres arrivent en continu.
+  </p>
+  <p class="meta">21 septembre 2026 · commit ced0bf7 · aucune migration de base</p>
+
+  <h2>Le problème</h2>
+  <div class="prose">
+    <p>
+      Une classe BET ne se clôture presque jamais : des apprenants la quittent, d'autres
+      la rejoignent, le coach continue de publier. Tant que l'accès dépendait de la
+      <em>classe</em>, deux situations restaient sans réponse.
+    </p>
+    <ul>
+      <li>Un apprenant qui <strong>arrive en cours de route</strong> voyait tous les cours déjà faits par les autres.</li>
+      <li>Un apprenant qui <strong>arrête sa formation</strong> continuait de recevoir les cours publiés après son départ.</li>
+    </ul>
+    <p>
+      Le bon repère n'est donc pas la classe, mais <strong>la période pendant laquelle
+      l'apprenant y était</strong>.
+    </p>
+  </div>
+
+  <h2>La règle</h2>
+  <div class="prose">
+    <p>
+      Chaque rattachement à une classe porte déjà deux dates en base :
+      <code>date_ajout</code> et <code>date_retrait</code>. Elles bornent la fenêtre.
+      Un contenu est accessible s'il a été <strong>publié pendant cette fenêtre</strong>.
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 960 400" role="img" aria-label="Trois apprenants sur une même frise de publications : Awa présente depuis le début accède aux quatre cours ; Moussa arrivé en mars voit les deux premiers grisés ; Fatou partie en février ne reçoit plus les deux derniers.">
+      <defs>
+        <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- Frise des publications -->
+      <text x="20" y="26" font-family="Archivo, sans-serif" font-size="12" font-weight="600" fill="currentColor" opacity=".55" letter-spacing="1.4">PUBLICATIONS DU COACH</text>
+      <line x1="120" y1="62" x2="920" y2="62" stroke="currentColor" opacity=".3" stroke-width="1.5" marker-end="url(#fl)"/>
+
+      <g font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".7">
+        <text x="200" y="88" text-anchor="middle">5 jan.</text>
+        <text x="380" y="88" text-anchor="middle">10 fév.</text>
+        <text x="580" y="88" text-anchor="middle">15 mars</text>
+        <text x="770" y="88" text-anchor="middle">20 avr.</text>
+      </g>
+      <g font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">
+        <text x="200" y="50" text-anchor="middle">Cours 1</text>
+        <text x="380" y="50" text-anchor="middle">Cours 2</text>
+        <text x="580" y="50" text-anchor="middle">Cours 3</text>
+        <text x="770" y="50" text-anchor="middle">Cours 4</text>
+      </g>
+      <g stroke="currentColor" opacity=".22" stroke-width="1" stroke-dasharray="3 4">
+        <line x1="200" y1="62" x2="200" y2="360"/>
+        <line x1="380" y1="62" x2="380" y2="360"/>
+        <line x1="580" y1="62" x2="580" y2="360"/>
+        <line x1="770" y1="62" x2="770" y2="360"/>
+      </g>
+
+      <!-- AWA : présente depuis le début -->
+      <text x="20" y="140" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="currentColor">Awa</text>
+      <text x="20" y="157" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".6">depuis déc.</text>
+      <rect x="130" y="122" width="790" height="34" rx="17" fill="#15803D" opacity=".10"/>
+      <g>
+        <circle cx="200" cy="139" r="11" fill="#15803D"/><circle cx="380" cy="139" r="11" fill="#15803D"/>
+        <circle cx="580" cy="139" r="11" fill="#15803D"/><circle cx="770" cy="139" r="11" fill="#15803D"/>
+      </g>
+
+      <!-- MOUSSA : arrive en mars -->
+      <text x="20" y="232" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="currentColor">Moussa</text>
+      <text x="20" y="249" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".6">arrivé 1 mars</text>
+      <rect x="480" y="214" width="440" height="34" rx="17" fill="#15803D" opacity=".10"/>
+      <line x1="480" y1="200" x2="480" y2="262" stroke="#0E7490" stroke-width="2.5"/>
+      <text x="486" y="206" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#0E7490" font-weight="600">date_ajout</text>
+      <g>
+        <circle cx="200" cy="231" r="11" fill="none" stroke="#5A6876" stroke-width="2" stroke-dasharray="3 3"/>
+        <circle cx="380" cy="231" r="11" fill="none" stroke="#5A6876" stroke-width="2" stroke-dasharray="3 3"/>
+        <circle cx="580" cy="231" r="11" fill="#15803D"/><circle cx="770" cy="231" r="11" fill="#15803D"/>
+      </g>
+
+      <!-- FATOU : partie en février -->
+      <text x="20" y="324" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="currentColor">Fatou</text>
+      <text x="20" y="341" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".6">partie 28 fév.</text>
+      <rect x="130" y="306" width="350" height="34" rx="17" fill="#15803D" opacity=".10"/>
+      <line x1="480" y1="292" x2="480" y2="354" stroke="#B3261E" stroke-width="2.5"/>
+      <text x="486" y="298" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#B3261E" font-weight="600">date_retrait</text>
+      <g>
+        <circle cx="200" cy="323" r="11" fill="#15803D"/><circle cx="380" cy="323" r="11" fill="#15803D"/>
+        <g stroke="#B3261E" stroke-width="2">
+          <line x1="573" y1="316" x2="587" y2="330"/><line x1="587" y1="316" x2="573" y2="330"/>
+          <line x1="763" y1="316" x2="777" y2="330"/><line x1="777" y1="316" x2="763" y2="330"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption>
+      La même frise de publications, vue par trois apprenants. La bande verte est la fenêtre
+      de présence de chacun ; seuls les cours qui y tombent sont servis.
+    </figcaption>
+    <div class="legende">
+      <span><i class="puce" style="background:#15803D"></i> accessible</span>
+      <span><i class="puce" style="background:transparent;border:2px dashed #5A6876"></i> grisé — publié avant l'arrivée</span>
+      <span><i class="puce" style="background:#B3261E"></i> retiré de la liste — publié après le départ</span>
+    </div>
+  </figure>
+
+  <div class="encart">
+    <div class="titre">Pourquoi Fatou garde ses deux premiers cours</div>
+    <p>
+      Elle les a suivis, souvent payés. Les lui retirer serait une punition que personne
+      n'a demandée, et cela effacerait son historique. Seuls les cours publiés
+      <em>après</em> son départ lui sont fermés.
+    </p>
+  </div>
+
+  <div class="encart">
+    <div class="titre">Pourquoi les cours de Moussa sont grisés et non masqués</div>
+    <p>
+      Pour un arrivant, le gris informe : « ça existe, ce n'est pas pour toi ». Pour
+      quelqu'un qui est parti, au contraire, afficher une liste de cours qu'il n'aura
+      jamais n'apprend rien à personne — ils disparaissent.
+    </p>
+  </div>
+
+  <h2>Les trois motifs de fermeture</h2>
+  <div class="prose">
+    <p>
+      Trois causes distinctes, trois messages. Un cadenas sans raison est incompréhensible,
+      et « terminez le précédent » ne se répare pas de la même façon que « publié avant
+      votre arrivée ».
+    </p>
+  </div>
+
+  <div class="cadre defile">
+    <table>
+      <thead>
+        <tr><th>Motif</th><th>Ce que voit l'apprenant</th><th>Que peut-il faire ?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="pastille p-avant">🕓 avant_arrivee</span></td>
+          <td>Carte grisée — « Publié <strong>avant votre arrivée</strong> dans la classe&nbsp;»</td>
+          <td>Rien. Le dire évite d'attendre une ouverture qui ne viendra jamais.</td>
+        </tr>
+        <tr>
+          <td><span class="pastille p-sequence">🔒 sequence</span></td>
+          <td>Carte ambre — « Terminez d'abord <em>« Cours X »</em>&nbsp;»</td>
+          <td>Terminer le cours nommé — le suivant s'ouvre aussitôt.</td>
+        </tr>
+        <tr>
+          <td><span class="pastille p-apres">✕ apres_depart</span></td>
+          <td>Rien : le cours n'apparaît pas dans sa liste.</td>
+          <td>Reprendre sa formation, via l'assistante.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>La décision, pas à pas</h2>
+
+  <figure>
+    <svg viewBox="0 0 900 470" role="img" aria-label="Arbre de décision : pour chaque contenu, on teste l'appartenance à une classe de l'apprenant, puis la date de publication par rapport à son arrivée et à son départ, puis l'existence d'un cours obligatoire antérieur non terminé.">
+      <defs>
+        <marker id="fl2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g font-family="Source Sans 3, sans-serif" font-size="13.5" fill="currentColor">
+
+        <rect x="300" y="12" width="300" height="42" rx="10" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+        <text x="450" y="38" text-anchor="middle" font-weight="600">Un contenu publié</text>
+        <line x1="450" y1="54" x2="450" y2="86" stroke="currentColor" opacity=".5" stroke-width="1.6" marker-end="url(#fl2)"/>
+
+        <rect x="278" y="90" width="344" height="46" rx="10" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+        <text x="450" y="118" text-anchor="middle">Vise une de mes classes&nbsp;?</text>
+        <line x1="622" y1="113" x2="742" y2="113" stroke="currentColor" opacity=".5" stroke-width="1.6" marker-end="url(#fl2)"/>
+        <text x="682" y="105" text-anchor="middle" font-size="11.5" opacity=".65">non</text>
+        <text x="800" y="118" text-anchor="middle" font-size="12.5" opacity=".75">hors sujet</text>
+        <line x1="450" y1="136" x2="450" y2="168" stroke="currentColor" opacity=".5" stroke-width="1.6" marker-end="url(#fl2)"/>
+        <text x="463" y="158" font-size="11.5" opacity=".65">oui</text>
+
+        <rect x="266" y="172" width="368" height="46" rx="10" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+        <text x="450" y="200" text-anchor="middle">Publié avant mon arrivée&nbsp;?</text>
+        <line x1="634" y1="195" x2="742" y2="195" stroke="#5A6876" stroke-width="1.8" marker-end="url(#fl2)" color="#5A6876"/>
+        <text x="688" y="187" text-anchor="middle" font-size="11.5" opacity=".65">oui</text>
+        <rect x="742" y="176" width="140" height="38" rx="9" fill="#EDF0F3"/>
+        <text x="812" y="200" text-anchor="middle" font-size="12.5" font-weight="600" fill="#5A6876">🕓 grisé</text>
+        <line x1="450" y1="218" x2="450" y2="250" stroke="currentColor" opacity=".5" stroke-width="1.6" marker-end="url(#fl2)"/>
+        <text x="463" y="240" font-size="11.5" opacity=".65">non</text>
+
+        <rect x="266" y="254" width="368" height="46" rx="10" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+        <text x="450" y="282" text-anchor="middle">Publié après mon départ&nbsp;?</text>
+        <line x1="634" y1="277" x2="742" y2="277" stroke="#B3261E" stroke-width="1.8" marker-end="url(#fl2)" color="#B3261E"/>
+        <text x="688" y="269" text-anchor="middle" font-size="11.5" opacity=".65">oui</text>
+        <rect x="742" y="258" width="150" height="38" rx="9" fill="#FBEAE9"/>
+        <text x="817" y="282" text-anchor="middle" font-size="12.5" font-weight="600" fill="#B3261E">✕ retiré</text>
+        <line x1="450" y1="300" x2="450" y2="332" stroke="currentColor" opacity=".5" stroke-width="1.6" marker-end="url(#fl2)"/>
+        <text x="463" y="322" font-size="11.5" opacity=".65">non</text>
+
+        <rect x="212" y="336" width="476" height="60" rx="10" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+        <text x="450" y="360" text-anchor="middle">Un cours obligatoire antérieur,</text>
+        <text x="450" y="379" text-anchor="middle">publié dans ma fenêtre, non terminé&nbsp;?</text>
+        <line x1="688" y1="366" x2="742" y2="366" stroke="#A35709" stroke-width="1.8" marker-end="url(#fl2)" color="#A35709"/>
+        <text x="716" y="358" text-anchor="middle" font-size="11.5" opacity=".65">oui</text>
+        <rect x="742" y="347" width="150" height="38" rx="9" fill="#FBF0E2"/>
+        <text x="817" y="371" text-anchor="middle" font-size="12.5" font-weight="600" fill="#A35709">🔒 séquence</text>
+        <line x1="450" y1="396" x2="450" y2="424" stroke="#15803D" stroke-width="1.8" marker-end="url(#fl2)" color="#15803D"/>
+        <text x="463" y="416" font-size="11.5" opacity=".65">non</text>
+
+        <rect x="340" y="426" width="220" height="40" rx="10" fill="#E8F6EC"/>
+        <text x="450" y="452" text-anchor="middle" font-weight="600" fill="#15803D">✅ accessible</text>
+      </g>
+    </svg>
+    <figcaption>
+      Le test est appliqué <strong>côté serveur</strong>, et les blocs d'un contenu fermé
+      ne sont pas envoyés : un verrou seulement visuel se contourne en lisant la réponse réseau.
+    </figcaption>
+  </figure>
+
+  <div class="encart">
+    <div class="titre">Le piège évité</div>
+    <p>
+      La séquence obligatoire ne porte <strong>que sur la fenêtre</strong>. Sans cette
+      restriction, Moussa serait retenu par le Cours&nbsp;1 — un prérequis qu'il n'a pas le
+      droit de consulter, donc qu'il ne pourrait jamais terminer. Le verrou serait définitif
+      et sans issue.
+    </p>
+  </div>
+
+  <h2>Déclarer un départ</h2>
+  <div class="prose">
+    <p>
+      Avant ce lot, <code>date_retrait</code> n'était écrite que lors d'un <strong>transfert</strong>
+      — 2 lignes sur 74. Rien ne permettait de dire « celui-ci arrête », et la règle ne se
+      serait jamais déclenchée.
+    </p>
+    <p>
+      Le bouton <strong>« 🎓 Arrêter la formation »</strong> est posé chez l'assistante, dans
+      l'onglet <em>Accès</em> de la fiche apprenant, à côté de « Bloquer l'accès ». Les deux
+      sont volontairement distincts :
+    </p>
+    <ul>
+      <li><strong>Bloquer l'accès</strong> — fermer la porte à quelqu'un qui <em>reste inscrit</em> (impayé, absences).</li>
+      <li><strong>Arrêter la formation</strong> — acter qu'il <em>est parti</em>. Il garde ses cours, il n'en reçoit plus de nouveaux.</li>
+    </ul>
+    <p>
+      L'action est <strong>réversible</strong> : un arrêt déclaré par erreur s'annule sans
+      recréer le rattachement, donc sans perdre l'historique. Une date d'arrêt antérieure à
+      l'arrivée est refusée — la fenêtre serait vide et l'apprenant perdrait d'un coup
+      <em>tous</em> ses cours.
+    </p>
+  </div>
+
+  <h2>Et la facturation</h2>
+  <div class="prose">
+    <p>
+      Déclarer un arrêt sans toucher à la facturation aurait produit exactement le problème
+      inverse : un apprenant privé des nouveaux cours, mais <strong>facturé tous les mois</strong>,
+      rappels J-7 / J-3 / J-1 compris.
+    </p>
+    <p>
+      Le mécanisme de neutralisation existait déjà — <code>planPaiement.js</code>, ignoré par
+      le cron et par le webhook de paiement — et était branché sur la mise en pause. L'arrêt
+      s'y branche désormais aussi.
+    </p>
+    <ul>
+      <li><strong>Le mois en cours reste dû.</strong> L'apprenant a eu cours pendant ce mois. La neutralisation commence au mois suivant.</li>
+      <li><strong>Les mois déjà soldés ne sont jamais touchés.</strong> Ce qui a été payé pour des cours suivis reste acquis.</li>
+      <li><strong>Un acompte n'est pas effacé.</strong> Un mois partiellement réglé voit son montant ramené à ce qui a été versé : le reliquat disparaît, l'argent reçu reste.</li>
+      <li><strong>Une reprise ne produit pas d'arriérés.</strong> Le plan est rebasé sur le mois de reprise au lieu de rattraper l'absence.</li>
+    </ul>
+  </div>
+  <pre>ARRÊT le 21/09 — neutralisation à partir de 2026-10
+  2026-07   dû 50 000   versé 50 000   → facturable
+  2026-08   dû 50 000   versé 50 000   → facturable
+  2026-09   dû 50 000   versé 50 000   → facturable   ← mois en cours, dû
+  2026-10   dû 20 000   versé 20 000   ⏸ annulé       ← acompte conservé
+  2026-11   dû      0   versé      0   ⏸ annulé
+  2026-12   dû      0   versé      0   ⏸ annulé
+                                          130 000 F annulés
+
+REPRISE en décembre → arriérés réclamés : AUCUN · décembre : 50 000 F</pre>
+  <div class="prose">
+    <p>
+      L'opération est <strong>non bloquante</strong> : un échec côté facturation n'annule pas
+      la décision de gestion. Mais la réponse dit ce qui s'est réellement passé, pour que
+      l'écran de l'assistante ne laisse pas croire que la facturation a suivi.
+    </p>
+  </div>
+
+  <h2>Vérifications</h2>
+  <div class="prose">
+    <p>Quatre scénarios construits, sortie réelle du calcul&nbsp;:</p>
+  </div>
+  <pre>arrive au début, rien lu          ARRIVÉ EN MARS (après C1 et C2)
+  ✅ C1 (05/01)                     🔒 C1 (05/01) — avant arrivée
+  🔒 C2 (10/02) ← C1                🔒 C2 (10/02) — avant arrivée
+  🔒 C3 (15/03) ← C1                ✅ C3 (15/03)
+  🔒 C4 (20/04) ← C1                ✅ C4 (20/04)
+
+PARTI EN FÉVRIER                  arrive LE JOUR de C2
+  ✅ C1 (05/01)                     🔒 C1 (05/01) — avant arrivée
+  🔒 C2 (10/02) ← C1                ✅ C2 (10/02)
+  🔒 C3 (15/03) — après départ      ✅ C3 (15/03)
+  🔒 C4 (20/04) — après départ      ✅ C4 (20/04)</pre>
+  <div class="prose">
+    <p>
+      Le dernier cas vaut d'être noté : la comparaison se fait <strong>à la journée</strong>
+      et non à la seconde. Un apprenant inscrit à 14&nbsp;h ne doit pas perdre le cours
+      publié à 9&nbsp;h le même jour.
+    </p>
+  </div>
+
+  <h2>Ce que ça touche</h2>
+  <div class="cadre defile">
+    <table>
+      <thead><tr><th>Fichier</th><th>Rôle</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">services/lectureSequentielle.js</td><td>Le calcul : fenêtre, séquence, motifs. Seul endroit où la règle est écrite.</td></tr>
+        <tr><td class="mono">routes/coursElearning.js</td><td><code>/pour-apprenant</code> — applique le verrou, retire les blocs, exclut l'après-départ.</td></tr>
+        <tr><td class="mono">routes/apprenants.js</td><td><code>POST …/lu</code> — refuse hors fenêtre, avec le message du motif.</td></tr>
+        <tr><td class="mono">routes/groupes.js</td><td><code>PATCH …/arret-formation</code> — déclarer un départ, l'annuler, et <strong>répercuter sur la facturation</strong>.</td></tr>
+        <tr><td class="mono">CommercialDashboard.jsx</td><td>Le bouton chez l'assistante, onglet Accès.</td></tr>
+        <tr><td class="mono">EspaceApprenant.jsx</td><td>Trois motifs, trois messages.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>À savoir</h2>
+  <div class="prose">
+    <ul>
+      <li><strong>Aucune migration.</strong> <code>date_ajout</code> est renseignée sur les 74 rattachements, <code>date_retrait</code> existait déjà.</li>
+      <li><strong>Le statut de départ est <code>retire</code></strong>, vocabulaire déjà présent dans le projet — pas de valeur inventée.</li>
+      <li><strong>Le contexte est gardé 60&nbsp;s en mémoire</strong> par apprenant. Un cours publié à l'instant met donc jusqu'à une minute à entrer dans le verrou de quelqu'un déjà connecté. Le verrou protège une progression pédagogique, pas un secret.</li>
+      <li><strong>bet-elearning n'affiche pas encore les cadenas.</strong> L'espace apprenant du dash le fait ; l'autre reste à aligner.</li>
+    </ul>
+  </div>
+
+</div>

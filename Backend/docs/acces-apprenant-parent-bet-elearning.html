@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schéma — Accès Apprenant ↔ Parent (bet-elearning)</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,4.5vw,46px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15.5px; color:var(--texte-att); max-width:720px; line-height:1.65; }
+  .meta-chips { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  .chip { font-size:12px; padding:6px 12px; border-radius:20px; background:var(--fond-carte2); border:1px solid var(--bordure); color:var(--texte-att); }
+
+  .verdict { display:flex; gap:14px; align-items:flex-start; background:linear-gradient(160deg, rgba(240,184,75,0.08), rgba(240,184,75,0.03)); border:1px solid rgba(240,184,75,0.3); border-radius:14px; padding:18px 22px; margin-bottom:48px; }
+  .verdict .ic { font-size:24px; flex-shrink:0; }
+  .verdict .txt { font-size:14px; color:var(--texte); line-height:1.65; }
+  .verdict .txt strong { color:var(--or); }
+
+  section { margin-bottom:56px; }
+  .section-titre2 { font-family:var(--serif); font-size:24px; margin: 0 0 8px; color:var(--texte); }
+  .section-desc { color:var(--texte-att); font-size:13.5px; max-width:760px; line-height:1.6; margin:0 0 22px; }
+
+  /* ── Flux principal (étapes) ── */
+  .flux { display:flex; flex-direction:column; gap:0; }
+  .etape { display:grid; grid-template-columns: 64px 1fr; gap:22px; position: relative; padding-bottom: 40px; }
+  .etape:last-child { padding-bottom: 0; }
+  .etape-rail { display:flex; flex-direction:column; align-items:center; }
+  .etape-num { width:46px; height:46px; border-radius:50%; background: var(--fond-carte2); border:2px solid var(--or); display:flex; align-items:center; justify-content:center; font-family: var(--serif); font-size:19px; color: var(--or); flex-shrink:0; }
+  .etape-ligne { width:2px; flex:1; background: var(--bordure); margin-top:8px; min-height: 30px; }
+  .etape:last-child .etape-ligne { display:none; }
+  .etape-corps { background: linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%); border:1px solid var(--bordure); border-radius:16px; padding:22px 26px; }
+  .etape-tag { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--texte-att); font-weight:700; margin-bottom:6px; }
+  .etape-titre { font-family: var(--serif); font-size:20px; color:var(--texte); margin-bottom:10px; }
+  .etape-desc { font-size:13.5px; color:var(--texte-att); line-height:1.65; max-width: 720px; }
+  .etape-code { margin-top:12px; background: rgba(0,0,0,0.28); border:1px solid var(--bordure); border-radius:10px; padding:12px 14px; font-family: var(--mono); font-size:11.5px; color: var(--or-clair); overflow-x:auto; white-space:pre; line-height:1.6; }
+  .acteurs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .acteur { font-size:11.5px; padding:5px 12px; border-radius:20px; border:1px solid; display:flex; align-items:center; gap:6px; }
+  .acteur.app     { color:var(--or);     border-color: rgba(240,184,75,0.4);  background: rgba(240,184,75,0.1); }
+  .acteur.parent  { color:var(--rose);   border-color: rgba(244,114,182,0.35);background: rgba(244,114,182,0.08); }
+  .acteur.systeme { color:var(--cyan);   border-color: rgba(45,212,232,0.35); background: rgba(45,212,232,0.08); }
+  .acteur.admin   { color:var(--violet); border-color: rgba(167,139,250,0.35);background: rgba(167,139,250,0.08); }
+  .mini-note { margin-top:14px; font-size:12px; color:var(--rose); background: rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.25); padding:8px 12px; border-radius:10px; display:flex; gap:8px; align-items:flex-start; }
+  .mini-note.ok { color:var(--vert); background:rgba(52,211,153,0.08); border-color:rgba(52,211,153,0.25); }
+
+  /* ── Comparatif ── */
+  .comparatif { display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+  .colonne { border-radius:16px; padding:22px 24px; border:1px solid var(--bordure); }
+  .colonne.stocke { background: rgba(167,139,250,0.05); border-color: rgba(167,139,250,0.25); }
+  .colonne.reel   { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.25); }
+  .colonne-entete { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px; }
+  .colonne.stocke .colonne-entete { color: var(--violet); }
+  .colonne.reel .colonne-entete { color: var(--vert); }
+  .colonne ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:9px; }
+  .colonne li { font-size:13px; color:var(--texte-att); line-height:1.55; }
+  .colonne code { color: var(--or-clair); background: rgba(0,0,0,0.25); padding:1px 6px; border-radius:5px; font-family: var(--mono); font-size:12px; }
+
+  /* ── Data flow / table colonnes ── */
+  .dataflow { background: var(--fond-carte); border:1px solid var(--bordure); border-radius:16px; padding: 10px 28px; }
+  .df-row { display:flex; align-items:flex-start; gap:16px; font-size:13px; padding: 14px 0; border-bottom: 1px dashed var(--bordure); }
+  .df-row:last-child { border-bottom:none; }
+  .df-tbl { font-family: var(--mono); color:var(--or-clair); background: rgba(0,0,0,0.25); padding:4px 10px; border-radius:7px; font-size:12px; white-space:nowrap; flex-shrink:0; min-width:150px; }
+  .df-desc { color: var(--texte-att); flex:1; line-height:1.55; }
+  .df-desc strong { color: var(--texte); }
+
+  /* ── Endpoints table ── */
+  .table-wrap { overflow-x:auto; border-radius:14px; border:1px solid var(--bordure); }
+  table { width:100%; border-collapse:collapse; font-size:13px; min-width:680px; }
+  thead th { text-align:left; padding:12px 16px; background:var(--fond-carte2); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--texte-att); border-bottom:1px solid var(--bordure); }
+  tbody td { padding:12px 16px; border-bottom:1px solid var(--bordure); vertical-align:top; color:var(--texte-att); }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background: rgba(240,184,75,0.04); }
+  .route { font-family:var(--mono); color:var(--or-clair); font-size:12px; white-space:nowrap; }
+  .route .methode { color:var(--vert); font-weight:700; }
+
+  /* ── Checklist pièges ── */
+  .check-grille { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .check-item { display:flex; align-items:flex-start; gap:12px; border-radius:14px; padding:16px 18px; border:1px solid var(--bordure); }
+  .check-item.non { background: rgba(248,113,113,0.05); border-color: rgba(248,113,113,0.25); }
+  .check-item.oui { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.25); }
+  .check-ic { font-size:17px; flex-shrink:0; margin-top:1px; }
+  .check-item.non .check-ic { color:var(--rouge); }
+  .check-item.oui .check-ic { color:var(--vert); }
+  .check-txt-titre { font-size:13.5px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .check-txt-desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  /* ── Portage vers dash ── */
+  .portage-grille { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .portage-carte { background: var(--fond-carte); border:1px solid var(--bordure); border-radius:14px; padding:16px 18px; }
+  .portage-carte .depuis { font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--or); font-weight:700; margin-bottom:4px; }
+  .portage-carte .vers { font-size:13px; color:var(--texte); font-weight:600; margin-bottom:6px; }
+  .portage-carte p { margin:0; font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+  .portage-carte.manquant { border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.04); }
+  .portage-carte.manquant .depuis { color: var(--rouge); }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    .etape { grid-template-columns: 46px 1fr; gap:14px; }
+    .comparatif, .check-grille, .portage-grille { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">bet-elearning · Référence technique — à porter ailleurs</span>
+    <h1>Accès <em>Apprenant ↔ Parent</em> — schéma complet</h1>
+    <p class="sous-titre">
+      Comment un apprenant se connecte, comment son dashboard s'adapte selon son profil
+      (enfant / adolescent / adulte), comment un parent est créé, se connecte et retrouve
+      ses enfants. Document de référence pour porter ce système ailleurs — chaque étape cite
+      le fichier et les lignes exactes.
+    </p>
+    <div class="meta-chips">
+      <span class="chip">bet-elearning + Backend</span>
+      <span class="chip">Lecture seule — aucun code modifié</span>
+      <span class="chip">8 étapes · 2 comptes Auth · 1 divergence clé</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <span class="ic">🔑</span>
+    <span class="txt">
+      Point le plus important à retenir avant de porter ce système ailleurs :
+      <strong>le profil affiché (enfant/ado/adulte) n'est jamais lu depuis la colonne stockée
+      <code>profil_type</code></strong> — il est recalculé côté client à chaque chargement à
+      partir de <code>date_naissance</code>. Le champ stocké ne sert qu'au backend, pour un calcul
+      différent (détecter qu'un parent se connecte avec son propre email faute d'email enfant).
+      Reproduire ce système ailleurs oblige à choisir explicitement lequel des deux mécanismes
+      on réplique.
+    </span>
+  </div>
+
+  <!-- ── FLUX PRINCIPAL ── -->
+  <section>
+    <h2 class="section-titre2">Le flux, de bout en bout</h2>
+    <p class="section-desc">Huit étapes, de l'inscription à l'affichage du dashboard parent avec plusieurs enfants.</p>
+    <div class="flux">
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">1</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Inscription</div>
+          <div class="etape-titre">La ligne apprenant est créée avec tout le contexte parent</div>
+          <div class="etape-desc">
+            À l'assignation de classe (<code>PATCH /api/inscriptions-elearning/:id/assigner</code>,
+            <code>Backend/src/routes/inscriptionsElearning.js:508-524</code>), une ligne complète est
+            insérée dans <code>classes_elearning_apprenants</code> : identité de l'apprenant
+            (<code>nom_complet</code>, <code>email</code>, <code>date_naissance</code>), niveau CECR,
+            et coordonnées parent (<code>nom_parent</code>, <code>email_parent</code>,
+            <code>telephone_parent</code>) + <code>profil_type</code>.
+          </div>
+          <div class="acteurs"><span class="acteur admin">Onboarding</span><span class="acteur systeme">classes_elearning_apprenants</span></div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">2</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Connexion apprenant</div>
+          <div class="etape-titre">Auth Supabase directe, puis vérification d'éligibilité</div>
+          <div class="etape-desc">
+            <code>LoginApprenant.jsx</code> délègue tout à <code>AuthContext.seConnecter()</code>
+            (<code>bet-elearning/src/contexts/AuthContext.jsx:277-363</code>) :
+            <code>supabase.auth.signInWithPassword()</code> puis appel à
+            <code>GET /api/apprenants/check-eligibilite</code> avec le token. Le rôle stocké
+            (<code>bet_profil_mock.role</code>) vient uniquement de <code>app_metadata.role</code>
+            du JWT Supabase — jamais du flag <code>estParent</code> renvoyé par cet endpoint.
+          </div>
+          <div class="etape-code">const roleJWT = appMeta.role || userMeta.role;
+const estParent = roleJWT === 'parent';
+// check.estParent (renvoyé par le backend) n'est PAS lu ici
+role: estParent ? 'parent' : 'apprenant'</div>
+          <div class="acteurs"><span class="acteur app">Apprenant</span><span class="acteur systeme">check-eligibilite</span></div>
+          <div class="mini-note">Un enfant sans email propre (connecté avec l'email de son parent) reste traité comme "apprenant" ici — le cas n'est géré que dans le chemin parent par téléphone (étape 6).</div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">3</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Dashboard apprenant</div>
+          <div class="etape-titre">L'UI se recalcule depuis la date de naissance, pas depuis profil_type</div>
+          <div class="etape-desc">
+            <code>DashboardApprenant.jsx:888-908</code> relit la ligne
+            <code>classes_elearning_apprenants</code> puis calcule
+            <code>tranche_age = calcTranche(date_naissance)</code>
+            (<code>utils/trancheAge.js</code> : ≤12 → enfant, ≤17 → adolescent, sinon adulte).
+            Le hook <code>useAgeInterface(apprenant)</code> (<code>hooks/useAgeInterface.js</code>,
+            appelé ligne 988) dérive ensuite couleurs, wording et visibilité de blocs entiers
+            (voir tableau ci-dessous).
+          </div>
+          <div class="acteurs"><span class="acteur app">Apprenant</span><span class="acteur systeme">calcTranche · useAgeInterface</span></div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">4</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Création de l'accès parent</div>
+          <div class="etape-titre">100% manuelle, déclenchée par l'onboarding — jamais par le parent</div>
+          <div class="etape-desc">
+            <code>POST /api/apprenants/creer-acces-parent</code>
+            (<code>Backend/src/routes/apprenants.js:687-805</code>, <code>authenticateAdmin</code>) :
+            crée un compte Supabase Auth séparé avec
+            <code>app_metadata.role = "parent"</code>, upsert la ligne <code>utilisateurs</code>
+            correspondante, puis lie systématiquement <code>email_parent</code> sur la ligne
+            <code>classes_elearning_apprenants</code> de l'enfant. Aucun email/SMS de bienvenue
+            n'est envoyé automatiquement à cette étape (contrairement à la création d'accès apprenant).
+          </div>
+          <div class="acteurs"><span class="acteur admin">Onboarding</span><span class="acteur systeme">Supabase Auth · utilisateurs</span></div>
+          <div class="mini-note">Aucun endpoint "demande d'accès parent" n'existe côté parent — pas d'auto-inscription possible.</div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">5</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Connexion parent — par email</div>
+          <div class="etape-titre">Même chemin que l'apprenant, rôle porté par le JWT</div>
+          <div class="etape-desc">
+            <code>LoginParent.jsx</code> en mode email appelle le même
+            <code>seConnecter()</code> que l'apprenant. C'est uniquement parce que
+            <code>app_metadata.role = "parent"</code> a été posé à l'étape 4 que
+            <code>roleJWT === 'parent'</code> et que la redirection finit sur
+            <code>/parent/dashboard</code> (<code>ROLE_REDIRECT.parent</code>,
+            <code>constants/roles.js:74</code>).
+          </div>
+          <div class="acteurs"><span class="acteur parent">Parent</span><span class="acteur systeme">seConnecter()</span></div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">6</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Connexion parent — par téléphone</div>
+          <div class="etape-titre">Résolution du numéro vers un email, puis connexion forcée "parent"</div>
+          <div class="etape-desc">
+            <code>LoginParent.jsx</code> en mode téléphone appelle
+            <code>POST /api/apprenants/resolve-phone-parent</code>
+            (<code>apprenants.js:46-83</code>) : normalise le numéro, cherche une correspondance
+            dans <code>classes_elearning_apprenants.telephone_parent</code> (comparaison en
+            mémoire côté Node, pas de filtre SQL), renvoie <code>email_parent || email</code>.
+            La connexion utilise ensuite <code>seConnecterParent()</code> — qui force
+            <code>role: 'parent'</code> directement, sans repasser par
+            <code>check-eligibilite</code>.
+          </div>
+          <div class="acteurs"><span class="acteur parent">Parent</span><span class="acteur systeme">resolve-phone-parent</span></div>
+          <div class="mini-note ok">C'est le seul chemin où le cas "enfant sans email propre" est traité correctement de bout en bout.</div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">7</div><div class="etape-ligne"></div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">2FA</div>
+          <div class="etape-titre">Simulé, pas une vraie sécurité</div>
+          <div class="etape-desc">
+            <code>LoginParent.jsx</code> propose une étape 2FA, mais
+            <code>AuthContext.valider2FA()</code> compare simplement à un code fixe en dur
+            (<code>123456</code>). Le flux Manager BET, lui, utilise
+            <code>supabase.auth.mfa</code> réel — ce n'est pas le cas ici.
+          </div>
+          <div class="acteurs"><span class="acteur parent">Parent</span></div>
+          <div class="mini-note">À ne pas reproduire tel quel si le portage doit être en production.</div>
+        </div>
+      </div>
+
+      <div class="etape">
+        <div class="etape-rail"><div class="etape-num">8</div></div>
+        <div class="etape-corps">
+          <div class="etape-tag">Dashboard parent</div>
+          <div class="etape-titre">Résolution des enfants en direct via Supabase, pas via une API dédiée</div>
+          <div class="etape-desc">
+            <code>DashboardParent.jsx:90-145</code> interroge directement
+            <code>supabase.from('classes_elearning_apprenants').eq('email_parent', profile.email)</code>
+            — c'est la seule clé de jointure parent→enfants, il n'y a pas de colonne
+            <code>parent_id</code>. Le sélecteur multi-enfants (lignes 55-56, 332-344) n'apparaît
+            que si plusieurs lignes remontent ; changer d'enfant actif recharge présences,
+            résultats, devoirs, séances et contenus pour cet enfant précis.
+          </div>
+          <div class="acteurs"><span class="acteur parent">Parent</span><span class="acteur systeme">Supabase direct (RLS)</span></div>
+          <div class="mini-note">Cette requête passe par le client Supabase, donc par les règles RLS — non auditées dans cette investigation.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── CE QUI PILOTE L'ADAPTATION PAR PROFIL ── -->
+  <section>
+    <h2 class="section-titre2">Ce qui change réellement selon le profil</h2>
+    <p class="section-desc"><code>useAgeInterface(apprenant)</code> dérive trois booléens (<code>estEnfant</code>, <code>estAdolescent</code>, <code>estAdulte</code>) qui pilotent :</p>
+    <div class="dataflow">
+      <div class="df-row"><span class="df-tbl">Wording &amp; emoji</span><span class="df-desc"><strong>Ligne 1348, 1384, 1404 :</strong> "🚀 Rejoindre !" vs "Rejoindre", "📚 Mes cours" vs "📖 Mes cours", "🌟 Mes badges" vs "🏅 Mes badges".</span></div>
+      <div class="df-row"><span class="df-tbl">Rapport mensuel</span><span class="df-desc"><strong>Ligne 2042-2043 :</strong> bloc "bulletin scolaire" affiché uniquement si <code>!estAdulte</code> — invisible pour les adultes.</span></div>
+      <div class="df-row"><span class="df-tbl">Mini-jeux</span><span class="df-desc"><strong>Ligne 2352-2363 :</strong> chaque jeu déclare ses profils autorisés (<code>anagramme</code> → enfant/ado, <code>cecr</code>/<code>dictee</code> → adulte uniquement).</span></div>
+      <div class="df-row"><span class="df-tbl">En-tête d'espace</span><span class="df-desc"><strong>Ligne 2373-2385 :</strong> "🧒 Espace Enfants" / "🧑 Espace Adolescents" / "👔 Espace Adultes" — couleurs et libellés dédiés par tranche.</span></div>
+      <div class="df-row"><span class="df-tbl">Cartes à venir</span><span class="df-desc"><strong>Ligne 2456-2457 :</strong> les cartes "Bientôt disponible" ne s'affichent que pour <code>tranche === 'enfant'</code>.</span></div>
+      <div class="df-row"><span class="df-tbl">Mascotte &amp; gamification</span><span class="df-desc"><code>afficherMascotte = estEnfant</code>, <code>afficherGamification = estEnfant || estAdolescent</code> — deux flags exposés par le hook pour le reste du composant.</span></div>
+      <div class="df-row"><span class="df-tbl">Menu de navigation</span><span class="df-desc"><code>menuRole</code> (<code>apprenant_enfant</code> / <code>apprenant_adolescent</code> / <code>apprenant_adulte</code>) transmis au layout pour adapter le menu latéral.</span></div>
+    </div>
+  </section>
+
+  <!-- ── STOCKÉ VS RÉEL ── -->
+  <section>
+    <h2 class="section-titre2">Stocké en base vs réellement utilisé</h2>
+    <p class="section-desc">Le champ <code>profil_type</code> existe, est renseigné à l'inscription, mais son usage réel est plus étroit qu'on ne l'attendrait.</p>
+    <div class="comparatif">
+      <div class="colonne stocke">
+        <div class="colonne-entete">📦 Stocké — <code>profil_type</code></div>
+        <ul>
+          <li>Colonne <code>classes_elearning_apprenants.profil_type</code> — valeurs <code>enfant</code> / <code>adolescent</code> / <code>adulte</code> (défaut <code>adulte</code>).</li>
+          <li>Renseignée à l'inscription, propagée à l'assignation de classe.</li>
+          <li>Lue <strong>uniquement</strong> côté backend, dans <code>check-eligibilite</code>, pour calculer <code>estParent</code>.</li>
+          <li><strong>Jamais lue</strong> par <code>DashboardApprenant.jsx</code> (0 occurrence confirmée).</li>
+        </ul>
+      </div>
+      <div class="colonne reel">
+        <div class="colonne-entete">⚙️ Réellement utilisé — <code>date_naissance</code></div>
+        <ul>
+          <li><code>calcTranche(date_naissance)</code> recalculée côté client à chaque chargement (dashboard ET <code>AuthContext.chargerProfil()</code>).</li>
+          <li>≤ 12 ans → <code>enfant</code>, ≤ 17 ans → <code>adolescent</code>, sinon → <code>adulte</code>.</li>
+          <li>Pilote tout ce qui est listé dans le tableau ci-dessus (wording, blocs, mini-jeux, menu).</li>
+          <li>Si <code>date_naissance</code> est absente ou invalide → repli silencieux sur <code>adulte</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── COLONNES CLÉS ── -->
+  <section>
+    <h2 class="section-titre2">Colonnes clés de <code style="font-family:var(--mono);background:rgba(0,0,0,0.25);padding:2px 8px;border-radius:6px;">classes_elearning_apprenants</code></h2>
+    <div class="dataflow">
+      <div class="df-row"><span class="df-tbl">apprenant_id</span><span class="df-desc">FK vers <code>utilisateurs</code> — compte réel de l'apprenant, clé de lecture du dashboard.</span></div>
+      <div class="df-row"><span class="df-tbl">email</span><span class="df-desc">Email de connexion de l'apprenant — peut être virtuel (<code>tel.xxx@betacademy.app</code>) si pas d'email réel.</span></div>
+      <div class="df-row"><span class="df-tbl">date_naissance</span><span class="df-desc"><strong>Pilote l'adaptation UI</strong> via <code>calcTranche()</code> — pas <code>profil_type</code>.</span></div>
+      <div class="df-row"><span class="df-tbl">nom_complet</span><span class="df-desc">Pas de colonnes séparées prénom/nom — le split se fait côté frontend par <code>.split(' ')</code>.</span></div>
+      <div class="df-row"><span class="df-tbl">profil_type</span><span class="df-desc">Stocké mais lu uniquement côté backend (<code>check-eligibilite</code>) pour le calcul <code>estParent</code>.</span></div>
+      <div class="df-row"><span class="df-tbl">email_parent</span><span class="df-desc"><strong>Clé de jointure parent→enfants</strong> — utilisée par <code>DashboardParent.jsx</code>, <code>resolve-phone-parent</code>, <code>creer-acces-parent</code>. Aucune colonne <code>parent_id</code> rigide.</span></div>
+      <div class="df-row"><span class="df-tbl">telephone_parent</span><span class="df-desc">Clé de résolution dans <code>resolve-phone-parent</code> (comparaison en mémoire, pas de filtre SQL indexé).</span></div>
+      <div class="df-row"><span class="df-tbl">statut</span><span class="df-desc">Filtré partout via <code>.neq('statut', 'suspendu')</code>.</span></div>
+    </div>
+  </section>
+
+  <!-- ── ENDPOINTS ── -->
+  <section>
+    <h2 class="section-titre2">Endpoints backend impliqués</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Route</th><th>Fichier</th><th>Rôle requis</th><th>Rôle dans le flux</th></tr></thead>
+        <tbody>
+          <tr><td class="route"><span class="methode">GET</span> /api/apprenants/check-eligibilite</td><td>apprenants.js:88</td><td>Token Supabase (aucun rôle admin)</td><td>Vérifie l'éligibilité apprenant + calcule <code>estParent</code> (non exploité côté front standard).</td></tr>
+          <tr><td class="route"><span class="methode">POST</span> /api/apprenants/resolve-phone-parent</td><td>apprenants.js:46</td><td>Public (token non requis)</td><td>Numéro parent → email de connexion.</td></tr>
+          <tr><td class="route"><span class="methode">POST</span> /api/apprenants/creer-acces-parent</td><td>apprenants.js:687</td><td><code>authenticateAdmin</code></td><td>Crée le compte Supabase parent + lie <code>email_parent</code>.</td></tr>
+          <tr><td class="route"><span class="methode">GET</span> /api/apprenants/acces-parent</td><td>apprenants.js:650</td><td><code>authenticateAdmin</code></td><td>Vérifie si un compte parent existe déjà pour un email.</td></tr>
+          <tr><td class="route"><span class="methode">GET</span> /api/apprenants/mon-espace</td><td>apprenants.js:808</td><td>Token Supabase</td><td>Données du dashboard apprenant.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── PIÈGES ── -->
+  <section>
+    <h2 class="section-titre2">Pièges relevés — à ne pas reproduire tel quel</h2>
+    <div class="check-grille">
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">estParent calculé mais jamais lu</div><div class="check-txt-desc">Le flag renvoyé par check-eligibilite n'est utilisé dans aucune branche de seConnecter() — un enfant sans email propre reste "apprenant" tant qu'il ne passe pas par le login parent/téléphone.</div></div></div>
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">2FA parent mocké</div><div class="check-txt-desc">Code fixe 123456 côté AuthContext.valider2FA — aucune vraie vérification, contrairement au flux Manager BET (supabase.auth.mfa réel).</div></div></div>
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">Pas d'auto-demande d'accès parent</div><div class="check-txt-desc">Seul un compte admin (onboarding) peut créer un accès parent — aucun endpoint self-service côté parent.</div></div></div>
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">Résolution des enfants sans API dédiée</div><div class="check-txt-desc">DashboardParent interroge Supabase directement (RLS) — dépendance à des règles non auditées ici, pas d'endpoint backend testable isolément.</div></div></div>
+      <div class="check-item oui"><span class="check-ic">✓</span><div><div class="check-txt-titre">Comptes Auth séparés dans le cas standard</div><div class="check-txt-desc">Parent et enfant ont chacun leur compte Supabase Auth, liés uniquement par email_parent — pas de FK rigide, facile à porter.</div></div></div>
+      <div class="check-item oui"><span class="check-ic">✓</span><div><div class="check-txt-titre">resolve-phone-parent + creer-acces-parent forment un flux complet</div><div class="check-txt-desc">Couvre correctement le cas "enfant sans email propre" de bout en bout, contrairement au chemin email standard.</div></div></div>
+    </div>
+  </section>
+
+  <!-- ── PORTAGE VERS DASH ── -->
+  <section>
+    <h2 class="section-titre2">Équivalences pour un portage vers <code style="font-family:var(--mono);background:rgba(0,0,0,0.25);padding:2px 8px;border-radius:6px;">dash</code></h2>
+    <p class="section-desc">D'après l'investigation menée côté dash : le lien parent↔apprenant classique existe déjà dans <code>assignations_parcours</code> / <code>inscriptions_enfants</code>, mais aucun mécanisme d'authentification parent n'existe encore.</p>
+    <div class="portage-grille">
+      <div class="portage-carte">
+        <div class="depuis">bet-elearning</div>
+        <div class="vers">classes_elearning_apprenants.email_parent</div>
+        <p>Équivalent dash : <code>assignations_parcours.email_parent</code> (déjà présent, même logique de jointure).</p>
+      </div>
+      <div class="portage-carte">
+        <div class="depuis">bet-elearning</div>
+        <div class="vers">calcTranche(date_naissance)</div>
+        <p>Équivalent dash : à répliquer à l'identique si on garde la même logique d'adaptation par âge — aucune fonction équivalente trouvée côté dash aujourd'hui.</p>
+      </div>
+      <div class="portage-carte manquant">
+        <div class="depuis">Manquant côté dash</div>
+        <div class="vers">seConnecterParent() / LoginParent.jsx</div>
+        <p>Aucun login parent, aucune résolution téléphone→email côté dash classique — à construire par analogie, en pointant vers <code>assignations_parcours</code>/<code>inscriptions_enfants</code> au lieu de <code>classes_elearning_apprenants</code>.</p>
+      </div>
+      <div class="portage-carte manquant">
+        <div class="depuis">Manquant côté dash</div>
+        <div class="vers">creer-acces-parent (admin)</div>
+        <p>Aucun endpoint équivalent — à créer dans un fichier backend dash dédié, sans toucher à celui de bet-elearning (tables différentes).</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Schéma technique — Accès Apprenant/Parent bet-elearning</span>
+    <span>Document interne — usage privé</span>
+  </footer>
+
+</div>
+</body>
+</html>

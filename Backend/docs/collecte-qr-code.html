@@ -1,0 +1,503 @@
+<title>Collecte par QR code</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --ground:#F7F8FB; --card:#FFFFFF; --ink:#14192E; --ink-soft:#4A5168; --muted:#6B7385;
+    --line:#E2E5EE; --deep:#1B3080; --deep-soft:#EBEEF9;
+    --gain:#0E8A6A; --gain-soft:#E4F4EE;
+    --call:#C9283A; --call-soft:#FCEBEC;
+    --code-bg:#F1F3F9;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0D1020; --card:#151A2E; --ink:#EEF1F8; --ink-soft:#BDC4D8; --muted:#8B93AC;
+      --line:#262C44; --deep:#8AA3F0; --deep-soft:#1B2144;
+      --gain:#4FD0A6; --gain-soft:#12302A;
+      --call:#F2808D; --call-soft:#341C22;
+      --code-bg:#1B2138;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0D1020; --card:#151A2E; --ink:#EEF1F8; --ink-soft:#BDC4D8; --muted:#8B93AC;
+    --line:#262C44; --deep:#8AA3F0; --deep-soft:#1B2144;
+    --gain:#4FD0A6; --gain-soft:#12302A;
+    --call:#F2808D; --call-soft:#341C22;
+    --code-bg:#1B2138;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:"Source Sans 3",system-ui,-apple-system,sans-serif;
+    font-size:16px; line-height:1.65; margin:0;
+  }
+  .wrap{max-width:860px; margin:0 auto; padding:48px 24px 96px}
+
+  h1,h2,h3{font-family:"Bricolage Grotesque","Source Sans 3",sans-serif; text-wrap:balance; margin:0}
+  h1{font-size:clamp(30px,5vw,44px); font-weight:800; line-height:1.08; letter-spacing:-.02em}
+  h2{font-size:clamp(21px,3vw,27px); font-weight:700; margin:56px 0 8px; letter-spacing:-.01em}
+  h3{font-size:17px; font-weight:700; margin:28px 0 6px}
+  p{margin:0 0 14px; max-width:68ch}
+
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--deep); font-weight:600; margin-bottom:14px;
+  }
+  .lede{font-size:18.5px; color:var(--ink-soft); max-width:62ch; margin-top:14px}
+  .rule{height:1px; background:var(--line); border:0; margin:38px 0}
+
+  code,.mono{font-family:"IBM Plex Mono",monospace; font-size:.88em}
+  p code, li code, td code{background:var(--code-bg); padding:1px 5px; border-radius:4px; color:var(--deep)}
+
+  /* Le problème en trois mesures */
+  .mesures{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:22px 0}
+  .mesure{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
+  .mesure .n{font-family:"Bricolage Grotesque",sans-serif; font-size:27px; font-weight:800; line-height:1.1}
+  .mesure .l{font-size:13px; color:var(--muted); margin-top:3px}
+
+  figure{margin:30px 0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 20px 16px}
+  figure svg{display:block; width:100%; height:auto}
+  figcaption{font-size:13px; color:var(--muted); margin-top:12px; line-height:1.55}
+
+  /* Fiches de tables */
+  .tbl{background:var(--card); border:1px solid var(--line); border-radius:11px; padding:18px 20px; margin:14px 0}
+  .tbl > .nom{font-family:"IBM Plex Mono",monospace; font-size:14.5px; font-weight:600; color:var(--deep)}
+  .tbl > .role{font-size:14px; color:var(--ink-soft); margin:6px 0 12px; max-width:64ch}
+  .cols{display:flex; flex-wrap:wrap; gap:5px}
+  .col{
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; background:var(--code-bg);
+    color:var(--ink-soft); padding:2.5px 8px; border-radius:20px; border:1px solid var(--line);
+  }
+  .col.key{background:var(--deep-soft); color:var(--deep); border-color:transparent; font-weight:600}
+  .col.win{background:var(--gain-soft); color:var(--gain); border-color:transparent; font-weight:600}
+
+  /* Arbitrages */
+  .arb{border-left:3px solid var(--line); padding:2px 0 2px 18px; margin:22px 0}
+  .arb.decide{border-left-color:var(--deep)}
+  .arb.open{border-left-color:var(--call)}
+  .arb .t{font-weight:700; font-size:15.5px; margin-bottom:4px}
+  .arb .t .tag{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    padding:2px 7px; border-radius:4px; margin-right:9px; vertical-align:2px; font-weight:600;
+  }
+  .arb.decide .tag{background:var(--deep-soft); color:var(--deep)}
+  .arb.open .tag{background:var(--call-soft); color:var(--call)}
+  .arb p{font-size:15px; color:var(--ink-soft); margin:0 0 8px}
+
+  table.grid{width:100%; border-collapse:collapse; font-size:14.5px; margin:16px 0}
+  table.grid th{
+    text-align:left; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); font-weight:600; padding:0 12px 8px 0; border-bottom:1px solid var(--line);
+  }
+  table.grid td{padding:10px 12px 10px 0; border-bottom:1px solid var(--line); vertical-align:top; color:var(--ink-soft)}
+  table.grid td:first-child{color:var(--ink); font-weight:600; white-space:nowrap}
+  .scroll{overflow-x:auto}
+
+  ul{margin:0 0 14px; padding-left:20px; max-width:66ch}
+  li{margin-bottom:7px; color:var(--ink-soft)}
+  strong{color:var(--ink)}
+  .note{font-size:14px; color:var(--muted); font-style:italic}
+</style>
+
+<div class="wrap">
+
+  <div class="eyebrow">Proposition de schéma · à valider</div>
+  <h1>Collecte par QR&nbsp;code</h1>
+  <p class="lede">
+    Remplacer Google&nbsp;Forms pour les campagnes BET, savoir enfin <em>quel support</em> amène
+    des inscriptions — et relancer les prospects collectés sur WhatsApp, comme la Newsletter
+    le fait déjà par e-mail.
+  </p>
+
+  <hr class="rule">
+
+  <h2>Ce qu'on perd aujourd'hui</h2>
+  <p>
+    Les campagnes passent par Google&nbsp;Forms, puis les réponses sont ressaisies dans
+    l'application. Deux coûts, très inégaux.
+  </p>
+  <p>
+    Le premier est visible&nbsp;: la ressaisie. Le second ne l'est pas, et c'est le plus cher —
+    <strong>le lien entre le support et l'inscription est rompu</strong>. On sait combien de
+    personnes ont répondu. On ne sait pas si c'est l'affiche d'Angré, le flyer du marché ou le
+    stand du salon qui les a fait venir. Chaque campagne suivante se décide donc à l'intuition.
+  </p>
+
+  <div class="mesures">
+    <div class="mesure">
+      <div class="n" style="color:var(--deep)">6</div>
+      <div class="l">centres, donc autant de supports locaux à distinguer</div>
+    </div>
+    <div class="mesure">
+      <div class="n" style="color:var(--deep)">73</div>
+      <div class="l">dossiers dans <span class="mono">assignations_parcours</span>, la cible de conversion</div>
+    </div>
+    <div class="mesure">
+      <div class="n" style="color:var(--call)">0</div>
+      <div class="l">campagne aujourd'hui rattachable à son support d'origine</div>
+    </div>
+  </div>
+
+  <h2>Le mécanisme</h2>
+  <p>
+    Un formulaire, <strong>plusieurs canaux de diffusion</strong>. Un QR par support imprimé —
+    affiche, flyer, kakémono — et un <strong>lien partageable</strong> par groupe WhatsApp,
+    publication ou signature d'e-mail. Tous ouvrent la même page&nbsp;; chacun signe son origine.
+  </p>
+  <p>
+    QR et lien ne sont pas deux mécanismes&nbsp;: c'est la même adresse,
+    <code>/f/rentree-2026?d=ANGR01</code>, encodée en image ou copiée telle quelle. Les compter
+    séparément aurait produit des chiffres incomparables — d'où une seule table,
+    <code>campagne_diffusions</code>, et non une table de QR à laquelle on aurait greffé les liens.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 800 330" role="img" aria-label="Trois canaux — une affiche avec QR, un flyer avec QR, un lien partagé sur WhatsApp — mènent au même formulaire. Chaque réponse conserve le code du canal, devient un dossier dans assignations_parcours, et alimente une relance WhatsApp.">
+      <defs>
+        <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="flg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#0E8A6A"/>
+        </marker>
+      </defs>
+      <g font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">
+
+        <text x="74" y="16" text-anchor="middle" font-size="9.5" opacity=".55">CANAUX</text>
+
+        <rect x="8" y="26" width="132" height="38" rx="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="74" y="42" text-anchor="middle">▪ Affiche Angré</text>
+        <text x="74" y="55" text-anchor="middle" font-size="9.5" opacity=".65">qr · d=ANGR01</text>
+
+        <rect x="8" y="100" width="132" height="38" rx="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="74" y="116" text-anchor="middle">▪ Flyer marché</text>
+        <text x="74" y="129" text-anchor="middle" font-size="9.5" opacity=".65">qr · d=FLY22</text>
+
+        <rect x="8" y="174" width="132" height="38" rx="7" fill="none" stroke="#0E8A6A" stroke-width="1.5"/>
+        <text x="74" y="190" text-anchor="middle" fill="#0E8A6A">🔗 Lien partagé</text>
+        <text x="74" y="203" text-anchor="middle" font-size="9.5" fill="#0E8A6A" opacity=".8">lien · d=WAG09</text>
+        <text x="74" y="228" text-anchor="middle" font-size="9" opacity=".55">groupe WhatsApp, story…</text>
+
+        <g stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#fl)" opacity=".7">
+          <path d="M144,45 C182,45 184,104 214,116"/>
+          <path d="M144,119 L214,119"/>
+          <path d="M144,193 C182,193 184,134 214,122"/>
+        </g>
+
+        <rect x="218" y="84" width="130" height="70" rx="8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text x="283" y="105" text-anchor="middle" font-size="11.5">Formulaire</text>
+        <text x="283" y="120" text-anchor="middle" font-size="9.5" opacity=".65">/f/rentree-2026</text>
+        <text x="283" y="140" text-anchor="middle" font-size="9" opacity=".6">15 types de champs</text>
+
+        <line x1="352" y1="119" x2="404" y2="119" stroke="currentColor" stroke-width="1.2" marker-end="url(#fl)"/>
+
+        <rect x="408" y="84" width="140" height="70" rx="8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text x="478" y="105" text-anchor="middle" font-size="11.5">Réponse</text>
+        <text x="478" y="120" text-anchor="middle" font-size="9.5" opacity=".8">+ diffusion_id</text>
+        <text x="478" y="140" text-anchor="middle" font-size="9" opacity=".6">+ consentement</text>
+
+        <line x1="552" y1="104" x2="612" y2="86" stroke="#0E8A6A" stroke-width="1.3" marker-end="url(#flg)"/>
+        <line x1="552" y1="136" x2="612" y2="160" stroke="#0E8A6A" stroke-width="1.3" marker-end="url(#flg)"/>
+
+        <rect x="616" y="52" width="176" height="52" rx="8" fill="none" stroke="#0E8A6A" stroke-width="1.7"/>
+        <text x="704" y="72" text-anchor="middle" font-size="10.5" fill="#0E8A6A">assignations_parcours</text>
+        <text x="704" y="88" text-anchor="middle" font-size="9" opacity=".65">le dossier, sans ressaisie</text>
+
+        <rect x="616" y="134" width="176" height="52" rx="8" fill="none" stroke="#0E8A6A" stroke-width="1.7"/>
+        <text x="704" y="154" text-anchor="middle" font-size="10.5" fill="#0E8A6A">campagne WhatsApp</text>
+        <text x="704" y="170" text-anchor="middle" font-size="9" opacity=".65">relance par modèle approuvé</text>
+
+        <path d="M704,192 C704,250 380,266 74,252" stroke="#0E8A6A" stroke-width="1.2" fill="none"
+              stroke-dasharray="4 4" marker-end="url(#flg)" opacity=".85"/>
+        <text x="400" y="290" text-anchor="middle" font-size="10" fill="#0E8A6A">« ce lien WhatsApp a produit 7 inscriptions et 4 relances lues »</text>
+      </g>
+    </svg>
+    <figcaption>
+      Le code du canal voyage avec la réponse jusqu'au dossier — et jusqu'à la relance. Un QR
+      imprimé et un lien partagé suivent exactement le même chemin&nbsp;: c'est ce qui permet de
+      les comparer. La flèche de retour est ce que le dispositif actuel ne peut pas tracer.
+    </figcaption>
+  </figure>
+
+  <h2>L'éditeur de formulaire</h2>
+  <p>
+    Quinze types de champs, à parité avec Google&nbsp;Forms. Deux d'entre eux n'attendent aucune
+    réponse&nbsp;: <code>section</code> et <code>information</code> structurent la page. Les traiter
+    comme des questions produirait des valeurs vides à analyser.
+  </p>
+  <div class="scroll">
+    <table class="grid">
+      <thead><tr><th>Famille</th><th>Types</th></tr></thead>
+      <tbody>
+        <tr><td>Saisie</td><td><span class="mono">texte · texte_long · nombre · date · heure</span></td></tr>
+        <tr><td>Coordonnées</td><td><span class="mono">email · telephone</span> — marquables <span class="mono">role_canonique</span></td></tr>
+        <tr><td>Choix</td><td><span class="mono">choix_unique · choix_multiple · liste · oui_non</span>, avec option « Autre » libre</td></tr>
+        <tr><td>Enquête</td><td><span class="mono">echelle</span> (1–10) · <span class="mono">note</span> (étoiles)</td></tr>
+        <tr><td>BET</td><td><span class="mono">centre</span> — alimenté depuis vos 6 centres, pas ressaisi</td></tr>
+        <tr><td>Mise en page</td><td><span class="mono">section · information</span> — sans réponse</td></tr>
+        <tr><td>Pièce jointe</td><td><span class="mono">fichier</span> — via l'envoi direct Cloudinary déjà en place</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Chaque champ porte son libellé, son texte d'aide, son caractère obligatoire, son ordre, ses
+    options, ses règles de validation et, si besoin, une image. <code>role_canonique</code> marque
+    les champs qui alimentent la conversion&nbsp;: sans lui, il faudrait analyser les libellés pour
+    deviner où se trouve le téléphone.
+  </p>
+
+  <h2>Les sept tables de collecte</h2>
+  <p class="note">
+    Les pastilles vertes marquent les colonnes qui portent la mesure&nbsp;; les bleues, les liens.
+  </p>
+
+  <div class="tbl">
+    <div class="nom">campagnes</div>
+    <div class="role">Le regroupement — « Rentrée septembre 2026 ». Un formulaire peut vivre sans campagne&nbsp;: archiver une campagne ne doit jamais emporter les réponses déjà collectées.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col">nom</span><span class="col">statut</span>
+      <span class="col">date_debut</span><span class="col">date_fin</span>
+      <span class="col key">centre_id</span><span class="col">objectif_reponses</span><span class="col">budget</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagne_formulaires</div>
+    <div class="role">La page publique, à l'adresse <code>/f/&lt;slug&gt;</code>. Le <em>slug</em> est encodé dans des QR déjà imprimés&nbsp;: il ne peut plus changer après diffusion.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">campagne_id</span><span class="col win">slug</span>
+      <span class="col">titre</span><span class="col">statut</span><span class="col">ouvre_le</span><span class="col">ferme_le</span>
+      <span class="col">message_merci</span><span class="col">message_ferme</span>
+      <span class="col key">assignee_id</span><span class="col">autoriser_doublons</span><span class="col">texte_consentement</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagne_formulaire_champs</div>
+    <div class="role">Les questions, en lignes et non en JSON&nbsp;: on veut compter les réponses par option, et une question se réordonne, se rend obligatoire, se retire. <code>role_canonique</code> désigne les champs qui alimentent la conversion.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">formulaire_id</span><span class="col">ordre</span>
+      <span class="col">libelle</span><span class="col">type</span><span class="col">obligatoire</span>
+      <span class="col">options</span><span class="col">validation</span><span class="col win">role_canonique</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagne_diffusions</div>
+    <div class="role">Le cœur de la proposition. Un canal par support&nbsp;: QR sur une affiche, lien dans un groupe WhatsApp, les deux sur un flyer. <code>format</code> distingue la forme, <code>code</code> porte la traçabilité. L'image du QR n'est pas stockée — elle se regénère depuis l'URL.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">formulaire_id</span><span class="col win">code</span>
+      <span class="col">libelle</span><span class="col win">format</span><span class="col win">support</span>
+      <span class="col">emplacement</span><span class="col key">centre_id</span><span class="col">actif</span><span class="col win">nb_visites</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagne_visites</div>
+    <div class="role">Ouvrir n'est pas répondre. C'est l'écart entre les deux qui instruit&nbsp;: un canal très ouvert mais peu converti accuse le formulaire, pas le canal. « Visite » et non « scan »&nbsp;— un lien se clique, et les deux doivent se compter pareil pour être comparables.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">diffusion_id</span><span class="col key">formulaire_id</span>
+      <span class="col">visite_le</span><span class="col">ip_hash</span><span class="col">user_agent</span><span class="col">referent</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagne_reponses</div>
+    <div class="role">Une soumission. <code>donnees</code> fige ce qui a été envoyé, tel quel&nbsp;; <code>nom</code>, <code>email</code> et <code>telephone</code> en sont extraits pour permettre le dédoublonnage et la conversion sans jamais ouvrir le JSON.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">formulaire_id</span><span class="col key win">diffusion_id</span>
+      <span class="col">nom</span><span class="col">email</span><span class="col">telephone</span>
+      <span class="col">donnees</span><span class="col">statut</span><span class="col">consentement</span>
+      <span class="col key win">assignation_id</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagne_reponse_valeurs</div>
+    <div class="role">La même réponse, éclatée en lignes, pour compter et croiser. <code>libelle_champ</code> conserve la question telle qu'elle était posée — supprimer une question ne doit pas rendre les réponses passées incompréhensibles.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">reponse_id</span><span class="col key">champ_id</span>
+      <span class="col">libelle_champ</span><span class="col">valeur_texte</span><span class="col">valeurs</span>
+      <span class="col">valeur_nombre</span><span class="col">valeur_date</span>
+    </div>
+  </div>
+
+  <h2>La relance WhatsApp</h2>
+  <p>
+    Vous avez déjà l'e-mail&nbsp;: <span class="mono">newsletter_campagnes</span> — sujet, segment de
+    destinataires, programmation, compteurs, envoi via Brevo. La partie WhatsApp reprend
+    <strong>le même vocabulaire</strong>, pour qu'un écran qui sait lire l'un sache lire l'autre.
+  </p>
+  <p>
+    Mais WhatsApp n'est pas un e-mail, et deux règles de Meta gouvernent tout le reste. Elles ne
+    sont pas négociables, et les ignorer ferait échouer la première campagne.
+  </p>
+
+  <div class="arb open">
+    <div class="t"><span class="tag">contrainte Meta</span>La fenêtre de 24 heures</div>
+    <p>
+      Passé 24h depuis le dernier message de la personne, on ne peut plus écrire librement&nbsp;:
+      seul un <strong>modèle pré-approuvé par Meta</strong> passe. Une campagne sortante tombe
+      toujours dans ce cas. D'où <code>whatsapp_modeles</code>, qui n'est pas un confort mais une
+      condition d'existence — et un délai d'approbation à prévoir avant chaque campagne.
+    </p>
+  </div>
+
+  <div class="arb open">
+    <div class="t"><span class="tag">contrainte Meta</span>Le consentement, sous peine de bannissement</div>
+    <p>
+      Écrire à un numéro qui ne l'a pas demandé fait signaler l'expéditeur, et un numéro trop
+      signalé est banni — <strong>définitivement</strong>, avec le compte WhatsApp Business de BET.
+      L'opt-in est donc tracé par numéro, avec sa date et sa provenance, et la case cochée sur le
+      formulaire en est la preuve.
+    </p>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">whatsapp_modeles</div>
+    <div class="role">Les modèles approuvés par Meta. <code>corps</code> contient des marqueurs <span class="mono">{{1}}</span> que l'envoi remplace. On n'envoie qu'avec un modèle <span class="mono">approuve</span>&nbsp;: tenter autrement échoue côté API.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col">nom</span><span class="col">langue</span>
+      <span class="col">categorie</span><span class="col">corps</span><span class="col">variables</span>
+      <span class="col win">statut</span><span class="col">motif_rejet</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">whatsapp_optin</div>
+    <div class="role">Le consentement par numéro, au format international normalisé — sans quoi le même correspondant existerait sous trois écritures. <code>reponse_id</code> garde la preuve&nbsp;: la réponse de formulaire qui portait la case cochée.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col win">telephone</span><span class="col win">consenti</span>
+      <span class="col">source</span><span class="col key">reponse_id</span>
+      <span class="col">consenti_le</span><span class="col">retire_le</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">campagnes_whatsapp</div>
+    <div class="role">Le pendant de <code>newsletter_campagnes</code>. <code>destinataires</code> garde la même forme JSON&nbsp;: tous ceux d'un formulaire, d'un canal précis, ou un segment d'apprenants.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">campagne_id</span><span class="col key">modele_id</span>
+      <span class="col">variables</span><span class="col win">destinataires</span><span class="col">statut</span>
+      <span class="col">date_programmee</span><span class="col win">nb_envoyes</span><span class="col win">nb_lus</span>
+      <span class="col">nb_echecs</span><span class="col win">nb_sans_optin</span>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <div class="nom">whatsapp_envois</div>
+    <div class="role">Une ligne par destinataire, avec un index unique par campagne et par numéro. C'est la garantie anti-doublon posée par la base&nbsp;: réexpédier à quelqu'un qui a déjà reçu le fait signaler — et le signalement se paie cher.</div>
+    <div class="cols">
+      <span class="col key">id</span><span class="col key">campagne_wa_id</span><span class="col win">telephone</span>
+      <span class="col key">reponse_id</span><span class="col win">statut</span><span class="col">message_id</span>
+      <span class="col">erreur</span><span class="col">envoye_le</span><span class="col">delivre_le</span><span class="col">lu_le</span>
+    </div>
+  </div>
+
+  <p class="note">
+    <span class="mono">nb_sans_optin</span> est compté à part des échecs&nbsp;: ce n'est pas une panne
+    technique, c'est une base sans consentement. Les confondre masquerait le vrai problème.
+  </p>
+
+  <h2>Les arbitrages</h2>
+  <p>Ce que j'ai tranché, et pourquoi. Chacun se discute.</p>
+
+  <div class="arb decide">
+    <div class="t"><span class="tag">tranché</span>Les réponses sont stockées deux fois</div>
+    <p>
+      En JSON brut <em>et</em> en lignes. Le JSON est la mémoire&nbsp;: si une question est reformulée
+      six mois plus tard, la réponse d'origine reste lisible. Les lignes sont l'analyse&nbsp;: compter
+      « combien ont choisi Anglais des affaires » sur du JSON est pénible et lent.
+    </p>
+    <p>Le coût est une écriture double à la soumission. Le bénéfice est qu'aucune des deux lectures n'est sacrifiée.</p>
+  </div>
+
+  <div class="arb decide">
+    <div class="t"><span class="tag">tranché</span>Un formulaire fermé répond quand même</div>
+    <p>
+      Un QR imprimé survit à la campagne. Quelqu'un scannera une affiche oubliée dans six mois&nbsp;;
+      lui renvoyer une erreur serait le pire accueil possible. Le formulaire affiche alors son
+      message de clôture.
+    </p>
+  </div>
+
+  <div class="arb decide">
+    <div class="t"><span class="tag">tranché</span>Pas de logique conditionnelle</div>
+    <p>
+      Ni questions qui en déclenchent d'autres, ni pages multiples, ni score calculé. Tant que le
+      besoin n'est pas avéré, chacune coûte plus à maintenir qu'elle ne rapporte — et elles sont
+      ajoutables plus tard sans rien casser.
+    </p>
+  </div>
+
+  <div class="arb decide">
+    <div class="t"><span class="tag">tranché</span>L'adresse IP n'est jamais conservée en clair</div>
+    <p>
+      Seulement son empreinte. Elle suffit à repérer un robot ou un doublon, sans garder une donnée
+      personnelle dont on n'a aucun autre usage.
+    </p>
+  </div>
+
+  <div class="arb open">
+    <div class="t"><span class="tag">à décider</span>Qui reçoit les réponses&nbsp;?</div>
+    <p>
+      Le schéma prévoit <code>assignee_id</code> sur le formulaire, mais trois règles sont possibles&nbsp;:
+      tout arrive dans une liste commune&nbsp;; ou la réponse va à la commerciale du centre choisi&nbsp;;
+      ou elle suit le centre du QR scanné. La troisième est la plus fidèle à la réalité d'une
+      affiche posée dans un centre précis.
+    </p>
+  </div>
+
+  <div class="arb open">
+    <div class="t"><span class="tag">à décider</span>La conversion est-elle automatique&nbsp;?</div>
+    <p>
+      Une réponse peut devenir un dossier d'un clic, ou automatiquement dès qu'elle porte un nom et
+      un téléphone. L'automatique supprime toute ressaisie mais fait entrer du bruit dans le
+      pipeline — un test de curiosité sur un stand devient un dossier à traiter.
+      <strong>Je recommande le clic</strong>, au moins pour les premières campagnes.
+    </p>
+  </div>
+
+  <div class="arb open">
+    <div class="t"><span class="tag">à décider</span>Quel fournisseur WhatsApp&nbsp;?</div>
+    <p>
+      <strong>Brevo</strong> est déjà en place pour l'e-mail (clé configurée, envois en production)
+      et propose WhatsApp&nbsp;: un seul compte, une seule facture, un code d'envoi presque
+      identique. L'alternative est l'API Cloud de Meta en direct — moins chère au volume, mais
+      c'est une intégration entière à écrire et à maintenir. Je recommande Brevo.
+    </p>
+  </div>
+
+  <div class="arb open">
+    <div class="t"><span class="tag">à décider</span>Où vivent ces écrans&nbsp;?</div>
+    <p>
+      Le rôle <code>marketing</code> existe (4 comptes) mais pointe aujourd'hui vers le dashboard
+      SuperAdmin. Il faut soit lui créer son espace, soit poser un onglet Campagnes chez le
+      SuperAdmin et les commerciales.
+    </p>
+  </div>
+
+  <h2>Ce que le schéma permet ensuite</h2>
+  <div class="scroll">
+    <table class="grid">
+      <thead><tr><th>Question</th><th>Ce qui y répond</th></tr></thead>
+      <tbody>
+        <tr><td>Quelle affiche convertit&nbsp;?</td><td>Vue <span class="mono">v_campagne_performance_qr</span> — scans, réponses et inscriptions par QR</td></tr>
+        <tr><td>Où placer le budget prochain&nbsp;?</td><td>Le même tableau, comparé entre supports et entre centres</td></tr>
+        <tr><td>Le formulaire décourage-t-il&nbsp;?</td><td>Écart entre scans et réponses&nbsp;: beaucoup de scans, peu d'envois</td></tr>
+        <tr><td>Combien d'inscrits vient d'une campagne&nbsp;?</td><td><span class="mono">assignation_id</span> renseigné sur les réponses</td></tr>
+        <tr><td>Qui n'a pas encore été rappelé&nbsp;?</td><td><span class="mono">statut = 'nouvelle'</span>, indexé pour cet usage</td></tr>
+        <tr><td>Le lien ou l'affiche&nbsp;?</td><td><span class="mono">format</span> sur la diffusion — QR et lien comparés sur la même échelle</td></tr>
+        <tr><td>Combien ont lu la relance&nbsp;?</td><td><span class="mono">nb_lus</span> sur la campagne WhatsApp — impossible en e-mail sans pixel</td></tr>
+        <tr><td>Combien de numéros exploitables&nbsp;?</td><td><span class="mono">whatsapp_optin</span> — et ce qu'on perd faute de consentement</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="rule">
+  <p class="note">
+    Le SQL complet et commenté est dans <span class="mono">Backend/sql/campagnes_formulaires.sql</span>.
+    Il n'a pas été exécuté&nbsp;: rien ne touche la base avant votre validation.
+  </p>
+
+</div>

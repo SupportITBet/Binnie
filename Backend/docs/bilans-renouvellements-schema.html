@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>État des lieux — Bilans &amp; Renouvellements (Onboarding)</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,4.5vw,46px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15.5px; color:var(--texte-att); max-width:680px; line-height:1.65; }
+
+  .verdict { display:flex; gap:14px; align-items:flex-start; background:linear-gradient(160deg, rgba(240,184,75,0.08), rgba(240,184,75,0.03)); border:1px solid rgba(240,184,75,0.3); border-radius:14px; padding:18px 22px; margin-bottom:48px; }
+  .verdict .ic { font-size:24px; flex-shrink:0; }
+  .verdict .txt { font-size:14px; color:var(--texte); line-height:1.65; }
+  .verdict .txt strong { color:var(--or-clair); }
+
+  /* ── Flux principal ── */
+  .flux { display:flex; flex-direction:column; gap:0; margin-bottom:60px; }
+  .etape {
+    display:grid; grid-template-columns: 64px 1fr; gap:22px;
+    position: relative; padding-bottom: 44px;
+  }
+  .etape:last-child { padding-bottom: 0; }
+  .etape-rail { display:flex; flex-direction:column; align-items:center; }
+  .etape-num {
+    width:46px; height:46px; border-radius:50%;
+    background: var(--fond-carte2); border:2px solid var(--or);
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--serif); font-size:19px; color: var(--or); flex-shrink:0;
+  }
+  .etape-ligne { width:2px; flex:1; background: linear-gradient(var(--bordure), var(--bordure)); margin-top:8px; min-height: 34px; }
+  .etape:last-child .etape-ligne { display:none; }
+
+  .etape-corps {
+    background: linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%);
+    border:1px solid var(--bordure); border-radius:16px; padding:22px 26px;
+  }
+  .etape-tag { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--texte-att); font-weight:700; margin-bottom:6px; }
+  .etape-titre { font-family: var(--serif); font-size:21px; color:var(--texte); margin-bottom:10px; }
+  .etape-desc { font-size:13.5px; color:var(--texte-att); line-height:1.65; max-width: 700px; }
+
+  .acteurs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .acteur { font-size:11.5px; padding:5px 12px; border-radius:20px; border:1px solid; display:flex; align-items:center; gap:6px; }
+  .acteur.coach   { color:var(--cyan);   border-color: rgba(45,212,232,0.35);  background: rgba(45,212,232,0.08); }
+  .acteur.pa      { color:var(--violet); border-color: rgba(167,139,250,0.35);background: rgba(167,139,250,0.08); }
+  .acteur.comm    { color:var(--rose);   border-color: rgba(244,114,182,0.35);background: rgba(244,114,182,0.08); }
+  .acteur.app     { color:var(--or);     border-color: rgba(240,184,75,0.4);  background: rgba(240,184,75,0.1); }
+  .acteur.systeme { color:var(--texte-att); border-color: var(--bordure); background: rgba(255,255,255,0.03); }
+
+  .mini-note {
+    margin-top:14px; font-size:12px; color:var(--rose);
+    background: rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.25);
+    padding:8px 12px; border-radius:10px; display:flex; gap:8px; align-items:flex-start;
+  }
+  .mini-note.ok { color:var(--vert); background:rgba(52,211,153,0.08); border-color:rgba(52,211,153,0.25); }
+
+  /* ── Checklist ── */
+  .section-titre2 { font-family:var(--serif); font-size:24px; margin: 0 0 20px; color:var(--texte); }
+  .check-grille { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom: 56px; }
+  .check-item {
+    display:flex; align-items:flex-start; gap:12px; border-radius:14px; padding:16px 18px;
+    border:1px solid var(--bordure);
+  }
+  .check-item.oui  { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.25); }
+  .check-item.non  { background: rgba(248,113,113,0.05); border-color: rgba(248,113,113,0.25); }
+  .check-ic { font-size:17px; flex-shrink:0; margin-top:1px; }
+  .check-item.oui .check-ic { color:var(--vert); }
+  .check-item.non .check-ic { color:var(--rouge); }
+  .check-txt-titre { font-size:13.5px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .check-txt-desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  /* ── Origine des champs ── */
+  .champs { display:grid; grid-template-columns: repeat(2, 1fr); gap:14px; margin-bottom: 56px; }
+  .champ-item { border-radius:14px; padding:16px 18px; border:1px solid var(--bordure); background: var(--fond-carte); }
+  .champ-nom { font-size:13.5px; font-weight:700; color:var(--or-clair); margin-bottom:6px; }
+  .champ-source { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+  .champ-source .df-tbl { margin: 0 2px; }
+
+  /* ── Data flow ── */
+  .dataflow {
+    background: var(--fond-carte); border:1px solid var(--bordure); border-radius:16px;
+    padding: 26px 28px; margin-bottom: 20px;
+  }
+  .df-row { display:flex; align-items:center; gap:14px; font-size:13px; padding: 10px 0; border-bottom: 1px dashed var(--bordure); }
+  .df-row:last-child { border-bottom:none; }
+  .df-tbl { font-family: ui-monospace, 'SF Mono', Menlo, monospace; color:var(--or-clair); background: rgba(0,0,0,0.25); padding:3px 9px; border-radius:7px; font-size:12px; white-space:nowrap; }
+  .df-arrow { color: var(--texte-att); }
+  .df-desc { color: var(--texte-att); flex:1; }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    .etape { grid-template-columns: 46px 1fr; gap:14px; }
+    .check-grille { grid-template-columns: 1fr; }
+    .champs { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET · Onboarding — Bilans &amp; Renouvellements</span>
+    <h1>Comment un apprenant arrive dans <em>Bilans &amp; Renouvellements</em>, et ce qu'il se passe après</h1>
+    <p class="sous-titre">
+      Rien n'est déclenché manuellement par le coach : le tableau se remplit automatiquement
+      quand un groupe approche de sa fin. Le coach nourrit la donnée en faisant son travail
+      habituel (présences, corrections), Onboarding valide et alerte la commerciale.
+    </p>
+  </header>
+
+  <div class="verdict">
+    <span class="ic">⚠️</span>
+    <div class="txt">
+      <strong>Réel jusqu'à la notification, manuel après.</strong> Le calcul du bilan et l'envoi
+      de l'alerte à la commerciale sont de vraies écritures en base (plus de mock). Mais côté
+      commerciale, l'alerte atterrit dans l'onglet <strong>Notifications</strong> générique — il
+      n'existe pas encore de file d'attente dédiée "renouvellements à traiter" pour elle.
+    </div>
+  </div>
+
+  <!-- ── FLUX ── -->
+  <div class="flux">
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">1</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Alimentation continue — pas une action dédiée</div>
+        <div class="etape-titre">Le coach nourrit la donnée sans le savoir</div>
+        <div class="etape-desc">
+          Deux gestes que le coach fait déjà, ailleurs dans l'app, tout au long du cycle :
+          pointer les présences à chaque séance, et corriger les évaluations en laissant
+          un commentaire. Aucun bouton "faire le bilan" n'existe côté coach.
+        </div>
+        <div class="acteurs">
+          <span class="acteur coach">👤 Coach — pointage des présences</span>
+          <span class="acteur coach">👤 Coach — correction des évaluations + commentaire</span>
+          <span class="acteur systeme">⚙️ groupes_presences / resultats_evaluations_groupes</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">2</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Déclencheur automatique</div>
+        <div class="etape-titre">Une simple date de fin de groupe fait apparaître l'apprenant</div>
+        <div class="etape-desc">
+          Dès que <span class="df-tbl">groupes.date_fin</span> est à ≤ 30 jours (ou déjà dépassée),
+          chaque apprenant encore actif dans ce groupe devient un "candidat au bilan" —
+          recalculé à chaque chargement de l'onglet, aucune action requise en amont.
+        </div>
+        <div class="acteurs">
+          <span class="acteur systeme">⚙️ GET /api/groupes/apprenants/bilans</span>
+          <span class="acteur systeme">⚙️ filtre : date_fin ≤ aujourd'hui + 30j</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">3</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Onboarding Dashboard</div>
+        <div class="etape-titre">Onboarding consulte, vérifie, décide</div>
+        <div class="etape-desc">
+          L'apprenant apparaît dans le tableau "Bilans &amp; Renouvellements" avec niveau
+          début/fin, présence, note et commentaire coach déjà agrégés. Un clic sur la ligne
+          ouvre le détail complet avant d'agir.
+        </div>
+        <div class="acteurs">
+          <span class="acteur pa">🎓 Onboarding — tableau cliquable</span>
+          <span class="acteur pa">🎓 Onboarding — modal détail</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">4</div><div class="etape-ligne"></div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Transmission</div>
+        <div class="etape-titre">Onboarding envoie l'alerte à la commerciale</div>
+        <div class="etape-desc">
+          Le bouton "📣 Envoyer l'alerte de renouvellement" résout la commerciale rattachée au
+          dossier de l'apprenant (via <span class="df-tbl">assignations_parcours</span>), lui
+          envoie une vraie notification, puis marque l'alerte comme envoyée en base — état
+          persisté, plus un simple flag local.
+        </div>
+        <div class="acteurs">
+          <span class="acteur systeme">⚙️ POST /apprenants/:id/alerte-renouvellement</span>
+          <span class="acteur systeme">⚙️ groupes_apprenants.bilan_alerte_envoyee → true</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="etape">
+      <div class="etape-rail"><div class="etape-num">5</div></div>
+      <div class="etape-corps">
+        <div class="etape-tag">Côté commerciale</div>
+        <div class="etape-titre">La commerciale reçoit… et doit agir manuellement</div>
+        <div class="etape-desc">
+          La notification arrive dans son onglet Notifications générique (🔔), avec le nom de
+          l'apprenant et le niveau suggéré pour la suite. Elle doit ensuite relancer l'apprenant
+          et créer la nouvelle inscription avec ses outils habituels — il n'y a pas encore de
+          file d'attente ou de statut de suivi dédié à cette étape.
+        </div>
+        <div class="acteurs">
+          <span class="acteur comm">🧭 Commerciale — onglet Notifications</span>
+        </div>
+        <div class="mini-note">
+          ⚠️ Pas de suite outillée : aucun onglet "Renouvellements à traiter", aucun statut
+          (contacté / relancé / renouvelé) côté commerciale pour l'instant.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── ORIGINE DES CHAMPS ── -->
+  <h2 class="section-titre2">D'où vient chaque donnée affichée dans le bilan</h2>
+  <div class="champs">
+    <div class="champ-item">
+      <div class="champ-nom">Niveau initial</div>
+      <div class="champ-source">Figé à l'inscription — <span class="df-tbl">groupes_apprenants.niveau</span>.</div>
+    </div>
+    <div class="champ-item">
+      <div class="champ-nom">Niveau final</div>
+      <div class="champ-source">Hypothèse : le niveau enseigné dans la classe suivie — <span class="df-tbl">groupes.niveau</span>. Pas de saisie manuelle.</div>
+    </div>
+    <div class="champ-item">
+      <div class="champ-nom">Taux de présence</div>
+      <div class="champ-source">Calculé sur toutes les séances pointées par le coach — <span class="df-tbl">groupes_presences</span>, filtré par apprenant.</div>
+    </div>
+    <div class="champ-item">
+      <div class="champ-nom">Note finale + commentaire</div>
+      <div class="champ-source">Dernier résultat corrigé — <span class="df-tbl">resultats_evaluations_groupes</span> (statut "corrige", trié par date).</div>
+    </div>
+    <div class="champ-item">
+      <div class="champ-nom">Renouvellement suggéré</div>
+      <div class="champ-source">Niveau CECRL suivant calculé automatiquement (B1 → B2, etc.) à partir du niveau final.</div>
+    </div>
+    <div class="champ-item">
+      <div class="champ-nom">Statut de l'alerte</div>
+      <div class="champ-source">Persisté — <span class="df-tbl">bilan_alerte_envoyee</span> / <span class="df-tbl">bilan_alerte_date</span> sur <span class="df-tbl">groupes_apprenants</span>.</div>
+    </div>
+  </div>
+
+  <!-- ── CHECKLIST ── -->
+  <h2 class="section-titre2">Ce qui est couvert, ce qui ne l'est pas</h2>
+  <div class="check-grille">
+    <div class="check-item oui">
+      <span class="check-ic">✓</span>
+      <div>
+        <div class="check-txt-titre">Calcul automatique, pas de saisie manuelle</div>
+        <div class="check-txt-desc">Le tableau se peuple tout seul dès qu'un groupe approche de sa fin — aucune action du coach requise pour "déclencher" un bilan.</div>
+      </div>
+    </div>
+    <div class="check-item oui">
+      <span class="check-ic">✓</span>
+      <div>
+        <div class="check-txt-titre">Notification réelle à la commerciale</div>
+        <div class="check-txt-desc">Vraie écriture dans <span class="df-tbl" style="font-size:11px;">notifications</span>, résolution automatique du bon destinataire via <span class="df-tbl" style="font-size:11px;">assignations_parcours</span>.</div>
+      </div>
+    </div>
+    <div class="check-item oui">
+      <span class="check-ic">✓</span>
+      <div>
+        <div class="check-txt-titre">État de l'alerte persisté</div>
+        <div class="check-txt-desc">Une fois envoyée, l'alerte reste marquée "envoyée" même après rechargement — pas un flag local perdu au refresh.</div>
+      </div>
+    </div>
+    <div class="check-item oui">
+      <span class="check-ic">✓</span>
+      <div>
+        <div class="check-txt-titre">Détail consultable avant d'agir</div>
+        <div class="check-txt-desc">Tableau cliquable + modal détail (niveaux, présence, note, commentaire coach) avant d'envoyer l'alerte.</div>
+      </div>
+    </div>
+    <div class="check-item non">
+      <span class="check-ic">✗</span>
+      <div>
+        <div class="check-txt-titre">Pas de file de suivi côté commerciale</div>
+        <div class="check-txt-desc">L'alerte arrive dans les Notifications génériques — aucun onglet dédié "Renouvellements à traiter" avec statut (contacté / relancé / renouvelé).</div>
+      </div>
+    </div>
+    <div class="check-item non">
+      <span class="check-ic">✗</span>
+      <div>
+        <div class="check-txt-titre">Niveau final non vérifiable manuellement</div>
+        <div class="check-txt-desc">Déduit du niveau du groupe — si l'apprenant n'a pas réellement validé ce niveau, rien ne le signale (pas de champ de correction côté coach).</div>
+      </div>
+    </div>
+    <div class="check-item non">
+      <span class="check-ic">✗</span>
+      <div>
+        <div class="check-txt-titre">Aucun bouclage automatique</div>
+        <div class="check-txt-desc">Si la commerciale crée effectivement la nouvelle inscription, rien ne referme ou n'archive automatiquement la ligne de bilan correspondante.</div>
+      </div>
+    </div>
+    <div class="check-item non">
+      <span class="check-ic">✗</span>
+      <div>
+        <div class="check-txt-titre">Un seul destinataire par alerte</div>
+        <div class="check-txt-desc">Seule la commerciale rattachée au dossier est notifiée — pas de double envoi PA/onboarding comme sur "signaler une absence".</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DONNÉES ── -->
+  <h2 class="section-titre2">Ce qui circule, techniquement</h2>
+  <div class="dataflow">
+    <div class="df-row"><span class="df-tbl">groupes.date_fin</span><span class="df-arrow">→</span><span class="df-desc">seuil qui fait apparaître l'apprenant dans le tableau (≤ 30 jours ou dépassée)</span></div>
+    <div class="df-row"><span class="df-tbl">groupes_presences</span><span class="df-arrow">→</span><span class="df-desc">agrégé par apprenant pour calculer le taux de présence affiché</span></div>
+    <div class="df-row"><span class="df-tbl">resultats_evaluations_groupes</span><span class="df-arrow">→</span><span class="df-desc">dernier résultat corrigé → note finale + commentaire coach</span></div>
+    <div class="df-row"><span class="df-tbl">assignations_parcours</span><span class="df-arrow">→</span><span class="df-desc">résout quelle commerciale (assistantes.utilisateur_id) doit recevoir l'alerte</span></div>
+    <div class="df-row"><span class="df-tbl">notifications</span><span class="df-arrow">→</span><span class="df-desc">message envoyé à la commerciale, avec le niveau suggéré en clair</span></div>
+    <div class="df-row"><span class="df-tbl">groupes_apprenants.bilan_alerte_envoyee</span><span class="df-arrow">→</span><span class="df-desc">bascule à true + date horodatée, empêche le renvoi accidentel de l'alerte</span></div>
+  </div>
+
+  <footer>
+    <span>BET — Onboarding · Bilans &amp; Renouvellements</span>
+    <span>Document interne — usage privé</span>
+  </footer>
+
+</div>
+</body>
+</html>

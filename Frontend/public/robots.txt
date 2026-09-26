@@ -1,0 +1,10 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Disallow: /mon-espace
+Disallow: /connexion
+Disallow: /update-password
+Disallow: /paiement/retour
+Disallow: /parcours/inscription
+Disallow: /lead-magnet/merci
+
+Sitemap: https://binniesenglish.com/sitemap.xml

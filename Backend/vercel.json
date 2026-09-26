@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/app.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/app.js"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/jobs/paiements-mensuels",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/jobs/badges-fidelite",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/jobs/newsletter-programmee",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/jobs/rappels-seances",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://binniesenglish.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://binniesenglish.com/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://binniesenglish.com/contact</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://binniesenglish.com/faq</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://binniesenglish.com/temoignages</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://binniesenglish.com/blog</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://binniesenglish.com/test-niveau</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://binniesenglish.com/bet-for-business</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://binniesenglish.com/parcours/particulier</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://binniesenglish.com/boutique</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+
+  <!-- Cours (coursesData.js) -->
+  <url><loc>https://binniesenglish.com/cours/en-ligne</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://binniesenglish.com/cours/cabinet</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://binniesenglish.com/cours/domicile</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+
+  <!-- Certifications (certificationsData.js) -->
+  <url><loc>https://binniesenglish.com/certification/toeic</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://binniesenglish.com/certification/toefl</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://binniesenglish.com/certification/ielts</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+</urlset>

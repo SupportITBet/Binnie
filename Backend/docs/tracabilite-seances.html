@@ -1,0 +1,384 @@
+<title>Traçabilité des séances</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --fond:#f5f6f8; --surface:#ffffff; --texte:#141821; --texte-doux:#4e5563; --texte-pale:#838b99;
+    --trait:#e3e6ec; --trait-fort:#c4c9d4;
+    --indigo:#3b3f9e; --indigo-bg:#eeeefb;
+    --constate:#136b52; --constate-bg:#ecf6f2;
+    --declare:#8a5a12; --declare-bg:#fdf5e8;
+    --alerte:#a8322c; --alerte-bg:#fbf0ef;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --fond:#101319; --surface:#191d26; --texte:#eef0f5; --texte-doux:#aeb5c2; --texte-pale:#838b99;
+      --trait:#262b36; --trait-fort:#3c4350;
+      --indigo:#9ba0f0; --indigo-bg:#1b1d33;
+      --constate:#6ec5a5; --constate-bg:#12241e;
+      --declare:#dfae64; --declare-bg:#2a2115;
+      --alerte:#e58b84; --alerte-bg:#2a1716;
+    }
+  }
+  :root[data-theme="dark"]{
+    --fond:#101319; --surface:#191d26; --texte:#eef0f5; --texte-doux:#aeb5c2; --texte-pale:#838b99;
+    --trait:#262b36; --trait-fort:#3c4350;
+    --indigo:#9ba0f0; --indigo-bg:#1b1d33;
+    --constate:#6ec5a5; --constate-bg:#12241e;
+    --declare:#dfae64; --declare-bg:#2a2115;
+    --alerte:#e58b84; --alerte-bg:#2a1716;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--fond); color:var(--texte);
+    font-family:"Public Sans",system-ui,-apple-system,sans-serif;
+    font-size:16px; line-height:1.68; margin:0;
+    padding:clamp(28px,5vw,64px) clamp(18px,5vw,40px) 96px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  .prose{max-width:67ch}
+
+  h1{
+    font-family:Archivo,system-ui,sans-serif; font-weight:700;
+    font-size:clamp(30px,4.4vw,44px); line-height:1.1; letter-spacing:-.025em;
+    margin:0 0 12px; text-wrap:balance;
+  }
+  h2{
+    font-family:Archivo,system-ui,sans-serif; font-weight:600;
+    font-size:clamp(20px,2.5vw,26px); line-height:1.25; letter-spacing:-.012em;
+    margin:58px 0 8px; text-wrap:balance;
+  }
+  h3{font-size:14px;font-weight:700;margin:26px 0 6px;text-transform:uppercase;letter-spacing:.07em;color:var(--texte-pale)}
+  p{margin:0 0 14px}
+  .lede{font-size:17.5px;color:var(--texte-doux);max-width:63ch}
+  .eyebrow{
+    font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--indigo);margin:0 0 14px;
+  }
+  .rule{height:1px;background:var(--trait);border:0;margin:0 0 34px}
+  code,.mono{font-family:"Roboto Mono",ui-monospace,monospace;font-size:.85em}
+  code{background:var(--indigo-bg);color:var(--indigo);padding:1px 6px;border-radius:4px}
+
+  figure{margin:28px 0 8px}
+  figure svg{display:block;width:100%;max-width:100%;height:auto}
+  figcaption{
+    font-size:13px;color:var(--texte-pale);margin-top:11px;
+    padding-left:14px;border-left:2px solid var(--trait-fort);max-width:70ch;
+  }
+
+  .tbl-scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;margin:18px 0}
+  th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--trait);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--texte-pale);font-weight:700}
+  td:first-child{white-space:nowrap}
+
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap}
+  .t-ok{background:var(--constate-bg);color:var(--constate)}
+  .t-warn{background:var(--declare-bg);color:var(--declare)}
+  .t-bad{background:var(--alerte-bg);color:var(--alerte)}
+
+  .callout{
+    background:var(--surface);border:1px solid var(--trait);border-left:3px solid var(--indigo);
+    border-radius:0 10px 10px 0;padding:17px 21px;margin:24px 0;
+  }
+  .callout.ok{border-left-color:var(--constate)}
+  .callout.risque{border-left-color:var(--alerte)}
+  .callout h3{margin:0 0 7px;text-transform:none;font-size:15px;letter-spacing:0;color:var(--texte)}
+  .callout p:last-child{margin-bottom:0}
+
+  .cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));margin:22px 0 6px}
+  .card{background:var(--surface);border:1px solid var(--trait);border-radius:12px;padding:18px 20px}
+  .card.reco{border-color:var(--constate);box-shadow:0 0 0 1px var(--constate) inset}
+  .card h3{margin:0 0 3px;font-size:15.5px;text-transform:none;letter-spacing:0;color:var(--texte)}
+  .card .sub{font-size:12px;color:var(--texte-pale);margin:0 0 12px}
+  .card ul{margin:0;padding-left:18px;font-size:14px;color:var(--texte-doux)}
+  .card li{margin-bottom:6px}
+  .card li::marker{color:var(--trait-fort)}
+
+  ol.q{counter-reset:q;list-style:none;padding:0;margin:20px 0 0;max-width:68ch}
+  ol.q li{counter-increment:q;position:relative;padding-left:42px;margin-bottom:17px}
+  ol.q li::before{
+    content:counter(q);position:absolute;left:0;top:2px;
+    width:27px;height:27px;border-radius:50%;
+    background:var(--indigo);color:var(--fond);
+    font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Analyse — plateforme BET</p>
+  <h1>Traçabilité des séances</h1>
+  <p class="lede prose">
+    La salle de classe affiche un chronomètre au coach. À la fermeture de sa fenêtre, ce
+    temps disparaissait — personne ne pouvait dire après coup combien de temps un cours avait
+    duré. Le relevé est désormais conservé, mais il reste <strong>déclaratif</strong>. Voici
+    l'écart entre ce qu'un coach déclare et ce qui s'est réellement passé, et ce qu'il
+    faudrait pour le combler.
+  </p>
+  <hr class="rule">
+
+  <h2>1. Ce qui a été corrigé, et ce qui demeure</h2>
+  <p class="prose">
+    Le chronomètre tournait bien, mais la clôture n'envoyait que
+    <code>statut: "terminee"</code> : le temps repartait avec la fenêtre. Trois colonnes le
+    conservent maintenant — <span class="mono">demarree_at</span>,
+    <span class="mono">terminee_at</span>, <span class="mono">duree_reelle_s</span> — et la
+    route de planning les remonte au PA, à la commerciale, à l'onboarding et au superviseur.
+  </p>
+  <p class="prose">
+    <strong>Mais un chronomètre mesure une fenêtre, pas un cours.</strong> Rien ne prouve que
+    le coach a ouvert sa visio, ni qu'un apprenant l'a rejoint. C'est là que se situe la
+    question de conformité.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 880 290" role="img" aria-label="Deux sources d'information coexistent. Le déclaratif vient du coach : il ouvre la salle BET, un chronomètre tourne, il clôture. Le constaté vient de la plateforme de visioconférence : heure réelle d'ouverture, participants entrés et sortis, durée effective. L'écart entre les deux est le signal à surveiller.">
+      <defs>
+        <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="24" font-size="11" font-weight="700" letter-spacing="1.3" fill="#8a5a12">DÉCLARÉ — ce que le coach fait dans BET</text>
+
+      <rect x="20" y="40" width="150" height="52" rx="10" fill="#fdf5e8" stroke="#8a5a12" stroke-width="1.5"/>
+      <text x="95" y="62" text-anchor="middle" font-size="12.5" font-weight="700" fill="#8a5a12">Ouvre la salle</text>
+      <text x="95" y="80" text-anchor="middle" font-size="10.5" fill="#8a5a12" opacity=".8">chrono démarre</text>
+
+      <line x1="170" y1="66" x2="212" y2="66" stroke="#8a5a12" stroke-width="1.5" marker-end="url(#fa)" color="#8a5a12"/>
+
+      <rect x="220" y="40" width="150" height="52" rx="10" fill="#fdf5e8" stroke="#8a5a12" stroke-width="1.5"/>
+      <text x="295" y="62" text-anchor="middle" font-size="12.5" font-weight="700" fill="#8a5a12">Saisit présences</text>
+      <text x="295" y="80" text-anchor="middle" font-size="10.5" fill="#8a5a12" opacity=".8">à la main</text>
+
+      <line x1="370" y1="66" x2="412" y2="66" stroke="#8a5a12" stroke-width="1.5" marker-end="url(#fa)" color="#8a5a12"/>
+
+      <rect x="420" y="40" width="150" height="52" rx="10" fill="#fdf5e8" stroke="#8a5a12" stroke-width="1.5"/>
+      <text x="495" y="62" text-anchor="middle" font-size="12.5" font-weight="700" fill="#8a5a12">Clôture</text>
+      <text x="495" y="80" text-anchor="middle" font-size="10.5" fill="#8a5a12" opacity=".8">durée conservée</text>
+
+      <text x="600" y="60" font-size="12" font-weight="700" fill="#8a5a12">✅ disponible</text>
+      <text x="600" y="78" font-size="11" fill="#8a5a12" opacity=".75">y compris en présentiel</text>
+
+      <line x1="20" y1="120" x2="860" y2="120" stroke="currentColor" stroke-width="1" opacity=".15"/>
+
+      <text x="20" y="150" font-size="11" font-weight="700" letter-spacing="1.3" fill="#136b52">CONSTATÉ — ce que la plateforme de visio enregistre</text>
+
+      <rect x="20" y="166" width="150" height="52" rx="10" fill="#ecf6f2" stroke="#136b52" stroke-width="1.5"/>
+      <text x="95" y="188" text-anchor="middle" font-size="12.5" font-weight="700" fill="#136b52">meeting.started</text>
+      <text x="95" y="206" text-anchor="middle" font-size="10.5" fill="#136b52" opacity=".8">heure réelle</text>
+
+      <line x1="170" y1="192" x2="212" y2="192" stroke="#136b52" stroke-width="1.5" marker-end="url(#fa)" color="#136b52"/>
+
+      <rect x="220" y="166" width="150" height="52" rx="10" fill="#ecf6f2" stroke="#136b52" stroke-width="1.5"/>
+      <text x="295" y="188" text-anchor="middle" font-size="12.5" font-weight="700" fill="#136b52">participant_joined</text>
+      <text x="295" y="206" text-anchor="middle" font-size="10.5" fill="#136b52" opacity=".8">qui, et quand</text>
+
+      <line x1="370" y1="192" x2="412" y2="192" stroke="#136b52" stroke-width="1.5" marker-end="url(#fa)" color="#136b52"/>
+
+      <rect x="420" y="166" width="150" height="52" rx="10" fill="#ecf6f2" stroke="#136b52" stroke-width="1.5"/>
+      <text x="495" y="188" text-anchor="middle" font-size="12.5" font-weight="700" fill="#136b52">meeting.ended</text>
+      <text x="495" y="206" text-anchor="middle" font-size="10.5" fill="#136b52" opacity=".8">durée effective</text>
+
+      <text x="600" y="186" font-size="12" font-weight="700" fill="#a8322c">⚠️ seulement sous compte BET</text>
+      <text x="600" y="204" font-size="11" fill="#a8322c" opacity=".8">et seulement en ligne</text>
+
+      <rect x="20" y="240" width="820" height="36" rx="9" fill="#eeeefb" stroke="#3b3f9e" stroke-width="1.4"/>
+      <text x="430" y="263" text-anchor="middle" font-size="12.5" font-weight="700" fill="#3b3f9e">L'ÉCART entre les deux est le signal : salle ouverte 60 min, réunion Zoom tenue 12 min.</text>
+    </svg>
+    <figcaption>
+      Les deux sources ne se remplacent pas. Le déclaratif est immédiat et couvre le
+      présentiel ; le constaté est une preuve, mais partielle. C'est leur confrontation qui
+      a de la valeur pour un superviseur.
+    </figcaption>
+  </figure>
+
+  <h2>2. La moitié du travail existe déjà</h2>
+  <p class="prose">
+    <span class="mono">Backend/src/routes/liveVerification.js</span> — 202 lignes, monté sur
+    <span class="mono">/api/webhooks</span>, avec la table
+    <span class="mono">sessions_live_verification</span> créée. Il traite les webhooks Zoom
+    (<span class="mono">meeting.started</span>,
+    <span class="mono">participant_joined</span>, <span class="mono">meeting.ended</span>) et
+    leur équivalent Teams, vérifie la signature HMAC, et rattache la réunion en cherchant son
+    identifiant dans le lien collé par le coach.
+  </p>
+  <p class="prose">
+    Le commentaire en tête annonce exactement l'intention : <em>« remplace la confiance
+    aveugle faite jusqu'ici au clic Clôturer par une preuve venant directement de la
+    plateforme »</em>.
+  </p>
+
+  <div class="callout risque">
+    <h3>Pourquoi rien n'arrive</h3>
+    <p>
+      Trois secrets manquent — <span class="mono">ZOOM_WEBHOOK_SECRET</span>,
+      <span class="mono">TEAMS_CLIENT_ID</span>, <span class="mono">TEAMS_CLIENT_STATE</span> —
+      et la table est à <strong>0 ligne</strong>. Aucun webhook n'est jamais parvenu.
+    </p>
+  </div>
+
+  <h2>3. L'obstacle est organisationnel, pas technique</h2>
+  <p class="prose">
+    Le fichier le dit lui-même : cela ne fonctionne que pour les réunions créées
+    <strong>sous le compte BET</strong>. Un coach qui utilise son Zoom personnel reste
+    invisible — l'API n'a aucune visibilité hors du compte propriétaire. Or aujourd'hui, le
+    coach <em>colle un lien</em>.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 880 300" role="img" aria-label="Trois options selon qui possède la réunion. Option A : chaque coach utilise son propre compte, aucune traçabilité possible. Option B : un compte BET partagé dont les coachs collent le lien, traçabilité partielle car elle dépend de leur discipline. Option C : BET crée la réunion par API, le lien est généré et non collé, la traçabilité est complète.">
+      <defs>
+        <marker id="fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="22" font-size="11.5" font-weight="700" letter-spacing="1" fill="#a8322c">A · CHAQUE COACH SON COMPTE</text>
+      <rect x="20" y="34" width="130" height="42" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="85" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Zoom perso</text>
+      <line x1="150" y1="55" x2="196" y2="55" stroke="#a8322c" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#fb)" color="#a8322c"/>
+      <rect x="204" y="34" width="150" height="42" rx="9" fill="#fbf0ef" stroke="#a8322c" stroke-width="1.5"/>
+      <text x="279" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#a8322c">Aucun webhook</text>
+      <text x="370" y="59" font-size="11.5" fill="#a8322c">BET ne voit rien — l'état actuel</text>
+
+      <line x1="20" y1="96" x2="860" y2="96" stroke="currentColor" stroke-width="1" opacity=".14"/>
+
+      <text x="20" y="126" font-size="11.5" font-weight="700" letter-spacing="1" fill="#8a5a12">B · COMPTE BET PARTAGÉ, LIEN COLLÉ</text>
+      <rect x="20" y="138" width="130" height="42" rx="9" fill="#fdf5e8" stroke="#8a5a12" stroke-width="1.5"/>
+      <text x="85" y="164" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Compte BET</text>
+      <line x1="150" y1="159" x2="196" y2="159" stroke="#8a5a12" stroke-width="1.5" marker-end="url(#fb)" color="#8a5a12"/>
+      <rect x="204" y="138" width="150" height="42" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="279" y="164" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Le coach colle</text>
+      <line x1="354" y1="159" x2="400" y2="159" stroke="#8a5a12" stroke-width="1.5" marker-end="url(#fb)" color="#8a5a12"/>
+      <rect x="408" y="138" width="150" height="42" rx="9" fill="#fdf5e8" stroke="#8a5a12" stroke-width="1.5"/>
+      <text x="483" y="164" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Webhooks reçus</text>
+      <text x="574" y="163" font-size="11.5" fill="#8a5a12">…si le coach a collé le bon lien</text>
+
+      <line x1="20" y1="200" x2="860" y2="200" stroke="currentColor" stroke-width="1" opacity=".14"/>
+
+      <text x="20" y="230" font-size="11.5" font-weight="700" letter-spacing="1" fill="#136b52">C · BET CRÉE LA RÉUNION PAR API <tspan font-weight="400" opacity=".75">— recommandé</tspan></text>
+      <rect x="20" y="242" width="130" height="42" rx="9" fill="#ecf6f2" stroke="#136b52" stroke-width="1.6"/>
+      <text x="85" y="268" text-anchor="middle" font-size="12" font-weight="700" fill="#136b52">BET génère</text>
+      <line x1="150" y1="263" x2="196" y2="263" stroke="#136b52" stroke-width="1.6" marker-end="url(#fb)" color="#136b52"/>
+      <rect x="204" y="242" width="170" height="42" rx="9" fill="#ecf6f2" stroke="#136b52" stroke-width="1.6"/>
+      <text x="289" y="268" text-anchor="middle" font-size="12" font-weight="700" fill="#136b52">Identifiant connu</text>
+      <line x1="374" y1="263" x2="420" y2="263" stroke="#136b52" stroke-width="1.6" marker-end="url(#fb)" color="#136b52"/>
+      <rect x="428" y="242" width="170" height="42" rx="9" fill="#ecf6f2" stroke="#136b52" stroke-width="1.6"/>
+      <text x="513" y="268" text-anchor="middle" font-size="12" font-weight="700" fill="#136b52">Traçabilité complète</text>
+      <text x="614" y="267" font-size="11.5" fill="#136b52">plus aucun lien tronqué</text>
+    </svg>
+    <figcaption>
+      En C, le coach ne colle plus rien : il demande une salle, BET la crée. Le problème des
+      liens incomplets — <span class="mono">zoom.us/j/</span> sans identifiant — disparaît
+      avec la saisie manuelle.
+    </figcaption>
+  </figure>
+
+  <h2>4. Le paysage des plateformes</h2>
+  <p class="prose">
+    Trois familles, et le critère décisif n'est pas la qualité vidéo : c'est
+    <strong>le mode de facturation</strong>. Avec 189 coachs, une licence par hôte devient
+    prohibitive sans rapport avec l'usage réel.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Plateforme</th><th>Création par API</th><th>Webhooks</th><th>Présence</th><th>Palier requis</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Zoom</strong></td><td>✅ excellente</td><td>✅ complets</td><td>✅ Reports API</td><td>Pro min., <strong>Business</strong> pour les rapports</td></tr>
+      <tr><td><strong>Teams</strong></td><td>✅ Graph API</td><td>✅ callRecords</td><td>✅ natif</td><td>M365 Business Standard+, consentement admin</td></tr>
+      <tr><td><strong>Google Meet</strong></td><td>⚠️ via Calendar</td><td>⚠️ limités</td><td>✅ Reports API</td><td>Workspace <strong>Business Plus</strong></td></tr>
+      <tr><td><strong>Webex</strong></td><td>✅</td><td>✅</td><td>✅</td><td>payant</td></tr>
+      <tr><td><strong>BigBlueButton</strong></td><td>✅ auto-hébergé</td><td>✅</td><td>✅ <strong>analytics pédagogiques natifs</strong></td><td>un serveur — <em>pas de licence par hôte</em></td></tr>
+      <tr><td><strong>Jitsi</strong></td><td>✅ auto-hébergé</td><td>✅</td><td>⚠️ basique</td><td>un serveur</td></tr>
+      <tr><td><strong>SDK intégrés</strong><br><span class="mono" style="font-size:11px">Daily · LiveKit · 100ms</span></td><td>✅ la salle est <em>la vôtre</em></td><td>natif</td><td>✅ total</td><td>à la minute-participant</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout ok">
+    <h3>La piste que je signale en priorité</h3>
+    <p>
+      Les <strong>SDK vidéo intégrables</strong> changent la question plutôt que d'y répondre.
+      BET a <em>déjà construit la coquille</em> : la salle de classe a son chronomètre, son
+      chat, ses mains levées, sa saisie de présences. Il n'y manque que l'image. Avec un SDK
+      intégré, le chronomètre <strong>devient</strong> la durée réelle, les entrées et sorties
+      sont connues nativement, le lien tronqué n'existe plus — et l'on paie à l'usage, non par
+      coach. La traçabilité n'est plus reconstituée après coup : elle est produite par la
+      salle elle-même.
+    </p>
+  </div>
+
+  <h2>5. Recommandation</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Si vous avez déjà M365</h3>
+      <p class="sub">Coût marginal nul</p>
+      <ul>
+        <li><strong>Teams</strong> — l'intégration est écrite</li>
+        <li>Consentement admin Azure à obtenir</li>
+        <li>Rapport de présence natif</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Si le coût prime à 189 coachs</h3>
+      <p class="sub">Un serveur, pas des licences</p>
+      <ul>
+        <li><strong>BigBlueButton</strong> auto-hébergé</li>
+        <li>Conçu pour l'enseignement</li>
+        <li>Demande une administration</li>
+      </ul>
+    </div>
+    <div class="card reco">
+      <h3>Si la conformité prime <span class="tag t-ok" style="margin-left:4px">visé</span></h3>
+      <p class="sub">La salle produit la preuve</p>
+      <ul>
+        <li><strong>SDK intégré</strong> dans la salle existante</li>
+        <li>Plus de lien à coller</li>
+        <li>Facturation à l'usage</li>
+        <li>Demande de réécrire <span class="mono">liveVerification.js</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <h3>Garder les deux mécanismes</h3>
+    <p>
+      Le chronomètre et les webhooks ne se remplacent pas. Le premier est immédiat et couvre
+      le présentiel ; le second est une preuve, mais seulement en ligne et seulement sous le
+      compte BET. Les conserver ensemble, c'est se donner l'écart — et c'est l'écart qui
+      alerte.
+    </p>
+  </div>
+
+  <h2>6. À trancher avant d'aller plus loin</h2>
+  <ol class="q">
+    <li>
+      <strong>BET dispose-t-elle déjà de Microsoft 365 ?</strong> Si oui, Teams devient
+      l'option la moins chère et la plus rapide — le code l'attend.
+    </li>
+    <li>
+      <strong>Combien de coachs animent en ligne simultanément ?</strong> C'est ce nombre, et
+      non les 189 inscrits, qui détermine le dimensionnement et le coût réel.
+    </li>
+    <li>
+      <strong>Les coachs utilisent-ils aujourd'hui leur compte personnel ?</strong> Si oui,
+      aucune option ne fonctionne sans changer d'abord cette pratique — c'est un préalable
+      d'organisation, pas de développement.
+    </li>
+  </ol>
+
+  <div class="callout">
+    <h3>Où en est le code</h3>
+    <p>
+      Le relevé déclaratif est <strong>livré</strong> : chronomètre conservé, horodatage
+      d'ouverture et de fermeture, écart affiché au-delà de cinq minutes, remontée au PA, à la
+      commerciale, à l'onboarding et au superviseur. Les webhooks sont <strong>écrits mais
+      dormants</strong> — il leur manque trois secrets et une décision sur le compte
+      propriétaire. Aucune ligne n'est à jeter quel que soit le choix retenu.
+    </p>
+  </div>
+
+</div>

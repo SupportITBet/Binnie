@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proposition — Refonte du flux de transfert d'apprenant</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,4.5vw,46px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15.5px; color:var(--texte-att); max-width:700px; line-height:1.65; }
+
+  .statut-doc { display:flex; gap:14px; align-items:flex-start; background:linear-gradient(160deg, rgba(240,184,75,0.1), rgba(240,184,75,0.03)); border:1px solid rgba(240,184,75,0.3); border-radius:14px; padding:18px 22px; margin-bottom:48px; }
+  .statut-doc .ic { font-size:24px; flex-shrink:0; }
+  .statut-doc .txt { font-size:14px; color:var(--texte); line-height:1.65; }
+  .statut-doc .txt strong { color:var(--or); }
+
+  h2.section-titre { font-family:var(--serif); font-size:26px; margin: 0 0 8px; color:var(--texte); }
+  .section-sous { font-size:13.5px; color:var(--texte-att); margin-bottom:24px; max-width:680px; line-height:1.6; }
+
+  /* ── Problèmes ── */
+  .problemes { display:flex; flex-direction:column; gap:14px; margin-bottom:60px; }
+  .probleme {
+    display:grid; grid-template-columns: 44px 1fr; gap:18px;
+    background: linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%);
+    border:1px solid rgba(248,113,113,0.3); border-radius:14px; padding:18px 22px;
+  }
+  .probleme-num { width:34px; height:34px; border-radius:50%; background:rgba(248,113,113,0.12); border:1.5px solid var(--rouge); display:flex; align-items:center; justify-content:center; font-family:var(--serif); font-size:15px; color:var(--rouge); flex-shrink:0; }
+  .probleme-titre { font-size:14.5px; font-weight:700; color:var(--texte); margin-bottom:6px; }
+  .probleme-desc { font-size:13px; color:var(--texte-att); line-height:1.6; }
+  .probleme-desc .df-tbl { font-family: ui-monospace, 'SF Mono', Menlo, monospace; color:var(--or-clair); background: rgba(0,0,0,0.25); padding:2px 7px; border-radius:6px; font-size:11.5px; }
+
+  /* ── Comparatif avant / après ── */
+  .comparatif-flux { display:grid; grid-template-columns: 1fr 44px 1fr; gap:0; align-items:stretch; margin-bottom:60px; }
+  .colonne-flux { border-radius:16px; padding:24px 26px; border:1px solid var(--bordure); }
+  .colonne-flux.avant { background: rgba(248,113,113,0.04); border-color: rgba(248,113,113,0.22); }
+  .colonne-flux.apres { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.28); }
+  .colonne-fleche { display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--texte-att); }
+  .colonne-entete2 { display:flex; align-items:center; gap:8px; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px; }
+  .colonne-flux.avant .colonne-entete2 { color: var(--rouge); }
+  .colonne-flux.apres .colonne-entete2 { color: var(--vert); }
+  .mini-etape { display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-bottom:1px dashed var(--bordure); font-size:13px; color:var(--texte-att); line-height:1.55; }
+  .mini-etape:last-child { border-bottom:none; }
+  .mini-etape .puce { flex-shrink:0; font-size:13px; margin-top:1px; }
+  .mini-etape strong { color:var(--texte); }
+
+  /* ── Rôles / acteurs proposés ── */
+  .acteurs-grille { display:grid; grid-template-columns: repeat(3,1fr); gap:16px; margin-bottom:60px; }
+  .acteur-carte { border-radius:14px; padding:20px 22px; border:1px solid var(--bordure); background:var(--fond-carte); }
+  .acteur-carte .role { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .acteur-carte.coach .role { color:var(--cyan); }
+  .acteur-carte.onb .role { color:var(--violet); }
+  .acteur-carte.pa .role { color:var(--or); }
+  .acteur-carte ul { margin:0; padding-left:16px; display:flex; flex-direction:column; gap:6px; }
+  .acteur-carte li { font-size:12.5px; color:var(--texte-att); line-height:1.5; }
+
+  /* ── Roadmap ── */
+  .roadmap { display:flex; flex-direction:column; gap:0; margin-bottom:40px; }
+  .rm-item { display:grid; grid-template-columns: 90px 1fr; gap:20px; padding:16px 0; border-bottom:1px solid var(--bordure); }
+  .rm-item:last-child { border-bottom:none; }
+  .rm-effort { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:5px 10px; border-radius:8px; text-align:center; height:fit-content; }
+  .rm-effort.petit { color:var(--vert); background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.3); }
+  .rm-effort.moyen { color:var(--or); background:rgba(240,184,75,0.1); border:1px solid rgba(240,184,75,0.3); }
+  .rm-effort.gros  { color:var(--rose); background:rgba(244,114,182,0.1); border:1px solid rgba(244,114,182,0.3); }
+  .rm-titre { font-size:14px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .rm-desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 900px) {
+    .comparatif-flux { grid-template-columns: 1fr; }
+    .colonne-fleche { transform: rotate(90deg); padding: 10px 0; }
+    .acteurs-grille { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    .rm-item { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET · Proposition — À reprendre plus tard</span>
+    <h1>Refonte du flux de <em>transfert d'apprenant</em> entre groupes</h1>
+    <p class="sous-titre">
+      Compagnon de <code>transfert-apprenant-schema.html</code> (l'état des lieux technique).
+      Ce document liste les problèmes de fond du flux actuel et propose une architecture plus
+      cohérente — pas encore implémentée, à valider avant de coder.
+    </p>
+  </header>
+
+  <div class="statut-doc">
+    <span class="ic">📌</span>
+    <div class="txt">
+      <strong>Statut : discussion, non implémenté.</strong> Deux boutons existent aujourd'hui
+      (Onboarding et Coach) qui appellent tous les deux <code style="background:rgba(0,0,0,.25);padding:2px 6px;border-radius:5px;">POST /api/groupes/transfert</code>
+      et exécutent le transfert immédiatement — malgré un vocabulaire différent selon qui clique.
+    </div>
+  </div>
+
+  <!-- ── PROBLÈMES ── -->
+  <h2 class="section-titre">Ce qui ne va pas dans le flux actuel</h2>
+  <p class="section-sous">Au-delà des manques déjà documentés dans l'état des lieux (capacité, doublons, audit log), cinq problèmes de <em>conception</em> plutôt que de simples oublis.</p>
+  <div class="problemes">
+
+    <div class="probleme">
+      <div class="probleme-num">1</div>
+      <div>
+        <div class="probleme-titre">Le bouton coach ment sur son propre comportement</div>
+        <div class="probleme-desc">
+          "🔄 Demander un transfert" + toast "Demande de transfert envoyée" — mais le transfert est
+          <strong style="color:var(--rouge)">exécuté immédiatement</strong>, sans validation d'un PA ou
+          de l'onboarding. Un coach peut aujourd'hui déplacer seul un apprenant vers un autre groupe
+          en un clic, malgré le vocabulaire qui suggère une simple demande soumise à approbation.
+        </div>
+      </div>
+    </div>
+
+    <div class="probleme">
+      <div class="probleme-num">2</div>
+      <div>
+        <div class="probleme-titre">Le champ <span class="df-tbl">initiateur</span> est déclaratif, jamais vérifié</div>
+        <div class="probleme-desc">
+          Le body envoyé au backend contient <span class="df-tbl">initiateur</span> ("apprenant" / "assistant" / "coach"),
+          choisi manuellement côté Onboarding ou codé en dur côté coach — mais rien ne le confronte à
+          <span class="df-tbl">req.role</span>, l'identité réelle de l'appelant authentifié. Le comportement des
+          notifications (étape 4 du flux) dépend entièrement de cette valeur non fiabilisée.
+        </div>
+      </div>
+    </div>
+
+    <div class="probleme">
+      <div class="probleme-num">3</div>
+      <div>
+        <div class="probleme-titre">Le coach source n'est jamais prévenu qu'il perd un apprenant</div>
+        <div class="probleme-desc">
+          Seul le <strong>nouveau</strong> coach est notifié systématiquement. Si c'est l'onboarding
+          qui initie le transfert (avec <span class="df-tbl">initiateur:"apprenant"</span> ou
+          <span class="df-tbl">"assistant"</span>), le coach qui enseignait jusque-là à cet apprenant
+          n'a aucune alerte — il découvre l'absence à la prochaine séance.
+        </div>
+      </div>
+    </div>
+
+    <div class="probleme">
+      <div class="probleme-num">4</div>
+      <div>
+        <div class="probleme-titre">Trois circuits différents pour le même objectif métier</div>
+        <div class="probleme-desc">
+          <span class="df-tbl">POST /groupes/transfert</span> (initiateur onboarding),
+          <span class="df-tbl">POST /groupes/transfert</span> (initiateur coach) et
+          <span class="df-tbl">PATCH /apprenants/:id/reactiver</span> (depuis les archives) déplacent
+          tous les trois un apprenant vers un nouveau groupe — mais avec des règles différentes :
+          statut de départ (<span class="df-tbl">periode_test</span> vs <span class="df-tbl">actif</span>),
+          permission requise ou non, notifications asymétriques.
+        </div>
+      </div>
+    </div>
+
+    <div class="probleme">
+      <div class="probleme-num">5</div>
+      <div>
+        <div class="probleme-titre">Le PA Advisor a le droit mais aucun bouton</div>
+        <div class="probleme-desc">
+          <span class="df-tbl">pedagogical_advisor</span> a <span class="df-tbl">classes:update=true</span>
+          en base — légalement il pourrait appeler la route — mais aucune UI n'existe dans
+          <span class="df-tbl">PedagogicalAdvisorDashboard.jsx</span> pour le faire. Le "Transfert" qu'on
+          y trouve concerne en réalité le remplacement définitif d'un coach sur des classes entières,
+          un mécanisme totalement différent qui porte juste le même mot.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── COMPARATIF AVANT / APRÈS ── -->
+  <h2 class="section-titre">Flux actuel vs flux proposé</h2>
+  <p class="section-sous">L'idée centrale : distinguer une <strong style="color:var(--texte)">exécution directe</strong> (par quelqu'un habilité à trancher) d'une <strong style="color:var(--texte)">demande</strong> (par quelqu'un qui signale un besoin sans avoir le dernier mot).</p>
+  <div class="comparatif-flux">
+
+    <div class="colonne-flux avant">
+      <div class="colonne-entete2">✗ Aujourd'hui</div>
+      <div class="mini-etape"><span class="puce">1️⃣</span><div>Onboarding <strong>ou</strong> coach clique sur "Transférer" / "Demander un transfert"</div></div>
+      <div class="mini-etape"><span class="puce">2️⃣</span><div>Écriture immédiate en base, quel que soit qui a cliqué</div></div>
+      <div class="mini-etape"><span class="puce">3️⃣</span><div>Notifications envoyées après coup, asymétriques selon <span class="df-tbl" style="font-size:11px;">initiateur</span> déclaré</div></div>
+      <div class="mini-etape"><span class="puce">⚠️</span><div>Le mot "demande" côté coach ne correspond à aucune étape de validation réelle</div></div>
+    </div>
+
+    <div class="colonne-fleche">→</div>
+
+    <div class="colonne-flux apres">
+      <div class="colonne-entete2">✓ Proposé</div>
+      <div class="mini-etape"><span class="puce">1️⃣</span><div><strong>Onboarding / PA Advisor</strong> → transfert exécuté <strong>directement</strong> (ce sont les rôles habilités à trancher)</div></div>
+      <div class="mini-etape"><span class="puce">1️⃣'</span><div><strong>Coach</strong> → crée une <strong>vraie demande en attente</strong> (nouvelle table ou statut), pas d'écriture sur <span class="df-tbl" style="font-size:11px;">groupes_apprenants</span> tant que non validée</div></div>
+      <div class="mini-etape"><span class="puce">2️⃣</span><div>La demande apparaît dans une file chez Onboarding/PA — accepter = exécute le même flux qu'aujourd'hui, refuser = notifie le coach avec motif</div></div>
+      <div class="mini-etape"><span class="puce">3️⃣</span><div><span class="df-tbl" style="font-size:11px;">initiateur</span> dérivé de <span class="df-tbl" style="font-size:11px;">req.role</span> côté serveur, jamais du body client</div></div>
+      <div class="mini-etape"><span class="puce">4️⃣</span><div>Coach source <strong>toujours</strong> notifié, en plus du nouveau coach</div></div>
+    </div>
+
+  </div>
+
+  <!-- ── QUI FAIT QUOI ── -->
+  <h2 class="section-titre">Qui ferait quoi, dans le flux proposé</h2>
+  <div class="acteurs-grille">
+    <div class="acteur-carte coach">
+      <div class="role">👤 Coach</div>
+      <ul>
+        <li>Peut <strong>signaler</strong> un besoin de transfert avec motif</li>
+        <li>Aucune écriture directe sur le groupe/apprenant</li>
+        <li>Notifié quand sa demande est acceptée ou refusée</li>
+      </ul>
+    </div>
+    <div class="acteur-carte onb">
+      <div class="role">🎓 Onboarding</div>
+      <ul>
+        <li>Exécute directement (comme aujourd'hui)</li>
+        <li>Voit et traite la file des demandes coach en attente</li>
+        <li>Reste le point d'entrée principal pour les demandes apprenant/parent</li>
+      </ul>
+    </div>
+    <div class="acteur-carte pa">
+      <div class="role">🧭 PA Advisor</div>
+      <ul>
+        <li>Nouveau bouton à ajouter (n'existe pas aujourd'hui malgré le droit en base)</li>
+        <li>Exécute directement, arbitre naturel en cas de litige coach/onboarding</li>
+        <li>Voit aussi la file d'attente, en visibilité partagée avec Onboarding</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── ROADMAP ── -->
+  <h2 class="section-titre">Découpage possible si on reprend ce chantier</h2>
+  <div class="roadmap">
+    <div class="rm-item">
+      <div class="rm-effort petit">Petit</div>
+      <div>
+        <div class="rm-titre">Dériver <span class="df-tbl" style="font-size:11px;">initiateur</span> de <span class="df-tbl" style="font-size:11px;">req.role</span></div>
+        <div class="rm-desc">Ne plus faire confiance au body client — calculer la valeur côté serveur à partir du rôle authentifié. Corrige le problème 2 sans toucher à l'UI.</div>
+      </div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-effort petit">Petit</div>
+      <div>
+        <div class="rm-titre">Notifier systématiquement le coach source</div>
+        <div class="rm-desc">Ajouter l'appel <span class="df-tbl" style="font-size:11px;">notifyUser</span> manquant vers l'ancien coach dans la route <span class="df-tbl" style="font-size:11px;">/api/groupes/transfert</span>. Corrige le problème 3.</div>
+      </div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-effort moyen">Moyen</div>
+      <div>
+        <div class="rm-titre">Unifier <span class="df-tbl" style="font-size:11px;">/transfert</span> et <span class="df-tbl" style="font-size:11px;">/reactiver</span></div>
+        <div class="rm-desc">Faire converger les deux routes vers la même logique (statut de départ, permission requise, notifications) — ou documenter explicitement pourquoi elles doivent rester différentes. Corrige le problème 4.</div>
+      </div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-effort moyen">Moyen</div>
+      <div>
+        <div class="rm-titre">Ajouter le bouton chez PA Advisor</div>
+        <div class="rm-desc">Réutiliser le modal Onboarding existant (recherche par niveau, motif) dans <span class="df-tbl" style="font-size:11px;">PedagogicalAdvisorDashboard.jsx</span>, gaté par <span class="df-tbl" style="font-size:11px;">peut("classes","update")</span> déjà vrai en base. Corrige le problème 5.</div>
+      </div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-effort gros">Gros</div>
+      <div>
+        <div class="rm-titre">Vraie file de demandes en attente côté coach</div>
+        <div class="rm-desc">Nouvelle table (ou statut) pour les demandes non exécutées, écran de traitement Onboarding/PA, notifications accepté/refusé avec motif. Corrige le problème 1 — c'est le changement de comportement le plus visible pour les utilisateurs, à valider avant de coder.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>BET — Proposition de refonte, non implémentée</span>
+    <span>À reprendre avec l'équipe avant tout développement</span>
+  </footer>
+
+</div>
+</body>
+</html>

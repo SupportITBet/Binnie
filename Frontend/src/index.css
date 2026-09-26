@@ -1,0 +1,50 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Échelle des boutons flottants (coin bas-droit)
+
+   Les quatre boutons - retour en haut, WhatsApp, chat prospect, panier -
+   étaient posés chacun de son côté, avec des écarts arbitraires (34, 68, 68)
+   et un `right` divergent (28 au lieu de 20). Le panier de la boutique
+   occupait 28→88 alors que le bouton « retour en haut » commence à 62 :
+   26 px de chevauchement, visibles dès le premier article ajouté.
+
+   Une seule échelle ici, et chaque bouton s'y rattache par sa variable.
+   Ajouter un cinquième bouton un jour, c'est ajouter un palier - pas
+   recalculer quatre valeurs à la main.
+
+   Le panier occupe le palier du HAUT parce qu'il n'existe que sur la
+   boutique : au palier du bas, il aurait fallu décaler les trois autres
+   sur cette seule page, et laisser un trou en bas sur toutes les autres.
+   ════════════════════════════════════════════════════════════════════════ */
+:root {
+  --flottant-droite:  20px;
+  --flottant-taille:  60px;
+  --flottant-ecart:   14px;
+
+  --flottant-p1: 20px;                                                        /* retour en haut */
+  --flottant-p2: calc(var(--flottant-p1) + var(--flottant-taille) + var(--flottant-ecart));  /* WhatsApp      */
+  --flottant-p3: calc(var(--flottant-p2) + var(--flottant-taille) + var(--flottant-ecart));  /* chat prospect */
+  --flottant-p4: calc(var(--flottant-p3) + var(--flottant-taille) + var(--flottant-ecart));  /* panier        */
+}
+
+@media (max-width: 768px) {
+  :root {
+    --flottant-droite: 15px;
+    --flottant-taille: 50px;
+    --flottant-ecart:  12px;
+    --flottant-p1:     15px;
+  }
+}

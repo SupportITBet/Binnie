@@ -1,0 +1,469 @@
+<title>Grille d'évaluation des coachs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --encre:      #101828;
+    --encre-doux: #5b6478;
+    --bleu:       #0c33ac;
+    --bleu-pale:  #eaeffb;
+    --rouge:      #c81e37;
+    --rouge-pale: #fdeced;
+    --ambre:      #9a6200;
+    --ambre-pale: #fdf4e3;
+    --vert:       #14663f;
+    --fond:       #f5f6fa;
+    --surface:    #ffffff;
+    --ligne:      #dfe3ee;
+    --ligne-fine: #edeff6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --encre:      #eef1f8;
+      --encre-doux: #a3abbe;
+      --bleu:       #93b0ff;
+      --bleu-pale:  #16224a;
+      --rouge:      #ff9aa6;
+      --rouge-pale: #3a1820;
+      --ambre:      #f3c369;
+      --ambre-pale: #34260d;
+      --vert:       #7ddcae;
+      --fond:       #0c0f18;
+      --surface:    #141824;
+      --ligne:      #2a3145;
+      --ligne-fine: #1e2434;
+    }
+  }
+  :root[data-theme="dark"] {
+    --encre:      #eef1f8;
+    --encre-doux: #a3abbe;
+    --bleu:       #93b0ff;
+    --bleu-pale:  #16224a;
+    --rouge:      #ff9aa6;
+    --rouge-pale: #3a1820;
+    --ambre:      #f3c369;
+    --ambre-pale: #34260d;
+    --vert:       #7ddcae;
+    --fond:       #0c0f18;
+    --surface:    #141824;
+    --ligne:      #2a3145;
+    --ligne-fine: #1e2434;
+  }
+
+  body {
+    background: var(--fond);
+    color: var(--encre);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+
+  h1, h2, h3, th, .eyebrow, .num, .chiffre {
+    font-family: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  }
+  h1 { font-size: 2.15rem; line-height: 1.12; font-weight: 800; letter-spacing: -.02em; margin: 0 0 10px; text-wrap: balance; }
+  h2 { font-size: 1.28rem; font-weight: 700; letter-spacing: -.01em; margin: 56px 0 14px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+  h3 { font-size: 1.02rem; font-weight: 700; margin: 30px 0 8px; }
+  p  { margin: 0 0 14px; }
+  strong { font-weight: 600; }
+
+  .num {
+    font-size: .74rem; font-weight: 800; color: var(--bleu);
+    background: var(--bleu-pale); border-radius: 4px;
+    padding: 3px 8px; letter-spacing: .04em; flex-shrink: 0;
+  }
+  .eyebrow {
+    font-size: .7rem; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--encre-doux);
+  }
+
+  header.hero { padding: 56px 0 26px; border-bottom: 3px solid var(--encre); margin-bottom: 8px; }
+  header.hero p.chapeau { font-size: 1.08rem; color: var(--encre-doux); margin: 0 0 18px; max-width: 62ch; }
+  .meta { font-family: "Libre Franklin", sans-serif; font-size: .76rem; color: var(--encre-doux); letter-spacing: .03em; }
+  .meta span + span::before { content: "·"; margin: 0 9px; opacity: .5; }
+
+  /* Le constat qui motive le document */
+  .constat {
+    background: var(--surface); border: 1px solid var(--ligne);
+    border-left: 4px solid var(--rouge);
+    padding: 22px 24px; margin: 30px 0 8px;
+  }
+  .constat .chiffre { font-size: 2.5rem; font-weight: 800; color: var(--rouge); line-height: 1; letter-spacing: -.03em; }
+  .constat .legende { font-size: .93rem; color: var(--encre-doux); margin-top: 6px; }
+
+  .zone-table { overflow-x: auto; margin: 18px 0 8px; border: 1px solid var(--ligne); background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th {
+    text-align: left; font-size: .68rem; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--encre-doux);
+    padding: 12px 14px; border-bottom: 2px solid var(--ligne); white-space: nowrap;
+  }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--ligne-fine); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .poids {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600;
+    font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap;
+  }
+  .barre { height: 5px; background: var(--bleu); border-radius: 0; margin-top: 7px; }
+  .barre-piste { background: var(--ligne-fine); height: 5px; min-width: 80px; }
+  tr.total td { border-top: 2px solid var(--encre); font-weight: 600; background: var(--bleu-pale); }
+  tr.total .poids { font-size: 1.05rem; color: var(--bleu); }
+
+  .sortie { background: var(--ambre-pale); border: 1px solid var(--ligne); border-left: 4px solid var(--ambre); padding: 18px 22px; margin: 22px 0; }
+  .sortie .eyebrow { color: var(--ambre); }
+
+  .echelle { border: 1px solid var(--ligne); background: var(--surface); margin: 14px 0 22px; }
+  .echelle > div { display: flex; gap: 14px; align-items: baseline; padding: 11px 16px; border-bottom: 1px solid var(--ligne-fine); }
+  .echelle > div:last-child { border-bottom: none; }
+  .echelle .pts {
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: .86rem;
+    font-variant-numeric: tabular-nums; min-width: 46px; color: var(--bleu);
+  }
+  .echelle .lib { font-weight: 600; }
+  .echelle .det { color: var(--encre-doux); font-size: .9rem; }
+
+  .verdict { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 24px; }
+  .verdict > div { flex: 1 1 200px; border: 1px solid var(--ligne); background: var(--surface); padding: 14px 16px; }
+  .verdict .seuil { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: .95rem; font-variant-numeric: tabular-nums; }
+
+  ul.liste { margin: 0 0 16px; padding-left: 20px; }
+  ul.liste li { margin-bottom: 9px; }
+
+  .decision { border: 1px solid var(--ligne); background: var(--surface); padding: 16px 20px; margin-bottom: 10px; }
+  .decision .q { font-weight: 600; margin-bottom: 4px; }
+  .decision .r { color: var(--encre-doux); font-size: .93rem; }
+
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--ligne); font-family: "Libre Franklin", sans-serif; font-size: .78rem; color: var(--encre-doux); }
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="eyebrow">Binnie's English Training — Document de validation</div>
+    <h1>Grille d'évaluation des coachs</h1>
+    <p class="chapeau">
+      Proposition de grille cible, établie à partir de la feuille « 2026 Coaches Weekly
+      Performance Appraisal Sheet » et de ce que l'application sait déjà mesurer.
+      À valider avant toute modification du formulaire de rapport d'observation.
+    </p>
+    <div class="meta"><span>17 septembre 2026</span><span>Superviseur Général · Deputy Superviseurs · Conseil pédagogique</span></div>
+  </header>
+
+  <div class="constat" style="border-left-color:var(--vert);background:var(--surface)">
+    <div class="eyebrow" style="color:var(--vert)">État au 18 septembre 2026 — implémenté</div>
+    <p style="margin:8px 0 0">
+      Les quatre critères manquants, le contexte d'observation, le signalement d'incident et la
+      synthèse calculée <strong>sont en place dans le rapport d'observation</strong>. Un export
+      Excel reproduit la mise en page de la feuille terrain, côté superviseur et côté conseil
+      pédagogique. Ce qui reste à trancher est signalé en section&nbsp;08.
+    </p>
+  </div>
+
+  <div class="constat">
+    <div class="eyebrow">Le point de départ</div>
+    <div class="chiffre">1 / 25</div>
+    <div class="legende">
+      Colonnes d'observation portant des notes chiffrées dans l'extrait examiné.
+      Les quatre lignes qualitatives sont remplies presque partout ; les cinq lignes
+      chiffrées — les seules qui permettraient de comparer, classer et suivre une
+      progression — sont vides dans 24 cas sur 25.
+    </div>
+  </div>
+
+  <p>
+    Une grille désertée ne se corrige pas par un rappel à l'ordre : elle se corrige en
+    supprimant ce qui décourage de la remplir. Trois causes ressortent de la feuille
+    actuelle, et la grille ci-dessous répond à chacune.
+  </p>
+  <ul class="liste">
+    <li><strong>Rien n'est calculé.</strong> Même là où les notes existent, aucun total n'apparaît. Deux observations d'Allangba Koffi Maxime donnent le même 55/70 avec des profils opposés — la méthodologie baisse de 18 à 15 pendant que l'engagement monte de 15 à 18. L'information est dans la feuille ; personne ne la voit.</li>
+    <li><strong>Deux grilles cohabitent.</strong> L'une qualitative et rapide, l'autre chiffrée et longue. La première suffit à « remplir la ligne », donc la seconde reste vide.</li>
+    <li><strong>Un critère n'évalue pas le coach.</strong> « Network : Stable » relève de l'infrastructure. Il occupe une ligne, vaut « Stable » partout, et n'apprend rien.</li>
+  </ul>
+
+  <h2><span class="num">01</span> La grille cible</h2>
+
+  <p>
+    Huit critères, un total sur 100. Les cinq premiers reprennent la pondération déjà en
+    usage dans la feuille — la méthodologie et l'expression y pèsent quatre fois la
+    préparation, et c'est un choix professionnel qu'il n'y a pas lieu de défaire. Les trois
+    derniers transforment en échelles fermées les lignes que les observateurs remplissent
+    réellement aujourd'hui.
+  </p>
+
+  <div class="zone-table">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:34px">#</th>
+          <th>Critère</th>
+          <th>Nature</th>
+          <th class="poids">Poids</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="poids">1</td>
+          <td><strong>Préparation &amp; planification</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Plan de leçon, matériel, objectifs annoncés</span></td>
+          <td>Note directe</td>
+          <td class="poids">5<div class="barre-piste"><div class="barre" style="width:5%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">2</td>
+          <td><strong>Méthodologie d'enseignement</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Progression, adaptation au niveau, supports</span></td>
+          <td>Note directe</td>
+          <td class="poids">20<div class="barre-piste"><div class="barre" style="width:20%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">3</td>
+          <td><strong>Expression &amp; engagement des apprenants</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Temps de parole apprenant, sollicitation de chacun</span></td>
+          <td>Note directe</td>
+          <td class="poids">20<div class="barre-piste"><div class="barre" style="width:20%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">4</td>
+          <td><strong>Gestion de classe</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Cadre, rythme, traitement des écarts</span></td>
+          <td>Note directe</td>
+          <td class="poids">15<div class="barre-piste"><div class="barre" style="width:15%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">5</td>
+          <td><strong>Feedback &amp; correction des erreurs</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Reprise, reformulation, correction différée</span></td>
+          <td>Note directe</td>
+          <td class="poids">10<div class="barre-piste"><div class="barre" style="width:10%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">6</td>
+          <td><strong>Interactivité de la classe</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Remplace « Class Interactivity », en échelle fermée</span></td>
+          <td>Échelle 4 niveaux</td>
+          <td class="poids">10<div class="barre-piste"><div class="barre" style="width:10%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">7</td>
+          <td><strong>Approche grammaticale</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Remplace « Grammar » et ses abréviations libres</span></td>
+          <td>Échelle 4 niveaux</td>
+          <td class="poids">10<div class="barre-piste"><div class="barre" style="width:10%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="poids">8</td>
+          <td><strong>Ponctualité &amp; tenue du créneau</strong><br><span style="color:var(--encre-doux);font-size:.88rem">Pré-rempli par le système — voir section 03</span></td>
+          <td>Échelle 4 niveaux</td>
+          <td class="poids">10<div class="barre-piste"><div class="barre" style="width:10%"></div></div></td>
+        </tr>
+        <tr class="total">
+          <td></td>
+          <td>Total</td>
+          <td></td>
+          <td class="poids">100</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sortie">
+    <div class="eyebrow">Sort de la grille</div>
+    <p style="margin:8px 0 0">
+      <strong>« Network »</strong> devient un signalement d'incident, coché à part, sans
+      incidence sur la note. Un coach ne doit pas être évalué sur la stabilité d'une connexion
+      qu'il ne maîtrise pas — et un incident réseau mérite d'être remonté à qui peut le
+      résoudre, pas classé dans une appréciation pédagogique.
+    </p>
+  </div>
+
+  <h2><span class="num">02</span> Les trois échelles fermées</h2>
+
+  <p>
+    Une échelle fermée vaut mieux qu'un texte libre pour une raison simple : elle se calcule
+    et se compare. Les libellés reprennent le vocabulaire déjà employé par les observateurs,
+    pour que la transition ne demande aucun réapprentissage.
+  </p>
+
+  <h3>Interactivité de la classe — 10 points</h3>
+  <div class="echelle">
+    <div><span class="pts">10</span><span><span class="lib">Excellent</span> <span class="det">— tous les apprenants sollicités, échanges entre eux</span></span></div>
+    <div><span class="pts">7</span><span><span class="lib">Bon</span> <span class="det">— la majorité participe, quelques-uns restent en retrait</span></span></div>
+    <div><span class="pts">4</span><span><span class="lib">Acceptable</span> <span class="det">— participation inégale, sollicitations peu réparties</span></span></div>
+    <div><span class="pts">0</span><span><span class="lib">Insuffisant</span> <span class="det">— cours frontal, apprenants passifs</span></span></div>
+  </div>
+
+  <h3>Approche grammaticale — 10 points</h3>
+  <div class="echelle">
+    <div><span class="pts">10</span><span><span class="lib">Inductive et claire</span> <span class="det">— la règle est dégagée par les apprenants</span></span></div>
+    <div><span class="pts">7</span><span><span class="lib">Inductive, explication perfectible</span> <span class="det">— démarche juste, formulation confuse</span></span></div>
+    <div><span class="pts">4</span><span><span class="lib">Déductive mais claire</span> <span class="det">— règle donnée puis appliquée, sans ambiguïté</span></span></div>
+    <div><span class="pts">0</span><span><span class="lib">Confuse ou erronée</span> <span class="det">— reprend « Not Induc &amp; Confu » de la feuille</span></span></div>
+  </div>
+
+  <h3>Ponctualité &amp; tenue du créneau — 10 points</h3>
+  <div class="echelle">
+    <div><span class="pts">10</span><span><span class="lib">À l'heure</span> <span class="det">— salle ouverte dans les 5 minutes du créneau</span></span></div>
+    <div><span class="pts">7</span><span><span class="lib">Retard léger</span> <span class="det">— jusqu'à 10 minutes</span></span></div>
+    <div><span class="pts">4</span><span><span class="lib">Retard marqué</span> <span class="det">— jusqu'à 20 minutes</span></span></div>
+    <div><span class="pts">0</span><span><span class="lib">Retard majeur ou séance non tenue</span> <span class="det">— au-delà de 20 minutes, ou salle jamais ouverte</span></span></div>
+  </div>
+
+  <h2><span class="num">03</span> Le seul critère que le système peut pré-remplir</h2>
+
+  <p>
+    Depuis la mise en place du suivi des séances, l'application enregistre l'heure
+    d'<strong>ouverture réelle</strong> de la salle par le coach, sa fermeture, et le temps
+    passé en classe. La ponctualité cesse donc d'être une impression : elle se déduit de
+    l'écart entre l'horaire prévu et l'ouverture constatée.
+  </p>
+  <p>
+    Le formulaire proposera la valeur, l'observateur pourra la corriger — un coach peut avoir
+    ouvert la salle à l'heure et commencé le cours vingt minutes plus tard. Mais partir d'un
+    fait mesuré plutôt que d'une case vide change la nature du critère.
+  </p>
+  <p>
+    Le même mécanisme met sous les yeux de l'observateur, pendant qu'il note, la
+    <strong>durée réelle</strong> du cours et la <strong>liste des présents</strong>. Une note
+    de gestion de classe n'a pas le même sens devant deux apprenants ou devant douze.
+  </p>
+
+  <h2><span class="num">04</span> « Satisfaction » devient un résultat, pas une note</h2>
+
+  <p>
+    Dans la feuille, « Satisfaction » est rempli avec « Excellent/Outstanding »,
+    « Satisfactory/Acceptable » ou « Needs improvement ». Ce n'est pas un critère : c'est la
+    synthèse des autres, saisie à la main. La faire calculer supprime un jugement redondant et
+    garantit qu'elle correspond toujours aux notes qui la précèdent.
+  </p>
+
+  <div class="verdict">
+    <div><div class="seuil" style="color:var(--vert)">≥ 85 / 100</div><div style="margin-top:4px">Excellent — Outstanding</div></div>
+    <div><div class="seuil" style="color:var(--ambre)">65 – 84</div><div style="margin-top:4px">Satisfaisant — Acceptable</div></div>
+    <div><div class="seuil" style="color:var(--rouge)">&lt; 65</div><div style="margin-top:4px">À accompagner — Needs improvement</div></div>
+  </div>
+
+  <h2><span class="num">04 bis</span> Ce qui est déjà en place</h2>
+
+  <p>
+    Plutôt que d'attendre la validation de la grille pondérée, les critères manquants ont été
+    ajoutés au rapport existant, <strong>notés de 1 à 5 comme les autres</strong> : la moyenne
+    continue de fonctionner, rien n'est à recalculer, et les neuf critères restent comparables
+    entre eux. La pondération de la section 01 reste la cible, et ne change que le calcul du
+    total — pas la saisie.
+  </p>
+
+  <div class="zone-table">
+    <table>
+      <thead><tr><th>Ajouté au rapport</th><th>Origine dans la feuille</th><th>Forme</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Expression &amp; engagement</strong></td><td>Speaking &amp; Learner Engagement /20</td><td>note 1–5</td></tr>
+        <tr><td><strong>Feedback &amp; correction</strong></td><td>Feedback &amp; Error Correction /10</td><td>note 1–5</td></tr>
+        <tr><td><strong>Interactivité de la classe</strong></td><td>Class Interactivity</td><td>échelle fermée, 4 niveaux</td></tr>
+        <tr><td><strong>Approche grammaticale</strong></td><td>Grammar</td><td>échelle fermée, 4 niveaux</td></tr>
+        <tr><td><strong>Type d'observation</strong></td><td>2<sup>e</sup> onglet « Mock Teaching »</td><td>cours / mock teaching</td></tr>
+        <tr><td><strong>Type de leçon</strong></td><td>en-tête <em>LESSON TYPES</em>, jamais rempli</td><td>liste fermée</td></tr>
+        <tr><td><strong>Incident technique</strong></td><td>ligne <em>Network</em></td><td>case + détail, <strong>hors note</strong></td></tr>
+        <tr><td><strong>Synthèse</strong></td><td>ligne <em>Satisfaction</em></td><td><strong>calculée</strong>, jamais saisie</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>L'export Excel reprend la mise en page de la feuille</h3>
+  <p>
+    Un bloc par coach, les critères en lignes, les observations successives en colonnes, les
+    pastilles de couleur et les libellés anglais d'origine. Rendre un tableau plat aurait obligé
+    la direction à réapprendre à lire son propre document. Les notes sur 5 sont remises au
+    barème de la feuille — une note de 4/5 ressort à 16/20 en méthodologie, 12/15 en gestion de
+    classe —, de sorte que les colonnes exportées se comparent directement à l'historique déjà
+    saisi à la main.
+  </p>
+  <p>
+    L'export ajoute deux choses que la feuille n'avait pas : un <strong>total sur 70</strong>, et
+    la <strong>séance observée avec son temps réel en salle</strong>.
+  </p>
+
+  <h2><span class="num">05</span> Ce que ça change, des deux côtés</h2>
+
+  <div class="zone-table">
+    <table>
+      <thead>
+        <tr><th>Point</th><th>Feuille actuelle</th><th>Application aujourd'hui</th><th>Grille cible</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Nombre de critères</td><td>9 (dont 4 qualitatifs)</td><td>5</td><td><strong>8</strong></td></tr>
+        <tr><td>Pondération</td><td>/5 /20 /20 /15 /10</td><td>égale — 5 × /5</td><td><strong>reprise de la feuille + 3 × /10</strong></td></tr>
+        <tr><td>Total</td><td>non calculé</td><td>moyenne simple</td><td><strong>/100, automatique</strong></td></tr>
+        <tr><td>Observateur &amp; date</td><td>texte libre dans une cellule</td><td>identifiés</td><td>identifiés</td></tr>
+        <tr><td>Classe observée</td><td>absente</td><td>texte</td><td><strong>classe + séance</strong></td></tr>
+        <tr><td>Durée réelle, présences</td><td>absentes</td><td>affichées</td><td>affichées</td></tr>
+        <tr><td>Réseau</td><td>noté</td><td>absent</td><td><strong>signalement séparé</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:16px">
+    <strong>Point de vigilance sur l'historique.</strong> Les évaluations déjà saisies dans
+    l'application reposent sur cinq critères de poids égal ; celles de la feuille sur cinq
+    critères pondérés notés sur 70. Les trois barèmes ne sont pas comparables entre eux. Je
+    recommande de <strong>ne rien recalculer rétroactivement</strong> : conserver les notes
+    brutes par critère, appliquer le total sur 100 aux seuls rapports postérieurs à
+    l'adoption, et marquer la date de bascule.
+  </p>
+
+  <h2><span class="num">06</span> Deux règles sans lesquelles la grille restera vide</h2>
+
+  <h3>Fréquence</h3>
+  <p>
+    La couverture actuelle est très inégale : cinq observations pour un coach, une seule pour
+    un autre, aucune pour un troisième dont le bloc entier est vide. Une règle minimale —
+    <strong>une observation par coach et par mois</strong> — n'a de sens que si elle est
+    visible : un coach sans observation depuis six semaines doit apparaître dans « Mes tâches »
+    du superviseur, comme n'importe quelle échéance.
+  </p>
+
+  <h3>Calibration des observateurs</h3>
+  <p>
+    Quatre observateurs au moins interviennent dans la feuille — Sophia, Aboubacar, Michael,
+    Daouda. Avec une échelle purement qualitative, rien ne garantit que le « Good » de l'un
+    vaille celui de l'autre. Une grille chiffrée réduit cette dérive sans l'éliminer.
+    <strong>Deux fois par an, tous les observateurs notent la même séance enregistrée</strong> ;
+    un écart supérieur à 10 points sur 100 déclenche une reprise commune de la grille.
+  </p>
+
+  <h2><span class="num">07</span> Un point de gouvernance</h2>
+  <p>
+    Ces appréciations individuelles vivent aujourd'hui dans un classeur Google partagé par
+    lien depuis un compte personnel. Ce sont des données RH nominatives portant sur
+    l'ensemble du corps enseignant. Les rapatrier dans l'application n'est pas qu'un confort :
+    les accès y sont déjà filtrés par rôle, chaque écriture est horodatée et attribuée, et le
+    lien avec la séance observée rend chaque note vérifiable.
+  </p>
+
+  <h2><span class="num">08</span> Décisions à valider</h2>
+
+  <div class="decision">
+    <div class="q">1. Adopte-t-on le total sur 100, ou conserve-t-on le /70 de la feuille ?</div>
+    <div class="r">Le /100 se lit directement comme un pourcentage et absorbe les trois nouveaux critères. Le /70 préserve la continuité visuelle avec l'historique papier.</div>
+  </div>
+  <div class="decision">
+    <div class="q">2. Les pondérations proposées sont-elles les bonnes ?</div>
+    <div class="r">Méthodologie et expression pèsent chacune 20 ; la préparation, 5. C'est ce que dit la feuille actuelle — à confirmer, car c'est le cœur de ce que BET attend d'un coach. <strong>Sans incidence sur la saisie</strong> : les critères sont déjà en place, seule la formule du total changerait.</div>
+  </div>
+  <div class="decision">
+    <div class="q">5. Que code la couleur du nom du coach ?</div>
+    <div class="r">La feuille annonce « PERSONALITY » en en-tête et précise « You'll find the Coach's personality on his/her name ». L'information est portée par la couleur de fond de la cellule — bleu ou pêche, deux catégories — et disparaît à tout export. Dites-moi ce que ces deux couleurs représentent et j'ajoute le champ ; je ne veux pas lui inventer un sens.</div>
+  </div>
+  <div class="decision">
+    <div class="q">3. La ponctualité pré-remplie est-elle acceptée ?</div>
+    <div class="r">Elle repose sur l'heure d'ouverture de la salle, donc ne vaut que pour les cours en ligne. En présentiel, l'observateur la saisit comme les autres critères.</div>
+  </div>
+  <div class="decision">
+    <div class="q">4. Qui observe qui ?</div>
+    <div class="r">La feuille ne l'établit pas. Une règle d'affectation — par centre, par niveau, ou par rotation — conditionne la règle de fréquence proposée en section 06.</div>
+  </div>
+
+  <footer>
+    Document de travail — BET · Binnie's English Training, Abidjan.
+    Établi à partir de « 2026 Coaches Weekly Performance Appraisal Sheet » (onglets
+    <em>Weekly Performance</em> et <em>July 2026 Mock Teaching Performances</em>)
+    et du module Rapports d'observation de la plateforme.
+  </footer>
+
+</div>

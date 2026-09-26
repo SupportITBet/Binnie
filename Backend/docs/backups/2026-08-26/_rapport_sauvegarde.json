@@ -1,0 +1,93 @@
+{
+  "date": "2026-08-26T13:28:35.778Z",
+  "report": [
+    {
+      "table": "assignations_parcours",
+      "count": 74
+    },
+    {
+      "table": "groupes",
+      "count": 36
+    },
+    {
+      "table": "groupes_apprenants",
+      "count": 51
+    },
+    {
+      "table": "groupes_cours",
+      "count": 0
+    },
+    {
+      "table": "groupes_fichiers",
+      "count": 9
+    },
+    {
+      "table": "groupes_presences",
+      "count": 18
+    },
+    {
+      "table": "evaluations_groupes",
+      "count": 8
+    },
+    {
+      "table": "resultats_evaluations_groupes",
+      "count": 6
+    },
+    {
+      "table": "honoraires_mois",
+      "count": 9
+    },
+    {
+      "table": "seances",
+      "count": 31
+    },
+    {
+      "table": "seances_presences",
+      "count": 0
+    },
+    {
+      "table": "sessions_live",
+      "count": 28
+    },
+    {
+      "table": "paiements_parcours",
+      "count": 74
+    },
+    {
+      "table": "paiements_touchpoint",
+      "count": 58
+    },
+    {
+      "table": "apprenants",
+      "count": 55
+    },
+    {
+      "table": "contrats_prives",
+      "count": 0
+    },
+    {
+      "table": "seances_privees",
+      "count": 0
+    },
+    {
+      "table": "presences_privees",
+      "count": 0
+    },
+    {
+      "table": "fichiers_prives",
+      "count": 1
+    },
+    {
+      "table": "remplacements",
+      "count": 2
+    },
+    {
+      "table": "delegations",
+      "count": 2
+    },
+    {
+      "table": "utilisateurs_apprenants",
+      "count": 45
+    }
+  ]
+}

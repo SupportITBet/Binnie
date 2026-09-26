@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clôture de classe — spécification &amp; référence d'implémentation</title>
+<style>
+  :root {
+    --bg: #F6F7F9;
+    --surface: #FFFFFF;
+    --surface-2: #EEF1F5;
+    --ink: #0F172A;
+    --ink-soft: #4B5A73;
+    --ink-faint: #8895AA;
+    --border: #DDE3EC;
+    --accent: #0891B2;
+    --accent-soft: #E0F2FE;
+    --accent-ink: #0E5A6E;
+    --ok: #16A34A;
+    --ok-bg: #DCFCE7;
+    --warn: #B45309;
+    --warn-bg: #FEF3C7;
+    --bug: #DC2626;
+    --bug-bg: #FEE2E2;
+    --unclear: #7C3AED;
+    --unclear-bg: #F1EBFF;
+    --font-head: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0A0F1A;
+      --surface: #111826;
+      --surface-2: #17202F;
+      --ink: #E8EDF6;
+      --ink-soft: #A6B2C6;
+      --ink-faint: #6B7893;
+      --border: #232E42;
+      --accent: #22D3EE;
+      --accent-soft: #103241;
+      --accent-ink: #7EE3F5;
+      --ok: #4ADE80;
+      --ok-bg: #113420;
+      --warn: #FBBF24;
+      --warn-bg: #3A2A0B;
+      --bug: #F87171;
+      --bug-bg: #3A1414;
+      --unclear: #C4A6FF;
+      --unclear-bg: #241A3D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0A0F1A; --surface: #111826; --surface-2: #17202F; --ink: #E8EDF6;
+    --ink-soft: #A6B2C6; --ink-faint: #6B7893; --border: #232E42;
+    --accent: #22D3EE; --accent-soft: #103241; --accent-ink: #7EE3F5;
+    --ok: #4ADE80; --ok-bg: #113420; --warn: #FBBF24; --warn-bg: #3A2A0B;
+    --bug: #F87171; --bug-bg: #3A1414; --unclear: #C4A6FF; --unclear-bg: #241A3D;
+  }
+  :root[data-theme="light"] {
+    --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #EEF1F5; --ink: #0F172A;
+    --ink-soft: #4B5A73; --ink-faint: #8895AA; --border: #DDE3EC;
+    --accent: #0891B2; --accent-soft: #E0F2FE; --accent-ink: #0E5A6E;
+    --ok: #16A34A; --ok-bg: #DCFCE7; --warn: #B45309; --warn-bg: #FEF3C7;
+    --bug: #DC2626; --bug-bg: #FEE2E2; --unclear: #7C3AED; --unclear-bg: #F1EBFF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ── Masthead ───────────────────────────────────── */
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  h1 {
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 15px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  nav.jump {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  nav.jump a {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: border-color .15s, color .15s;
+  }
+  nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--accent); color: var(--accent-ink); }
+
+  /* ── Section shell ─────────────────────────────── */
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 20px;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .section-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  h2 {
+    font-family: var(--font-head);
+    font-size: 19px;
+    font-weight: 750;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .section-note {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    max-width: 66ch;
+  }
+
+  /* ── Rules list (Section A) ────────────────────── */
+  .rules {
+    display: grid;
+    gap: 10px;
+  }
+  .rule {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 14px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .rule .n {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rule .t { font-size: 14.5px; font-weight: 650; }
+  .rule .d { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+
+  /* ── Flow diagram (Section B) ──────────────────── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .fnode {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .fnode.trunk { align-self: center; width: 100%; max-width: 480px; }
+  .fnode .ico {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .fnode .label { font-size: 13.5px; font-weight: 600; }
+  .fnode .path {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    padding: 1px 7px;
+    border-radius: 5px;
+    display: inline-block;
+    margin-left: 6px;
+  }
+  .connector {
+    align-self: center;
+    width: 1.5px;
+    height: 22px;
+    background: var(--border);
+    position: relative;
+  }
+  .connector::after {
+    content: "";
+    position: absolute;
+    left: 50%; bottom: 0;
+    transform: translateX(-50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--border);
+  }
+
+  .fnode.ok-node { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+  .fnode.ok-node .label::after {
+    content: "confirmé";
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ok);
+    background: var(--ok-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  /* ── Impact table (Section C) ──────────────────── */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+  thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-faint);
+    background: var(--surface-2);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { background: var(--surface); }
+  td.loc { font-family: var(--font-mono); font-size: 12px; color: var(--accent-ink); white-space: nowrap; }
+  td.desc { color: var(--ink-soft); max-width: 34ch; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    padding: 3px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .pill.bug { color: var(--bug); background: var(--bug-bg); }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.unclear { color: var(--unclear); background: var(--unclear-bg); }
+
+  /* ── Footer callout ─────────────────────────────── */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Spécification · BET · implémenté dans dash</div>
+    <h1>Clôture de classe — règle produit &amp; référence d'implémentation</h1>
+    <p class="dek">Comportement final, implémenté et vérifié dans <strong>dash</strong>. À reprendre tel quel lors de l'implémentation de la clôture de classe dans <strong>bet-elearning</strong>.</p>
+    <nav class="jump">
+      <a href="#regle">Règle produit</a>
+      <a href="#flux">Flux implémenté</a>
+      <a href="#impact">Correctifs appliqués</a>
+      <a href="#bet-elearning">À faire dans bet-elearning</a>
+    </nav>
+  </header>
+
+  <!-- ═══════ A — Intended design ═══════ -->
+  <section id="regle">
+    <div class="section-head">
+      <span class="section-tag">01</span>
+      <h2>Ce que la clôture doit faire — et rien de plus</h2>
+    </div>
+    <div class="rules">
+      <div class="rule">
+        <span class="n">1</span>
+        <div>
+          <div class="t">La classe se verrouille</div>
+          <div class="d"><span style="font-family:var(--font-mono)">groupes.statut</span> passe à <span style="font-family:var(--font-mono)">"cloture"</span> — un simple drapeau sur le groupe, aucune autre table touchée.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">2</span>
+        <div>
+          <div class="t">Plus rien de nouveau ne s'ajoute</div>
+          <div class="d">Aucun apprenant assigné, aucune séance, aucune évaluation créée après clôture — appliqué côté serveur, pas seulement dans l'interface.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">3</span>
+        <div>
+          <div class="t">Tout le monde garde l'accès</div>
+          <div class="d">Notes, présences, historique, contact coach — visibles et accessibles sans dégradation, pour l'apprenant <strong>et</strong> pour tout le personnel BET (coach, admin, commercial, onboarding, PA).</div>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>Pourquoi cette règle existe&nbsp;:</strong> une version précédente archivait aussi les apprenants à la clôture — ça faisait disparaître leurs données de plusieurs écrans. La règle actuelle a délibérément retiré cette étape.
+    </div>
+  </section>
+
+  <!-- ═══════ B — Actual flow, verified clean ═══════ -->
+  <section id="flux">
+    <div class="section-head">
+      <span class="section-tag">02</span>
+      <h2>Le flux implémenté — vérifié bout en bout</h2>
+    </div>
+    <p class="section-note">Deux audits + une passe de correction complète. Le bouton « Clôturer » respecte la règle à la lettre, et les garde-fous côté serveur sont désormais en place.</p>
+
+    <div class="flow">
+      <div class="fnode trunk">
+        <span class="ico">clic</span>
+        <span class="label">PA advisor clique « Clôturer »</span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk">
+        <span class="ico">POST</span>
+        <span class="label">Requête<span class="path">/api/groupes/:id/cloture</span></span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk ok-node">
+        <span class="ico">écrit</span>
+        <span class="label"><span style="font-family:var(--font-mono)">groupes.statut = "cloture"</span></span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk ok-node">
+        <span class="ico">confirmé</span>
+        <span class="label">Aucune écriture sur <span style="font-family:var(--font-mono)">groupes_apprenants</span> — zéro appel à <span class="path">/archiver</span> dans ce flux</span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk ok-node">
+        <span class="ico">garde-fou</span>
+        <span class="label">4 endpoints de création vérifient <span style="font-family:var(--font-mono)">groupe.statut !== "cloture"</span> et renvoient 409 sinon</span>
+      </div>
+    </div>
+
+    <div class="callout" style="border-left-color:var(--ok);">
+      <strong>Ce qu'on pensait vs. ce qui est vrai&nbsp;:</strong> les apprenants "archive" trouvés dans une classe clôturée ne venaient <em>pas</em> de la clôture elle-même — la plupart avaient simplement continué ailleurs (réaffectés à une autre classe, cycle de vie normal). <strong>Le vrai bug était que tout apprenant "archive", pour n'importe quelle raison, se faisait exclure</strong> par des filtres trop stricts en aval — corrigé partout où c'était pertinent (carte ci-dessous).
+    </div>
+
+    <div class="rules" style="margin-top:4px;">
+      <div class="rule">
+        <span class="n" style="background:var(--ok-bg); color:var(--ok);">✓</span>
+        <div>
+          <div class="t">Vue apprenant — intacte</div>
+          <div class="d">L'écran réellement utilisé (<span style="font-family:var(--font-mono)">monEspace.js</span>) inclut déjà les statuts <span style="font-family:var(--font-mono)">actif</span> et <span style="font-family:var(--font-mono)">archive</span> — un apprenant d'une classe clôturée voit toujours ses notes, séances et fichiers.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n" style="background:var(--ok-bg); color:var(--ok);">✓</span>
+        <div>
+          <div class="t">Garde-fou serveur contre l'ajout</div>
+          <div class="d"><span style="font-family:var(--font-mono)">POST /:id/apprenants</span>, <span style="font-family:var(--font-mono)">/:id/evaluations</span>, <span style="font-family:var(--font-mono)">/:id/cours</span>, <span style="font-family:var(--font-mono)">/:id/presences</span> — les 4 vérifient désormais le statut du groupe parent et rejettent (409) si clôturé.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n" style="background:var(--ok-bg); color:var(--ok);">✓</span>
+        <div>
+          <div class="t">Texte d'interface corrigé</div>
+          <div class="d">La modale « Clôturer » et les notifications ne mentionnent plus d'archivage — le champ API a été renommé <span style="font-family:var(--font-mono)">apprenants_notifies</span> (au lieu de <span style="font-family:var(--font-mono)">apprenants_archives</span>) pour refléter la réalité.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n" style="background:var(--ok-bg); color:var(--ok);">✓</span>
+        <div>
+          <div class="t">Badges de statut cohérents partout</div>
+          <div class="d">Toute classe clôturée affiche désormais <span style="font-family:var(--font-mono)">🔒 Clôturée</span> — plus jamais le texte brut <span style="font-family:var(--font-mono)">"cloture"</span> ni un trompeur <span style="font-family:var(--font-mono)">"Inactif"</span> — dans les 6 dashboards où une classe peut s'afficher.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ C — Impact map ═══════ -->
+  <section id="impact">
+    <div class="section-head">
+      <span class="section-tag">03</span>
+      <h2>Correctifs appliqués — tout ce qui filtrait par « actif »</h2>
+    </div>
+    <p class="section-note">Chaque endroit qui excluait silencieusement un apprenant "archive" (clôture ou réaffectation) a été corrigé. Le remède standard&nbsp;: remplacer <span style="font-family:var(--font-mono)">.eq("statut","actif")</span> par <span style="font-family:var(--font-mono)">.neq("statut","retire")</span> — seul un apprenant explicitement retiré doit disparaître.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Endroit</th><th>Ce qui cassait</th><th>Statut</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="loc">groupes.js:2438<br><span style="color:var(--ink-faint)">/evaluations/:id/resultats</span></td>
+            <td class="desc">Notes déjà corrigées invisibles pour les apprenants archivés.</td>
+            <td><span class="pill ok">✓ corrigé</span></td>
+          </tr>
+          <tr>
+            <td class="loc">groupes.js:2521<br><span style="color:var(--ink-faint)">/evaluations/:id/valider</span></td>
+            <td class="desc">Validation de note bloquée entière ("Aucun apprenant actif").</td>
+            <td><span class="pill ok">✓ corrigé</span></td>
+          </tr>
+          <tr>
+            <td class="loc">parcours.js:1027</td>
+            <td class="desc">Réapparaissait comme prospect "non routé" côté commercial/onboarding.</td>
+            <td><span class="pill ok">✓ corrigé</span></td>
+          </tr>
+          <tr>
+            <td class="loc">messages.js:31, 35</td>
+            <td class="desc">Perdait l'accès à son contact coach en messagerie.</td>
+            <td><span class="pill ok">✓ corrigé</span></td>
+          </tr>
+          <tr>
+            <td class="loc">authRoutes.js:346, 412</td>
+            <td class="desc">Ancien apprenant mal classé comme "jamais inscrit".</td>
+            <td><span class="pill ok">✓ corrigé</span></td>
+          </tr>
+          <tr>
+            <td class="loc">groupes.js:1602, 2321, 1858, 1387<br><span style="color:var(--ink-faint)">POST apprenants / évaluations / cours / présences</span></td>
+            <td class="desc">Aucun garde-fou serveur — une classe clôturée acceptait encore des ajouts via l'API.</td>
+            <td><span class="pill ok">✓ garde-fou ajouté</span></td>
+          </tr>
+          <tr>
+            <td class="loc">OnboardingDashboard.jsx:2339, 2371</td>
+            <td class="desc">Compteur "0 apprenant actif" incohérent avec la liste affichée en dessous.</td>
+            <td><span class="pill ok">✓ corrigé</span></td>
+          </tr>
+          <tr>
+            <td class="loc">6 dashboards<br><span style="color:var(--ink-faint)">SuperAdmin, Superviseur, PA Advisor, Onboarding, Espace Professeur</span></td>
+            <td class="desc">Badge de statut affichait le texte brut <span style="font-family:var(--font-mono)">"cloture"</span> ou l'étiquette trompeuse "Inactif".</td>
+            <td><span class="pill ok">✓ uniformisé 🔒 Clôturée</span></td>
+          </tr>
+          <tr>
+            <td class="loc">PedagogicalAdvisorDashboard.jsx:3434, 3457<br>groupes.js:1124, 1131</td>
+            <td class="desc">Modale + toast + champ API annonçaient un archivage qui n'a jamais eu lieu.</td>
+            <td><span class="pill ok">✓ texte corrigé</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════ D — bet-elearning checklist ═══════ -->
+  <section id="bet-elearning">
+    <div class="section-head">
+      <span class="section-tag">04</span>
+      <h2>À reprendre dans bet-elearning</h2>
+    </div>
+    <p class="section-note">Même règle produit (section 01), même architecture. Checklist à dérouler quand la clôture de classe sera implémentée côté bet-elearning — noms de tables/fichiers à adapter à son propre schéma.</p>
+
+    <div class="rules">
+      <div class="rule">
+        <span class="n">1</span>
+        <div>
+          <div class="t">Endpoint de clôture</div>
+          <div class="d">Un seul write&nbsp;: <span style="font-family:var(--font-mono)">groupe.statut = "cloture"</span>. Clôturer les évaluations encore publiées, notifier coach + apprenants. <strong>Ne jamais</strong> toucher au statut des apprenants dans ce même appel.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">2</span>
+        <div>
+          <div class="t">Garde-fous côté serveur</div>
+          <div class="d">Sur chaque endpoint de création rattaché à une classe (ajout d'apprenant, d'évaluation, de séance, de présence)&nbsp;: vérifier <span style="font-family:var(--font-mono)">groupe.statut !== "cloture"</span> avant d'écrire, répondre 409 sinon. Ne pas se reposer uniquement sur l'interface pour cacher les classes clôturées des sélecteurs.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">3</span>
+        <div>
+          <div class="t">Filtres de visibilité — la règle du <span style="font-family:var(--font-mono)">neq</span></div>
+          <div class="d">Partout où une requête filtre les apprenants d'un groupe par <span style="font-family:var(--font-mono)">.eq("statut","actif")</span> à des fins d'<em>affichage/historique</em> (contacts, notes, présences, fiche apprenant, prospect-info…), remplacer par <span style="font-family:var(--font-mono)">.neq("statut","retire")</span>. Garder <span style="font-family:var(--font-mono)">actif</span> strict uniquement pour les cas où exclure les archivés est correct&nbsp;: notifications de nouveau contenu, compteur "places restantes", listes de prise de présence en direct.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">4</span>
+        <div>
+          <div class="t">Interface — filtre Actives / Terminées / Toutes</div>
+          <div class="d">Sur chaque sélecteur de classe (apprenants, ressources, présences, notes), proposer les 3 vues avec un dropdown + recherche plutôt qu'une liste de pastilles illimitée. Par défaut sur "Actives". Si la classe sélectionnée sort du filtre courant, revenir automatiquement à "Toutes" pour ne pas bloquer l'utilisateur.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">5</span>
+        <div>
+          <div class="t">Convention visuelle&nbsp;: le cadenas</div>
+          <div class="d">Toujours <span style="font-family:var(--font-mono)">🔒 Clôturée</span> — jamais le texte brut du statut, jamais "Inactif" (réservé aux comptes/entités désactivés temporairement, pas aux classes clôturées définitivement).</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">6</span>
+        <div>
+          <div class="t">Copie honnête</div>
+          <div class="d">Le texte de confirmation, les toasts et les notifications ne doivent annoncer que ce que le code fait réellement. Éviter le décalage qui a motivé cette page&nbsp;: une modale promettait un archivage que le backend n'exécutait plus depuis longtemps.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Référence complète&nbsp;:</strong> le détail des correctifs (sections 02–03 ci-dessus) montre l'implémentation de référence dans <span style="font-family:var(--font-mono)">dash</span> — même logique à reproduire fichier par fichier dans bet-elearning une fois son propre schéma de classes en place.
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,390 @@
+<title>Schéma — Paiements mensuels récurrents & notifications apprenant</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --vert:        #34D399;
+    --vert-clair:  #A7F3D0;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --or:          #F0B84B;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--vert); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,4.5vw,46px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--vert); font-style:normal; }
+  .sous-titre { font-size:15.5px; color:var(--texte-att); max-width:760px; line-height:1.65; }
+
+  nav.sommaire { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+  nav.sommaire a { font-size:11.5px; color:var(--texte-att); text-decoration:none; padding:6px 12px; border:1px solid var(--bordure); border-radius:20px; transition:all .15s; }
+  nav.sommaire a:hover { color:var(--vert); border-color:var(--vert); }
+
+  .chiffres { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap:14px; margin: 22px 0 44px; }
+  .chiffre { background:var(--fond-carte); border:1px solid var(--bordure); border-radius:14px; padding:18px 20px; }
+  .chiffre .val { font-family:var(--serif); font-size:32px; color:var(--vert); line-height:1; }
+  .chiffre .lib { font-size:11.5px; color:var(--texte-att); margin-top:6px; }
+
+  .section-titre2 { font-family:var(--serif); font-size:26px; margin: 0 0 8px; color:var(--texte); scroll-margin-top: 24px; }
+  .section-sous { font-size:13.5px; color:var(--texte-att); margin-bottom:22px; max-width:760px; line-height:1.6; }
+
+  .schema-fig { margin: 8px 0 40px; background:var(--fond-carte); border:1px solid var(--bordure); border-radius:16px; padding:24px 26px 20px; }
+  .schema-fig svg { width:100%; height:auto; display:block; overflow:visible; }
+  .schema-fig figcaption { font-size:12.5px; color:var(--texte-att); margin-top:16px; line-height:1.65; border-top:1px dashed var(--bordure); padding-top:14px; }
+  .sn-box { fill: var(--fond-carte2); stroke: var(--bordure); stroke-width:1.5; }
+  .sn-box.accent { stroke: var(--vert); }
+  .sn-box.rose { stroke: var(--rose); }
+  .sn-box.violet { stroke: var(--violet); }
+  .sn-text { font-family: var(--sans); fill: var(--texte); font-size:13px; font-weight:600; }
+  .sn-text.att { fill: var(--texte-att); font-size:11px; font-weight:400; }
+  .sn-label { font-family: var(--mono); fill: var(--texte-att); font-size:10.5px; }
+
+  .comparatif { display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom: 40px; }
+  .colonne { border-radius:16px; padding:22px 24px; border:1px solid var(--bordure); }
+  .colonne.avant { background: rgba(248,113,113,0.05); border-color: rgba(248,113,113,0.3); }
+  .colonne.apres { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.3); }
+  .colonne-entete { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px; }
+  .colonne.avant .colonne-entete { color: var(--rouge); }
+  .colonne.apres .colonne-entete { color: var(--vert); }
+  .colonne ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:9px; }
+  .colonne li { font-size:13px; color:var(--texte-att); line-height:1.55; }
+
+  table.matrice { width:100%; border-collapse:collapse; font-size:12.5px; margin: 14px 0 6px; }
+  table.matrice th { text-align:left; color:var(--texte-att); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; font-size:10.5px; padding:8px 10px; border-bottom:1px solid var(--bordure); }
+  table.matrice td { padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--texte); vertical-align:top; }
+  table.matrice tr:last-child td { border-bottom:none; }
+  table.matrice code { font-family:var(--mono); font-size:11.5px; color:var(--vert-clair); }
+
+  .sev { font-size:10px; font-weight:800; padding:2px 9px; border-radius:8px; white-space:nowrap; display:inline-block; }
+  .sev.j7  { color:var(--cyan); background: rgba(45,212,232,0.15); }
+  .sev.j3  { color:var(--or); background: rgba(240,184,75,0.15); }
+  .sev.j1  { color:var(--rouge); background: rgba(248,113,113,0.15); }
+  .sev.fait { color:var(--vert); background: rgba(52,211,153,0.15); }
+  .sev.planifie { color:var(--violet); background: rgba(167,139,250,0.15); }
+
+  .phase-tag { font-family:var(--mono); font-size:10.5px; color:var(--violet); background: rgba(167,139,250,0.1); padding:2px 8px; border-radius:6px; white-space:nowrap; }
+
+  .roadmap { display:flex; flex-direction:column; gap:10px; margin-bottom:56px; }
+  .roadmap-item { display:grid; grid-template-columns: 90px 210px 1fr; gap:16px; align-items:start; background:var(--fond-carte); border:1px solid var(--bordure); border-radius:12px; padding:14px 18px; }
+  .roadmap-item .titre { font-size:13.5px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .roadmap-item .desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  .mini-note { margin-top:14px; font-size:12px; color:var(--rose); background: rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.25); padding:8px 12px; border-radius:10px; display:flex; gap:8px; align-items:flex-start; }
+  .mini-note.info { color:var(--cyan); background: rgba(45,212,232,0.08); border-color: rgba(45,212,232,0.25); }
+  .mini-note.ok { color:var(--vert); background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.25); }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    table.matrice { display:block; overflow-x:auto; }
+    .roadmap-item { grid-template-columns: 1fr; }
+    .comparatif { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET · Paiements récurrents & notifications apprenant</span>
+    <h1>Paiement mensuel <em>100% automatique</em>, jusqu'à annulation</h1>
+    <p class="sous-titre">
+      Aujourd'hui, un plan mensuel "ouvert" (sans date de fin) ne génère le mois suivant que si
+      quelqu'un clique manuellement, ou si un paiement vient de tomber — si personne ne paie,
+      rien ne se génère jamais. Ce chantier remplace ça par une vraie récurrence calendaire,
+      avec des rappels à l'apprenant avant chaque échéance, pour le coaching privé <strong>et</strong>
+      les classes de groupe (présentiel <strong>et</strong> en ligne) sans date de fin.
+    </p>
+    <nav class="sommaire">
+      <a href="#chiffres">L'avancement</a>
+      <a href="#existant">1 · Ce qui existe déjà</a>
+      <a href="#flux">2 · Le nouveau flux</a>
+      <a href="#jour-echeance">2b · Jour d'échéance ancré sur la date de début</a>
+      <a href="#notifs">3 · Notifications apprenant — J-7 / J-3 / J-1</a>
+      <a href="#annulation">4 · Bouton d'annulation dédié</a>
+      <a href="#infra">5 · Infra — route cron compatible Vercel</a>
+      <a href="#rattrapage">6 · Rattrapage des plans déjà existants</a>
+      <a href="#feuille-de-route">7 · Feuille de route</a>
+    </nav>
+  </header>
+
+  <div class="chiffres" id="chiffres">
+    <div class="chiffre"><div class="val">2</div><div class="lib">Populations couvertes : coaching privé + classes de groupe (présentiel et en ligne) sans date de fin</div></div>
+    <div class="chiffre"><div class="val">J-7/J-3/J-1</div><div class="lib">Rappels à l'apprenant avant chaque échéance mensuelle</div></div>
+    <div class="chiffre"><div class="val">0</div><div class="lib">Nouvelle route backend nécessaire pour le plan existant — 1 seule route cron ajoutée</div></div>
+  </div>
+
+  <!-- ── EXISTANT ── -->
+  <h2 class="section-titre2" id="existant">1 · Ce qui existe déjà</h2>
+  <p class="section-sous">Le plan mensuel manuel (Commercial + PA) reste la base — ce chantier ne le remplace pas, il comble le trou : la génération automatique du mois suivant, et l'ajout de rappels à l'apprenant qui n'existent pas du tout aujourd'hui.</p>
+
+  <div class="comparatif">
+    <div class="colonne avant">
+      <div class="colonne-entete">⚠️ Aujourd'hui</div>
+      <ul>
+        <li>Un plan "ouvert" (sans date de fin) ne génère qu'<strong>un seul mois</strong> à la configuration</li>
+        <li>Le mois suivant n'apparaît que sur un clic manuel ("➕ Générer mois suivant"), ou en effet de bord d'un paiement reçu</li>
+        <li>Si personne ne paie ni ne clique, la récurrence s'arrête silencieusement — aucune alerte</li>
+        <li>Le job d'échéance existant (<code>notifierEcheancesPaiement.js</code>) ne couvre que les tranches échelonnées, jamais le plan mensuel</li>
+        <li>Les notifications d'échéance, quand elles existent, vont à l'assistante — jamais à l'apprenant</li>
+        <li>Le changement de classe est bloqué pour le coaching privé ("non concerné pour le moment")</li>
+      </ul>
+    </div>
+    <div class="colonne apres">
+      <div class="colonne-entete">✅ Après ce chantier</div>
+      <ul>
+        <li>Le mois suivant est généré <strong>automatiquement</strong>, sur un vrai calendrier — aucun clic, aucun paiement requis</li>
+        <li>Ça s'applique aussi aux apprenants de <strong>classes de groupe sans date de fin — présentiel ET en ligne</strong>, pas seulement au coaching privé. Même code (<code style="color:var(--vert-clair)">CommercialDashboard.jsx</code>) pour les deux profils d'assistante, donc rien de spécifique à coder pour l'un ou l'autre.</li>
+        <li>L'apprenant reçoit un rappel <strong>J-7, J-3, J-1</strong> avant chaque échéance, dans son onglet Notifications + une bannière</li>
+        <li>Un <strong>bouton "Annuler" dédié</strong> au plan de paiement stoppe la récurrence, sans forcément annuler tout le dossier</li>
+        <li>Les plans déjà existants sont <strong>rattrapés</strong> automatiquement, pas seulement les nouveaux</li>
+        <li>Configuration SMS/Email posée (champs prêts), l'envoi réel arrivera avec Brevo plus tard</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── FLUX ── -->
+  <h2 class="section-titre2" id="flux" style="margin-top:56px;">2 · Le nouveau flux</h2>
+  <p class="section-sous">Une seule route backend, déclenchée une fois par jour par un cron externe (Vercel Cron) — elle fait tout le travail : génération du mois dû, calcul des échéances proches, envoi des rappels.</p>
+
+  <figure class="schema-fig">
+    <svg viewBox="0 0 1000 640" role="img" aria-label="Flux : un cron externe appelle une route quotidienne qui parcourt tous les dossiers avec un plan mensuel actif (coaching privé ou classe de groupe sans date de fin), génère le mois dû si nécessaire, calcule les jours restants avant l'échéance, et notifie l'apprenant à J-7, J-3 et J-1 — un dossier marqué annulé ou dont le plan a été explicitement arrêté est ignoré par le job.">
+      <defs>
+        <marker id="arrowhead2" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto">
+          <polygon points="0,0 9,4 0,8" style="fill:var(--texte-att)"></polygon>
+        </marker>
+      </defs>
+
+      <!-- Cron -->
+      <rect x="360" y="16" width="280" height="54" rx="12" class="sn-box accent"></rect>
+      <text x="500" y="38" text-anchor="middle" class="sn-text">⏰ Cron externe — Vercel Cron</text>
+      <text x="500" y="56" text-anchor="middle" class="sn-text att">1 fois par jour</text>
+
+      <line x1="500" y1="70" x2="500" y2="104" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <!-- Route -->
+      <rect x="300" y="106" width="400" height="54" rx="12" class="sn-box"></rect>
+      <text x="500" y="128" text-anchor="middle" class="sn-text">📡 GET /api/jobs/paiements-mensuels</text>
+      <text x="500" y="146" text-anchor="middle" class="sn-text att">route HTTP classique — pas de setInterval</text>
+
+      <line x1="500" y1="160" x2="500" y2="194" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <!-- Parcours dossiers -->
+      <rect x="270" y="196" width="460" height="58" rx="12" class="sn-box"></rect>
+      <text x="500" y="220" text-anchor="middle" class="sn-text">🔎 Parcourt tous les dossiers avec plan mensuel actif</text>
+      <text x="500" y="238" text-anchor="middle" class="sn-text att">coaching privé + classes de groupe (présentiel/en ligne) sans date de fin</text>
+
+      <!-- Branches -->
+      <line x1="440" y1="254" x2="180" y2="298" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+      <line x1="560" y1="254" x2="820" y2="298" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <!-- Chemin A : dossier actif -->
+      <rect x="40" y="300" width="280" height="58" rx="12" class="sn-box accent"></rect>
+      <text x="180" y="324" text-anchor="middle" class="sn-text">✅ Plan actif, non annulé</text>
+      <text x="180" y="342" text-anchor="middle" class="sn-text att">statut ≠ annulé, plan_paiement.actif ≠ false</text>
+
+      <line x1="180" y1="358" x2="180" y2="402" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <rect x="40" y="404" width="280" height="66" rx="12" class="sn-box accent"></rect>
+      <text x="180" y="428" text-anchor="middle" class="sn-text">Mois dû non encore généré ?</text>
+      <text x="180" y="446" text-anchor="middle" class="sn-text att">→ ajoute le mois suivant automatiquement</text>
+      <text x="180" y="460" text-anchor="middle" class="sn-label">mêmes règles que genererMoisPaiements()</text>
+
+      <line x1="180" y1="470" x2="180" y2="514" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <rect x="40" y="516" width="280" height="66" rx="12" class="sn-box violet"></rect>
+      <text x="180" y="540" text-anchor="middle" class="sn-text">Jours restants avant échéance ?</text>
+      <text x="180" y="558" text-anchor="middle" class="sn-text att">J-7 / J-3 / J-1 → notifie l'apprenant</text>
+      <text x="180" y="572" text-anchor="middle" class="sn-label">dédupliqué : jamais 2× le même seuil</text>
+
+      <!-- Chemin B : dossier annulé -->
+      <rect x="680" y="300" width="280" height="58" rx="12" class="sn-box rose"></rect>
+      <text x="820" y="324" text-anchor="middle" class="sn-text">🚫 Annulé (bouton dédié ou dossier)</text>
+      <text x="820" y="342" text-anchor="middle" class="sn-text att">plan_paiement.actif = false</text>
+
+      <line x1="820" y1="358" x2="820" y2="402" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <rect x="680" y="404" width="280" height="58" rx="12" class="sn-box rose"></rect>
+      <text x="820" y="428" text-anchor="middle" class="sn-text">Ignoré par le job</text>
+      <text x="820" y="446" text-anchor="middle" class="sn-text att">aucun nouveau mois, aucune notification</text>
+
+      <!-- Convergence -->
+      <line x1="220" y1="582" x2="430" y2="606" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+      <line x1="780" y1="462" x2="570" y2="606" style="stroke:var(--texte-att); stroke-width:1.5;" marker-end="url(#arrowhead2)"></line>
+
+      <!-- Résultat -->
+      <rect x="290" y="608" width="420" height="24" rx="12" class="sn-box"></rect>
+      <text x="500" y="624" text-anchor="middle" class="sn-text att" style="font-size:11px;">Prochain passage du cron le lendemain</text>
+    </svg>
+    <figcaption>
+      Une exécution quotidienne suffit : génère le mois dû si besoin, calcule les échéances
+      proches, notifie l'apprenant aux bons seuils — et ignore tout dossier dont le plan a été
+      explicitement arrêté, sans jamais y retoucher.
+    </figcaption>
+  </figure>
+
+  <!-- ── JOUR D'ÉCHÉANCE ── -->
+  <h2 class="section-titre2" id="jour-echeance" style="margin-top:56px;">2b · Jour d'échéance ancré sur la date de début (pas toujours le 1er)</h2>
+  <p class="section-sous">
+    Découverte en vérifiant le code réel : <code style="color:var(--vert-clair)">genererMoisPaiements()</code> force
+    aujourd'hui <code style="color:var(--vert-clair)">curr.setDate(1)</code> — chaque mois est silencieusement calé
+    au 1er, peu importe le vrai jour de départ. Un dossier commencé le 20 septembre devrait avoir
+    ses échéances le 20 de chaque mois, pas le 1er.
+  </p>
+  <div class="mini-note ok">
+    ✓ <strong>Bonne surprise en creusant</strong> — <code style="color:var(--vert)">mois.periode</code> ne stocke
+    que "AAAA-MM" (année-mois) ; <strong>aucun jour n'est enregistré nulle part</strong> aujourd'hui, et
+    <code style="color:var(--vert)">getMoisStatut()</code> compare uniquement le mois pour décider "retard"
+    (<code style="color:var(--vert-clair)">mois.periode &lt; todayStr.slice(0,7)</code>), jamais le jour. Ajouter
+    un jour d'échéance n'écrase donc <strong>aucune vraie donnée existante</strong> — c'est une information
+    manquante qu'on ajoute, pas une correction qui modifie un historique de paiement.
+  </div>
+  <div class="dataflow" style="background: var(--fond-carte); border:1px solid var(--bordure); border-radius:16px; padding: 20px 24px; margin: 14px 0;">
+    <div style="font-size:13px; color:var(--texte-att); line-height:1.7;">
+      <strong style="color:var(--texte);">Nouveau champ</strong> <code style="color:var(--vert-clair)">jour_echeance</code> sur
+      le plan (un seul jour pour tout le plan, pas par mois) — dérivé du jour de
+      <code style="color:var(--vert-clair)">date_debut_formation</code>. Mois plus court que le jour d'ancrage
+      (ex: ancre au 31, mois de 30 jours ou février) → repli sur le <strong>dernier jour du mois</strong>.<br/><br/>
+      <strong style="color:var(--texte);">Rétro-remplissage</strong> — au premier passage du job, tous les plans
+      déjà en base (nouveaux comme anciens) reçoivent ce champ calculé depuis leur propre
+      <code style="color:var(--vert-clair)">date_debut_formation</code> — <code style="color:var(--vert-clair)">tranches</code>,
+      <code style="color:var(--vert-clair)">montant</code> et <code style="color:var(--vert-clair)">statut</code> déjà
+      enregistrés restent intouchés. Un dossier démarré le 20 septembre affiche "20" pour toutes ses
+      échéances, passées comme futures, dès ce rétro-remplissage.
+    </div>
+  </div>
+
+  <!-- ── NOTIFICATIONS ── -->
+  <h2 class="section-titre2" id="notifs" style="margin-top:56px;">3 · Notifications apprenant — J-7 / J-3 / J-1</h2>
+  <p class="section-sous">Aucune notification n'existe aujourd'hui pour l'apprenant sur ses échéances — le job existant (tranches échelonnées) ne notifie que l'assistante. Ce chantier ajoute un canal apprenant complet.</p>
+
+  <table class="matrice">
+    <tr><th>Seuil</th><th>Canal</th><th>Contenu</th></tr>
+    <tr>
+      <td><span class="sev j7">J-7</span></td>
+      <td>Onglet Notifications</td>
+      <td>Rappel doux + <strong>lien de paiement généré et envoyé automatiquement</strong> — "Votre mensualité de [X] F est due le [date], payez en 1 clic"</td>
+    </tr>
+    <tr>
+      <td><span class="sev j3">J-3</span></td>
+      <td>Onglet Notifications + bannière</td>
+      <td>Rappel renforcé, même lien rappelé, visible dès la connexion à l'espace apprenant</td>
+    </tr>
+    <tr>
+      <td><span class="sev j1">J-1</span></td>
+      <td>Onglet Notifications + bannière (urgente)</td>
+      <td>Dernier rappel avant échéance — ton plus insistant, même lien</td>
+    </tr>
+  </table>
+
+  <div class="mini-note info">
+    ℹ️ <strong>Déduplication</strong> — même principe que le job existant (<code style="color:var(--cyan)">notifierEcheancesPaiement.js</code>) :
+    avant d'envoyer, on vérifie qu'aucune notification pour ce même dossier + ce même mois + ce même
+    seuil (J-7/J-3/J-1) n'a déjà été envoyée. Sans ça, un cron qui tourne chaque jour renverrait le
+    même rappel en boucle.
+  </div>
+
+  <h3 style="font-family:var(--serif); font-size:19px; color:var(--texte); margin:32px 0 12px;">Lien de paiement TouchPoint — déjà branché, réutilisé tel quel</h3>
+  <p class="section-sous">
+    Vérifié dans le code réel avant de concevoir cette partie : le lien de paiement en ligne
+    existe déjà pour le plan mensuel (bouton "🔗 Envoyer le lien de paiement" à côté de chaque
+    mois, <code style="color:var(--vert-clair)">envoyerLienMois(mois)</code>) — il embarque un
+    <code style="color:var(--vert-clair)">mois_id</code> dans ses métadonnées, et le webhook TouchPoint
+    (<code style="color:var(--vert-clair)">finalizeSuccessfulPayment</code>) sait déjà retrouver ce mois et le
+    marquer payé automatiquement dès que l'apprenant règle. Complètement agnostique coaching
+    privé/groupe — rien à modifier côté paiement en ligne.
+  </p>
+  <div class="mini-note ok">
+    ✓ <strong>Décision</strong> — au J-7, le job appelle directement la même génération de lien
+    (<code style="color:var(--vert)">envoyerLienMois</code>) pour le mois qui vient d'être créé, et l'envoie
+    avec le rappel. L'apprenant reçoit donc un rappel <strong>déjà payable en 1 clic</strong>, sans qu'une
+    commerciale n'ait besoin de cliquer chaque mois — le même lien est rappelé à J-3 et J-1 s'il n'a
+    toujours pas payé.
+  </div>
+
+  <h3 style="font-family:var(--serif); font-size:19px; color:var(--texte); margin:32px 0 12px;">Configuration SMS/Email — posée maintenant, activée plus tard avec Brevo</h3>
+  <p class="section-sous">
+    Aucun envoi SMS/Email réel dans cette phase — seulement les champs de configuration (numéro
+    de téléphone confirmé, préférence de canal, clé API Brevo en attente) pour ne pas avoir à
+    revenir sur le schéma de données quand l'intégration Brevo sera branchée.
+  </p>
+
+  <!-- ── ANNULATION ── -->
+  <h2 class="section-titre2" id="annulation" style="margin-top:56px;">4 · Bouton d'annulation dédié</h2>
+  <p class="section-sous">Distinct de "🚫 Annuler le dossier" (qui arrête tout : dossier + accès + facturation). Ici, on arrête uniquement la récurrence du plan de paiement — le dossier et l'apprenant restent actifs.</p>
+  <div class="mini-note">
+    🔘 Nouveau bouton "Arrêter la récurrence" sur la carte du plan mensuel (Commercial + PA), à
+    côté de "➕ Générer mois suivant" — passe <code style="color:var(--rose)">plan_paiement.actif</code> à
+    <code style="color:var(--rose)">false</code>. Le job cron l'ignore ensuite définitivement, sans
+    toucher aux mois déjà générés (historique conservé).
+  </div>
+
+  <!-- ── INFRA ── -->
+  <h2 class="section-titre2" id="infra" style="margin-top:56px;">5 · Infra — route cron compatible Vercel</h2>
+  <p class="section-sous">Le pattern habituel (<code style="color:var(--vert-clair)">Backend/src/jobs/*.js</code> avec <code style="color:var(--vert-clair)">setInterval</code>) suppose un process qui tourne en continu — pas garanti sur du serverless Vercel (l'instance peut se réveiller/dormir entre les requêtes).</p>
+  <table class="matrice">
+    <tr><th>Approche</th><th>Verdict</th></tr>
+    <tr>
+      <td><code>setInterval</code> classique (pattern actuel)</td>
+      <td><span class="sev" style="color:var(--rouge);background:rgba(248,113,113,.15);">❌ Non fiable sur Vercel</span></td>
+    </tr>
+    <tr>
+      <td>Route HTTP dédiée + Vercel Cron (<code>vercel.json</code> → <code>crons</code>) appelant cette route 1×/jour</td>
+      <td><span class="sev fait">✅ Retenu</span></td>
+    </tr>
+  </table>
+  <div class="mini-note info">ℹ️ Cette route sera protégée (secret partagé ou header dédié) pour ne pas être déclenchable par n'importe qui — même logique que les webhooks déjà en place ailleurs dans le backend.</div>
+
+  <!-- ── RATTRAPAGE ── -->
+  <h2 class="section-titre2" id="rattrapage" style="margin-top:56px;">6 · Rattrapage des plans déjà existants</h2>
+  <p class="section-sous">Le premier passage du job doit couvrir les plans mensuels déjà configurés manuellement avant ce chantier, pas seulement ceux créés après.</p>
+  <div class="mini-note ok">
+    ✓ Au premier passage, le job traite <strong>tous</strong> les dossiers avec un <code style="color:var(--vert)">plan_paiement.mois_paiements</code>
+    déjà présent (coaching privé et classes de groupe confondus) — génère les mois manquants
+    jusqu'à aujourd'hui, puis bascule sur le fonctionnement récurrent normal pour la suite. Aucune
+    resaisie manuelle nécessaire pour les dossiers déjà en cours.
+  </div>
+
+  <!-- ── FEUILLE DE ROUTE ── -->
+  <h2 class="section-titre2" id="feuille-de-route" style="margin-top:56px;">7 · Feuille de route</h2>
+  <div class="roadmap">
+    <div class="roadmap-item">
+      <span class="sev planifie">Phase 1</span>
+      <span class="phase-tag">Route + génération auto</span>
+      <div><div class="titre">Route /api/jobs/paiements-mensuels + Vercel Cron</div><div class="desc">Génère le mois dû automatiquement pour coaching privé ET classes de groupe (présentiel comme en ligne) sans date de fin, avec rattrapage des plans déjà existants.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev planifie">Phase 2</span>
+      <span class="phase-tag">Bouton d'annulation</span>
+      <div><div class="titre">"Arrêter la récurrence" — Commercial + PA</div><div class="desc">plan_paiement.actif=false, distinct de l'annulation complète du dossier ; le job l'exclut définitivement.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev planifie">Phase 3</span>
+      <span class="phase-tag">Notifications apprenant</span>
+      <div><div class="titre">J-7 / J-3 / J-1 — onglet Notifications + bannière</div><div class="desc">Déduplication par dossier + mois + seuil, pour ne jamais renvoyer le même rappel en boucle.</div></div>
+    </div>
+    <div class="roadmap-item">
+      <span class="sev moyen" style="color:var(--or);background:rgba(240,184,75,.15);">Phase 4</span>
+      <span class="phase-tag">Config SMS/Email</span>
+      <div><div class="titre">Champs de configuration (sans envoi réel)</div><div class="desc">Préférence de canal, contact confirmé — prêt pour le branchement Brevo, sans avoir à retoucher le schéma de données plus tard.</div></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>BET — Paiements mensuels récurrents & notifications apprenant</span>
+    <span>Document interne — schéma initial, avant implémentation</span>
+  </footer>
+
+</div>

@@ -1,0 +1,1032 @@
+<title>BET — Grille tarifaire consolidée</title>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --surface: #ffffff;
+    --surface-2: #eef0f6;
+    --ink: #10182b;
+    --ink-dim: #5b6472;
+    --ink-faint: #8890a0;
+    --navy: #0c2a6b;
+    --navy-deep: #071c4a;
+    --accent: #d3273e;
+    --accent-soft: #fdeaec;
+    --good: #157a4a;
+    --good-soft: #e7f6ee;
+    --line: #e2e6ee;
+    --line-strong: #cbd1e0;
+    --code-bg: #0d1526;
+    --code-ink: #d7e0f7;
+    --code-key: #7fb2ff;
+    --code-str: #ffd479;
+    --code-num: #8fe2b0;
+    --shadow: 0 1px 2px rgba(16,24,43,.04), 0 8px 24px -12px rgba(16,24,43,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f1c;
+      --surface: #12172a;
+      --surface-2: #1a2036;
+      --ink: #e9ecf6;
+      --ink-dim: #a7aec2;
+      --ink-faint: #6b7284;
+      --navy: #8fb3ff;
+      --navy-deep: #cddcff;
+      --accent: #ff6b7f;
+      --accent-soft: #351923;
+      --good: #6fe0ab;
+      --good-soft: #16301f;
+      --line: #262d45;
+      --line-strong: #333c5c;
+      --code-bg: #060a15;
+      --code-ink: #d7e0f7;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f1c;
+    --surface: #12172a;
+    --surface-2: #1a2036;
+    --ink: #e9ecf6;
+    --ink-dim: #a7aec2;
+    --ink-faint: #6b7284;
+    --navy: #8fb3ff;
+    --navy-deep: #cddcff;
+    --accent: #ff6b7f;
+    --accent-soft: #351923;
+    --good: #6fe0ab;
+    --good-soft: #16301f;
+    --line: #262d45;
+    --line-strong: #333c5c;
+    --code-bg: #060a15;
+    --code-ink: #d7e0f7;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    display: grid;
+    grid-template-columns: 240px minmax(0,1fr);
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  @media (max-width: 880px) {
+    .wrap { grid-template-columns: 1fr; }
+    nav.toc { display: none; }
+  }
+
+  /* ---------- Header ---------- */
+  header.top {
+    grid-column: 1 / -1;
+    padding: 40px 32px 28px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  header.top .eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  header.top h1 {
+    margin: 0;
+    font-size: clamp(26px, 3.4vw, 38px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--navy-deep);
+    text-wrap: balance;
+  }
+  header.top p.sub {
+    margin: 8px 0 0;
+    color: var(--ink-dim);
+    font-size: 14px;
+    max-width: 60ch;
+  }
+  header.top .meta {
+    text-align: right;
+    font-size: 12px;
+    color: var(--ink-faint);
+    line-height: 1.6;
+  }
+  header.top .meta strong { color: var(--ink-dim); }
+
+  /* ---------- Side nav ---------- */
+  nav.toc {
+    padding: 28px 16px 60px 32px;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  nav.toc .grp {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 20px 0 8px;
+  }
+  nav.toc .grp:first-child { margin-top: 0; }
+  nav.toc a {
+    display: block;
+    padding: 6px 10px;
+    margin: 1px 0;
+    border-radius: 7px;
+    color: var(--ink-dim);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    border-left: 2px solid transparent;
+  }
+  nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+
+  /* ---------- Main ---------- */
+  main { padding: 28px 32px 80px; min-width: 0; }
+
+  section.centre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    margin-bottom: 22px;
+    overflow: hidden;
+    scroll-margin-top: 16px;
+  }
+  section.centre > .head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  }
+  section.centre > .head .badge {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: var(--navy);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 800;
+    flex-shrink: 0;
+  }
+  section.centre > .head h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  section.centre > .head .tag {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+  section.centre > .body { padding: 6px 22px 20px; }
+
+  .cat {
+    margin-top: 18px;
+  }
+  .cat h3 {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  .cat .note {
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    margin: -4px 0 10px;
+  }
+
+  .tbl-scroll { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 460px;
+  }
+  thead th {
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    background: var(--surface-2);
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-dim);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td.lead { color: var(--ink); font-weight: 700; }
+  td.price {
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    color: var(--good);
+    white-space: nowrap;
+  }
+  td.price .unit { font-weight: 600; color: var(--ink-faint); font-size: 11px; margin-left: 3px; }
+  .price-pill {
+    display: inline-block;
+    background: var(--good-soft);
+    color: var(--good);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .flag {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+
+  /* ---------- JSON export ---------- */
+  section.export {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+    scroll-margin-top: 16px;
+  }
+  section.export h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--ink);
+  }
+  section.export p { margin: 0 0 14px; color: var(--ink-dim); font-size: 13px; }
+  .code-box {
+    position: relative;
+    background: var(--code-bg);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-box .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .code-box .bar span { font-size: 11px; color: #8ea0c9; font-weight: 700; letter-spacing: .04em; }
+  .code-box button {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #cddcff;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .code-box button:hover { background: rgba(255,255,255,.15); }
+  .code-box button:focus-visible, a:focus-visible, nav.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .code-box pre {
+    margin: 0;
+    padding: 16px;
+    overflow: auto;
+    max-height: 480px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--code-ink);
+  }
+  .tok-key { color: var(--code-key); }
+  .tok-str { color: var(--code-str); }
+  .tok-num { color: var(--code-num); }
+
+  footer.foot {
+    grid-column: 1 / -1;
+    padding: 24px 32px 40px;
+    color: var(--ink-faint);
+    font-size: 12px;
+    border-top: 1px solid var(--line);
+    margin-top: 8px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section.centre, section.export { transition: box-shadow .15s ease; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Binnie's English Training — Offres &amp; tarifs</p>
+      <h1>Grille tarifaire consolidée</h1>
+      <p class="sub">Reconstituée à partir des 8 affiches tarifaires (6 cabinets présentiels + offre en ligne adultes + offre en ligne enfants/ados). À vérifier avant intégration : deux photos de la grille "II Plateaux mobile" sont identiques et ont été fusionnées en une seule fiche.</p>
+    </div>
+    <div class="meta">
+      <div><strong>7</strong> fiches — 6 centres + en ligne</div>
+      <div>Devise : Franc CFA (XOF)</div>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Sommaire">
+    <div class="grp">Centres présentiels</div>
+    <a href="#plateaux">Cabinet des II Plateaux</a>
+    <a href="#yopougon">Yopougon</a>
+    <a href="#abatta">Abatta</a>
+    <a href="#koumassi">Koumassi</a>
+    <a href="#bouake">Bouaké</a>
+    <a href="#angre">Angré Sicomex</a>
+    <div class="grp">En ligne</div>
+    <a href="#ligne-adultes">Adultes — en ligne</a>
+    <a href="#ligne-enfants">Enfants &amp; ados — en ligne / domicile</a>
+    <div class="grp">Intégration</div>
+    <a href="#export">Export JSON</a>
+  </nav>
+
+  <main>
+
+    <!-- ================= II PLATEAUX ================= -->
+    <section class="centre" id="plateaux">
+      <div class="head"><div class="badge">2P</div><h2>Cabinet des II Plateaux (mobile)</h2><span class="tag">Présentiel</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — matin 9h–11h15 ou soir 18h30–20h30</td><td class="price">80 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td>Lun-Mer ou Mer-Ven (matin 9h–11h15 / soir 18h30–20h30) · Sam 9h–11h15 &amp; Dim 14h–16h · ou Sam 14h–16h &amp; Dim 16h–18h</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programmes enfants &amp; adolescents</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Programme</th><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Enfants</td><td>Mer 15h–17h + Sam 9h–11h · ou Sam 9h–11h + Dim 14h–16h · ou Mer 15h–17h + Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Adolescents</td><td>Sam 9h–11h + Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Vacances (enfants &amp; ados)</td><td>Mar &amp; Jeu — 9h–11h / 11h15–13h15 / 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programme ouvert</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td>Sam 9h–11h15 · Dim 16h–18h</td><td class="price">50 000<span class="unit">F/mois</span> <span class="price-pill">100 000 F / 3 mois en 1 versement</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Type</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3 séances de 2h/semaine</td><td>Classique</td><td class="price">150 000<span class="unit">F/mois</span></td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">5 séances/semaine</td><td>Intensive</td><td class="price">200 000<span class="unit">F/mois</span></td><td class="price">300 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="note">Coaching groupé présentiel pour étudiant — 2×/semaine : <strong>30 000 F/mois</strong>.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= YOPOUGON ================= -->
+    <section class="centre" id="yopougon">
+      <div class="head"><div class="badge">YO</div><h2>Yopougon</h2><span class="tag">Présentiel</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — matin 9h–12h ou soir 18h30–20h30</td><td class="price">80 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td>Lun-Mer, Mer-Ven ou Lun-Ven (9h–12h / 18h30–20h30) · Mar-Jeu 18h30–20h30 · Sam 9h–11h ou 11h30–13h30 &amp; Dim 14h–16h · ou Sam 14h–16h &amp; Dim 16h–18h</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Cours enfants (entre septembre et mai)</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Public</th><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Plus petits</td><td>Mer 14h–16h · Sam 9h–11h</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+              <tr><td class="lead">Ados</td><td>Mer 16h–18h · Sam 11h30–13h30</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programme enfants — vacances</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td>Mar &amp; Jeu — 9h–11h / 11h30–13h30 / 14h–16h</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="note">Dégressif : <strong>25 000 F/enfant/mois</strong> à partir de 3 enfants inscrits.</p>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel — petits &amp; ados</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">2 séances de 2h/semaine (créneaux choisis à l'inscription)</td><td class="price">100 000<span class="unit">F/mois</span></td><td class="price">250 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="note">Cours à domicile acceptés à partir de 2 enfants.</p>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel — adulte</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Type</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3 séances de 2h/semaine</td><td>Classique</td><td class="price">150 000<span class="unit">F/mois</span></td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">5 séances/semaine</td><td>Intensive</td><td class="price">300 000<span class="unit">F/mois</span></td><td class="price">350 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="flags"><span class="flag">Tarif étudiant : 30 000 F (2×/sem) — sur présentation de carte</span></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= ABATTA ================= -->
+    <section class="centre" id="abatta">
+      <div class="head"><div class="badge">AB</div><h2>Abatta</h2><span class="tag">Présentiel</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe présentiel adultes</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — matin 9h–11h ou soir 18h30–20h30</td><td class="price">80 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td>Combinaisons matin (Lun-Mer / Mer-Ven / Lun-Ven, 9h–11h) ou soir (Lun-Mer / Mer-Ven / Lun-Ven 18h30–20h30, Mar-Jeu 18h30–20h30) · Sam 9h–11h/Dim 14h–16h · ou Sam 11h–13h/Dim 16h–18h</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Groupe présentiel enfants — rentrée scolaire (octobre–mai)</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Public</th><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Tous niveaux (5–17 ans)</td><td>Mer &amp; Sam 14h–16h</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+              <tr><td class="lead">Pré-ados &amp; ados</td><td>Sam 10h–12h · Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programme enfants — vacances</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Public</th><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Tous niveaux (5–17 ans)</td><td>Mar-Jeu — 9h–11h / 11h15–13h15 / 13h30–15h30</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+              <tr><td class="lead">Pré-ados &amp; ados</td><td>Sam 10h–12h · Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois/enfant</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programme ouvert</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td>Mar-Jeu — 9h–11h / 11h15–13h15 / 13h30–15h30 (février à mai)</td><td class="price">50 000<span class="unit">F/mois</span> <span class="price-pill">100 000 F / 3 mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Type</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3 séances de 2h/semaine</td><td>Classique</td><td class="price">150 000<span class="unit">F/mois</span></td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">5 séances/semaine</td><td>Intensive</td><td class="price">300 000<span class="unit">F/mois</span></td><td class="price">350 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="flags"><span class="flag">Tarif étudiant : 30 000 F/mois — sur présentation carte/justificatif</span></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= KOUMASSI ================= -->
+    <section class="centre" id="koumassi">
+      <div class="head"><div class="badge">KO</div><h2>Koumassi</h2><span class="tag">Présentiel</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">2×/semaine</td><td>Lun-Mer ou Mer-Ven 9h–11h/18h30–20h · Mar-Jeu 18h30–20h30 · Sam matin/Dim soir 9h–11h &amp; 14h–16h</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — 9h–11h ou 18h30–20h</td><td class="price">80 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3 séances de 2h/semaine</td><td class="price">150 000<span class="unit">F/mois</span></td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">5 séances de 2h/semaine (Intensive)</td><td class="price">300 000<span class="unit">F/mois</span></td><td class="price">350 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Cours enfants — présentiel groupé</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Période</th><th>Jours &amp; heures</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Vacances scolaires</td><td>Mar 9h–11h &amp; 11h–13h · Jeu 9h–11h &amp; 11h30–13h · Sam 9h–11h · Dim 14h–16h</td></tr>
+              <tr><td class="lead">Année scolaire (oct.–mai)</td><td>Mer 14h–16h · Sam 9h–11h · Dim 14h–16h</td></tr>
+            </tbody>
+          </table></div>
+          <p class="note">Open classes — Mar-Jeu 9h–11h, Sam 11h–13h, Dim 16h–18h : <strong>30 000 F/mois</strong>.</p>
+        </div>
+
+        <div class="cat">
+          <h3>Programme privé enfants — présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Formule</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">1 enfant — 2 séances/semaine, horaires au choix des parents</td><td class="price">120 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2 enfants, même niveau</td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2 enfants, niveaux différents</td><td class="price">250 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="flags"><span class="flag">Tarif étudiant : 30 000 F/mois — sur présentation carte/justificatif</span></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= BOUAKÉ ================= -->
+    <section class="centre" id="bouake">
+      <div class="head"><div class="badge">BK</div><h2>Bouaké</h2><span class="tag">Présentiel</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — matin 9h–11h30 ou soir 18h30–20h30</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td>Lun-Mer ou Mer-Ven (9h–11h30 / 18h30–20h30) · Sam 9h–11h30/Dim 14h–16h · ou Sam 14h–16h/Dim 16h–18h</td><td class="price">40 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programmes enfants / adolescents</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Programme</th><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Programme 1</td><td>Mer 15h–17h · Sam 9h–11h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Programme 2</td><td>Sam 9h–11h · Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Vacances (enfants &amp; ados)</td><td>Mar &amp; Jeu — 9h–11h / 11h15–13h15 / 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Type</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3 séances de 2h/semaine</td><td>Classique</td><td class="price">150 000<span class="unit">F/mois</span></td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">5 séances/semaine</td><td>Intensive</td><td class="price">200 000<span class="unit">F/mois</span></td><td class="price">300 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="flags"><span class="flag">Tarif étudiant : 30 000 F/mois — sur présentation carte/justificatif</span></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= ANGRÉ SICOMEX ================= -->
+    <section class="centre" id="angre">
+      <div class="head"><div class="badge">AS</div><h2>Angré Sicomex</h2><span class="tag">Présentiel</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — matin 9h–11h15 ou soir 18h30–20h30</td><td class="price">80 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td>Lun-Mer ou Mer-Ven (9h–11h15 / 18h30–20h30) · Sam 9h–11h15/Dim 14h–16h · ou Sam 14h–16h/Dim 16h–18h</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programme ouvert (Open Classes — flexible, sans emploi du temps fixe)</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td rowspan="2">Lun · Mer · Ven — entre 18h30 et 20h30 (30 min, 1h ou plus au choix)</td><td class="price">40 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td class="price">20 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="flags"><span class="flag">Pas d'exercices à la maison</span><span class="flag">Aucun compte à rendre en cas d'absence</span><span class="flag">Coach sur place pour corriger</span></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programme exceptionnel — pré-intermédiaires / intermédiaires</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td rowspan="2">Lun · Mer · Ven — 11h30–13h00</td><td class="price">80 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td class="price">50 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Programmes enfants &amp; adolescents</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Programme</th><th>Créneaux</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Enfants</td><td>Mer 15h–17h + Sam 9h–11h · ou Sam 9h–11h + Dim 14h–16h · ou Mer 15h–17h + Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Adolescents</td><td>Sam 9h–11h + Dim 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Vacances (enfants &amp; ados)</td><td>Mar &amp; Jeu — 9h–11h / 11h15–13h15 / 14h–16h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé présentiel</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Type</th><th>Au cabinet</th><th>À domicile</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3 séances de 2h/semaine</td><td>Classique</td><td class="price">150 000<span class="unit">F/mois</span></td><td class="price">200 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">5 séances/semaine</td><td>Intensive</td><td class="price">250 000<span class="unit">F/mois</span></td><td class="price">300 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Tarif étudiant / non travailleur</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td>Mar &amp; Jeu — 18h30–20h30</td><td class="price">25 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= EN LIGNE ADULTES ================= -->
+    <section class="centre" id="ligne-adultes">
+      <div class="head"><div class="badge">EL</div><h2>Cours d'anglais en ligne — Adultes</h2><span class="tag">En ligne · Google Meet</span></div>
+      <div class="body">
+        <p class="note" style="margin-top:14px">Formation 100&nbsp;% en visioconférence · horaires en GMT (heure d'Abidjan) · connexion stable requise.</p>
+
+        <div class="cat">
+          <h3>Formules en groupe</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Formule</th><th>Jours &amp; heures</th><th>Durée/séance</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">3×/semaine</td><td>Lun · Mer · Ven — 20h–22h</td><td>2h</td><td class="price">50 000<span class="unit">F CFA/mois</span></td></tr>
+              <tr><td class="lead">2×/semaine</td><td>Mar · Jeu — 20h–22h</td><td>2h</td><td class="price">40 000<span class="unit">F CFA/mois</span></td></tr>
+              <tr><td class="lead">Week-end</td><td>Sam · Dim — 19h–21h</td><td>2h</td><td class="price">40 000<span class="unit">F CFA/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Coaching privé en ligne</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Formule</th><th>Séances/semaine</th><th>Durée/séance</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Standard</td><td>3</td><td>1h30</td><td class="price">100 000<span class="unit">F CFA/mois</span></td></tr>
+              <tr><td class="lead">Intensive</td><td>5</td><td>2h</td><td class="price">200 000<span class="unit">F CFA/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="note">Horaires flexibles, définis selon la disponibilité de l'apprenant.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= EN LIGNE ENFANTS ================= -->
+    <section class="centre" id="ligne-enfants">
+      <div class="head"><div class="badge">EA</div><h2>Cours d'anglais — Enfants &amp; adolescents</h2><span class="tag">En ligne / à domicile</span></div>
+      <div class="body">
+
+        <div class="cat">
+          <h3>Groupe en ligne (enfants &amp; ados)</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Groupe</th><th>Jours &amp; heures</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Groupe 1 (6–10 ans)</td><td>Sam &amp; Dim — 14h30–16h30</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Groupe 2 (12–18 ans)</td><td>Sam &amp; Dim — 15h–17h</td><td class="price">30 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="cat">
+          <h3>Cours privé en ligne</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Fréquence</th><th>Durée/séance</th><th>Fourchette tarifaire</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">2 séances/semaine</td><td>1h ou 1h30</td><td class="price">80 000 – 100 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">3 séances/semaine</td><td>1h ou 1h30</td><td class="price">100 000 – 120 000<span class="unit">F/mois</span></td></tr>
+            </tbody>
+          </table></div>
+          <p class="note">Contenu personnalisé selon le niveau et les besoins de l'apprenant.</p>
+        </div>
+
+        <div class="cat">
+          <h3>Cours privé à domicile</h3>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Formule</th><th>Séances/semaine</th><th>Tarif</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">Deux enfants, même niveau</td><td>2 (2h chacune)</td><td class="price">150 000<span class="unit">F/mois</span></td></tr>
+              <tr><td class="lead">Enfants de niveaux différents</td><td>2 (2h chacune)</td><td class="price">125 000<span class="unit">F/mois/enfant</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="flags"><span class="flag">Bonus : 1h en ligne offerte pour tester la connexion de l'enfant</span></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= EXPORT ================= -->
+    <section class="export" id="export">
+      <h2>Export JSON</h2>
+      <p>Structure prête à consommer côté frontend — un tableau <code>centres</code>, chacun avec ses <code>categories</code> et leurs <code>formules</code>. Les tarifs sont en francs CFA, valeur numérique brute (pas de séparateur).</p>
+      <div class="code-box">
+        <div class="bar">
+          <span>grille-tarifaire-bet.json</span>
+          <button type="button" onclick="copyJSON(this)">Copier</button>
+        </div>
+        <pre id="json-out"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    Reconstitué à partir de 8 visuels fournis (dont un doublon "II Plateaux mobile" fusionné). Vérifier les horaires ambigus avant mise en ligne — signalés par plusieurs combinaisons possibles dans une même cellule.
+  </footer>
+</div>
+
+<script>
+  const data = {
+    devise: "XOF",
+    centres: [
+      {
+        id: "plateaux", nom: "Cabinet des II Plateaux (mobile)", mode: "presentiel",
+        categories: [
+          { nom: "Groupe présentiel", formules: [
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven — 9h-11h15 ou 18h30-20h30", tarif: 80000, unite: "mois" },
+            { frequence: "2x/semaine", horaires: "Lun-Mer ou Mer-Ven, + weekend au choix", tarif: 50000, unite: "mois" }
+          ]},
+          { nom: "Enfants & adolescents", formules: [
+            { public: "Enfants", tarif: 30000, unite: "mois" },
+            { public: "Adolescents", tarif: 30000, unite: "mois" },
+            { public: "Vacances", tarif: 30000, unite: "mois" }
+          ]},
+          { nom: "Programme ouvert", formules: [
+            { tarif: 50000, unite: "mois" },
+            { tarif: 100000, unite: "3 mois (1 versement)" }
+          ]},
+          { nom: "Coaching privé présentiel", formules: [
+            { frequence: "3 séances de 2h/semaine", type: "Classique", cabinet: 150000, domicile: 200000, unite: "mois" },
+            { frequence: "5 séances/semaine", type: "Intensive", cabinet: 200000, domicile: 300000, unite: "mois" }
+          ]},
+          { nom: "Coaching groupé étudiant", formules: [
+            { frequence: "2x/semaine", tarif: 30000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "yopougon", nom: "Yopougon", mode: "presentiel",
+        categories: [
+          { nom: "Groupe présentiel", formules: [
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven — 9h-12h ou 18h30-20h30", tarif: 80000, unite: "mois" },
+            { frequence: "2x/semaine", horaires: "Multiples combinaisons + weekend", tarif: 50000, unite: "mois" }
+          ]},
+          { nom: "Cours enfants (sept.-mai)", formules: [
+            { public: "Plus petits", horaires: "Mer 14h-16h, Sam 9h-11h", tarif: 30000, unite: "mois/enfant" },
+            { public: "Ados", horaires: "Mer 16h-18h, Sam 11h30-13h30", tarif: 30000, unite: "mois/enfant" }
+          ]},
+          { nom: "Programme enfants vacances", formules: [
+            { horaires: "Mar/Jeu 9h-11h / 11h30-13h30 / 14h-16h", tarif: 30000, unite: "mois/enfant", degressif: "25000 F/enfant à partir de 3 enfants" }
+          ]},
+          { nom: "Coaching privé — petits & ados", formules: [
+            { frequence: "2 séances de 2h/semaine", cabinet: 100000, domicile: 250000, unite: "mois", note: "domicile à partir de 2 enfants" }
+          ]},
+          { nom: "Coaching privé — adulte", formules: [
+            { frequence: "3 séances de 2h/semaine", type: "Classique", cabinet: 150000, domicile: 200000, unite: "mois" },
+            { frequence: "5 séances/semaine", type: "Intensive", cabinet: 300000, domicile: 350000, unite: "mois" }
+          ]},
+          { nom: "Tarif étudiant", formules: [
+            { frequence: "2x/semaine", tarif: 30000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "abatta", nom: "Abatta", mode: "presentiel",
+        categories: [
+          { nom: "Groupe présentiel adultes", formules: [
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven — 9h-11h ou 18h30-20h30", tarif: 80000, unite: "mois" },
+            { frequence: "2x/semaine", horaires: "Multiples combinaisons + weekend", tarif: 50000, unite: "mois" }
+          ]},
+          { nom: "Groupe enfants (oct.-mai)", formules: [
+            { public: "5-17 ans", horaires: "Mer & Sam 14h-16h", tarif: 30000, unite: "mois/enfant" },
+            { public: "Pré-ados & ados", horaires: "Sam 10h-12h, Dim 14h-16h", tarif: 30000, unite: "mois/enfant" }
+          ]},
+          { nom: "Programme enfants vacances", formules: [
+            { public: "5-17 ans", horaires: "Mar-Jeu 9h-11h / 11h15-13h15 / 13h30-15h30", tarif: 30000, unite: "mois/enfant" },
+            { public: "Pré-ados & ados", horaires: "Sam 10h-12h, Dim 14h-16h", tarif: 30000, unite: "mois/enfant" }
+          ]},
+          { nom: "Programme ouvert", formules: [
+            { horaires: "Mar-Jeu, février à mai", tarif: 50000, unite: "mois" },
+            { tarif: 100000, unite: "3 mois" }
+          ]},
+          { nom: "Coaching privé présentiel", formules: [
+            { frequence: "3 séances de 2h/semaine", type: "Classique", cabinet: 150000, domicile: 200000, unite: "mois" },
+            { frequence: "5 séances/semaine", type: "Intensive", cabinet: 300000, domicile: 350000, unite: "mois" }
+          ]},
+          { nom: "Tarif étudiant", formules: [
+            { tarif: 30000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "koumassi", nom: "Koumassi", mode: "presentiel",
+        categories: [
+          { nom: "Groupe présentiel", formules: [
+            { frequence: "2x/semaine", tarif: 50000, unite: "mois" },
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven — 9h-11h ou 18h30-20h", tarif: 80000, unite: "mois" }
+          ]},
+          { nom: "Coaching privé présentiel", formules: [
+            { frequence: "3 séances de 2h/semaine", cabinet: 150000, domicile: 200000, unite: "mois" },
+            { frequence: "5 séances de 2h/semaine", type: "Intensive", cabinet: 300000, domicile: 350000, unite: "mois" }
+          ]},
+          { nom: "Open classes", formules: [
+            { tarif: 30000, unite: "mois" }
+          ]},
+          { nom: "Programme privé enfants", formules: [
+            { formule: "1 enfant", tarif: 120000, unite: "mois" },
+            { formule: "2 enfants, même niveau", tarif: 200000, unite: "mois" },
+            { formule: "2 enfants, niveaux différents", tarif: 250000, unite: "mois" }
+          ]},
+          { nom: "Tarif étudiant", formules: [
+            { tarif: 30000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "bouake", nom: "Bouaké", mode: "presentiel",
+        categories: [
+          { nom: "Groupe présentiel", formules: [
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven — 9h-11h30 ou 18h30-20h30", tarif: 50000, unite: "mois" },
+            { frequence: "2x/semaine", tarif: 40000, unite: "mois" }
+          ]},
+          { nom: "Enfants & adolescents", formules: [
+            { formule: "Programme 1", horaires: "Mer 15h-17h, Sam 9h-11h", tarif: 30000, unite: "mois" },
+            { formule: "Programme 2", horaires: "Sam 9h-11h, Dim 14h-16h", tarif: 30000, unite: "mois" },
+            { formule: "Vacances", tarif: 30000, unite: "mois" }
+          ]},
+          { nom: "Coaching privé présentiel", formules: [
+            { frequence: "3 séances de 2h/semaine", type: "Classique", cabinet: 150000, domicile: 200000, unite: "mois" },
+            { frequence: "5 séances/semaine", type: "Intensive", cabinet: 200000, domicile: 300000, unite: "mois" }
+          ]},
+          { nom: "Tarif étudiant", formules: [
+            { tarif: 30000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "angre-sicomex", nom: "Angré Sicomex", mode: "presentiel",
+        categories: [
+          { nom: "Groupe présentiel", formules: [
+            { frequence: "3x/semaine", tarif: 80000, unite: "mois" },
+            { frequence: "2x/semaine", tarif: 50000, unite: "mois" }
+          ]},
+          { nom: "Programme ouvert (Open Classes flexible)", formules: [
+            { frequence: "3x/semaine", tarif: 40000, unite: "mois" },
+            { frequence: "2x/semaine", tarif: 20000, unite: "mois" }
+          ]},
+          { nom: "Programme exceptionnel pré-intermédiaires/intermédiaires", formules: [
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven 11h30-13h00", tarif: 80000, unite: "mois" },
+            { frequence: "2x/semaine", horaires: "Lun/Mer/Ven 11h30-13h00", tarif: 50000, unite: "mois" }
+          ]},
+          { nom: "Enfants & adolescents", formules: [
+            { public: "Enfants", tarif: 30000, unite: "mois" },
+            { public: "Adolescents", tarif: 30000, unite: "mois" },
+            { public: "Vacances", tarif: 30000, unite: "mois" }
+          ]},
+          { nom: "Coaching privé présentiel", formules: [
+            { frequence: "3 séances de 2h/semaine", type: "Classique", cabinet: 150000, domicile: 200000, unite: "mois" },
+            { frequence: "5 séances/semaine", type: "Intensive", cabinet: 250000, domicile: 300000, unite: "mois" }
+          ]},
+          { nom: "Tarif étudiant / non travailleur", formules: [
+            { horaires: "Mar & Jeu 18h30-20h30", tarif: 25000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "en-ligne-adultes", nom: "En ligne — Adultes", mode: "en_ligne",
+        categories: [
+          { nom: "Formules en groupe", formules: [
+            { frequence: "3x/semaine", horaires: "Lun/Mer/Ven 20h-22h", duree: "2h", tarif: 50000, unite: "mois" },
+            { frequence: "2x/semaine", horaires: "Mar/Jeu 20h-22h", duree: "2h", tarif: 40000, unite: "mois" },
+            { frequence: "Week-end", horaires: "Sam/Dim 19h-21h", duree: "2h", tarif: 40000, unite: "mois" }
+          ]},
+          { nom: "Coaching privé en ligne", formules: [
+            { formule: "Standard", seances_semaine: 3, duree: "1h30", tarif: 100000, unite: "mois" },
+            { formule: "Intensive", seances_semaine: 5, duree: "2h", tarif: 200000, unite: "mois" }
+          ]}
+        ]
+      },
+      {
+        id: "en-ligne-enfants", nom: "En ligne / domicile — Enfants & adolescents", mode: "en_ligne_domicile",
+        categories: [
+          { nom: "Groupe en ligne", formules: [
+            { groupe: "6-10 ans", horaires: "Sam & Dim 14h30-16h30", tarif: 30000, unite: "mois" },
+            { groupe: "12-18 ans", horaires: "Sam & Dim 15h-17h", tarif: 30000, unite: "mois" }
+          ]},
+          { nom: "Cours privé en ligne", formules: [
+            { frequence: "2 séances/semaine", duree: "1h ou 1h30", tarif_min: 80000, tarif_max: 100000, unite: "mois" },
+            { frequence: "3 séances/semaine", duree: "1h ou 1h30", tarif_min: 100000, tarif_max: 120000, unite: "mois" }
+          ]},
+          { nom: "Cours privé à domicile", formules: [
+            { formule: "Deux enfants, même niveau", seances_semaine: 2, duree: "2h", tarif: 150000, unite: "mois" },
+            { formule: "Enfants, niveaux différents", seances_semaine: 2, duree: "2h", tarif: 125000, unite: "mois/enfant" }
+          ]}
+        ]
+      }
+    ]
+  };
+
+  function syntaxHighlight(json) {
+    json = json.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
+      let cls = "tok-num";
+      if (/^"/.test(match)) { cls = /:$/.test(match) ? "tok-key" : "tok-str"; }
+      return '<span class="' + cls + '">' + match + "</span>";
+    });
+  }
+
+  const jsonStr = JSON.stringify(data, null, 2);
+  document.getElementById("json-out").innerHTML = syntaxHighlight(jsonStr);
+
+  function copyJSON(btn) {
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      const old = btn.textContent;
+      btn.textContent = "Copié ✓";
+      setTimeout(() => { btn.textContent = old; }, 1600);
+    });
+  }
+</script>

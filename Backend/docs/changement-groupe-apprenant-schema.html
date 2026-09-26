@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changement de groupe d'un apprenant — état des lieux &amp; plan</title>
+<style>
+  :root {
+    --bg: #F6F7F9;
+    --surface: #FFFFFF;
+    --surface-2: #EEF1F5;
+    --ink: #0F172A;
+    --ink-soft: #4B5A73;
+    --ink-faint: #8895AA;
+    --border: #DDE3EC;
+    --accent: #0891B2;
+    --accent-soft: #E0F2FE;
+    --accent-ink: #0E5A6E;
+    --ok: #16A34A;
+    --ok-bg: #DCFCE7;
+    --warn: #B45309;
+    --warn-bg: #FEF3C7;
+    --bug: #DC2626;
+    --bug-bg: #FEE2E2;
+    --unclear: #7C3AED;
+    --unclear-bg: #F1EBFF;
+    --font-head: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0A0F1A;
+      --surface: #111826;
+      --surface-2: #17202F;
+      --ink: #E8EDF6;
+      --ink-soft: #A6B2C6;
+      --ink-faint: #6B7893;
+      --border: #232E42;
+      --accent: #22D3EE;
+      --accent-soft: #103241;
+      --accent-ink: #7EE3F5;
+      --ok: #4ADE80;
+      --ok-bg: #113420;
+      --warn: #FBBF24;
+      --warn-bg: #3A2A0B;
+      --bug: #F87171;
+      --bug-bg: #3A1414;
+      --unclear: #C4A6FF;
+      --unclear-bg: #241A3D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0A0F1A; --surface: #111826; --surface-2: #17202F; --ink: #E8EDF6;
+    --ink-soft: #A6B2C6; --ink-faint: #6B7893; --border: #232E42;
+    --accent: #22D3EE; --accent-soft: #103241; --accent-ink: #7EE3F5;
+    --ok: #4ADE80; --ok-bg: #113420; --warn: #FBBF24; --warn-bg: #3A2A0B;
+    --bug: #F87171; --bug-bg: #3A1414; --unclear: #C4A6FF; --unclear-bg: #241A3D;
+  }
+  :root[data-theme="light"] {
+    --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #EEF1F5; --ink: #0F172A;
+    --ink-soft: #4B5A73; --ink-faint: #8895AA; --border: #DDE3EC;
+    --accent: #0891B2; --accent-soft: #E0F2FE; --accent-ink: #0E5A6E;
+    --ok: #16A34A; --ok-bg: #DCFCE7; --warn: #B45309; --warn-bg: #FEF3C7;
+    --bug: #DC2626; --bug-bg: #FEE2E2; --unclear: #7C3AED; --unclear-bg: #F1EBFF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  h1 {
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 15px;
+    color: var(--ink-soft);
+    max-width: 66ch;
+    margin: 0;
+  }
+
+  nav.jump {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  nav.jump a {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: border-color .15s, color .15s;
+  }
+  nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--accent); color: var(--accent-ink); }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 20px;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .section-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  h2 {
+    font-family: var(--font-head);
+    font-size: 19px;
+    font-weight: 750;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .section-note {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    max-width: 68ch;
+  }
+
+  .rules { display: grid; gap: 10px; }
+  .rule {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 14px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .rule .n {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .rule .t { font-size: 14.5px; font-weight: 650; }
+  .rule .d { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+
+  code.k { font-family: var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--accent-ink); }
+
+  /* ── Two-lane flow (existant vs à ajouter) ─────── */
+  .lanes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 720px) { .lanes { grid-template-columns: 1fr; } }
+  .lane {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .lane-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .lane-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .lane.done .dot { background: var(--ok); }
+  .lane.todo .dot { background: var(--warn); }
+
+  .fnode {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .fnode .ico {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .fnode .label { font-size: 13px; font-weight: 650; }
+  .fnode .path {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    padding: 1px 7px;
+    border-radius: 5px;
+    display: inline-block;
+    margin-top: 3px;
+    width: fit-content;
+  }
+  .lane.done .fnode { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+  .lane.todo .fnode { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); border-style: dashed; }
+
+  .connector {
+    align-self: center;
+    width: 1.5px;
+    height: 18px;
+    background: var(--border);
+    position: relative;
+  }
+  .connector::after {
+    content: "";
+    position: absolute;
+    left: 50%; bottom: 0;
+    transform: translateX(-50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--border);
+  }
+
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    display: inline-block;
+    width: fit-content;
+    margin-top: 8px;
+  }
+  .badge.ok { color: var(--ok); background: var(--ok-bg); }
+  .badge.warn { color: var(--warn); background: var(--warn-bg); }
+
+  /* ── Table ──────────────────────────────────────── */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13px; }
+  thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-faint);
+    background: var(--surface-2);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { background: var(--surface); }
+  td.loc { font-family: var(--font-mono); font-size: 12px; color: var(--accent-ink); white-space: nowrap; }
+  td.desc { color: var(--ink-soft); max-width: 34ch; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bug { color: var(--bug); background: var(--bug-bg); }
+  .pill.unclear { color: var(--unclear); background: var(--unclear-bg); }
+
+  /* ── Role matrix ────────────────────────────────── */
+  .roles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  .role-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .role-card .who { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; }
+  .role-card .what { font-size: 12.5px; color: var(--ink-soft); }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Plan · BET · à valider avant implémentation</div>
+    <h1>Changement de groupe d'un apprenant — état des lieux &amp; plan</h1>
+    <p class="dek">Déplacer un apprenant d'une classe existante vers une autre classe existante (les classes elles-mêmes ne changent pas). Aujourd'hui réservé à Onboarding en ligne ; à étendre aux assistantes présentiel, qui jouent leur propre rôle d'onboarding.</p>
+    <nav class="jump">
+      <a href="#regle">Ce que fait le transfert</a>
+      <a href="#existant">Ce qui existe déjà</a>
+      <a href="#manquant">Ce qui manque</a>
+      <a href="#roles">Qui peut faire quoi</a>
+      <a href="#plan">Plan d'implémentation</a>
+      <a href="#extensions">Extensions envisagées</a>
+    </nav>
+  </header>
+
+  <!-- ═══════ 01 — Règle produit ═══════ -->
+  <section id="regle">
+    <div class="section-head">
+      <span class="section-tag">01</span>
+      <h2>Ce que fait le transfert — et rien de plus</h2>
+    </div>
+    <div class="rules">
+      <div class="rule">
+        <span class="n">1</span>
+        <div>
+          <div class="t">L'apprenant change de groupe, pas la classe</div>
+          <div class="d">Le groupe d'origine et le groupe cible existent déjà tous les deux — aucune classe n'est créée ni supprimée par cette action.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">2</span>
+        <div>
+          <div class="t">L'ancienne place se libère proprement</div>
+          <div class="d">La ligne <code class="k">groupes_apprenants</code> d'origine passe en <code class="k">statut:"transfere"</code> (pas supprimée — trace conservée), <code class="k">nb_apprenants</code> du groupe d'origine décrémenté.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">3</span>
+        <div>
+          <div class="t">La nouvelle place s'ouvre en période de test</div>
+          <div class="d">Nouvelle ligne créée dans le groupe cible avec <code class="k">statut:"periode_test"</code>, niveau et notes repris de l'ancienne ligne, <code class="k">nb_apprenants</code> du groupe cible incrémenté.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">4</span>
+        <div>
+          <div class="t">Les bonnes personnes sont notifiées</div>
+          <div class="d">Le nouveau coach, l'assistante commerciale concernée, et la personne à l'origine de l'inscription (<code class="k">added_by</code>) — selon qui a initié le transfert.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">5</span>
+        <div>
+          <div class="t">Rien de l'ancienne classe n'est perdu — tout reste consultable</div>
+          <div class="d">Vérifié dans le code actuel, sans qu'aucun changement ne soit nécessaire pour l'assistante présentiel&nbsp;: les paiements vivent sur <code class="k">assignations_parcours</code> (<code class="k">assignation_id</code>), jamais sur la ligne <code class="k">groupes_apprenants</code> qui est fermée — le transfert ne touche pas l'assignation, donc l'historique de paiement reste intact et inchangé, quelle que soit la classe. Les présences (<code class="k">groupes_presences</code>) et évaluations (<code class="k">evaluations_groupes</code>) restent rattachées à l'ancien <code class="k">ga_id</code> / ancien groupe, consultables à tout moment depuis la fiche de l'ancienne classe — rien n'est réécrit ni supprimé.</div>
+        </div>
+      </div>
+    </div>
+    <div class="callout ok">
+      <strong>Garantie déjà en place, à ne pas casser&nbsp;:</strong> un transfert ne supprime jamais rien — il ferme une ligne (<code class="k">statut:"transfere"</code>) et en ouvre une autre. Toute donnée déjà écrite (paiements, présences, évaluations, notes) reste interrogeable via l'ancien <code class="k">ga_id</code>/l'ancienne classe. Le plan ci-dessous (section 05) n'introduit aucune suppression ni réécriture de données existantes.
+    </div>
+  </section>
+
+  <!-- ═══════ 02 — Ce qui existe / manque ═══════ -->
+  <section id="existant">
+    <div class="section-head">
+      <span class="section-tag">02</span>
+      <h2>Ce qui existe déjà vs. ce qui manque</h2>
+    </div>
+    <p class="section-note">Le backend est déjà complet et générique — un seul endpoint sert tous les rôles. Le seul manque est côté interface&nbsp;: l'assistante présentiel n'a pas le bouton pour l'utiliser.</p>
+
+    <div class="lanes">
+      <div class="lane done">
+        <div class="lane-title"><span class="dot"></span>Existant — Onboarding en ligne</div>
+        <div class="fnode">
+          <span class="ico">clic</span>
+          <span class="label">Bouton « 🔄 Changer de groupe » dans la fiche apprenant</span>
+          <span class="path">OnboardingDashboard.jsx</span>
+        </div>
+        <div class="connector"></div>
+        <div class="fnode">
+          <span class="ico">recherche</span>
+          <span class="label">Recherche des groupes cibles par niveau</span>
+          <span class="path">searchGroupesCibles()</span>
+        </div>
+        <div class="connector"></div>
+        <div class="fnode">
+          <span class="ico">POST</span>
+          <span class="label">Exécution du transfert</span>
+          <span class="path">/api/groupes/transfert</span>
+        </div>
+        <span class="badge ok">✓ en production</span>
+      </div>
+
+      <div class="lane done">
+        <div class="lane-title"><span class="dot"></span>Assistante présentiel</div>
+        <div class="fnode">
+          <span class="ico">clic</span>
+          <span class="label">Bouton « 🔄 Changer de groupe » dans <code class="k">apprenantModal</code> (bloc « Classe & Coach assignés », via <code class="k">commClasseInfo.ga_id</code> déjà résolu) et dans <code class="k">classeApprenantModal</code> (via <code class="k">ga.id</code>, déjà fiable pour ce cas)</span>
+          <span class="path">CommercialDashboard.jsx</span>
+        </div>
+        <div class="connector"></div>
+        <div class="fnode">
+          <span class="ico">recherche</span>
+          <span class="label">Recherche des groupes cibles par niveau</span>
+          <span class="path">searchGroupesCibles()</span>
+        </div>
+        <div class="connector"></div>
+        <div class="fnode">
+          <span class="ico">POST</span>
+          <span class="label">Exécution du transfert — initiateur:"assistant"</span>
+          <span class="path">/api/groupes/transfert</span>
+        </div>
+        <span class="badge ok">✓ implémenté</span>
+      </div>
+    </div>
+    <div class="callout ok">
+      <strong>Correction apportée en cours de route&nbsp;:</strong> l'écart d'id documenté ci-dessous (section 03) n'a pas nécessité de toucher <code class="k">openApprenantDetail()</code> — <code class="k">commClasseInfo</code> (déjà chargé séparément pour les onglets Notes/Présences) porte déjà un <code class="k">ga_id</code> fiable, résolu côté backend via <code class="k">/api/groupes/apprenant-by-email</code>. Le bouton le réutilise tel quel. Pour <code class="k">classeApprenantModal</code>, <code class="k">ga.id</code> est directement le bon id (ce cas n'implique jamais d'assignation).
+    </div>
+
+    <div class="callout">
+      <strong>Pourquoi le backend n'a rien à changer côté logique&nbsp;:</strong> <code class="k">POST /api/groupes/transfert</code> accepte déjà un paramètre <code class="k">initiateur: "coach" | "assistant" | "apprenant"</code> — l'assistante présentiel utiliserait simplement <code class="k">initiateur:"assistant"</code>, exactement comme le fait déjà Onboarding.
+    </div>
+
+    <p class="section-note">Vérification faite sur le code actuel de <code class="k">CommercialDashboard.jsx</code> : quand l'assistante clique un apprenant depuis l'onglet <em>Apprenants</em> d'une classe, deux chemins distincts s'ouvrent selon les cas — la plupart des apprenants n'ont pas le même point d'entrée que ce que le premier passage de ce document supposait.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Cas</th><th>Modal ouvert</th><th>Fréquence réelle</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="loc">Apprenant avec dossier BET lié (<code class="k">assignations_parcours</code> retrouvée par <code class="k">assignation_id</code> en note, ou par email)</td>
+            <td class="desc"><code class="k">apprenantModal</code> — la fiche riche, utilisée partout ailleurs dans ce dashboard (paiements, accès, présences…)</td>
+            <td><span class="pill ok">cas majoritaire</span></td>
+          </tr>
+          <tr>
+            <td class="loc">Apprenant sans dossier BET lié (liste de classe seule)</td>
+            <td class="desc"><code class="k">classeApprenantModal</code> — fiche minimale, 2 onglets (Informations / Présences), bandeau d'avertissement affiché</td>
+            <td><span class="pill warn">cas de secours</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════ 03 — Ce qui manque en détail ═══════ -->
+  <section id="manquant">
+    <div class="section-head">
+      <span class="section-tag">03</span>
+      <h2>Écarts précis à combler</h2>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Endroit</th><th>Écart constaté</th><th>Statut</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="loc">CommercialDashboard.jsx<br><span style="color:var(--ink-faint)">apprenantModal + classeApprenantModal</span></td>
+            <td class="desc">Bouton « Changer de groupe » ajouté sur les deux fiches.</td>
+            <td><span class="pill ok">fait</span></td>
+          </tr>
+          <tr>
+            <td class="loc">CommercialDashboard.jsx:1505<br><span style="color:var(--ink-faint)">openApprenantDetail() — fusion assignation/ga</span></td>
+            <td class="desc"><code class="k">enriched = { ...a, ...assignationLiee }</code> écrase toujours <code class="k">.id</code> par celui de l'assignation — le risque décrit ici reste réel pour tout futur code qui utiliserait <code class="k">apprenantModal.id</code> comme <code class="k">ga_id</code>. Contourné (pas corrigé à la source) en faisant porter le bouton sur <code class="k">commClasseInfo.ga_id</code>, déjà résolu de façon fiable ailleurs dans ce fichier (onglets Notes/Présences).</td>
+            <td><span class="pill warn">contourné, pas corrigé à la source</span></td>
+          </tr>
+          <tr>
+            <td class="loc">groupes.js:1302<br><span style="color:var(--ink-faint)">POST /transfert</span></td>
+            <td class="desc">Ne notifie jamais le PA advisor lors d'un transfert (seuls coach + assistante commerciale + added_by le sont), contrairement à l'ajout de groupe qui le notifie déjà.</td>
+            <td><span class="pill warn">pas encore fait</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════ 04 — Qui peut faire quoi ═══════ -->
+  <section id="roles">
+    <div class="section-head">
+      <span class="section-tag">04</span>
+      <h2>Qui peut initier un transfert, une fois le plan appliqué</h2>
+    </div>
+    <div class="roles">
+      <div class="role-card">
+        <div class="who">🟢 Onboarding en ligne</div>
+        <div class="what">Déjà opérationnel. <code class="k">initiateur:"assistant"</code>.</div>
+      </div>
+      <div class="role-card">
+        <div class="who">🟡 Assistante présentiel</div>
+        <div class="what">À ajouter — même bouton, même modal, même endpoint. <code class="k">initiateur:"assistant"</code>.</div>
+      </div>
+      <div class="role-card">
+        <div class="who">⚪ Coach</div>
+        <div class="what">Déjà pris en charge par l'endpoint (<code class="k">initiateur:"coach"</code>) — hors périmètre de cette demande, non modifié.</div>
+      </div>
+      <div class="role-card">
+        <div class="who">⚪ PA advisor</div>
+        <div class="what">N'initie pas de transfert — devient simplement informé une fois la notification ajoutée.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ 05 — Plan ═══════ -->
+  <section id="plan">
+    <div class="section-head">
+      <span class="section-tag">05</span>
+      <h2>Plan d'implémentation proposé</h2>
+    </div>
+    <div class="rules">
+      <div class="rule">
+        <span class="n">1</span>
+        <div>
+          <div class="t"><span class="pill ok">fait</span>&nbsp; CommercialDashboard.jsx — bouton « Changer de groupe » sur les deux fiches</div>
+          <div class="d">Ajouté dans <code class="k">apprenantModal</code> (bloc « Classe & Coach assignés », <code class="k">ga_id</code> pris sur <code class="k">commClasseInfo</code>) et dans <code class="k">classeApprenantModal</code> (<code class="k">ga.id</code> déjà fiable). Ouvre un modal de transfert dédié, recherche des groupes cibles par niveau, puis <code class="k">POST /api/groupes/transfert</code> avec <code class="k">initiateur:"assistant"</code>.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">2</span>
+        <div>
+          <div class="t"><span class="pill warn">à faire</span>&nbsp; Revoir le modal de transfert</div>
+          <div class="d">Le modal actuel est une version minimale (recherche par niveau + motif libre, sans le picker de disponibilités/jours-créneaux qu'a Onboarding). Prochaine étape à définir avec l'équipe avant de coder.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">3</span>
+        <div>
+          <div class="t"><span class="pill warn">pas encore fait</span>&nbsp; groupes.js — notifier le PA</div>
+          <div class="d">Ajouter <code class="k">notifyRole(["pedagogical_advisor","admin_pa_advisor"], …)</code> dans <code class="k">POST /transfert</code>, sur le même modèle que celui déjà utilisé dans <code class="k">POST /:id/apprenants</code>.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">4</span>
+        <div>
+          <div class="t">Aucun changement de modèle de données, aucune perte d'historique</div>
+          <div class="d">Table <code class="k">groupes_apprenants</code> et logique de l'endpoint <code class="k">/transfert</code> inchangées — paiements (liés à l'assignation), présences et évaluations (liées à l'ancien <code class="k">ga_id</code>) restent intacts et consultables comme aujourd'hui (voir garantie section 01).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>À confirmer avant de coder&nbsp;:</strong> ce plan n'implémente rien tant que le périmètre n'est pas validé. Si un point doit être ajusté (ex&nbsp;: pas de notif PA, ou ouvrir aussi l'accès à l'assistante en ligne), le dire avant le go.
+    </div>
+  </section>
+
+  <!-- ═══════ 06 — Extensions envisagées ═══════ -->
+  <section id="extensions">
+    <div class="section-head">
+      <span class="section-tag">06</span>
+      <h2>Extensions envisagées — à l'analyse, rien de décidé</h2>
+    </div>
+    <p class="section-note">Deux besoins remontés au-delà du périmètre initial (un seul apprenant, vers une classe déjà existante). À analyser avant d'ajouter quoi que ce soit au plan de la section 05.</p>
+
+    <div class="rules">
+      <div class="rule">
+        <span class="n">A</span>
+        <div>
+          <div class="t">Transférer toute une classe en une fois, pas seulement un apprenant</div>
+          <div class="d">
+            Aujourd'hui l'unité transférée est toujours un seul apprenant (un seul <code class="k">ga_id</code>). L'idée&nbsp;: pouvoir sélectionner « toute la classe » comme unité, ex. depuis l'en-tête du détail classe plutôt que depuis chaque fiche apprenant.
+            <br><br>
+            <strong>Mécanique probable&nbsp;:</strong> répéter l'action actuelle (fermer <code class="k">groupes_apprenants</code>, ouvrir en <code class="k">periode_test</code> côté cible) pour chaque ligne active du groupe source, vers le même groupe cible.
+            <br><br>
+            <strong>Questions ouvertes&nbsp;:</strong> que devient le groupe source une fois vide — clôture automatique (<code class="k">statut:"cloture"</code>) ou groupe vide laissé tel quel&nbsp;? Que faire en cas d'échec partiel (ex. 7 apprenants transférés sur 10, puis une erreur)&nbsp;? La capacité du groupe cible — déjà jamais vérifiée aujourd'hui pour un seul apprenant (voir doc compagnon <code class="k">transfert-apprenant-schema.html</code>) — devient plus risquée en transfert de masse. Notifications&nbsp;: une par apprenant ou un récapitulatif unique au nouveau coach&nbsp;?
+          </div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">B</span>
+        <div>
+          <div class="t">Créer une nouvelle classe à la volée si aucune ne correspond</div>
+          <div class="d">
+            Quand la recherche de groupes cibles par niveau ne renvoie aucun résultat, proposer de créer la classe manquante sans quitter le modal de transfert, puis l'utiliser immédiatement comme cible.
+            <br><br>
+            <strong>Mécanique probable&nbsp;:</strong> réutiliser l'endpoint déjà existant <code class="k">POST /api/groupes</code> — le même que « Créer un groupe » (Onboarding) et « Créer une classe » (déjà présent aussi côté <code class="k">CommercialDashboard.jsx</code>, gated par <code class="k">peut("classes","create")</code>). Le niveau serait pré-rempli avec celui de l'apprenant à transférer.
+            <br><br>
+            <strong>Questions ouvertes&nbsp;:</strong> assigner un coach est-il obligatoire à la création depuis ce raccourci, ou autorisé vide comme aujourd'hui&nbsp;? Le droit <code class="k">classes:create</code> est-il déjà accordé à tous les rôles qui auraient accès au bouton de transfert (Onboarding, assistante présentiel)&nbsp;? Formulaire complet (horaires, centre…) ou version minimale dans le modal&nbsp;?
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Statut&nbsp;:</strong> ces deux pistes ne sont pas dans le plan de la section 05 et n'ont pas d'implémentation en cours. Elles seront analysées séparément avant toute décision de les coder.
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

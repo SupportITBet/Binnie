@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schéma — Flux de paiement TouchPoint</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(28px,4.5vw,44px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15px; color:var(--texte-att); max-width:720px; line-height:1.65; }
+
+  .diagramme-carte { background:linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%); border:1px solid var(--bordure); border-radius:18px; padding:28px; margin-bottom:44px; overflow-x:auto; }
+  svg text { font-family: var(--sans); }
+
+  .legende { display:flex; gap:24px; flex-wrap:wrap; margin-top:18px; padding-top:18px; border-top:1px dashed var(--bordure); }
+  .legende-item { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--texte-att); }
+  .puce { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+
+  h2 { font-family:var(--serif); font-size:22px; font-weight:400; color:var(--texte); margin:0 0 14px; }
+  .section { margin-bottom:48px; }
+  .desc { font-size:14px; color:var(--texte-att); line-height:1.75; max-width:760px; }
+  .desc code { background:rgba(255,255,255,0.06); padding:1px 7px; border-radius:5px; color:var(--cyan); font-size:13px; }
+  .desc b { color:var(--texte); }
+
+  .liens { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+  .lien-carte { background:var(--fond-carte2); border:1px solid var(--bordure); border-radius:10px; padding:14px 18px; }
+  .lien-label { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--texte-att); font-weight:700; margin-bottom:5px; }
+  .lien-valeur { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:13px; color:var(--or-clair); word-break:break-all; }
+
+  footer { margin-top:60px; padding-top:24px; border-top:1px solid var(--bordure); font-size:12px; color:var(--texte-att); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">BET · Intégration paiement</span>
+    <h1>Flux de paiement <em>TouchPoint</em></h1>
+    <p class="sous-titre">Comment un paiement en ligne se propage, du site public jusqu'au dossier de la commerciale — et pourquoi une partie du circuit (le callback serveur) ne fonctionne toujours pas. Généré le 21 août 2026.</p>
+  </header>
+
+  <div class="section">
+    <h2>Vue d'ensemble du circuit</h2>
+    <p class="desc">Un paiement suit deux chemins en parallèle une fois le client débité : la <b style="color:var(--rouge)">notification serveur directe de TouchPoint (cassée)</b> et la <b style="color:var(--vert)">redirection du navigateur (fonctionnelle, utilisée comme filet de secours)</b>.</p>
+
+    <div class="diagramme-carte">
+      <svg viewBox="0 0 1120 620" role="img" aria-label="Schéma du flux de paiement TouchPoint depuis le site public jusqu'au dossier commercial, montrant le callback serveur cassé et la redirection navigateur fonctionnelle utilisée en filet de secours" style="width:100%; height:auto;">
+        <defs>
+          <marker id="fleche" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="fleche-rouge" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#F87171"/>
+          </marker>
+          <marker id="fleche-verte" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#34D399"/>
+          </marker>
+        </defs>
+
+        <!-- Étape 1 : Site public -->
+        <rect x="20" y="20" width="220" height="70" rx="12" fill="#16213A" stroke="#223052" stroke-width="1.5"/>
+        <text x="130" y="48" text-anchor="middle" fill="#EDF1F7" font-size="14" font-weight="700">Site public BET</text>
+        <text x="130" y="66" text-anchor="middle" fill="#A9B4C9" font-size="11">ParcoursModal · CourseDetail</text>
+        <text x="130" y="80" text-anchor="middle" fill="#A9B4C9" font-size="11">CertificationDetail · etc.</text>
+
+        <!-- flèche 1→2 -->
+        <line x1="240" y1="55" x2="300" y2="55" stroke="#2DD4E8" stroke-width="2" marker-end="url(#fleche)"/>
+        <text x="270" y="45" text-anchor="middle" fill="#A9B4C9" font-size="10">sendPaymentInfos()</text>
+
+        <!-- Étape 2 : TouchPoint Checkout -->
+        <rect x="300" y="20" width="220" height="70" rx="12" fill="#16213A" stroke="#F0B84B" stroke-width="1.5"/>
+        <text x="410" y="48" text-anchor="middle" fill="#EDF1F7" font-size="14" font-weight="700">TouchPoint Checkout</text>
+        <text x="410" y="66" text-anchor="middle" fill="#A9B4C9" font-size="11">Sélection MTN / Orange /</text>
+        <text x="410" y="80" text-anchor="middle" fill="#A9B4C9" font-size="11">Moov / Wave</text>
+
+        <!-- flèche 2→3 -->
+        <line x1="520" y1="55" x2="580" y2="55" stroke="#2DD4E8" stroke-width="2" marker-end="url(#fleche)"/>
+
+        <!-- Étape 3 : Opérateur -->
+        <rect x="580" y="20" width="220" height="70" rx="12" fill="#16213A" stroke="#223052" stroke-width="1.5"/>
+        <text x="690" y="48" text-anchor="middle" fill="#EDF1F7" font-size="14" font-weight="700">Opérateur Mobile Money</text>
+        <text x="690" y="66" text-anchor="middle" fill="#A9B4C9" font-size="11">Débit confirmé côté client</text>
+        <text x="690" y="80" text-anchor="middle" fill="#A9B4C9" font-size="11">(SMS de confirmation)</text>
+
+        <!-- Split vers 2 chemins -->
+        <line x1="690" y1="90" x2="690" y2="140" stroke="#A9B4C9" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+        <!-- Chemin CASSÉ (rouge) -->
+        <line x1="690" y1="140" x2="220" y2="180" stroke="#F87171" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#fleche-rouge)"/>
+        <rect x="20" y="180" width="400" height="90" rx="12" fill="#1a1420" stroke="#F87171" stroke-width="1.5"/>
+        <text x="220" y="205" text-anchor="middle" fill="#F87171" font-size="13" font-weight="800">❌ Callback serveur TouchPoint</text>
+        <text x="220" y="224" text-anchor="middle" fill="#EDF1F7" font-size="11" font-family="ui-monospace, monospace">/api/touchpoint/callback</text>
+        <text x="220" y="244" text-anchor="middle" fill="#A9B4C9" font-size="11">Jamais reçu malgré confirmation</text>
+        <text x="220" y="259" text-anchor="middle" fill="#A9B4C9" font-size="11">de config par TouchPoint (Hilaire)</text>
+
+        <!-- Chemin FONCTIONNEL (vert) -->
+        <line x1="690" y1="140" x2="900" y2="180" stroke="#34D399" stroke-width="2" marker-end="url(#fleche-verte)"/>
+        <rect x="700" y="180" width="400" height="90" rx="12" fill="#0f1f18" stroke="#34D399" stroke-width="1.5"/>
+        <text x="900" y="205" text-anchor="middle" fill="#34D399" font-size="13" font-weight="800">✅ Redirection navigateur</text>
+        <text x="900" y="224" text-anchor="middle" fill="#EDF1F7" font-size="11" font-family="ui-monospace, monospace">/paiement/retour?order_number=...</text>
+        <text x="900" y="244" text-anchor="middle" fill="#A9B4C9" font-size="11">&amp;errorCode &amp;amount</text>
+        <text x="900" y="259" text-anchor="middle" fill="#A9B4C9" font-size="11">&amp;num_transaction_from_gu</text>
+
+        <!-- Chemin vert continue vers confirm-redirect -->
+        <line x1="900" y1="270" x2="900" y2="320" stroke="#34D399" stroke-width="2" marker-end="url(#fleche-verte)"/>
+        <rect x="700" y="320" width="400" height="70" rx="12" fill="#16213A" stroke="#34D399" stroke-width="1.5"/>
+        <text x="900" y="348" text-anchor="middle" fill="#EDF1F7" font-size="13" font-weight="700">Filet de secours backend</text>
+        <text x="900" y="366" text-anchor="middle" fill="#A9B4C9" font-size="11" font-family="ui-monospace, monospace">POST /api/touchpoint/confirm-redirect</text>
+
+        <!-- Les deux chemins convergent vers finalisation -->
+        <line x1="220" y1="270" x2="500" y2="440" stroke="#F87171" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.4"/>
+        <line x1="900" y1="390" x2="560" y2="440" stroke="#34D399" stroke-width="2" marker-end="url(#fleche-verte)"/>
+
+        <!-- Finalisation -->
+        <rect x="360" y="440" width="400" height="90" rx="12" fill="#16213A" stroke="#F0B84B" stroke-width="1.5"/>
+        <text x="560" y="465" text-anchor="middle" fill="#F0B84B" font-size="13" font-weight="800">finalizeSuccessfulPayment()</text>
+        <text x="560" y="484" text-anchor="middle" fill="#EDF1F7" font-size="11">paiements_touchpoint → validé</text>
+        <text x="560" y="500" text-anchor="middle" fill="#EDF1F7" font-size="11">assignations_parcours.statut_paiement → payé</text>
+        <text x="560" y="516" text-anchor="middle" fill="#EDF1F7" font-size="11">paiements_parcours + notification commerciale</text>
+
+        <!-- flèche vers dash -->
+        <line x1="560" y1="530" x2="560" y2="570" stroke="#2DD4E8" stroke-width="2" marker-end="url(#fleche)"/>
+        <rect x="360" y="570" width="400" height="40" rx="10" fill="#0c1420" stroke="#223052" stroke-width="1.5"/>
+        <text x="560" y="595" text-anchor="middle" fill="#A9B4C9" font-size="12">Visible dans dash — Prospects parcours &amp; Paiements TouchPoint</text>
+
+      </svg>
+
+      <div class="legende">
+        <div class="legende-item"><span class="puce" style="background:#F87171"></span> Chemin cassé — TouchPoint ne nous appelle jamais</div>
+        <div class="legende-item"><span class="puce" style="background:#34D399"></span> Chemin fonctionnel — filet de secours actif depuis le 21/08/2026</div>
+        <div class="legende-item"><span class="puce" style="background:#F0B84B"></span> Logique de finalisation partagée entre les deux chemins</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Pourquoi un filet de secours ?</h2>
+    <p class="desc">
+      Le <b>callback serveur</b> ("Callback TouchPay") est le mécanisme normalement prévu : TouchPoint doit appeler directement
+      notre backend (<code>GET /api/touchpoint/callback</code>) dès qu'un paiement est confirmé, peu importe si le client
+      reste sur la page ou non. Malgré une configuration confirmée par leur support (Hilaire, 21/08/2026), cet appel n'arrive
+      jamais chez nous — testé et confirmé à plusieurs reprises, y compris avec un débit réel côté opérateur.
+    </p>
+    <p class="desc">
+      En attendant que TouchPoint corrige ce point de leur côté, on s'appuie sur un <b>constat empirique</b> : leur page
+      transmet bien les informations de confirmation (<code>errorCode</code>, <code>amount</code>,
+      <code>num_transaction_from_gu</code>) directement dans l'URL de redirection vers le navigateur du client. On lit ces
+      paramètres et on appelle notre propre logique de finalisation à partir de là.
+    </p>
+    <p class="desc" style="color:#F87171;">
+      <b>Limite du filet de secours :</b> il ne fonctionne que si le navigateur du client termine la redirection. Si le
+      client ferme l'onglet ou perd la connexion juste après avoir payé, la confirmation n'arrivera jamais — contrairement
+      à un vrai callback serveur qui serait fiable même dans ce cas. Le vrai callback reste la solution à corriger en
+      priorité avec TouchPoint.
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>Liens et identifiants à transmettre à TouchPoint</h2>
+    <div class="liens">
+      <div class="lien-carte">
+        <div class="lien-label">URL de callback (celle qui ne fonctionne pas)</div>
+        <div class="lien-valeur">https://backend-binnie.vercel.app/api/touchpoint/callback</div>
+      </div>
+      <div class="lien-carte">
+        <div class="lien-label">Domaine enregistré (domain_name)</div>
+        <div class="lien-valeur">binnie.pureprocleaners.ci</div>
+      </div>
+      <div class="lien-carte">
+        <div class="lien-label">Script Checkout page utilisé</div>
+        <div class="lien-valeur">https://touchpay.gutouch.net/touchpayv2/script/touchpaynr/prod_touchpay-0.0.1.js</div>
+      </div>
+      <div class="lien-carte">
+        <div class="lien-label">URL de redirection après paiement (succès et échec)</div>
+        <div class="lien-valeur">https://binnie.pureprocleaners.ci/paiement/retour?order_number=...</div>
+      </div>
+      <div class="lien-carte">
+        <div class="lien-label">Code agence</div>
+        <div class="lien-valeur">BETSA9323</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Backend/docs/touchpoint-flux-schema.html — voir aussi <code>Backend/docs/touchpoint-integration.md</code> pour le détail technique complet.
+  </footer>
+
+</div>
+</body>
+</html>

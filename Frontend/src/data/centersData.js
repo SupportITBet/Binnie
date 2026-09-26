@@ -1,0 +1,80 @@
+export const centersData = {
+  bouake: {
+    name: "BET BOUAKÉ",
+    fullName: "BINNIE'S ENGLISH TRAINING",
+    address: "en face de la cité universitaire Sainte Marie, quartier Commerce",
+    phone: "+225 07 68 55 21 98",
+    email: "contact@binniesenglish.com",
+    image: "https://images.unsplash.com/photo-1577412647305-991150c7d163?auto=format&fit=crop&w=1200&q=80",
+    mapUrl: "https://maps.google.com/?q=Bouaké+Côte+d'Ivoire",
+    hours: "Lundi - Samedi : 8h00 - 20h00",
+    description: "Notre centre de Bouaké est entièrement équipé de salles climatisées, d'une bibliothèque et d'un espace numérique. Idéal pour les cours en groupe ou individuels.",
+    facilities: ["Salles climatisées", "Bibliothèque", "Espace numérique", "Parking gratuit"],
+    programs: ["Anglais général", "Préparation TOEIC/TOEFL/IELTS", "Cours de conversation", "Formation entreprise"]
+  },
+  angre: {
+    name: "BET ANGRÉ",
+    fullName: "BINNIE'S ENGLISH TRAINING",
+    address: "Angré 7ème tranche, près du lycée moderne, Abidjan",
+    phone: "+225 07 68 55 21 99",
+    email: "angre@binniesenglish.com",
+    image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80",
+    mapUrl: "https://maps.google.com/?q=Angré+Abidjan",
+    hours: "Lundi - Vendredi : 9h00 - 19h00, Samedi : 9h00 - 14h00",
+    description: "Situé au cœur d'Angré, notre centre offre un cadre calme et propice à l'apprentissage. Accès facile depuis les grandes artères.",
+    facilities: ["Salles modernes", "Laboratoire audio", "Cafétéria", "Connexion Wi-Fi"],
+    programs: ["Anglais des affaires", "Préparation TOEIC", "Cours en ligne", "Ateliers de conversation"]
+  },
+  abatta: {
+    name: "BET ABATTA",
+    fullName: "BINNIE'S ENGLISH TRAINING",
+    address: "Abatta, face station Total, Abidjan",
+    phone: "+225 07 68 55 22 00",
+    email: "abatta@binniesenglish.com",
+    image: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80",
+    mapUrl: "https://maps.google.com/?q=Abatta+Abidjan",
+    hours: "Lundi - Samedi : 8h30 - 18h30",
+    description: "Notre centre d'Abatta est spécialisé dans les formations intensives et les stages de courte durée.",
+    facilities: ["Salles immersives", "Coin lecture", "Terrasse", "Accès handicapés"],
+    programs: ["Anglais accéléré", "Préparation IELTS", "Cours pour enfants", "Séjours linguistiques"]
+  },
+  yopougon: {
+    name: "BET YOPOUGON",
+    fullName: "BINNIE'S ENGLISH TRAINING",
+    address: "Yopougon, quartier Sicogi, derrière la mairie",
+    phone: "+225 07 68 55 22 01",
+    email: "yopougon@binniesenglish.com",
+    image: "https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?auto=format&fit=crop&w=1200&q=80",
+    mapUrl: "https://maps.google.com/?q=Yopougon+Abidjan",
+    hours: "Lundi - Vendredi : 10h00 - 20h00, Samedi : 10h00 - 15h00",
+    description: "Centre moderne équipé des dernières technologies pour l'apprentissage de l'anglais.",
+    facilities: ["Smart classrooms", "Salle informatique", "Espace détente", "Navette gratuite"],
+    programs: ["Cours en ligne", "Formation TOEIC", "Anglais juridique", "Préparation entretiens"]
+  },
+  koumassi: {
+    name: "BET KOUMASSI",
+    fullName: "BINNIE'S ENGLISH TRAINING",
+    address: "Koumassi, rue des pêcheurs, proche du palais des sports",
+    phone: "+225 07 68 55 22 02",
+    email: "koumassi@binniesenglish.com",
+    image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80",
+    mapUrl: "https://maps.google.com/?q=Koumassi+Abidjan",
+    hours: "Lundi - Samedi : 8h00 - 19h00",
+    description: "Un cadre convivial et une équipe pédagogique dynamique pour vous accompagner.",
+    facilities: ["Salles spacieuses", "Bibliothèque", "Cours en visio", "Cafétéria"],
+    programs: ["Anglais général", "Préparation TOEFL", "Ateliers de prononciation", "Formation sur mesure"]
+  },
+  "2plateaux": {
+    name: "BET II PLATEAUX",
+    fullName: "BINNIE'S ENGLISH TRAINING",
+    address: "II Plateaux, rue des jardins, à côté de la banque Atlantique",
+    phone: "+225 07 68 55 22 03",
+    email: "2plateaux@binniesenglish.com",
+    image: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80",
+    mapUrl: "https://maps.google.com/?q=II+Plateaux+Abidjan",
+    hours: "Lundi - Vendredi : 9h00 - 21h00, Samedi : 9h00 - 17h00",
+    description: "Notre centre de prestige propose des formations haut de gamme et un accompagnement personnalisé.",
+    facilities: ["Salles VIP", "Cafétéria premium", "Terrasse", "Accès prioritaire aux événements"],
+    programs: ["Anglais des affaires", "Coaching personnalisé", "Préparation IELTS/TOEFL", "Séminaires entreprises"]
+  }
+};

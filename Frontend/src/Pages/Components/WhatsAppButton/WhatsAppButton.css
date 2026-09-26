@@ -1,0 +1,66 @@
+/* WhatsAppButton.css */
+.whatsapp-button {
+  position: fixed;
+  bottom: var(--flottant-p2);
+  right: var(--flottant-droite);
+  width: var(--flottant-taille);
+  height: var(--flottant-taille);
+  background-color: #25d366;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 900;
+}
+
+.whatsapp-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.whatsapp-icon {
+  width: 35px;
+  height: 35px;
+}
+
+.scroll-top-button {
+  position: fixed;
+  bottom: var(--flottant-p1);
+  right: var(--flottant-droite);
+  width: var(--flottant-taille);
+  height: var(--flottant-taille);
+  background-color: #0c33ac;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+  z-index: 900;
+}
+
+.scroll-top-button:hover {
+  background-color: #0c33ac;
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* Responsive : seules la taille de l'icône et la police changent - les positions et les
+   dimensions viennent des variables d'échelle (voir index.css), qui ont déjà leur propre
+   point de rupture. Les redéfinir ici recréerait la divergence qu'on vient de supprimer. */
+@media (max-width: 768px) {
+  .whatsapp-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .scroll-top-button {
+    font-size: 1.2rem;
+  }
+}

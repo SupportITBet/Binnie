@@ -1,0 +1,377 @@
+<title>Le bug du paiement "échoué" prématuré — MTN/Moov</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #f0f1f4;
+    --border: #e1e4ea;
+    --text: #1a1d24;
+    --text-muted: #676d7a;
+    --text-faint: #9aa1ac;
+    --accent: #0c33ac;
+    --accent-soft: #e8edfb;
+    --danger: #dc2626;
+    --danger-soft: #fdecec;
+    --success: #16a34a;
+    --success-soft: #eafaf0;
+    --warning: #b45309;
+    --warning-soft: #fdf3e0;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151c;
+      --surface: #1a1e27;
+      --surface-2: #20242f;
+      --border: #2b303c;
+      --text: #e7e9ee;
+      --text-muted: #a2a9b6;
+      --text-faint: #767d8a;
+      --accent: #7d9cf5;
+      --accent-soft: #1e2745;
+      --danger: #f87171;
+      --danger-soft: #3a1c1e;
+      --success: #4ade80;
+      --success-soft: #17301f;
+      --warning: #fbbf24;
+      --warning-soft: #362a10;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151c;
+    --surface: #1a1e27;
+    --surface-2: #20242f;
+    --border: #2b303c;
+    --text: #e7e9ee;
+    --text-muted: #a2a9b6;
+    --text-faint: #767d8a;
+    --accent: #7d9cf5;
+    --accent-soft: #1e2745;
+    --danger: #f87171;
+    --danger-soft: #3a1c1e;
+    --success: #4ade80;
+    --success-soft: #17301f;
+    --warning: #fbbf24;
+    --warning-soft: #362a10;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    margin: 0;
+    padding: 32px 20px 80px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--danger);
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-size: clamp(1.4rem, 3vw, 1.9rem);
+    font-weight: 800;
+    margin: 0 0 6px;
+    letter-spacing: -.01em;
+    text-wrap: balance;
+  }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 15px;
+    margin: 0 0 28px;
+    max-width: 62ch;
+  }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--danger);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 32px;
+    font-size: 14px;
+  }
+  .callout b { color: var(--danger); }
+
+  h2 {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-faint);
+    margin: 40px 0 4px;
+  }
+  h2 .n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    margin-right: 8px;
+  }
+  .section-lede {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin: 0 0 18px;
+    max-width: 68ch;
+  }
+
+  figure {
+    margin: 0 0 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    overflow-x: auto;
+  }
+  figure.before { border-top: 3px solid var(--danger); }
+  figure.after  { border-top: 3px solid var(--success); }
+  figcaption {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+  }
+  svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .diagram-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  .diagram-tag.before { background: var(--danger-soft); color: var(--danger); }
+  .diagram-tag.after  { background: var(--success-soft); color: var(--success); }
+
+  .evidence {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-top: 32px;
+    font-size: 14px;
+  }
+  .evidence table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+  .evidence th, .evidence td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  .evidence th { color: var(--text-faint); font-weight: 700; text-transform: uppercase; font-size: 10.5px; letter-spacing: .04em; }
+  .evidence td.mono, .evidence th.mono { font-family: var(--mono); }
+  .badge-fail { color: var(--danger); font-weight: 700; }
+
+  .fix-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .fix-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .fix-card .k { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); margin-bottom: 6px; }
+  .fix-card .v { font-size: 14px; font-weight: 600; }
+  code {
+    font-family: var(--mono);
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: .92em;
+  }
+  footer {
+    margin-top: 48px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Bug financier — paiements TouchPoint</div>
+  <h1>Pourquoi un paiement MTN/Moov réel se retrouvait bloqué en "échoué"</h1>
+  <p class="subtitle">Le client valide réellement son paiement via le code <code>*133#</code>, mais le système l'affichait déjà comme échoué — et ignorait la confirmation réelle arrivée juste après.</p>
+
+  <div class="callout">
+    <b>En une phrase :</b> TouchPoint renvoie le navigateur vers notre site <b>avant</b> que le client ait confirmé sur son téléphone. On traitait ce signal précoce comme un échec <b>définitif</b>, ce qui empêchait ensuite le vrai signal de succès (envoyé une fois la confirmation faite) d'être pris en compte.
+  </div>
+
+  <h2><span class="n">1</span>Avant correctif — le paiement réel se perd</h2>
+  <p class="section-lede">MTN et Moov confirment par USSD : after cliquant "Payer", le client doit encore composer <code>*133#</code> sur son téléphone. Mais TouchPoint redirige le navigateur immédiatement, sans attendre cette étape.</p>
+
+  <figure class="before">
+    <span class="diagram-tag before">Comportement cassé</span>
+    <svg viewBox="0 0 860 430" role="img" aria-label="Diagramme de séquence montrant qu'un échec précoce et non fiable est écrit de façon définitive, ce qui fait ignorer le vrai succès arrivé ensuite via le webhook.">
+      <defs>
+        <marker id="arrowB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- Lifelines -->
+      <g font-family="var(--sans)" font-size="13" font-weight="700" fill="currentColor">
+        <text x="90"  y="26" text-anchor="middle">Client</text>
+        <text x="430" y="26" text-anchor="middle">TouchPoint</text>
+        <text x="760" y="26" text-anchor="middle">Backend BET</text>
+      </g>
+      <g stroke="currentColor" stroke-opacity=".25" stroke-width="1.5">
+        <line x1="90"  y1="38" x2="90"  y2="410"/>
+        <line x1="430" y1="38" x2="430" y2="410"/>
+        <line x1="760" y1="38" x2="760" y2="410"/>
+      </g>
+
+      <!-- Step 1: Client -> TouchPoint : clique Payer -->
+      <line x1="98" y1="60" x2="422" y2="60" stroke="currentColor" stroke-width="1.6" marker-end="url(#arrowB)"/>
+      <text x="260" y="52" text-anchor="middle" font-size="11.5" fill="currentColor">1. Clique "Payer" (numéro MTN saisi)</text>
+
+      <!-- Step 2: TouchPoint -> Backend : redirection precoce -->
+      <line x1="430" y1="96" x2="756" y2="96" stroke="var(--danger)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrowB)"/>
+      <text x="595" y="82" text-anchor="middle" font-size="11.5" fill="var(--danger)" font-weight="700">2. Redirection immédiate</text>
+      <text x="595" y="112" text-anchor="middle" font-size="10.5" fill="currentColor" fill-opacity=".65">/confirm-redirect · errorCode ≠ 200 (pas encore confirmé)</text>
+
+      <!-- Step 3: Backend self action -->
+      <rect x="700" y="130" width="130" height="46" rx="8" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.2"/>
+      <text x="765" y="150" text-anchor="middle" font-size="11" font-weight="800" fill="var(--danger)">statut = "échoué"</text>
+      <text x="765" y="165" text-anchor="middle" font-size="9.5" fill="var(--danger)">écrit définitivement</text>
+
+      <!-- Step 4: Client confirms via USSD, later -->
+      <line x1="90" y1="230" x2="90" y2="230"/>
+      <rect x="30" y="205" width="120" height="42" rx="8" fill="var(--warning-soft)" stroke="var(--warning)" stroke-width="1.2"/>
+      <text x="90" y="223" text-anchor="middle" font-size="10.5" font-weight="800" fill="var(--warning)">Compose *133#</text>
+      <text x="90" y="238" text-anchor="middle" font-size="9.5" fill="var(--warning)">confirme réellement</text>
+
+      <line x1="98" y1="270" x2="422" y2="270" stroke="currentColor" stroke-width="1.6" marker-end="url(#arrowB)"/>
+      <text x="260" y="262" text-anchor="middle" font-size="11.5" fill="currentColor">4. Confirmation réelle du débit</text>
+
+      <!-- Step 5: TouchPoint server -> Backend : real webhook success -->
+      <line x1="430" y1="305" x2="756" y2="305" stroke="var(--success)" stroke-width="1.8" marker-end="url(#arrowB)"/>
+      <text x="595" y="293" text-anchor="middle" font-size="11.5" fill="var(--success)" font-weight="700">5. Webhook serveur (fiable)</text>
+      <text x="595" y="320" text-anchor="middle" font-size="10.5" fill="currentColor" fill-opacity=".65">/callback · payment_status = 200 (vrai succès)</text>
+
+      <!-- Step 6: idempotency blocks it -->
+      <rect x="695" y="345" width="140" height="58" rx="8" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.4"/>
+      <text x="765" y="366" text-anchor="middle" font-size="11" font-weight="800" fill="var(--danger)">Déjà "échoué"</text>
+      <text x="765" y="380" text-anchor="middle" font-size="9.5" fill="var(--danger)">→ ignoré (idempotence)</text>
+      <text x="765" y="393" text-anchor="middle" font-size="9.5" fill="var(--danger)" font-weight="700">succès réel perdu ✕</text>
+    </svg>
+    <figcaption>Le signal d'échec de l'étape 2 est non signé et prématuré, mais il est traité comme définitif — donc le vrai succès de l'étape 5 n'est jamais appliqué.</figcaption>
+  </figure>
+
+  <h2><span class="n">2</span>Après correctif — le vrai signal l'emporte</h2>
+  <p class="section-lede">La redirection précoce ne peut plus écrire d'échec définitif — seul le webhook serveur de TouchPoint (signal fiable) peut le faire. En attendant, le statut reste "en attente" et la page continue de vérifier.</p>
+
+  <figure class="after">
+    <span class="diagram-tag after">Comportement corrigé</span>
+    <svg viewBox="0 0 860 430" role="img" aria-label="Diagramme de séquence montrant que l'échec précoce et non fiable n'est plus écrit, laissant le statut en attente jusqu'à ce que le vrai webhook confirme le succès.">
+      <defs>
+        <marker id="arrowA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <g font-family="var(--sans)" font-size="13" font-weight="700" fill="currentColor">
+        <text x="90"  y="26" text-anchor="middle">Client</text>
+        <text x="430" y="26" text-anchor="middle">TouchPoint</text>
+        <text x="760" y="26" text-anchor="middle">Backend BET</text>
+      </g>
+      <g stroke="currentColor" stroke-opacity=".25" stroke-width="1.5">
+        <line x1="90"  y1="38" x2="90"  y2="410"/>
+        <line x1="430" y1="38" x2="430" y2="410"/>
+        <line x1="760" y1="38" x2="760" y2="410"/>
+      </g>
+
+      <line x1="98" y1="60" x2="422" y2="60" stroke="currentColor" stroke-width="1.6" marker-end="url(#arrowA)"/>
+      <text x="260" y="52" text-anchor="middle" font-size="11.5" fill="currentColor">1. Clique "Payer" (numéro MTN saisi)</text>
+
+      <line x1="430" y1="96" x2="756" y2="96" stroke="var(--warning)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrowA)"/>
+      <text x="595" y="82" text-anchor="middle" font-size="11.5" fill="var(--warning)" font-weight="700">2. Redirection immédiate</text>
+      <text x="595" y="112" text-anchor="middle" font-size="10.5" fill="currentColor" fill-opacity=".65">/confirm-redirect · source="redirect", errorCode ≠ 200</text>
+
+      <rect x="695" y="130" width="140" height="52" rx="8" fill="var(--warning-soft)" stroke="var(--warning)" stroke-width="1.2"/>
+      <text x="765" y="150" text-anchor="middle" font-size="11" font-weight="800" fill="var(--warning)">signal ignoré</text>
+      <text x="765" y="164" text-anchor="middle" font-size="9.5" fill="var(--warning)">statut reste "en attente"</text>
+      <text x="765" y="176" text-anchor="middle" font-size="9" fill="var(--warning)" fill-opacity=".8">(pas la source fiable)</text>
+
+      <rect x="30" y="205" width="120" height="42" rx="8" fill="var(--warning-soft)" stroke="var(--warning)" stroke-width="1.2"/>
+      <text x="90" y="223" text-anchor="middle" font-size="10.5" font-weight="800" fill="var(--warning)">Compose *133#</text>
+      <text x="90" y="238" text-anchor="middle" font-size="9.5" fill="var(--warning)">confirme réellement</text>
+
+      <line x1="98" y1="270" x2="422" y2="270" stroke="currentColor" stroke-width="1.6" marker-end="url(#arrowA)"/>
+      <text x="260" y="262" text-anchor="middle" font-size="11.5" fill="currentColor">4. Confirmation réelle du débit</text>
+
+      <line x1="430" y1="305" x2="756" y2="305" stroke="var(--success)" stroke-width="1.8" marker-end="url(#arrowA)"/>
+      <text x="595" y="293" text-anchor="middle" font-size="11.5" fill="var(--success)" font-weight="700">5. Webhook serveur (fiable)</text>
+      <text x="595" y="320" text-anchor="middle" font-size="10.5" fill="currentColor" fill-opacity=".65">/callback · source="callback", payment_status = 200</text>
+
+      <rect x="695" y="345" width="140" height="58" rx="8" fill="var(--success-soft)" stroke="var(--success)" stroke-width="1.4"/>
+      <text x="765" y="366" text-anchor="middle" font-size="11" font-weight="800" fill="var(--success)">statut = "validé"</text>
+      <text x="765" y="380" text-anchor="middle" font-size="9.5" fill="var(--success)">paiement finalisé</text>
+      <text x="765" y="393" text-anchor="middle" font-size="9.5" fill="var(--success)" font-weight="700">succès pris en compte ✓</text>
+    </svg>
+    <figcaption>Le "échec" de l'étape 2 vient de la redirection (falsifiable) — il n'écrit plus rien. Seul le webhook serveur de l'étape 5 (signature fiable) peut désormais changer le statut.</figcaption>
+  </figure>
+
+  <h2><span class="n">3</span>Ce qui a changé dans le code</h2>
+  <div class="fix-grid">
+    <div class="fix-card">
+      <div class="k">Fichier</div>
+      <div class="v">Backend/src/routes/touchpoint.js</div>
+    </div>
+    <div class="fix-card">
+      <div class="k">Nouveau paramètre</div>
+      <div class="v"><code>source: "callback" | "redirect"</code></div>
+    </div>
+    <div class="fix-card">
+      <div class="k">Règle ajoutée</div>
+      <div class="v">Un échec ne peut être écrit que si <code>source === "callback"</code></div>
+    </div>
+    <div class="fix-card">
+      <div class="k">Effet</div>
+      <div class="v">Le polling de la page de retour continue jusqu'au vrai résultat</div>
+    </div>
+  </div>
+
+  <div class="evidence">
+    <b>Preuve trouvée en base</b> — sur les 15 dernières transactions "échoué", 11 ont été marquées échouées en moins de 60 secondes après leur création, la plupart via <code>TouchPoint (redirection)</code> ou un opérateur MTN/Moov — exactement la signature de ce bug. Ce sont des transactions de test (10 FCFA), donc sans impact financier réel, mais elles confirment le mécanisme.
+    <table>
+      <tr><th>Référence</th><th>Opérateur</th><th class="mono">Créé → Marqué échoué</th></tr>
+      <tr><td class="mono">BET-1787511859829-473B0141</td><td>TouchPoint (redirection)</td><td class="mono badge-fail">19:04:20 → 19:04:46 (26s)</td></tr>
+      <tr><td class="mono">BET-1787511784270-4E1AB7E1</td><td>PAIEMENTMARCHAND_MOOV_CI</td><td class="mono badge-fail">19:03:04 → 19:03:27 (23s)</td></tr>
+      <tr><td class="mono">BET-1787360305034-5AA4F17D</td><td>PAIEMENTMARCHAND_MTN_CI</td><td class="mono badge-fail">00:58:25 → 00:58:36 (11s)</td></tr>
+    </table>
+  </div>
+
+  <h2><span class="n">4</span>Effet de bord du correctif — le filet de sécurité ajouté</h2>
+  <p class="section-lede">En empêchant la redirection d'écrire un échec définitif, un <b>vrai</b> échec (client qui annule, mauvais code, solde insuffisant) reste aussi en "en_attente" tant que le webhook fiable de TouchPoint n'arrive pas — et ce webhook est documenté comme pas toujours fiable. Sans rien de plus, un dossier pouvait donc rester "en attente" indéfiniment, sans jamais prévenir personne.</p>
+
+  <div class="fix-grid">
+    <div class="fix-card">
+      <div class="k">Còté client</div>
+      <div class="v"><code>PaiementRetour.jsx</code> — après ~3 min sans réponse, affiche "⚠️ Paiement probablement non abouti" au lieu de rester bloqué sur "en cours"</div>
+    </div>
+    <div class="fix-card">
+      <div class="k">Côté staff</div>
+      <div class="v">SuperAdmin → Paiements TouchPoint — badge "⚠️ Probablement échoué" sur toute ligne "en_attente" de plus de 15 min</div>
+    </div>
+    <div class="fix-card">
+      <div class="k">Important</div>
+      <div class="v">Purement <b>visuel</b> — le statut réel en base reste "en_attente" dans les deux cas, donc un webhook tardif de vrai succès peut encore finaliser le paiement normalement</div>
+    </div>
+  </div>
+
+  <footer>Correctif appliqué le 24 août 2026 — <code>traiterConfirmationPaiement()</code>, routes <code>/callback</code> et <code>/confirm-redirect</code>. Filet de sécurité affichage ajouté le même jour — <code>PaiementRetour.jsx</code>, <code>SuperAdminDashboard.jsx</code>.</footer>
+</div>

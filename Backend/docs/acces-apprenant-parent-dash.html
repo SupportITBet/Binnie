@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schéma — Accès Apprenant ↔ Parent (dash)</title>
+<style>
+  :root {
+    --fond:        #0B1220;
+    --fond-carte:  #121B2E;
+    --fond-carte2: #16213A;
+    --bordure:     #223052;
+    --or:          #F0B84B;
+    --or-clair:    #FDE4A8;
+    --cyan:        #2DD4E8;
+    --texte:       #EDF1F7;
+    --texte-att:   #A9B4C9;
+    --vert:        #34D399;
+    --rose:        #F472B6;
+    --violet:      #A78BFA;
+    --rouge:       #F87171;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--fond); color:var(--texte); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .page { max-width: 1180px; margin:0 auto; padding: 56px 32px 90px; }
+
+  header.hero { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding-bottom:36px; margin-bottom:48px; border-bottom:1px solid var(--bordure); }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--or); font-weight:600; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,4.5vw,46px); line-height:1.08; margin:0; font-weight:400; text-wrap:balance; }
+  h1 em { color:var(--or); font-style:normal; }
+  .sous-titre { font-size:15.5px; color:var(--texte-att); max-width:720px; line-height:1.65; }
+  .meta-chips { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  .chip { font-size:12px; padding:6px 12px; border-radius:20px; background:var(--fond-carte2); border:1px solid var(--bordure); color:var(--texte-att); }
+  .chip.statut { color: var(--or); border-color: rgba(240,184,75,0.4); background: rgba(240,184,75,0.08); }
+
+  .verdict { display:flex; gap:14px; align-items:flex-start; background:linear-gradient(160deg, rgba(240,184,75,0.08), rgba(240,184,75,0.03)); border:1px solid rgba(240,184,75,0.3); border-radius:14px; padding:18px 22px; margin-bottom:48px; }
+  .verdict .ic { font-size:24px; flex-shrink:0; }
+  .verdict .txt { font-size:14px; color:var(--texte); line-height:1.65; }
+  .verdict .txt strong { color:var(--or); }
+
+  section { margin-bottom:56px; }
+  .section-titre2 { font-family:var(--serif); font-size:24px; margin: 0 0 8px; color:var(--texte); }
+  .section-desc { color:var(--texte-att); font-size:13.5px; max-width:760px; line-height:1.6; margin:0 0 22px; }
+  code { font-family: var(--mono); font-size: 0.92em; }
+  .inline-tbl { background: rgba(0,0,0,0.25); padding:2px 8px; border-radius:6px; }
+
+  /* ── Deux canaux (cartes côte à côte) ── */
+  .canaux { display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+  .canal { border-radius:16px; padding:22px 24px; border:1px solid var(--bordure); background: var(--fond-carte); }
+  .canal.web { border-color: rgba(45,212,232,0.3); }
+  .canal.commerciale { border-color: rgba(167,139,250,0.3); }
+  .canal-entete { display:flex; align-items:center; gap:10px; font-weight:700; font-size:14px; margin-bottom:6px; }
+  .canal.web .canal-entete { color: var(--cyan); }
+  .canal.commerciale .canal-entete { color: var(--violet); }
+  .canal-sous { font-size:12px; color:var(--texte-att); margin-bottom:16px; }
+  .canal-etape { display:flex; gap:10px; align-items:flex-start; font-size:13px; color:var(--texte-att); padding:8px 0; border-top:1px dashed var(--bordure); }
+  .canal-etape:first-of-type { border-top:none; }
+  .canal-etape .n { font-family:var(--mono); color:var(--or); flex-shrink:0; }
+  .canal-etape strong { color: var(--texte); }
+  .canal-route { display:inline-block; margin-top:4px; font-family:var(--mono); font-size:11.5px; color:var(--or-clair); background: rgba(0,0,0,0.25); padding:2px 8px; border-radius:6px; }
+
+  /* ── Flux étapes (identique au doc bet-elearning) ── */
+  .flux { display:flex; flex-direction:column; gap:0; }
+  .etape { display:grid; grid-template-columns: 64px 1fr; gap:22px; position: relative; padding-bottom: 40px; }
+  .etape:last-child { padding-bottom: 0; }
+  .etape-rail { display:flex; flex-direction:column; align-items:center; }
+  .etape-num { width:46px; height:46px; border-radius:50%; background: var(--fond-carte2); border:2px solid var(--or); display:flex; align-items:center; justify-content:center; font-family: var(--serif); font-size:19px; color: var(--or); flex-shrink:0; }
+  .etape-ligne { width:2px; flex:1; background: var(--bordure); margin-top:8px; min-height: 30px; }
+  .etape:last-child .etape-ligne { display:none; }
+  .etape-corps { background: linear-gradient(160deg, var(--fond-carte) 0%, var(--fond-carte2) 100%); border:1px solid var(--bordure); border-radius:16px; padding:22px 26px; }
+  .etape-tag { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--texte-att); font-weight:700; margin-bottom:6px; }
+  .etape-titre { font-family: var(--serif); font-size:20px; color:var(--texte); margin-bottom:10px; }
+  .etape-desc { font-size:13.5px; color:var(--texte-att); line-height:1.65; max-width: 720px; }
+  .etape-code { margin-top:12px; background: rgba(0,0,0,0.28); border:1px solid var(--bordure); border-radius:10px; padding:12px 14px; font-family: var(--mono); font-size:11.5px; color: var(--or-clair); overflow-x:auto; white-space:pre; line-height:1.6; }
+  .acteurs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .acteur { font-size:11.5px; padding:5px 12px; border-radius:20px; border:1px solid; display:flex; align-items:center; gap:6px; }
+  .acteur.app     { color:var(--or);     border-color: rgba(240,184,75,0.4);  background: rgba(240,184,75,0.1); }
+  .acteur.parent  { color:var(--rose);   border-color: rgba(244,114,182,0.35);background: rgba(244,114,182,0.08); }
+  .acteur.systeme { color:var(--cyan);   border-color: rgba(45,212,232,0.35); background: rgba(45,212,232,0.08); }
+  .acteur.admin   { color:var(--violet); border-color: rgba(167,139,250,0.35);background: rgba(167,139,250,0.08); }
+  .mini-note { margin-top:14px; font-size:12px; color:var(--rose); background: rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.25); padding:8px 12px; border-radius:10px; display:flex; gap:8px; align-items:flex-start; }
+  .mini-note.ok { color:var(--vert); background:rgba(52,211,153,0.08); border-color:rgba(52,211,153,0.25); }
+  .mini-note.build { color:var(--or); background:rgba(240,184,75,0.08); border-color:rgba(240,184,75,0.3); }
+
+  /* ── Comparatif champs ── */
+  .comparatif { display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+  .colonne { border-radius:16px; padding:22px 24px; border:1px solid var(--bordure); }
+  .colonne.betel { background: rgba(167,139,250,0.05); border-color: rgba(167,139,250,0.25); }
+  .colonne.dash  { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.25); }
+  .colonne-entete { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px; }
+  .colonne.betel .colonne-entete { color: var(--violet); }
+  .colonne.dash .colonne-entete { color: var(--vert); }
+  .colonne ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:9px; }
+  .colonne li { font-size:13px; color:var(--texte-att); line-height:1.55; }
+
+  /* ── Table endpoints à construire ── */
+  .table-wrap { overflow-x:auto; border-radius:14px; border:1px solid var(--bordure); }
+  table { width:100%; border-collapse:collapse; font-size:13px; min-width:680px; }
+  thead th { text-align:left; padding:12px 16px; background:var(--fond-carte2); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--texte-att); border-bottom:1px solid var(--bordure); }
+  tbody td { padding:12px 16px; border-bottom:1px solid var(--bordure); vertical-align:top; color:var(--texte-att); }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background: rgba(240,184,75,0.04); }
+  .route { font-family:var(--mono); color:var(--or-clair); font-size:12px; white-space:nowrap; }
+  .route .methode { color:var(--vert); font-weight:700; }
+  .statut-tag { font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+  .statut-tag.existe { background: rgba(52,211,153,0.12); color: var(--vert); }
+  .statut-tag.creer { background: rgba(248,113,113,0.12); color: var(--rouge); }
+
+  /* ── Checklist ── */
+  .check-grille { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .check-item { display:flex; align-items:flex-start; gap:12px; border-radius:14px; padding:16px 18px; border:1px solid var(--bordure); }
+  .check-item.non { background: rgba(248,113,113,0.05); border-color: rgba(248,113,113,0.25); }
+  .check-item.oui { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.25); }
+  .check-ic { font-size:17px; flex-shrink:0; margin-top:1px; }
+  .check-item.non .check-ic { color:var(--rouge); }
+  .check-item.oui .check-ic { color:var(--vert); }
+  .check-txt-titre { font-size:13.5px; font-weight:700; color:var(--texte); margin-bottom:4px; }
+  .check-txt-desc { font-size:12.5px; color:var(--texte-att); line-height:1.55; }
+
+  footer { margin-top:70px; padding-top:26px; border-top:1px solid var(--bordure); display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--texte-att); }
+
+  @media (max-width: 760px) {
+    .page { padding: 40px 18px 70px; }
+    .etape { grid-template-columns: 46px 1fr; gap:14px; }
+    .canaux, .comparatif, .check-grille { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="eyebrow">dash · Plan d'implémentation — dérivé de bet-elearning</span>
+    <h1>Accès <em>Apprenant ↔ Parent</em> — schéma dash</h1>
+    <p class="sous-titre">
+      Adaptation du système d'accès validé côté bet-elearning
+      (<code>acces-apprenant-parent-bet-elearning.html</code>) au modèle de données réel de
+      dash : deux canaux d'inscription distincts, des champs enfant séparés au lieu d'un
+      <code>nom_complet</code> unique, et un lien parent qui passe par
+      <code>assignations_parcours</code> plutôt que <code>classes_elearning_apprenants</code>.
+    </p>
+    <div class="meta-chips">
+      <span class="chip">dash + Backend (tables classiques, hors e-learning)</span>
+      <span class="chip">2 canaux d'inscription</span>
+      <span class="chip statut">Rien de ce système n'existe encore côté accès — à construire</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <span class="ic">🔀</span>
+    <span class="txt">
+      Différence structurante avec bet-elearning : <strong>dash ne convertit pas toujours
+      l'inscription enfant en une seule écriture</strong>. Le formulaire web
+      ("j'inscris mon enfant") écrit dans une table de leads brute
+      (<code>inscriptions_enfants</code>), tandis que la commerciale, elle, écrit
+      directement dans la table pivot <code>assignations_parcours</code> — avec, en plus,
+      des champs enfant séparés (<code>prenom_enfant</code>, <code>nom_enfant</code>,
+      <code>age_enfant</code>, <code>niveau_classe_enfant</code>) là où bet-elearning n'a
+      qu'un <code>nom_complet</code> à découper côté frontend.
+    </span>
+  </div>
+
+  <!-- ── DEUX CANAUX D'INSCRIPTION ── -->
+  <section>
+    <h2 class="section-titre2">Deux canaux d'inscription, une seule finalité</h2>
+    <p class="section-desc">Contrairement à bet-elearning (un seul flux d'inscription, converti directement en ligne <code>classes_elearning_apprenants</code>), dash a deux points d'entrée qui ne se rejoignent pas automatiquement.</p>
+    <div class="canaux">
+      <div class="canal web">
+        <div class="canal-entete">🌐 Formulaire web self-service</div>
+        <div class="canal-sous">Un parent s'inscrit lui-même depuis le site public — "J'inscris mon enfant"</div>
+        <div class="canal-etape"><span class="n">1</span><div><strong>Frontend/src/Pages/HomePage/.../KidsRegistration.jsx</strong> collecte prénom/nom enfant, date de naissance, tranche d'âge, nom/email/téléphone parent.</div></div>
+        <div class="canal-etape"><span class="n">2</span><div>Envoi via <code>insertInscriptionEnfant()</code> (<code>Frontend/src/services/formsService.js:20</code>).<br/><span class="canal-route">POST /api/inscriptions/enfant/submit</span></div></div>
+        <div class="canal-etape"><span class="n">3</span><div><strong>Backend/src/routes/inscriptions.js:61-90</strong> insère dans <code>inscriptions_enfants</code> — table de <strong>lead brut</strong>, pas encore une inscription active.</div></div>
+        <div class="mini-note build">Ce lead doit ensuite être repris manuellement (onboarding/commerciale) pour devenir une vraie <code>assignation_parcours</code> — aucun pont automatique observé entre les deux tables.</div>
+      </div>
+      <div class="canal commerciale">
+        <div class="canal-entete">👩‍💼 Saisie manuelle par une commerciale</div>
+        <div class="canal-sous">Modal "Nouvelle inscription" dans CommercialDashboard.jsx</div>
+        <div class="canal-etape"><span class="n">1</span><div><strong>InscriptionForm</strong> (profil adulte/étudiant/enfant, infos enfant + parent, offre, dates) → <code>handleSaveInscription()</code>, ligne 1744.</div></div>
+        <div class="canal-etape"><span class="n">2</span><div>Écriture n°1 — trace/prospect :<br/><span class="canal-route">POST /api/inscriptions/adulte/submit</span> (même endpoint quel que soit le profil, tagué <code>profil_type</code>).</div></div>
+        <div class="canal-etape"><span class="n">3</span><div>Écriture n°2 — <strong>la vraie inscription active</strong> :<br/><span class="canal-route">POST /api/parcours/assignation</span> → table <code>assignations_parcours</code>, avec tous les champs enfant/parent + routage automatique vers l'Onboarding (en ligne) ou vers Prospects Parcours (présentiel).</div></div>
+        <div class="mini-note ok">Ce canal produit directement une ligne exploitable — c'est la même table que celle déjà utilisée par groupes.js/apprenants.js pour retrouver un parent.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CHAMPS : BET-ELEARNING VS DASH ── -->
+  <section>
+    <h2 class="section-titre2">Modèle de champs — bet-elearning vs dash</h2>
+    <div class="comparatif">
+      <div class="colonne betel">
+        <div class="colonne-entete">🟣 bet-elearning — classes_elearning_apprenants</div>
+        <ul>
+          <li><code>nom_complet</code> — un seul champ, split côté frontend par <code>.split(' ')</code> pour dériver prénom/nom.</li>
+          <li><code>date_naissance</code> — pilote directement <code>calcTranche()</code> (≤12 enfant, ≤17 ado, sinon adulte).</li>
+          <li><code>profil_type</code> — stocké mais lu uniquement côté backend (calcul <code>estParent</code>).</li>
+          <li><code>email_parent</code> / <code>telephone_parent</code> — clé de jointure parent→enfant.</li>
+        </ul>
+      </div>
+      <div class="colonne dash">
+        <div class="colonne-entete">🟢 dash — assignations_parcours / inscriptions_enfants</div>
+        <ul>
+          <li><code>prenom_enfant</code> + <code>nom_enfant</code> — champs séparés dès la saisie, pas de split à faire.</li>
+          <li><code>age_enfant</code> — âge saisi directement par la commerciale (pas de <code>date_naissance</code> systématique sur ce formulaire) ; <code>inscriptions_enfants</code> a en plus <code>date_naissance</code> et <code>tranche_age</code>.</li>
+          <li><code>niveau_classe_enfant</code> — spécifique dash, sans équivalent côté bet-elearning (niveau scolaire, pas niveau CECR).</li>
+          <li><code>profil_type</code> — même usage prévu (adulte/étudiant/enfant), déjà présent nativement.</li>
+          <li><code>nom_parent</code> / <code>email_parent</code> / <code>telephone_parent</code> — mêmes clés de jointure, mais vers <code>assignations_parcours</code> et non <code>classes_elearning_apprenants</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CE QU'IL RESTE À CONSTRUIRE ── -->
+  <section>
+    <h2 class="section-titre2">Ce qu'il reste à construire côté dash</h2>
+    <p class="section-desc">Le modèle de données existe déjà (deux canaux ci-dessus alimentent <code>assignations_parcours</code>) ; c'est toute la couche accès/dashboard qui est absente ou mockée.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Brique</th><th>Équivalent bet-elearning</th><th>État côté dash</th></tr></thead>
+        <tbody>
+          <tr><td>Pont profil enfant → EspaceApprenant</td><td><code>calcTranche(date_naissance)</code> + <code>useAgeInterface</code></td><td><span class="statut-tag creer">à construire</span> — <code>mon-espace</code> ne remonte pas <code>profil_type</code>/<code>age_enfant</code>, <code>EspaceApprenant.jsx</code> ne les lit jamais.</td></tr>
+          <tr><td>Résolution email/téléphone → enfants d'un parent</td><td><code>resolve-phone-parent</code>, <code>check-eligibilite</code> (flag <code>estParent</code>)</td><td><span class="statut-tag creer">à construire</span> — aucun endpoint équivalent pointant vers <code>assignations_parcours</code>.</td></tr>
+          <tr><td>Création de compte parent</td><td><code>creer-acces-parent</code> (admin, Supabase Auth séparé)</td><td><span class="statut-tag creer">à construire</span> — aucun endpoint, aucun rôle <code>parent</code> déclaré dans <code>ROLES_ADMIN_VALIDES</code>.</td></tr>
+          <tr><td>Login parent (email + téléphone)</td><td><code>LoginParent.jsx</code>, <code>seConnecterParent()</code></td><td><span class="statut-tag creer">à construire</span> — pas de fichier <code>LoginParent.jsx</code> dans <code>dash/src/Pages/Auth</code>.</td></tr>
+          <tr><td>Dashboard Parent connecté</td><td><code>DashboardParent.jsx</code> (résolution via <code>email_parent</code>, multi-enfants)</td><td><span class="statut-tag creer">à construire</span> — <code>dash/.../ParentDashboard.jsx</code> tourne entièrement sur <code>MOCK_CHILDREN</code>, route non protégée.</td></tr>
+          <tr><td>Pont lead web → inscription active</td><td>N/A (bet-elearning n'a pas ce cas)</td><td><span class="statut-tag creer">à construire</span> — un lead <code>inscriptions_enfants</code> doit être repris manuellement pour devenir une <code>assignation_parcours</code> ; à confirmer si un écran de reprise existe déjà côté onboarding.</td></tr>
+          <tr><td>Endpoints présences/cours/devoirs/contacts</td><td><code>presences_elearning</code>, <code>devoirs_elearning</code>, etc.</td><td><span class="statut-tag existe">existe déjà</span> — <code>monEspace.js</code> + <code>apprenants.js</code> (mes-presences, mes-evaluations, mes-resultats, mes-contacts) réutilisables tels quels par enfant.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── PIÈGES À NE PAS REPRODUIRE ── -->
+  <section>
+    <h2 class="section-titre2">Pièges bet-elearning à ne pas reproduire dans dash</h2>
+    <div class="check-grille">
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">Flag estParent calculé mais jamais lu</div><div class="check-txt-desc">Côté bet-elearning, ce flag existe côté backend mais n'est utilisé dans aucune branche du login standard. Pour dash, le brancher réellement dès la première version évite de recréer ce trou.</div></div></div>
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">2FA parent mocké</div><div class="check-txt-desc">Code fixe côté bet-elearning — à faire correctement dès le départ pour dash si un vrai 2FA est nécessaire, ou à ne pas afficher du tout plutôt que simuler une sécurité qui n'existe pas.</div></div></div>
+      <div class="check-item non"><span class="check-ic">✕</span><div><div class="check-txt-titre">Résolution des enfants sans API dédiée (dépendance RLS)</div><div class="check-txt-desc">bet-elearning interroge Supabase directement depuis le frontend. Pour dash, préférer un endpoint backend explicite (comme le reste des routes mon-espace/apprenants), plus facile à tester et à sécuriser.</div></div></div>
+      <div class="check-item oui"><span class="check-ic">✓</span><div><div class="check-txt-titre">Comptes Auth séparés parent/enfant</div><div class="check-txt-desc">Pattern à reprendre tel quel : un compte Supabase distinct par parent, lié uniquement par email_parent — pas de FK rigide, cohérent avec ce que dash fait déjà pour d'autres liaisons (ex. groupes.js).</div></div></div>
+      <div class="check-item oui"><span class="check-ic">✓</span><div><div class="check-txt-titre">Résolution téléphone → email de connexion</div><div class="check-txt-desc">Le pattern resolve-phone-parent est directement réutilisable en pointant vers assignations_parcours.telephone_parent au lieu de classes_elearning_apprenants.</div></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Schéma technique — Accès Apprenant/Parent dash</span>
+    <span>Document interne — usage privé</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+.lead-magnet {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa, #eef2f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+.lead-card {
+  max-width: 500px;
+  background: white;
+  border-radius: 32px;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 20px 35px rgba(0,0,0,0.1);
+}
+.lead-card input {
+  width: 100%;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 40px;
+}
+.lead-card button {
+  background: #0c33ac;
+  color: white;
+  border: none;
+  padding: 0.75rem;
+  width: 100%;
+  border-radius: 40px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.legal {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin-top: 1rem;
+}

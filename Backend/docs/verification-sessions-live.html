@@ -1,0 +1,313 @@
+<title>Vérification anti-triche des sessions live</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --surface-2: #f0f2f8;
+    --border: #dfe3ee;
+    --text: #0f1730;
+    --text-dim: #5b6478;
+    --text-faint: #8b93a7;
+    --navy: #0c33ac;
+    --navy-dark: #081f6b;
+    --cyan: #0891b2;
+    --red: #dc2626;
+    --red-bg: #fdecec;
+    --amber: #b45309;
+    --amber-bg: #fef3e2;
+    --green: #16803d;
+    --green-bg: #eafaf0;
+    --code-bg: #0f1730;
+    --code-text: #d8def0;
+    --shadow: 0 1px 2px rgba(15,23,48,.04), 0 8px 24px -12px rgba(15,23,48,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f1d;
+      --surface: #131a2e;
+      --surface-2: #182038;
+      --border: #262f4a;
+      --text: #e8ebf5;
+      --text-dim: #a7afc4;
+      --text-faint: #6d7690;
+      --navy: #6f8cf0;
+      --navy-dark: #a9bcf7;
+      --cyan: #4fd1e8;
+      --red: #f2837e;
+      --red-bg: #2c1618;
+      --amber: #f0b95e;
+      --amber-bg: #2a2013;
+      --green: #6fd99a;
+      --green-bg: #12261c;
+      --code-bg: #080c18;
+      --code-text: #c7cfe6;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f1d;
+    --surface: #131a2e;
+    --surface-2: #182038;
+    --border: #262f4a;
+    --text: #e8ebf5;
+    --text-dim: #a7afc4;
+    --text-faint: #6d7690;
+    --navy: #6f8cf0;
+    --navy-dark: #a9bcf7;
+    --cyan: #4fd1e8;
+    --red: #f2837e;
+    --red-bg: #2c1618;
+    --amber: #f0b95e;
+    --amber-bg: #2a2013;
+    --green: #6fd99a;
+    --green-bg: #12261c;
+    --code-bg: #080c18;
+    --code-text: #c7cfe6;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 48px 24px 96px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  .eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--cyan); margin-bottom: 10px;
+  }
+  h1 {
+    font-size: clamp(26px, 4vw, 34px); font-weight: 800; letter-spacing: -.02em;
+    margin: 0 0 10px; text-wrap: balance; color: var(--text);
+  }
+  .sub { color: var(--text-dim); font-size: 15px; max-width: 62ch; margin: 0 0 8px; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--amber-bg); color: var(--amber); border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+    border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; margin-top: 14px;
+  }
+  .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+
+  h2 {
+    font-size: 20px; font-weight: 800; letter-spacing: -.01em; margin: 56px 0 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .num {
+    font-size: 12px; width: 24px; height: 24px; border-radius: 7px;
+    background: var(--navy); color: #fff; display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 800; flex-shrink: 0;
+  }
+  .section-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 22px; max-width: 68ch; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; box-shadow: var(--shadow);
+  }
+
+  figure { margin: 0; }
+  figcaption { font-size: 12.5px; color: var(--text-faint); margin-top: 12px; text-align: center; }
+  svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  .diagram-scroll { overflow-x: auto; }
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 4px;
+  }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); font-weight: 700; }
+  td.opt { font-weight: 700; color: var(--text); white-space: nowrap; }
+  .table-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+  .table-wrap table { margin: 0; }
+  .table-wrap tr:last-child td { border-bottom: none; }
+
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+    margin: 2px 4px 2px 0;
+  }
+  .tag.ok { background: var(--green-bg); color: var(--green); }
+  .tag.no { background: var(--red-bg); color: var(--red); }
+  .tag.warn { background: var(--amber-bg); color: var(--amber); }
+
+  .callout {
+    border-radius: 14px; padding: 16px 18px; font-size: 13.5px; margin-top: 18px;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .callout.warn { background: var(--amber-bg); border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent); color: var(--text); }
+  .callout.info { background: color-mix(in srgb, var(--cyan) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent); color: var(--text); }
+  .callout .icon { font-size: 17px; flex-shrink: 0; line-height: 1.4; }
+  .callout b { color: var(--text); }
+
+  code { font-family: 'SF Mono', 'Menlo', monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+
+  .next-box {
+    margin-top: 64px; border-radius: 16px; padding: 26px 28px;
+    background: linear-gradient(135deg, var(--navy), var(--navy-dark));
+    color: #fff; box-shadow: var(--shadow);
+  }
+  .next-box h3 { margin: 0 0 8px; font-size: 16px; font-weight: 800; }
+  .next-box p { margin: 0; font-size: 13.5px; color: rgba(255,255,255,.82); max-width: 60ch; }
+  .next-box .resume-tag { display:inline-flex; align-items:center; gap:6px; background: rgba(255,255,255,.14); border-radius: 999px; padding: 5px 13px; font-size: 11.5px; font-weight: 700; margin-bottom: 14px; }
+
+  footer { margin-top: 40px; font-size: 12px; color: var(--text-faint); text-align: center; }
+</style>
+
+<div class="wrap">
+
+  <div class="eyebrow">BET · Anti-triche coachs</div>
+  <h1>Peut-on vraiment savoir si une session live a eu lieu ?</h1>
+  <p class="sub">État des lieux de l'investigation sur la vérification des séances en ligne (Zoom / Teams / Meet) données par les coachs — aucune décision n'a encore été prise, ce document sert de mémo pour reprendre le sujet.</p>
+  <div class="status-pill"><span class="dot"></span> En pause — à reprendre plus tard</div>
+
+  <h2><span class="num">1</span> Ce qui se passe aujourd'hui</h2>
+  <p class="section-sub">Le coach colle n'importe quel lien de visio dans le dash, ouvre/ferme la séance lui-même, et remplit la liste de présence à la main. Rien de tout ça n'est vérifié.</p>
+  <div class="card diagram-scroll">
+    <figure>
+      <svg viewBox="0 0 860 190" role="img" aria-label="Le coach planifie une séance, colle un lien Zoom, Teams ou Meet, ouvre puis clôture lui-même la séance et saisit la présence à la main ; le paiement de l'honoraire part de cette seule déclaration, sans aucune vérification indépendante.">
+        <defs>
+          <marker id="arrow1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="Inter, sans-serif" fill="currentColor">
+          <!-- Coach -->
+          <rect x="20" y="60" width="130" height="60" rx="12" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".85"/>
+          <text x="85" y="85" text-anchor="middle" font-size="13" font-weight="700">Coach</text>
+          <text x="85" y="102" text-anchor="middle" font-size="10.5" opacity=".6">planifie la séance</text>
+
+          <line x1="150" y1="90" x2="230" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow1)" opacity=".7"/>
+          <text x="190" y="78" text-anchor="middle" font-size="10">colle un lien</text>
+
+          <!-- Lien collé -->
+          <rect x="230" y="60" width="150" height="60" rx="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" opacity=".85"/>
+          <text x="305" y="82" text-anchor="middle" font-size="12" font-weight="700">Zoom / Teams / Meet</text>
+          <text x="305" y="100" text-anchor="middle" font-size="10" opacity=".6">compte perso du coach</text>
+
+          <line x1="380" y1="90" x2="460" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow1)" opacity=".7"/>
+
+          <!-- Backend -->
+          <rect x="460" y="60" width="140" height="60" rx="12" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".85"/>
+          <text x="530" y="82" text-anchor="middle" font-size="12" font-weight="700">sessions_live</text>
+          <text x="530" y="100" text-anchor="middle" font-size="10" opacity=".6">stocke le lien tel quel</text>
+
+          <line x1="600" y1="90" x2="680" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow1)" opacity=".7"/>
+          <text x="640" y="78" text-anchor="middle" font-size="10">clôture + présence</text>
+
+          <!-- Résultat -->
+          <rect x="680" y="55" width="160" height="70" rx="12" fill="#dc262622" stroke="#dc2626" stroke-width="1.5"/>
+          <text x="760" y="80" text-anchor="middle" font-size="12" font-weight="700" fill="#dc2626">Honoraire payé</text>
+          <text x="760" y="97" text-anchor="middle" font-size="10" fill="#dc2626" opacity=".85">sur simple déclaration</text>
+          <text x="760" y="112" text-anchor="middle" font-size="9.5" fill="#dc2626" opacity=".7">— aucune preuve indépendante —</text>
+        </g>
+      </svg>
+    </figure>
+    <figcaption>Chaque étape (lien, ouverture, présence, clôture) est intégralement déclarée par le coach lui-même.</figcaption>
+  </div>
+
+  <h2><span class="num">2</span> Pourquoi ce n'est pas juste un problème de code</h2>
+  <p class="section-sub">Zoom, Teams et Meet ne remontent des informations (API ou webhook) que sur les réunions qui appartiennent au compte/organisation propriétaire de l'application connectée. Un compte qu'on ne possède pas reste une boîte noire — c'est une frontière de sécurité voulue par ces plateformes, pas un manque technique de notre côté.</p>
+  <div class="card diagram-scroll">
+    <figure>
+      <svg viewBox="0 0 860 220" role="img" aria-label="Une application créée par BET ne peut recevoir des informations que sur les réunions organisées sous le compte BET ; les réunions organisées sous le compte personnel d'un coach restent invisibles, même avec une app BET, à moins que le coach n'autorise explicitement l'accès à son propre compte.">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="Inter, sans-serif" fill="currentColor">
+          <!-- App BET -->
+          <rect x="340" y="18" width="180" height="50" rx="10" fill="#0c33ac22" stroke="#0c33ac" stroke-width="1.5"/>
+          <text x="430" y="48" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0c33ac">App / bot créé par BET</text>
+
+          <!-- Compte BET -->
+          <rect x="60" y="130" width="230" height="70" rx="12" fill="#16803d18" stroke="#16803d" stroke-width="1.5"/>
+          <text x="175" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#16803d">Réunion sous compte BET</text>
+          <text x="175" y="176" text-anchor="middle" font-size="10.5" fill="#16803d" opacity=".85">✅ webhook / API disponibles</text>
+
+          <!-- Compte perso coach -->
+          <rect x="570" y="130" width="230" height="70" rx="12" fill="#dc262618" stroke="#dc2626" stroke-width="1.5"/>
+          <text x="685" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#dc2626">Réunion sous compte perso du coach</text>
+          <text x="685" y="176" text-anchor="middle" font-size="10.5" fill="#dc2626" opacity=".85">🚫 invisible, sauf accord explicite du coach</text>
+
+          <line x1="400" y1="68" x2="200" y2="128" stroke="#16803d" stroke-width="1.5" marker-end="url(#arrow2)"/>
+          <line x1="460" y1="68" x2="660" y2="128" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow2)"/>
+        </g>
+      </svg>
+    </figure>
+    <figcaption>Les coachs utilisent aujourd'hui leurs comptes personnels → deuxième cas de figure, invisible pour BET.</figcaption>
+  </div>
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <div><b>Décision explicite du 5 sept. :</b> on ne change pas le flux du coach (il garde son propre compte, colle son propre lien). La solution doit donc fonctionner malgré cette contrainte — d'où la piste "bot qui rejoint comme un participant", indépendante de qui possède le compte.</div>
+  </div>
+
+  <h2><span class="num">3</span> Options comparées</h2>
+  <p class="section-sub">Un "bot de réunion" rejoint la visio comme un participant normal, avec juste le lien — donc sans changer le flux du coach. Voici ce qui a été regardé.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Option</th><th>Zoom</th><th>Teams</th><th>Meet</th><th>Coût</th><th>Notification</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="opt">Attendee.dev<br><span style="font-weight:400;color:var(--text-faint);font-size:11.5px;">open source, auto-hébergé</span></td>
+          <td><span class="tag ok">✓ dispo</span></td>
+          <td><span class="tag no">✗ roadmap</span></td>
+          <td><span class="tag no">✗ roadmap</span></td>
+          <td>Gratuit (héberg. VPS)</td>
+          <td><span class="tag warn">polling</span> (pas de webhook encore)</td>
+        </tr>
+        <tr>
+          <td class="opt">Recall.ai<br><span style="font-weight:400;color:var(--text-faint);font-size:11.5px;">service payant</span></td>
+          <td><span class="tag ok">✓</span></td>
+          <td><span class="tag ok">✓</span></td>
+          <td><span class="tag ok">✓</span></td>
+          <td>Payant à la minute</td>
+          <td><span class="tag ok">webhooks réels</span></td>
+        </tr>
+        <tr>
+          <td class="opt">OAuth par coach<br><span style="font-weight:400;color:var(--text-faint);font-size:11.5px;">le coach autorise son propre compte</span></td>
+          <td><span class="tag ok">✓ (compte gratuit ok)</span></td>
+          <td><span class="tag warn">limité</span> (accord admin souvent requis)</td>
+          <td><span class="tag no">quasi impossible</span> (Gmail perso)</td>
+          <td>Gratuit</td>
+          <td>webhooks natifs</td>
+        </tr>
+        <tr>
+          <td class="opt">Bot maison<br><span style="font-weight:400;color:var(--text-faint);font-size:11.5px;">SDK propres à chaque plateforme</span></td>
+          <td><span class="tag warn">SDK lourd</span></td>
+          <td><span class="tag warn">SDK lourd</span></td>
+          <td><span class="tag no">pas d'API officielle</span></td>
+          <td>Gratuit (temps dev ++)</td>
+          <td>à construire soi-même</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout info">
+    <span class="icon">💡</span>
+    <div>Sur les <b>8 séances réelles</b> observées en base : 3 Zoom, 5 présentiel (hors périmètre), 0 Teams/Meet/Jitsi malgré ce qu'on nous rapporte à l'oral — à re-vérifier une fois qu'on aura des vraies volumétries par plateforme avant d'investir dans une option précise.</div>
+  </div>
+
+  <h2><span class="num">4</span> Ce qui est déjà en place, prêt à réutiliser</h2>
+  <p class="section-sub">Rien n'est perdu du travail déjà fait — juste en pause.</p>
+  <div class="card">
+    <table>
+      <tr><td class="opt" style="white-space:normal;">Table <code>sessions_live_verification</code></td><td>Créée en base — statut (vérifiée / suspecte / non vérifiable), horaires réels, durée réelle, participants, source de vérification.</td></tr>
+      <tr><td class="opt" style="white-space:normal;">Route <code>/api/webhooks/zoom</code></td><td>Squelette prêt (validation CRC + vérification de signature HMAC) — fonctionnera si on active de vrais webhooks Zoom.</td></tr>
+      <tr><td class="opt" style="white-space:normal;">Route <code>/api/webhooks/teams</code></td><td>Squelette prêt (poignée de main Graph + lecture clientState) — bloqué tant qu'on n'a pas de compte Microsoft 365 côté BET.</td></tr>
+      <tr><td class="opt" style="white-space:normal;">Détection de suspicion</td><td>Compare durée réelle vs durée prévue, alerte le PA/superviseur si le coach n'a jamais rejoint ou a quitté trop tôt.</td></tr>
+    </table>
+  </div>
+
+  <div class="next-box">
+    <span class="resume-tag">⏸ À la reprise</span>
+    <h3>Prochaine étape quand on relance le sujet</h3>
+    <p>Confirmer les vrais volumes par plateforme (Zoom vs Teams vs Meet) sur un mois complet avant de choisir — si Teams domine vraiment, il faudra soit attendre le support Teams d'Attendee.dev, soit partir sur Recall.ai malgré le coût, soit explorer l'auto-hébergement d'un projet équivalent (<code>meetingbot</code>, <code>screenappai/meeting-bot</code> — trouvés mais pas encore audités).</p>
+  </div>
+
+  <footer>Document de travail interne · généré le 6 septembre 2026 · à mettre à jour à la reprise du sujet</footer>
+</div>

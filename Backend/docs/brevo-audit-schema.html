@@ -1,0 +1,282 @@
+<title>Brevo dans BET — Audit &amp; schéma d'implémentation</title>
+<style>
+:root{
+  --bg:#f7f8fb; --surface:#ffffff; --surface-2:#eef0f7; --border:#dde1ee;
+  --ink:#161a2e; --muted:#5b6178; --muted-2:#8288a0;
+  --accent:#3454d1; --accent-dark:#1f3494; --accent-bg:#ecf0ff;
+  --good:#1f7a4d; --good-bg:#eaf6ef; --good-border:#bfe3cc;
+  --warn:#9a6400; --warn-bg:#fdf3df; --warn-border:#f0dca8;
+  --bad:#a3273a; --bad-bg:#fceef0; --bad-border:#f2c7cf;
+  --shadow: 0 1px 2px rgba(22,26,46,.05), 0 8px 24px rgba(22,26,46,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12141f; --surface:#191c2b; --surface-2:#212540; --border:#2d3350;
+    --ink:#e8e9f3; --muted:#a6acc7; --muted-2:#7d84a3;
+    --accent:#8fa4ff; --accent-dark:#b7c4ff; --accent-bg:#1c2350;
+    --good:#5fd095; --good-bg:#122a1f; --good-border:#245c3f;
+    --warn:#e3b458; --warn-bg:#2b2110; --warn-border:#5a4620;
+    --bad:#f0899a; --bad-bg:#301620; --bad-border:#5c2735;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12141f; --surface:#191c2b; --surface-2:#212540; --border:#2d3350;
+  --ink:#e8e9f3; --muted:#a6acc7; --muted-2:#7d84a3;
+  --accent:#8fa4ff; --accent-dark:#b7c4ff; --accent-bg:#1c2350;
+  --good:#5fd095; --good-bg:#122a1f; --good-border:#245c3f;
+  --warn:#e3b458; --warn-bg:#2b2110; --warn-border:#5a4620;
+  --bad:#f0899a; --bad-bg:#301620; --bad-border:#5c2735;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height:1.55;}
+.wrap{max-width:940px; margin:0 auto; padding:56px 24px 80px;}
+.eyebrow{font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:10px;}
+h1{font-family:Georgia,"Iowan Old Style","Times New Roman",serif; font-size:2rem; margin:0 0 8px; text-wrap:balance;}
+.lede{color:var(--muted); font-size:1.02rem; max-width:64ch; margin:0 0 40px;}
+h2{font-family:Georgia,"Iowan Old Style","Times New Roman",serif; font-size:1.28rem; margin:52px 0 16px; text-wrap:balance;}
+h2 .num{color:var(--accent-dark); font-variant-numeric:tabular-nums; margin-right:10px;}
+p{color:var(--ink)}
+.muted{color:var(--muted)}
+code{background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1px 6px; font-size:.86em;}
+
+/* Status grid */
+.status-grid{display:flex; flex-direction:column; gap:12px;}
+.status{
+  display:grid; grid-template-columns:120px 1fr; gap:4px 16px; align-items:start;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:14px 18px; box-shadow:var(--shadow);
+}
+.status .pill{
+  font-size:.68rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+  padding:4px 10px; border-radius:999px; text-align:center; height:fit-content;
+}
+.pill-ok{background:var(--good-bg); color:var(--good); border:1px solid var(--good-border);}
+.pill-partial{background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-border);}
+.pill-missing{background:var(--bad-bg); color:var(--bad); border:1px solid var(--bad-border);}
+.status .title{font-weight:700; font-size:.94rem; margin-bottom:3px;}
+.status .desc{color:var(--muted); font-size:.86rem;}
+.status .desc .loc{color:var(--muted-2); font-family:ui-monospace,Menlo,monospace; font-size:.78rem;}
+
+/* diagram */
+figure{margin:0;}
+.diagram-card{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:var(--shadow); overflow-x:auto;}
+svg{display:block; margin:0 auto; max-width:100%; height:auto; color:var(--ink);}
+figcaption{color:var(--muted); font-size:.82rem; margin-top:10px; text-align:center;}
+.svg-good{color:var(--good);}
+.svg-accent{color:var(--accent);}
+.svg-warn{color:var(--warn);}
+.svg-muted{color:var(--muted-2);}
+
+/* steps */
+.steps{display:flex; flex-direction:column; gap:0; counter-reset:step;}
+.step{
+  display:grid; grid-template-columns:36px 1fr; gap:16px; padding:16px 0;
+  border-top:1px solid var(--border);
+}
+.step:first-child{border-top:none;}
+.step .n{
+  counter-increment:step; width:32px; height:32px; border-radius:50%;
+  background:var(--accent-bg); color:var(--accent-dark); font-weight:800; font-size:.85rem;
+  display:flex; align-items:center; justify-content:center;
+}
+.step .n::before{content:counter(step);}
+.step .t{font-weight:700; font-size:.92rem; margin-bottom:3px;}
+.step .d{color:var(--muted); font-size:.87rem;}
+
+.callout{
+  margin-top:18px; padding:14px 16px; border-radius:10px; font-size:.86rem; font-weight:600;
+}
+.callout-warn{background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn);}
+
+.reco{margin-top:40px; padding:20px 22px; border-radius:14px; background:var(--accent-bg); border:1px solid var(--border); box-shadow:var(--shadow);}
+.reco h3{margin:0 0 8px; font-size:1rem; color:var(--accent-dark);}
+.reco p{margin:0; font-size:.92rem;}
+
+footer{margin-top:56px; padding-top:20px; border-top:1px solid var(--border); font-size:.78rem; color:var(--muted-2);}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">BET · Intégration Brevo</div>
+  <h1>Brevo dans le projet — audit et schéma d'implémentation</h1>
+  <p class="lede">Le compte Brevo vient d'être créé. Voici ce qui existe déjà dans le code (plus que prévu — l'email fonctionne réellement), ce qui est préparé mais en attente, et ce qui reste entièrement à construire (SMS, WhatsApp).</p>
+
+  <h2><span class="num">01</span>État actuel</h2>
+  <div class="status-grid">
+
+    <div class="status">
+      <span class="pill pill-ok">Déjà actif</span>
+      <div>
+        <div class="title">Email transactionnel</div>
+        <div class="desc">
+          <code>emailService.js</code> envoie déjà de vrais emails via Brevo (relais SMTP <code>smtp-relay.brevo.com</code>, actif) — utilisé pour les emails de bienvenue coach/apprenant/parent, les notifications de contact, et la newsletter.
+          <div class="loc">Backend/src/services/emailService.js · appelé depuis contact.js, adminRoutes.js, coachs.js, newsletter.js, apprenants.js</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="pill pill-partial">Prêt, pas activé</span>
+      <div>
+        <div class="title">API Brevo (vs SMTP)</div>
+        <div class="desc">
+          Le code bascule automatiquement sur l'API Brevo (plus fiable, tracking des ouvertures) dès que <code>BREVO_API_KEY</code> est renseignée — actuellement commentée dans <code>.env</code>, donc le SMTP fait tout le travail par défaut.
+          <div class="loc">Backend/.env:24 (BREVO_API_KEY commentée) · emailService.js:9,38</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="pill pill-partial">Champs prêts, rien derrière</span>
+      <div>
+        <div class="title">Cases "SMS (bientôt)" / "Email (bientôt)"</div>
+        <div class="desc">
+          Sur le plan mensuel de chaque apprenant, deux cases à cocher (<code>plan_paiement.canal_sms</code>/<code>canal_email</code>) sont déjà enregistrées en base — elles n'attendent qu'un déclencheur réel pour devenir fonctionnelles.
+          <div class="loc">dash/.../CommercialDashboard.jsx:10020-10040 · PedagogicalAdvisorDashboard.jsx:10852 (lecture seule)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="pill pill-missing">Inexistant</span>
+      <div>
+        <div class="title">Envoi SMS</div>
+        <div class="desc">
+          Aucun code n'appelle l'API SMS de Brevo nulle part — <code>canal_sms</code> est une case cochée sans aucun envoi derrière.
+        </div>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="pill pill-missing">Inexistant (API)</span>
+      <div>
+        <div class="title">WhatsApp</div>
+        <div class="desc">
+          Les boutons WhatsApp du site sont de simples liens <code>wa.me/...</code> qui ouvrent WhatsApp avec un message pré-rempli — ce n'est pas une intégration API, rien n'est envoyé automatiquement par le serveur.
+          <div class="loc">Frontend/.../Navbar.jsx, Footer.jsx, Contact.jsx, FAQ.jsx, CentresEnLigneModal.jsx</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="pill pill-warn" style="background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-border)">À vérifier</span>
+      <div>
+        <div class="title">Clé orpheline dans dash/.env</div>
+        <div class="desc">
+          <code>URL_BREVO_CLE</code> est définie dans <code>dash/.env</code> mais n'est référencée nulle part dans le code — probablement un reste d'un essai précédent. À nettoyer ou à documenter une fois le vrai compte Brevo branché.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2><span class="num">02</span>Schéma cible</h2>
+  <figure>
+    <div class="diagram-card">
+      <svg viewBox="0 0 880 400" role="img" aria-label="Schéma : le nouveau compte Brevo fournit une clé API unique, utilisée par le service email existant (déjà actif) et par un nouveau service SMS à créer ; ces deux services sont ensuite appelés par les jobs existants (rappels de paiement) et futurs (badges de fidélité), selon les cases canal_sms/canal_email déjà cochées sur chaque dossier.">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- Compte Brevo -->
+        <rect x="340" y="16" width="200" height="60" rx="10" class="svg-accent" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <text x="440" y="40" text-anchor="middle" font-size="12" font-weight="700" class="svg-accent">Compte Brevo</text>
+        <text x="440" y="58" text-anchor="middle" font-size="10.5" opacity=".75" class="svg-accent">clé API (BREVO_API_KEY)</text>
+
+        <line x1="440" y1="76" x2="440" y2="108" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="230" y1="108" x2="650" y2="108" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="230" y1="108" x2="230" y2="124" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <line x1="650" y1="108" x2="650" y2="124" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+        <!-- Email service (existant) -->
+        <rect x="100" y="128" width="260" height="64" rx="10" class="svg-good" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <text x="230" y="154" text-anchor="middle" font-size="12" font-weight="700" class="svg-good">emailService.js</text>
+        <text x="230" y="172" text-anchor="middle" font-size="10.5" opacity=".8" class="svg-good">déjà actif — email uniquement</text>
+        <text x="230" y="186" text-anchor="middle" font-size="9.5" opacity=".65" class="svg-good">reste à faire : basculer sur l'API (clé)</text>
+
+        <!-- SMS service (à créer) -->
+        <rect x="520" y="128" width="260" height="64" rx="10" class="svg-warn" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="5 3"/>
+        <text x="650" y="154" text-anchor="middle" font-size="12" font-weight="700" class="svg-warn">smsService.js — à créer</text>
+        <text x="650" y="172" text-anchor="middle" font-size="10.5" opacity=".8" class="svg-warn">API SMS Transactionnel Brevo</text>
+        <text x="650" y="186" text-anchor="middle" font-size="9.5" opacity=".65" class="svg-warn">nécessite un expéditeur SMS approuvé</text>
+
+        <!-- down to jobs -->
+        <line x1="230" y1="192" x2="230" y2="228" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <line x1="650" y1="192" x2="650" y2="228" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+        <!-- Jobs -->
+        <rect x="100" y="232" width="260" height="60" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="230" y="256" text-anchor="middle" font-size="12" font-weight="700">jobsPaiements.js</text>
+        <text x="230" y="274" text-anchor="middle" font-size="10.5" opacity=".65">rappels J-7/J-3/J-1 (existant)</text>
+
+        <rect x="520" y="232" width="260" height="60" rx="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="650" y="256" text-anchor="middle" font-size="12" font-weight="700">job badges fidélité</text>
+        <text x="650" y="274" text-anchor="middle" font-size="10.5" opacity=".65">futur (voir proposition précédente)</text>
+
+        <!-- condition -->
+        <line x1="230" y1="292" x2="230" y2="316" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="650" y1="292" x2="650" y2="316" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="230" y1="316" x2="650" y2="316" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="440" y1="316" x2="440" y2="336" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <text x="440" y="308" text-anchor="middle" font-size="10.5" font-weight="700" opacity=".8">si canal_sms / canal_email coché</text>
+
+        <!-- destinataire -->
+        <rect x="320" y="340" width="240" height="52" rx="10" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <text x="440" y="362" text-anchor="middle" font-size="12" font-weight="700">Apprenant / Assistante</text>
+        <text x="440" y="378" text-anchor="middle" font-size="10.5" opacity=".65">reçoit en plus de l'in-app déjà en place</text>
+      </svg>
+    </div>
+    <figcaption>La clé API du nouveau compte alimente deux services : l'email (déjà actif, juste à basculer sur l'API) et un service SMS à créer — tous deux appelés par les jobs existants et futurs, en respectant les cases déjà cochées sur chaque dossier.</figcaption>
+  </figure>
+
+  <h2><span class="num">03</span>Étapes d'implémentation proposées</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="n"></div>
+      <div>
+        <div class="t">Récupérer la clé API dans le compte Brevo</div>
+        <div class="d">SMTP &amp; API → Clé API. L'ajouter à <code>Backend/.env</code> (local) et <code>Backend/.env.vercel</code> (prod) comme <code>BREVO_API_KEY</code> — <code>emailService.js</code> bascule automatiquement dessus, aucun code à changer pour l'email.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n"></div>
+      <div>
+        <div class="t">Décider du canal SMS : Brevo SMS ou autre</div>
+        <div class="d">Brevo propose un vrai produit SMS Transactionnel, mais il faut déclarer un expéditeur (nom court validé) et il facture par SMS séparément de l'email — à confirmer que c'est bien le choix voulu avant de coder, plutôt qu'un fournisseur SMS local ivoirien parfois plus simple à faire approuver.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n"></div>
+      <div>
+        <div class="t">Créer <code>smsService.js</code> (même forme que emailService.js)</div>
+        <div class="d">Une fonction <code>envoyerSms({ to, message })</code> appelant l'API SMS de Brevo — même structure que <code>brevoSend()</code>, pour rester cohérent avec le reste du code.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n"></div>
+      <div>
+        <div class="t">Brancher dans <code>jobsPaiements.js</code></div>
+        <div class="d">À chaque rappel J-7/J-3/J-1 déjà envoyé en in-app, vérifier <code>plan.canal_email</code>/<code>plan.canal_sms</code> et appeler <code>emailService</code>/<code>smsService</code> en plus — les cases cochées deviennent enfin actives, sans changement pour l'utilisateur final côté dashboard.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n"></div>
+      <div>
+        <div class="t">Réutiliser pour les badges de fidélité</div>
+        <div class="d">Le futur job mensuel (proposition précédente) branche directement sur les mêmes deux services — aucune nouvelle intégration à faire, juste un nouvel appelant.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">⚠️ WhatsApp via Brevo (Business API) est un produit à part, nécessitant une validation Meta/WhatsApp Business séparée — nettement plus lourd que l'email/SMS. À traiter comme une phase 3 distincte, pas dans ce chantier.</div>
+
+  <div class="reco">
+    <h3>En une phrase</h3>
+    <p>L'email fonctionne déjà réellement via Brevo — il ne manque qu'une clé API pour passer du SMTP à l'API. Le SMS est entièrement à construire (mais sur le même modèle que l'email existant). Les deux se branchent ensuite sur les jobs déjà en place (paiements) et à venir (badges), sans toucher aux dashboards.</p>
+  </div>
+
+  <footer>BET · Binnie's English Training — audit technique, aucune implémentation encore réalisée.</footer>
+</div>

@@ -1,0 +1,559 @@
+<title>Boutique e-book</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --papier:#faf8f4; --surface:#ffffff; --encre:#191512; --encre-doux:#57504a; --encre-pale:#8b827a;
+    --trait:#e6e0d7; --trait-fort:#c9c0b3;
+    --or:#8a5d16; --or-bg:#fbf4e6;
+    --vert:#2c6540; --vert-bg:#eef5f0;
+    --brique:#a33a28; --brique-bg:#fbf0ee;
+    --ardoise:#3d4a57; --ardoise-bg:#eef1f4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --papier:#14120f; --surface:#1d1a16; --encre:#f2ede6; --encre-doux:#b5aca2; --encre-pale:#8b827a;
+      --trait:#2c2721; --trait-fort:#453d34;
+      --or:#d9a95e; --or-bg:#2a2115;
+      --vert:#7cc293; --vert-bg:#152319;
+      --brique:#e08a78; --brique-bg:#2a1713;
+      --ardoise:#9db4cc; --ardoise-bg:#1a212a;
+    }
+  }
+  :root[data-theme="dark"]{
+    --papier:#14120f; --surface:#1d1a16; --encre:#f2ede6; --encre-doux:#b5aca2; --encre-pale:#8b827a;
+    --trait:#2c2721; --trait-fort:#453d34;
+    --or:#d9a95e; --or-bg:#2a2115;
+    --vert:#7cc293; --vert-bg:#152319;
+    --brique:#e08a78; --brique-bg:#2a1713;
+    --ardoise:#9db4cc; --ardoise-bg:#1a212a;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--papier); color:var(--encre);
+    font-family:Karla,system-ui,-apple-system,sans-serif;
+    font-size:16.5px; line-height:1.7; margin:0;
+    padding:clamp(28px,5vw,64px) clamp(18px,5vw,40px) 96px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  .prose{max-width:66ch}
+
+  h1{
+    font-family:Literata,Georgia,serif; font-weight:600;
+    font-size:clamp(31px,4.6vw,46px); line-height:1.12; letter-spacing:-.018em;
+    margin:0 0 12px; text-wrap:balance;
+  }
+  h2{
+    font-family:Literata,Georgia,serif; font-weight:600;
+    font-size:clamp(21px,2.6vw,28px); line-height:1.25;
+    margin:60px 0 8px; text-wrap:balance;
+  }
+  h3{font-size:14.5px;font-weight:700;margin:28px 0 6px;letter-spacing:.01em;text-transform:uppercase;color:var(--encre-doux)}
+  p{margin:0 0 15px}
+  .lede{font-size:18px;color:var(--encre-doux);max-width:62ch}
+  .eyebrow{
+    font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+    color:var(--or);margin:0 0 14px;
+  }
+  .rule{height:1px;background:var(--trait);border:0;margin:0 0 36px}
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em}
+  code{background:var(--ardoise-bg);color:var(--ardoise);padding:1px 6px;border-radius:4px}
+  pre{
+    background:var(--surface);border:1px solid var(--trait);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;
+    font-size:13px;line-height:1.75;margin:18px 0;
+  }
+
+  figure{margin:30px 0 8px}
+  figure svg{display:block;width:100%;max-width:100%;height:auto}
+  figcaption{
+    font-size:13px;color:var(--encre-pale);margin-top:12px;
+    padding-left:14px;border-left:2px solid var(--trait-fort);max-width:70ch;
+  }
+
+  .tbl-scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;margin:18px 0}
+  th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--trait);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--encre-pale);font-weight:700}
+  td:first-child{white-space:nowrap}
+
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap}
+  .t-ok{background:var(--vert-bg);color:var(--vert)}
+  .t-warn{background:var(--or-bg);color:var(--or)}
+  .t-bad{background:var(--brique-bg);color:var(--brique)}
+
+  .callout{
+    background:var(--surface);border:1px solid var(--trait);border-left:3px solid var(--or);
+    border-radius:0 10px 10px 0;padding:17px 21px;margin:26px 0;
+  }
+  .callout.reco{border-left-color:var(--vert)}
+  .callout.risque{border-left-color:var(--brique)}
+  .callout h3{margin:0 0 7px;text-transform:none;font-size:15px;color:var(--encre)}
+  .callout p:last-child{margin-bottom:0}
+
+  .cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin:22px 0 6px}
+  .card{background:var(--surface);border:1px solid var(--trait);border-radius:12px;padding:19px 21px}
+  .card.reco{border-color:var(--vert);box-shadow:0 0 0 1px var(--vert) inset}
+  .card h3{margin:0 0 3px;font-size:16px;text-transform:none;color:var(--encre)}
+  .card .sub{font-size:12px;color:var(--encre-pale);margin:0 0 13px}
+  .card ul{margin:0;padding-left:18px;font-size:14px;color:var(--encre-doux)}
+  .card li{margin-bottom:6px}
+  .card li::marker{color:var(--trait-fort)}
+
+  ol.q{counter-reset:q;list-style:none;padding:0;margin:20px 0 0;max-width:68ch}
+  ol.q li{counter-increment:q;position:relative;padding-left:42px;margin-bottom:17px}
+  ol.q li::before{
+    content:counter(q);position:absolute;left:0;top:2px;
+    width:27px;height:27px;border-radius:50%;
+    background:var(--or);color:var(--papier);
+    font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Analyse éditoriale — plateforme BET</p>
+  <h1>Boutique e-book</h1>
+  <p class="lede prose">
+    BET n'a pas à construire une boutique : elle en a déjà une, qui encaisse. Ce qui manque
+    tient en une phrase — <strong>une fois le paiement reçu, l'acheteur ne reçoit rien</strong>.
+    Voici où la chaîne s'arrête, comment les autres éditeurs numériques ont résolu le même
+    problème, et le modèle que je recommande.
+  </p>
+  <hr class="rule">
+
+  <h2>1. Ce qui existe déjà</h2>
+  <p class="prose">
+    L'inventaire surprend : la boutique publique (<span class="mono">/boutique</span>, 611 lignes),
+    l'API produits et commandes avec ses permissions, l'historique « Mes achats », le journal
+    d'audit — et surtout <strong>le paiement en ligne TouchPoint, branché et fonctionnel</strong>.
+    Le catalogue est vide et les quatre commandes existantes sont des tests annulés, mais la
+    machine tourne.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 880 250" role="img" aria-label="La chaîne d'achat existante fonctionne du catalogue au paiement TouchPoint et à la commande payée, mais s'interrompt brutalement : rien ne livre le fichier à l'acheteur, rien ne lui ouvre de droit d'accès.">
+      <defs>
+        <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+        </marker>
+        <marker id="flv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="#2c6540"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="24" font-size="11" font-weight="700" letter-spacing="1.4" fill="#2c6540">CE QUI FONCTIONNE DÉJÀ</text>
+
+      <rect x="20" y="42" width="150" height="58" rx="10" fill="#eef5f0" stroke="#2c6540" stroke-width="1.6"/>
+      <text x="95" y="66" text-anchor="middle" font-size="13" font-weight="700" fill="#2c6540">Catalogue</text>
+      <text x="95" y="85" text-anchor="middle" font-size="10.5" fill="#2c6540" opacity=".8">/boutique</text>
+
+      <line x1="170" y1="71" x2="212" y2="71" stroke="#2c6540" stroke-width="1.6" marker-end="url(#flv)"/>
+
+      <rect x="220" y="42" width="150" height="58" rx="10" fill="#eef5f0" stroke="#2c6540" stroke-width="1.6"/>
+      <text x="295" y="66" text-anchor="middle" font-size="13" font-weight="700" fill="#2c6540">Panier</text>
+      <text x="295" y="85" text-anchor="middle" font-size="10.5" fill="#2c6540" opacity=".8">checkout</text>
+
+      <line x1="370" y1="71" x2="412" y2="71" stroke="#2c6540" stroke-width="1.6" marker-end="url(#flv)"/>
+
+      <rect x="420" y="42" width="150" height="58" rx="10" fill="#eef5f0" stroke="#2c6540" stroke-width="1.6"/>
+      <text x="495" y="66" text-anchor="middle" font-size="13" font-weight="700" fill="#2c6540">TouchPoint</text>
+      <text x="495" y="85" text-anchor="middle" font-size="10.5" fill="#2c6540" opacity=".8">paiement encaissé</text>
+
+      <line x1="570" y1="71" x2="612" y2="71" stroke="#2c6540" stroke-width="1.6" marker-end="url(#flv)"/>
+
+      <rect x="620" y="42" width="150" height="58" rx="10" fill="#eef5f0" stroke="#2c6540" stroke-width="1.6"/>
+      <text x="695" y="66" text-anchor="middle" font-size="13" font-weight="700" fill="#2c6540">Commande payée</text>
+      <text x="695" y="85" text-anchor="middle" font-size="10.5" fill="#2c6540" opacity=".8">statut, reçu</text>
+
+      <!-- la falaise -->
+      <line x1="770" y1="71" x2="832" y2="71" stroke="#a33a28" stroke-width="1.8" stroke-dasharray="6 5"/>
+      <text x="845" y="76" font-size="22" fill="#a33a28">?</text>
+
+      <line x1="20" y1="132" x2="860" y2="132" stroke="currentColor" stroke-width="1" opacity=".16"/>
+
+      <text x="20" y="164" font-size="11" font-weight="700" letter-spacing="1.4" fill="#a33a28">CE QUI N'EXISTE PAS</text>
+
+      <rect x="220" y="182" width="190" height="52" rx="10" fill="none" stroke="#a33a28" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <text x="315" y="204" text-anchor="middle" font-size="12.5" font-weight="700" fill="#a33a28">Le fichier</text>
+      <text x="315" y="222" text-anchor="middle" font-size="10.5" fill="#a33a28" opacity=".85">rien ne le stocke</text>
+
+      <rect x="430" y="182" width="190" height="52" rx="10" fill="none" stroke="#a33a28" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <text x="525" y="204" text-anchor="middle" font-size="12.5" font-weight="700" fill="#a33a28">La livraison</text>
+      <text x="525" y="222" text-anchor="middle" font-size="10.5" fill="#a33a28" opacity=".85">rien ne le remet</text>
+
+      <rect x="640" y="182" width="190" height="52" rx="10" fill="none" stroke="#a33a28" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <text x="735" y="204" text-anchor="middle" font-size="12.5" font-weight="700" fill="#a33a28">Le droit d'accès</text>
+      <text x="735" y="222" text-anchor="middle" font-size="10.5" fill="#a33a28" opacity=".85">rien ne le garde</text>
+
+      <path d="M845 92 L845 150 L525 150 L525 178" fill="none" stroke="#a33a28" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#fl)" color="#a33a28"/>
+    </svg>
+    <figcaption>
+      La chaîne est complète jusqu'à l'encaissement, puis s'interrompt. Le travail ne consiste
+      donc pas à bâtir une boutique, mais à prolonger celle-ci de trois briques.
+    </figcaption>
+  </figure>
+
+  <div class="callout risque">
+    <h3>Le modèle de données est physique</h3>
+    <p>
+      <span class="mono">produits</span> porte <code>stock</code>, <code>categorie</code>,
+      <code>image_url</code> — et rien d'autre. Un e-book se vend une infinité de fois :
+      laisser <code>stock</code> tel quel garantit qu'un jour quelqu'un saisira « 10 », et que
+      la onzième vente sera refusée sans que personne comprenne pourquoi. Il faut un
+      <code>type</code> qui neutralise le stock pour le numérique.
+    </p>
+  </div>
+
+  <h2>2. Comment font les autres</h2>
+  <p class="prose">
+    La question de la protection a été tranchée par l'industrie, et pas dans le sens qu'on
+    imagine. Les grandes plateformes grand public tiennent au DRM ; <strong>l'édition
+    professionnelle et technique l'a abandonné</strong> — O'Reilly, Manning, Pragmatic
+    Bookshelf, Leanpub vendent sans verrou, avec un simple filigrane au nom de l'acheteur.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Système</th><th>Protection</th><th>Livraison</th><th>Ce qu'on en retient</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Kindle</strong></td>
+        <td>DRM propriétaire, format fermé</td>
+        <td>Liée au compte, lecture app only</td>
+        <td>Écosystème verrouillé — hors de portée et hors sujet pour un éditeur seul</td>
+      </tr>
+      <tr>
+        <td><strong>Kobo</strong></td>
+        <td>Adobe DRM <em>ou</em> sans DRM, au choix de l'éditeur</td>
+        <td>EPUB, app + liseuse</td>
+        <td>Le DRM Adobe coûte cher et casse la lecture une fois sur dix</td>
+      </tr>
+      <tr>
+        <td><strong>Google Play Books</strong></td>
+        <td>DRM optionnel</td>
+        <td>Lecture web + app</td>
+        <td>La lecture web sans installation est ce qui convertit le mieux</td>
+      </tr>
+      <tr>
+        <td><strong>Leanpub</strong></td>
+        <td class="mono" style="white-space:normal"><span class="tag t-ok">filigrane</span></td>
+        <td>PDF + EPUB, téléchargement libre</td>
+        <td>Modèle de référence : aucun verrou, nom de l'acheteur sur chaque page</td>
+      </tr>
+      <tr>
+        <td><strong>Payhip / Gumroad</strong></td>
+        <td class="mono" style="white-space:normal"><span class="tag t-ok">filigrane</span> automatique</td>
+        <td>Lien lié au compte acheteur</td>
+        <td>Le « stamping » PDF est devenu un standard des petites boutiques</td>
+      </tr>
+      <tr>
+        <td><strong>BookFunnel</strong></td>
+        <td>Filigrane + lecture en ligne</td>
+        <td>Les deux, au choix du lecteur</td>
+        <td>Le plus proche de ce que BET devrait viser</td>
+      </tr>
+      <tr>
+        <td><strong>PDF par email</strong></td>
+        <td class="mono"><span class="tag t-bad">aucune</span></td>
+        <td>Pièce jointe</td>
+        <td>Le fichier circule dès le premier acheteur — et rien ne trace la fuite</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 880 400" role="img" aria-label="Positionnement des systèmes selon deux axes : la friction imposée à l'acheteur en abscisse et la protection du catalogue en ordonnée. Le PDF par email ne protège rien sans friction ; le DRM protège au prix d'une forte friction ; le filigrane occupe la zone recommandée, une protection réelle pour une friction quasi nulle.">
+      <defs>
+        <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- zone recommandee -->
+      <rect x="95" y="60" width="240" height="130" rx="12" fill="#eef5f0" stroke="#2c6540" stroke-width="1.5" stroke-dasharray="6 5"/>
+      <text x="215" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="#2c6540" letter-spacing="1">ZONE RECOMMANDÉE</text>
+
+      <!-- axes -->
+      <line x1="80" y1="330" x2="830" y2="330" stroke="currentColor" stroke-width="1.6" marker-end="url(#ax)"/>
+      <line x1="80" y1="330" x2="80" y2="45" stroke="currentColor" stroke-width="1.6" marker-end="url(#ax)"/>
+      <text x="830" y="355" text-anchor="end" font-size="12" font-weight="600" fill="currentColor">Friction pour l'acheteur →</text>
+      <text x="72" y="45" text-anchor="end" font-size="12" font-weight="600" fill="currentColor" transform="rotate(-90 72 45)">Protection du catalogue →</text>
+
+      <!-- points -->
+      <circle cx="140" cy="300" r="7" fill="#a33a28"/>
+      <text x="155" y="298" font-size="12.5" font-weight="700" fill="#a33a28">PDF par email</text>
+      <text x="155" y="314" font-size="10.5" fill="#a33a28" opacity=".8">aucune protection, aucune friction</text>
+
+      <circle cx="200" cy="140" r="8" fill="#2c6540"/>
+      <text x="216" y="138" font-size="12.5" font-weight="700" fill="#2c6540">Filigrane — Leanpub, Payhip</text>
+      <text x="216" y="154" font-size="10.5" fill="#2c6540" opacity=".85">le nom de l'acheteur sur chaque page</text>
+
+      <circle cx="300" cy="105" r="7" fill="#2c6540"/>
+      <text x="316" y="103" font-size="12.5" font-weight="700" fill="#2c6540">Filigrane + lecture en ligne</text>
+      <text x="316" y="119" font-size="10.5" fill="#2c6540" opacity=".85">BookFunnel, O'Reilly</text>
+
+      <circle cx="600" cy="95" r="7" fill="#8a5d16"/>
+      <text x="616" y="93" font-size="12.5" font-weight="700" fill="#8a5d16">DRM Adobe — Kobo</text>
+      <text x="616" y="109" font-size="10.5" fill="#8a5d16" opacity=".85">licence, logiciel tiers, échecs fréquents</text>
+
+      <circle cx="730" cy="70" r="7" fill="#8a5d16"/>
+      <text x="746" y="68" font-size="12.5" font-weight="700" fill="#8a5d16">DRM fermé — Kindle</text>
+      <text x="746" y="84" font-size="10.5" fill="#8a5d16" opacity=".85">écosystème propriétaire</text>
+
+      <circle cx="430" cy="250" r="7" fill="currentColor" opacity=".55"/>
+      <text x="446" y="248" font-size="12.5" font-weight="600" fill="currentColor" opacity=".75">Lien expirant seul</text>
+      <text x="446" y="264" font-size="10.5" fill="currentColor" opacity=".55">gêne l'acheteur, n'arrête pas le partage</text>
+
+      <text x="95" y="382" font-size="11.5" fill="currentColor" opacity=".7">Le DRM déplace le curseur vers la droite bien plus qu'il ne le monte : on paie en confort d'usage ce qu'on gagne peu en protection.</text>
+    </svg>
+    <figcaption>
+      La leçon que l'édition technique a tirée : au-delà d'un certain point, chaque cran de
+      protection coûte plus en ventes perdues qu'il n'en sauve en copies évitées.
+    </figcaption>
+  </figure>
+
+  <div class="callout reco">
+    <h3>Pourquoi le filigrane gagne</h3>
+    <p>
+      Un DRM se contourne en dix minutes avec un outil gratuit ; il n'arrête que l'acheteur
+      honnête dont la liseuse refuse le fichier. Un filigrane ne se contourne pas <em>sans
+      effort volontaire</em> — et surtout, <strong>personne ne partage un fichier qui porte son
+      nom et son email en bas de chaque page</strong>. La dissuasion est sociale, pas technique.
+      C'est la seule qui soit proportionnée à un catalogue de manuels de langue.
+    </p>
+  </div>
+
+  <h2>3. Les trois modèles de livraison</h2>
+  <p class="prose">
+    C'est la décision qui commande tout le reste : le modèle de données, le travail
+    d'intégration, et ce que l'apprenant pourra faire de son livre.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 880 330" role="img" aria-label="Trois modèles de livraison comparés. A : le fichier quitte la plateforme via un lien signé et expirant, l'acheteur le possède mais il peut ensuite circuler. B : le fichier ne sort jamais, il est diffusé page par page dans un lecteur en ligne, la lecture hors ligne est impossible. C : les deux, avec filigrane nominatif à la génération.">
+      <defs>
+        <marker id="f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- A -->
+      <text x="20" y="22" font-size="11.5" font-weight="700" letter-spacing="1" fill="#8a5d16">A · TÉLÉCHARGEMENT</text>
+      <rect x="20" y="36" width="110" height="46" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="75" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Fichier</text>
+      <line x1="130" y1="59" x2="176" y2="59" stroke="currentColor" stroke-width="1.5" marker-end="url(#f3)"/>
+      <text x="153" y="51" text-anchor="middle" font-size="9.5" fill="currentColor" opacity=".6">lien signé</text>
+      <rect x="184" y="36" width="110" height="46" rx="9" fill="#fbf4e6" stroke="#8a5d16" stroke-width="1.5"/>
+      <text x="239" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5d16">Acheteur</text>
+      <line x1="294" y1="59" x2="340" y2="59" stroke="#a33a28" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#f3)" color="#a33a28"/>
+      <text x="348" y="55" font-size="11" fill="#a33a28">puis… n'importe où</text>
+      <text x="20" y="102" font-size="11.5" fill="currentColor" opacity=".7">Hors ligne, imprimable. Le fichier échappe à la plateforme dès le premier clic.</text>
+
+      <line x1="20" y1="122" x2="860" y2="122" stroke="currentColor" stroke-width="1" opacity=".14"/>
+
+      <!-- B -->
+      <text x="20" y="152" font-size="11.5" font-weight="700" letter-spacing="1" fill="#3d4a57">B · LECTURE EN LIGNE</text>
+      <rect x="20" y="166" width="110" height="46" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="75" y="194" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Fichier</text>
+      <line x1="130" y1="189" x2="176" y2="189" stroke="#3d4a57" stroke-width="1.5" marker-end="url(#f3)" color="#3d4a57"/>
+      <text x="153" y="181" text-anchor="middle" font-size="9.5" fill="#3d4a57" opacity=".8">page à page</text>
+      <rect x="184" y="166" width="130" height="46" rx="9" fill="#eef1f4" stroke="#3d4a57" stroke-width="1.5"/>
+      <text x="249" y="194" text-anchor="middle" font-size="12" font-weight="700" fill="#3d4a57">Lecteur en ligne</text>
+      <line x1="314" y1="189" x2="360" y2="189" stroke="#3d4a57" stroke-width="1.5" marker-end="url(#f3)" color="#3d4a57"/>
+      <rect x="368" y="166" width="110" height="46" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="423" y="194" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Acheteur</text>
+      <text x="492" y="186" font-size="11" fill="#2c6540" font-weight="600">le fichier ne sort jamais</text>
+      <text x="20" y="232" font-size="11.5" fill="currentColor" opacity=".7">Protection maximale, lecture traçable. Mais rien hors connexion, et rien à imprimer.</text>
+
+      <line x1="20" y1="252" x2="860" y2="252" stroke="currentColor" stroke-width="1" opacity=".14"/>
+
+      <!-- C -->
+      <text x="20" y="282" font-size="11.5" font-weight="700" letter-spacing="1" fill="#2c6540">C · LES DEUX, AVEC FILIGRANE <tspan font-weight="400" opacity=".7">— recommandé</tspan></text>
+      <rect x="20" y="294" width="110" height="30" rx="8" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="75" y="314" text-anchor="middle" font-size="11.5" font-weight="700" fill="currentColor">Fichier</text>
+      <line x1="130" y1="309" x2="170" y2="309" stroke="#2c6540" stroke-width="1.5" marker-end="url(#f3)" color="#2c6540"/>
+      <rect x="178" y="294" width="150" height="30" rx="8" fill="#eef5f0" stroke="#2c6540" stroke-width="1.6"/>
+      <text x="253" y="314" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2c6540">Filigrane nominatif</text>
+      <line x1="328" y1="309" x2="368" y2="309" stroke="#2c6540" stroke-width="1.5" marker-end="url(#f3)" color="#2c6540"/>
+      <rect x="376" y="294" width="120" height="30" rx="8" fill="#eef5f0" stroke="#2c6540" stroke-width="1.5"/>
+      <text x="436" y="314" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2c6540">Lire en ligne</text>
+      <rect x="506" y="294" width="120" height="30" rx="8" fill="#eef5f0" stroke="#2c6540" stroke-width="1.5"/>
+      <text x="566" y="314" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2c6540">Télécharger</text>
+      <text x="640" y="314" font-size="11" fill="currentColor" opacity=".7">au choix du lecteur</text>
+    </svg>
+    <figcaption>
+      La différence tient à un seul point : le fichier quitte-t-il la plateforme ? Le filigrane
+      rend cette sortie acceptable, ce qui permet d'offrir les deux au lieu de choisir.
+    </figcaption>
+  </figure>
+
+  <div class="cards">
+    <div class="card">
+      <h3>A · Téléchargement seul</h3>
+      <p class="sub">Le plus simple à livrer</p>
+      <ul>
+        <li>Lien signé, expirant en quelques heures</li>
+        <li>Hors ligne, imprimable</li>
+        <li>Le PDF circule ensuite librement</li>
+        <li>Convient aux <strong>fiches d'exercices</strong></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>B · Lecture en ligne seule</h3>
+      <p class="sub">Le plus protecteur</p>
+      <ul>
+        <li>Le fichier n'est jamais exposé</li>
+        <li>Lecture traçable, reprise à la page</li>
+        <li>Rien hors connexion — rédhibitoire à Abidjan selon les usages</li>
+        <li>Convient aux <strong>manuels de cours</strong></li>
+      </ul>
+    </div>
+    <div class="card reco">
+      <h3>C · Les deux <span class="tag t-ok" style="margin-left:4px">recommandé</span></h3>
+      <p class="sub">Ce que fait l'édition technique</p>
+      <ul>
+        <li>Filigrane au nom et à l'email de l'acheteur</li>
+        <li>Lecture en ligne <em>et</em> téléchargement</li>
+        <li>Le choix revient au lecteur, pas à l'éditeur</li>
+        <li>Une seule protection à maintenir</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>4. Le modèle de données</h2>
+  <p class="prose">
+    Deux ajouts suffisent. Le premier distingue un bien numérique d'un bien physique ; le
+    second — et c'est la pièce maîtresse — transforme un paiement en <strong>droit
+    permanent</strong>.
+  </p>
+
+<pre>produits
+  + type            'physique' | 'ebook'     ← neutralise `stock` pour le numérique
+  + fichier_url     le maître, jamais exposé directement
+  + extrait_url     les premières pages, en accès libre
+  + format          'pdf' | 'epub'
+  + nb_pages, langue, auteur, isbn
+
+bibliotheque                                 ← LA pièce centrale
+    acheteur_id, produit_id, commande_id
+    achete_le
+    nb_telechargements, dernier_acces</pre>
+
+  <figure>
+    <svg viewBox="0 0 880 300" role="img" aria-label="Du paiement au droit permanent. Le webhook TouchPoint confirme la commande, ce qui écrit une ligne dans la table bibliothèque. Cette ligne est ensuite le seul juge : à chaque ouverture ou téléchargement, on vérifie qu'elle existe avant de générer le fichier filigrané ou d'ouvrir le lecteur.">
+      <defs>
+        <marker id="f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+        </marker>
+        <marker id="f4v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10" fill="#2c6540"/>
+        </marker>
+      </defs>
+
+      <rect x="20" y="30" width="160" height="56" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="100" y="54" text-anchor="middle" font-size="12.5" font-weight="700" fill="currentColor">Webhook TouchPoint</text>
+      <text x="100" y="72" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".6">paiement confirmé</text>
+
+      <line x1="180" y1="58" x2="232" y2="58" stroke="#2c6540" stroke-width="1.7" marker-end="url(#f4v)"/>
+      <text x="206" y="50" text-anchor="middle" font-size="10" fill="#2c6540">ouvre</text>
+
+      <rect x="240" y="20" width="200" height="76" rx="11" fill="#eef5f0" stroke="#2c6540" stroke-width="2"/>
+      <text x="340" y="48" text-anchor="middle" font-size="13.5" font-weight="700" fill="#2c6540">bibliotheque</text>
+      <text x="340" y="67" text-anchor="middle" font-size="10.5" fill="#2c6540" opacity=".85">acheteur × produit</text>
+      <text x="340" y="83" text-anchor="middle" font-size="10.5" fill="#2c6540" opacity=".85">le droit, permanent</text>
+
+      <!-- interrogations -->
+      <path d="M340 96 L340 140 L180 140 L180 172" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#f4)"/>
+      <path d="M340 96 L340 140 L520 140 L520 172" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#f4)"/>
+      <text x="340" y="134" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".65">interrogée à chaque accès</text>
+
+      <rect x="90" y="176" width="180" height="58" rx="10" fill="#eef1f4" stroke="#3d4a57" stroke-width="1.5"/>
+      <text x="180" y="200" text-anchor="middle" font-size="12.5" font-weight="700" fill="#3d4a57">Lecteur en ligne</text>
+      <text x="180" y="219" text-anchor="middle" font-size="10.5" fill="#3d4a57" opacity=".85">le fichier ne sort pas</text>
+
+      <rect x="430" y="176" width="180" height="58" rx="10" fill="#fbf4e6" stroke="#8a5d16" stroke-width="1.5"/>
+      <text x="520" y="200" text-anchor="middle" font-size="12.5" font-weight="700" fill="#8a5d16">Téléchargement</text>
+      <text x="520" y="219" text-anchor="middle" font-size="10.5" fill="#8a5d16" opacity=".85">filigrané à la volée</text>
+
+      <line x1="610" y1="205" x2="666" y2="205" stroke="currentColor" stroke-width="1.5" marker-end="url(#f4)"/>
+      <rect x="674" y="176" width="186" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="767" y="199" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">« Korotoum Sylla</text>
+      <text x="767" y="217" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">koro@… » en pied</text>
+
+      <text x="90" y="270" font-size="11.5" fill="currentColor" opacity=".7">Sans cette table, un remboursement, un retéléchargement ou une révocation n'ont aucun point d'appui.</text>
+    </svg>
+    <figcaption>
+      <span class="mono">bibliotheque</span> n'est pas un journal : c'est l'unique autorité qui
+      dit si quelqu'un a le droit d'ouvrir un livre. Tout le reste en découle.
+    </figcaption>
+  </figure>
+
+  <h2>5. Trois points qu'on néglige toujours</h2>
+
+  <div class="callout">
+    <h3>L'extrait gratuit vend plus que la description</h3>
+    <p>
+      Les vingt premières pages en accès libre convertissent davantage que n'importe quel
+      argumentaire — et elles rendent la politique de non-remboursement défendable. À prévoir
+      dans le modèle <em>dès maintenant</em> (<code>extrait_url</code>), pas après coup.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>Un e-book ne se retourne pas</h3>
+    <p>
+      Une fois lu, il est consommé. Il faut une position écrite avant la première vente, pas
+      à la première réclamation. L'extrait gratuit est l'argument qui la soutient : l'acheteur
+      a pu juger avant de payer.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>La TVA sur les biens numériques n'est pas celle des biens physiques</h3>
+    <p>
+      Elle dépend souvent du pays de l'<em>acheteur</em>, non du vendeur. Tant que les ventes
+      restent ivoiriennes, la question est théorique ; dès la première vente hors frontière,
+      elle ne l'est plus. Cela se décide au moment de choisir le modèle, pas au premier contrôle.
+    </p>
+  </div>
+
+  <h2>6. L'ordre que je recommande</h2>
+  <ol class="q">
+    <li>
+      <strong>Trancher le modèle de livraison</strong> — je recommande C. Tout le reste en
+      dépend, et revenir dessus après coup oblige à défaire le modèle de données.
+    </li>
+    <li>
+      <strong>Ajouter <span class="mono">type</span> et neutraliser <span class="mono">stock</span></strong>
+      pour le numérique. Une migration de quelques lignes, à faire avant le premier produit
+      saisi — le catalogue est vide, la fenêtre est ouverte.
+    </li>
+    <li>
+      <strong>Créer <span class="mono">bibliotheque</span> et l'alimenter depuis le webhook
+      TouchPoint</strong>, qui existe déjà. C'est le seul point où la boutique actuelle doit
+      être modifiée.
+    </li>
+    <li>
+      <strong>Livrer le filigrane et le téléchargement</strong> avant le lecteur en ligne :
+      moins de travail, et suffisant pour vendre. Le lecteur peut suivre.
+    </li>
+    <li>
+      <strong>L'onglet « Mes livres »</strong> dans l'espace apprenant, qui lit
+      <span class="mono">bibliotheque</span> — l'endroit où l'achat devient un usage.
+    </li>
+  </ol>
+
+  <div class="callout reco">
+    <h3>Ce qui rend ce projet raisonnable</h3>
+    <p>
+      BET ne part pas de zéro : le catalogue, le panier, l'encaissement TouchPoint, les
+      permissions et l'audit existent et fonctionnent. Le travail se concentre sur
+      <strong>trois briques bien délimitées</strong> — le fichier, le droit, la livraison — et
+      le catalogue vide signifie qu'aucune reprise de données ne sera nécessaire. Cette fenêtre
+      se referme dès le premier produit saisi.
+    </p>
+  </div>
+
+</div>

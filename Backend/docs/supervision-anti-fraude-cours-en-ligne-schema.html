@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supervision anti-fraude — cours en ligne des coachs</title>
+<style>
+  :root {
+    --bg: #F6F7F9;
+    --surface: #FFFFFF;
+    --surface-2: #EEF1F5;
+    --ink: #0F172A;
+    --ink-soft: #4B5A73;
+    --ink-faint: #8895AA;
+    --border: #DDE3EC;
+    --accent: #0891B2;
+    --accent-soft: #E0F2FE;
+    --accent-ink: #0E5A6E;
+    --ok: #16A34A;
+    --ok-bg: #DCFCE7;
+    --warn: #B45309;
+    --warn-bg: #FEF3C7;
+    --bug: #DC2626;
+    --bug-bg: #FEE2E2;
+    --unclear: #7C3AED;
+    --unclear-bg: #F1EBFF;
+    --font-head: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0A0F1A;
+      --surface: #111826;
+      --surface-2: #17202F;
+      --ink: #E8EDF6;
+      --ink-soft: #A6B2C6;
+      --ink-faint: #6B7893;
+      --border: #232E42;
+      --accent: #22D3EE;
+      --accent-soft: #103241;
+      --accent-ink: #7EE3F5;
+      --ok: #4ADE80;
+      --ok-bg: #113420;
+      --warn: #FBBF24;
+      --warn-bg: #3A2A0B;
+      --bug: #F87171;
+      --bug-bg: #3A1414;
+      --unclear: #C4A6FF;
+      --unclear-bg: #241A3D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0A0F1A; --surface: #111826; --surface-2: #17202F; --ink: #E8EDF6;
+    --ink-soft: #A6B2C6; --ink-faint: #6B7893; --border: #232E42;
+    --accent: #22D3EE; --accent-soft: #103241; --accent-ink: #7EE3F5;
+    --ok: #4ADE80; --ok-bg: #113420; --warn: #FBBF24; --warn-bg: #3A2A0B;
+    --bug: #F87171; --bug-bg: #3A1414; --unclear: #C4A6FF; --unclear-bg: #241A3D;
+  }
+  :root[data-theme="light"] {
+    --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #EEF1F5; --ink: #0F172A;
+    --ink-soft: #4B5A73; --ink-faint: #8895AA; --border: #DDE3EC;
+    --accent: #0891B2; --accent-soft: #E0F2FE; --accent-ink: #0E5A6E;
+    --ok: #16A34A; --ok-bg: #DCFCE7; --warn: #B45309; --warn-bg: #FEF3C7;
+    --bug: #DC2626; --bug-bg: #FEE2E2; --unclear: #7C3AED; --unclear-bg: #F1EBFF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  h1 {
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 15px;
+    color: var(--ink-soft);
+    max-width: 68ch;
+    margin: 0;
+  }
+
+  nav.jump {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  nav.jump a {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: border-color .15s, color .15s;
+  }
+  nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--accent); color: var(--accent-ink); }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 20px;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .section-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  h2 {
+    font-family: var(--font-head);
+    font-size: 19px;
+    font-weight: 750;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .section-note {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    max-width: 70ch;
+  }
+
+  code.k { font-family: var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--accent-ink); }
+
+  .rules { display: grid; gap: 10px; }
+  .rule {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 14px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .rule .n {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .rule .t { font-size: 14.5px; font-weight: 650; }
+  .rule .d { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+
+  /* ── Boucle actuelle (flow) ─────────────────────── */
+  .flow { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  .fnode {
+    position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 16px; display: flex; align-items: center; gap: 12px;
+  }
+  .fnode.trunk { align-self: center; width: 100%; max-width: 600px; }
+  .fnode .ico { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+  .fnode .label { font-size: 13.5px; font-weight: 600; }
+  .fnode .path {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-ink); background: var(--accent-soft);
+    padding: 1px 7px; border-radius: 5px; display: inline-block; margin-left: 6px;
+  }
+  .connector { align-self: center; width: 1.5px; height: 22px; background: var(--border); position: relative; }
+  .connector::after {
+    content: ""; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--border);
+  }
+  .fnode.bug-node { border-color: color-mix(in srgb, var(--bug) 45%, var(--border)); }
+
+  /* ── Layers (défense en profondeur) ─────────────── */
+  .layer {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .layer-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .layer-title { font-size: 15px; font-weight: 800; }
+  .layer-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .tag { font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: .03em; }
+  .tag.effort-low  { color: var(--ok); background: var(--ok-bg); }
+  .tag.effort-mid  { color: var(--warn); background: var(--warn-bg); }
+  .tag.effort-high { color: var(--bug); background: var(--bug-bg); }
+  .tag.robust-hi   { color: var(--accent-ink); background: var(--accent-soft); }
+  .layer-desc { font-size: 13px; color: var(--ink-soft); }
+  .layer-detail { font-size: 12.5px; color: var(--ink-soft); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+
+  /* ── Avantages / inconvénients ──────────────────── */
+  .proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .proscons { grid-template-columns: 1fr; } }
+  .proscons .pc { border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+  .proscons .pro { background: var(--ok-bg); color: color-mix(in srgb, var(--ok) 55%, var(--ink)); }
+  .proscons .con { background: var(--bug-bg); color: color-mix(in srgb, var(--bug) 55%, var(--ink)); }
+  .proscons .pc-head { font-family: var(--font-mono); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; opacity: .8; }
+  .proscons ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+
+  /* ── Groupe "plus loin, plus intrusif" ──────────── */
+  .further { border: 1px dashed var(--border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .further-item { display: flex; flex-direction: column; gap: 4px; }
+  .further-item .t { font-size: 13.5px; font-weight: 700; }
+  .further-item .d { font-size: 12.5px; color: var(--ink-soft); }
+
+  /* ── Table ──────────────────────────────────────── */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 13px; }
+  thead th {
+    text-align: left; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink-faint); background: var(--surface-2); padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { background: var(--surface); }
+  td.desc { color: var(--ink-soft); max-width: 34ch; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .03em; padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.bug { color: var(--bug); background: var(--bug-bg); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 16px 18px; font-size: 13.5px; color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+  .callout.bug { border-left-color: var(--bug); }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Analyse sécurité · BET · en attente de décision</div>
+    <h1>Supervision anti-fraude — cours en ligne des coachs</h1>
+    <p class="dek">Diagnostic de la faille actuelle et menu de solutions par niveau d'effort/robustesse, pour empêcher qu'une séance en ligne non tenue soit déclarée — et payée — comme réalisée.</p>
+    <nav class="jump">
+      <a href="#faille">La faille actuelle</a>
+      <a href="#pourquoi">Pourquoi c'est exploitable</a>
+      <a href="#solutions">Menu de solutions</a>
+      <a href="#recommandation">Recommandation</a>
+    </nav>
+  </header>
+
+  <!-- ═══════ 01 — La faille actuelle ═══════ -->
+  <section id="faille">
+    <div class="section-head">
+      <span class="section-tag">01</span>
+      <h2>La boucle actuelle — entièrement pilotée par le coach</h2>
+    </div>
+    <p class="section-note">Audit du code existant : de l'ouverture de la salle jusqu'au paiement de l'honoraire, <strong>aucun signal indépendant du coach n'intervient</strong>. Tout repose sur une déclaration qu'il saisit lui-même.</p>
+
+    <div class="flow">
+      <div class="fnode trunk">
+        <span class="ico">1</span>
+        <span class="label">Coach ouvre la salle — simple lien Jitsi/Zoom/Meet en texte libre</span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk">
+        <span class="ico">2</span>
+        <span class="label">Coach coche les présences <strong>manuellement</strong>, sans horodatage de connexion réelle</span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk">
+        <span class="ico">PATCH</span>
+        <span class="label">Session marquée<span class="path">statut: "terminee"</span></span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk bug-node">
+        <span class="ico">POST</span>
+        <span class="label">Clôture<span class="path">/api/seances/cloturer/:id</span> — "point central du système"</span>
+      </div>
+      <div class="connector"></div>
+      <div class="fnode trunk bug-node">
+        <span class="ico">déclenche</span>
+        <span class="label">Calcul et paiement automatique de l'honoraire du coach</span>
+      </div>
+    </div>
+
+    <div class="callout bug">
+      <strong>Le constat brut&nbsp;:</strong> aucune intégration Jitsi IFrame API (pas d'événement <code class="k">participantJoined</code>/<code class="k">videoConferenceLeft</code>), aucun webhook Zoom, aucun enregistrement vidéo/audio, aucune confirmation de l'apprenant. Le superviseur ne voit que le statut déclaré et des compteurs agrégés — jamais une preuve de connexion.
+    </div>
+  </section>
+
+  <!-- ═══════ 02 — Pourquoi c'est exploitable ═══════ -->
+  <section id="pourquoi">
+    <div class="section-head">
+      <span class="section-tag">02</span>
+      <h2>Pourquoi c'est structurellement exploitable</h2>
+    </div>
+    <div class="rules">
+      <div class="rule">
+        <span class="n">1</span>
+        <div>
+          <div class="t">Une seule source de vérité, et c'est la partie intéressée</div>
+          <div class="d">Le coach déclare la présence, coche la clôture, et déclenche son propre paiement — sans contre-vérification technique à aucune étape.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">2</span>
+        <div>
+          <div class="t">Aucun horodatage indépendant</div>
+          <div class="d">La table stocke <code class="k">heure_debut</code> et <code class="k">duree_h</code> planifiées, mais pas l'heure de connexion réelle ni la durée effective de la session.</div>
+        </div>
+      </div>
+      <div class="rule">
+        <span class="n">3</span>
+        <div>
+          <div class="t">Détection humaine seule = non tenable à l'échelle</div>
+          <div class="d">C'est exactement le problème signalé par BET&nbsp;: les deputys/superviseurs ne peuvent pas surveiller manuellement chaque session — la fraude devient rationnelle si le coût de la triche est nul et la chance d'être vu est faible.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ 03 — Menu de solutions ═══════ -->
+  <section id="solutions">
+    <div class="section-head">
+      <span class="section-tag">03</span>
+      <h2>Menu de solutions — défense en profondeur</h2>
+    </div>
+    <p class="section-note">Approche recommandée en sécurité&nbsp;: pas une solution unique, mais plusieurs couches indépendantes. Si une couche est contournée, les autres tiennent encore. Classées ici par gain rapide → investissement plus lourd.</p>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">A · Détection d'anomalies — sur les données déjà existantes</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible</span><span class="tag robust-hi">Aucune nouvelle intégration</span></div>
+      </div>
+      <div class="layer-desc">Un tableau de bord de scoring pour les superviseurs, bâti uniquement sur les timestamps déjà en base (aucune nouvelle donnée à collecter) : délai anormalement court entre ouverture de salle et clôture, présences cochées 100% à chaque fois pour un même coach, clôture qui suit l'heure planifiée à la seconde près (signe d'automatisation), pics d'activité groupée en fin de mois avant la paie.</div>
+      <div class="layer-detail">Gain rapide car s'appuie sur <code class="k">seances.js</code>/<code class="k">sessions_live</code> tels quels — c'est un rapport, pas une nouvelle collecte technique. Ne prouve rien à lui seul, mais oriente les vérifications ciblées là où le temps humain manque.</div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">B · Double confirmation apprenant</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible</span><span class="tag effort-mid">Robustesse moyenne</span></div>
+      </div>
+      <div class="layer-desc">Après chaque séance, l'apprenant (ou le parent) reçoit une notification "Confirmez-vous avoir suivi ce cours ?" avec un délai de réponse. Écart entre la déclaration du coach et celle de l'apprenant → signalement automatique au superviseur.</div>
+      <div class="layer-detail">Ne bloque pas une collusion coach + apprenant, mais c'est déjà la faille la plus fréquente en pratique (cours simplement non tenu, apprenant non complice) qui serait immédiatement détectée.</div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">C · Jitsi IFrame API — signal de connexion indépendant</span>
+        <div class="layer-meta"><span class="tag effort-mid">Effort moyen</span><span class="tag robust-hi">Robustesse forte</span></div>
+      </div>
+      <div class="layer-desc">Remplacer le simple <code class="k">&lt;iframe&gt;</code> actuel par la vraie <code class="k">JitsiMeetExternalAPI</code>, qui expose des événements <code class="k">videoConferenceJoined</code>/<code class="k">participantJoined</code>/<code class="k">videoConferenceLeft</code>. Ces événements sont envoyés au backend en temps réel — le serveur sait alors, indépendamment de toute déclaration, qui s'est réellement connecté et combien de temps.</div>
+      <div class="layer-detail">Fonctionne pour les salles Jitsi (déjà le cas par défaut quand aucun lien n'est fourni — room générée <code class="k">meet.jit.si/BET-{groupe_id}-{session_id}</code>). Pour standardiser, il faudrait limiter le choix de plateforme à Jitsi pour les séances suivies, ou traiter Zoom séparément (voir D).</div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">D · Webhooks Zoom (si la plateforme Zoom doit rester au choix)</span>
+        <div class="layer-meta"><span class="tag effort-mid">Effort moyen à élevé</span><span class="tag robust-hi">Robustesse forte</span></div>
+      </div>
+      <div class="layer-desc">Une app Zoom Server-to-Server envoie des webhooks <code class="k">meeting.started</code>, <code class="k">meeting.participant_joined</code>, <code class="k">meeting.ended</code> — mêmes garanties que Jitsi mais nécessite un compte Zoom Pro/Business avec API activée.</div>
+      <div class="layer-detail">À ne construire que si l'équipe tient à garder Zoom comme option — sinon la piste C (Jitsi standardisé) couvre le même besoin à moindre coût, la plateforme Jitsi étant déjà celle utilisée par défaut.</div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">E · Enregistrement + audit aléatoire</span>
+        <div class="layer-meta"><span class="tag effort-high">Effort élevé</span><span class="tag robust-hi">Preuve la plus forte</span></div>
+      </div>
+      <div class="layer-desc">Activer l'enregistrement (Jibri pour Jitsi self-hosted, ou cloud recording Zoom) sur un échantillon aléatoire de séances (ex. 5–10% par coach/mois), conservé un temps limité. Les superviseurs auditent l'échantillon plutôt que tout visionner.</div>
+      <div class="layer-detail">Coût d'infrastructure réel (serveur Jibri ou stockage cloud, bande passante) et question de consentement/vie privée à trancher avec les coachs et apprenants avant tout déploiement. À réserver aux cas où les couches A–C ne suffisent pas à rassurer BET.</div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">F · Bot observateur silencieux</span>
+        <div class="layer-meta"><span class="tag effort-mid">Effort moyen à élevé</span><span class="tag robust-hi">Robustesse très forte</span></div>
+      </div>
+      <div class="layer-desc">Service backend (navigateur headless type Puppeteer) qui rejoint automatiquement la salle Jitsi de chaque séance planifiée, sans caméra ni micro, juste pour constater qui s'y connecte — même principe que les bots "notetaker" (Otter, Fireflies), appliqué à la vérification. Faisable ici car l'URL de salle est prévisible et calculable depuis les séances planifiées en base (<code class="k">meet.jit.si/BET-{groupe_id}-{session_id}</code>).</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Témoin totalement indépendant du client du coach — non falsifiable en manipulant son propre navigateur</li>
+          <li>Peut couvrir 100% des séances, pas un échantillon, car automatisé et sans coût humain à l'échelle</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Marche nativement pour Jitsi seulement — Zoom/Meet/Teams demanderaient un compte invité par plateforme</li>
+          <li>Infrastructure à opérer et surveiller (le bot lui-même peut planter/être bloqué)</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">G · Audit humain structuré et aléatoire</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible (outil)</span><span class="tag effort-mid">Coût humain récurrent</span></div>
+      </div>
+      <div class="layer-desc">Le problème actuel n'est pas l'absence d'humains disponibles, c'est l'absence d'un système qui leur dit quoi vérifier et quand. Un outil "Séances en cours" tire au sort un quota quotidien de séances à auditer, réparties équitablement entre coachs (pas choisies par le superviseur, pour éviter le biais), avec lien direct pour rejoindre en observateur et compte-rendu de 30 secondes.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Effet dissuasif fort même à faible couverture (5–10%) si le tirage est vraiment imprévisible — logique des contrôles fiscaux</li>
+          <li>Aucune nouvelle intégration technique, juste un outil de sélection et de planification</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Consomme du temps humain en continu — c'est justement la ressource rare signalée par BET</li>
+          <li>Couverture partielle par nature — ne remplace pas une preuve systématique</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">H · Détection d'activité vocale (au-dessus de F)</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible si F existe</span><span class="tag robust-hi">Robustesse forte</span></div>
+      </div>
+      <div class="layer-desc">Le bot F sait qui s'est connecté, pas si quelqu'un a réellement parlé. En captant le niveau audio (API WebRTC standard, sans enregistrer le contenu), on distingue "la salle était ouverte" de "un cours a eu lieu".</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Détecte le cas "salle ouverte et laissée en silence" — angle mort du bot F seul</li>
+          <li>Ne capte qu'un niveau sonore, pas le contenu — nettement moins invasif qu'un enregistrement</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Dépend entièrement de F comme prérequis technique</li>
+          <li>Un faux-positif possible (cours très calme, apprenant timide) à calibrer</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">I · Bot WhatsApp de confirmation apprenant</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible</span><span class="tag effort-mid">Robustesse moyenne</span></div>
+      </div>
+      <div class="layer-desc">Version automatisée de la couche B, par WhatsApp plutôt qu'in-app — canal à bien plus fort taux de réponse en Côte d'Ivoire. Juste après l'heure de fin prévue, un bot envoie "Le cours a-t-il eu lieu ?" avec un bouton oui/non.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Taux de réponse nettement meilleur qu'une notification in-app ignorée</li>
+          <li>Peu coûteux à construire, réutilise un canal déjà familier aux apprenants/parents</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Ne bloque pas une collusion coach + apprenant</li>
+          <li>Nécessite une intégration API WhatsApp Business (coût/volume à cadrer)</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">J · Corrélation avec les résultats pédagogiques</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible</span><span class="tag robust-hi">Signal difficile à truquer</span></div>
+      </div>
+      <div class="layer-desc">Croiser les séances déclarées avec les progrès réels déjà suivis dans la plateforme (résultats de tests, devoirs rendus, activité de l'apprenant côté élève) — sans capter aucune nouvelle donnée technique, juste exploiter ce qui existe déjà.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Pour tricher durablement il faudrait aussi truquer les progrès des apprenants — bien plus difficile</li>
+          <li>Zéro nouvelle collecte technique, uniquement du croisement de données existantes</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Signal indirect et différé — détecte après coup, pas au moment de la séance</li>
+          <li>Un apprenant naturellement lent à progresser peut fausser le signal sans fraude réelle</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">K · Score de risque évolutif (au-delà des règles fixes de A)</span>
+        <div class="layer-meta"><span class="tag effort-mid">Effort moyen</span><span class="tag robust-hi">S'améliore avec l'historique</span></div>
+      </div>
+      <div class="layer-desc">Une fois assez d'historique accumulé (via A/F/G/J), un score de risque par coach qui apprend des patterns réels plutôt que des seuils écrits à la main — priorise automatiquement qui auditer en G plutôt qu'un tirage uniforme.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Rend l'audit humain (G) plus efficace en le ciblant sur les cas les plus suspects</li>
+          <li>S'améliore avec le temps sans intervention manuelle sur les règles</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Nécessite d'abord un historique de données suffisant — pas exploitable dès le premier jour</li>
+          <li>Risque de biais si les données d'entraînement reflètent déjà des angles morts existants</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">L · Traçage du clic "Rejoindre" apprenant (identité + IP + horodatage)</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort très faible</span><span class="tag effort-mid">Robustesse partielle</span></div>
+      </div>
+      <div class="layer-desc">Le bouton "Rejoindre" côté apprenant existe déjà (<code class="k">EspaceApprenant.jsx:5077</code>) mais n'envoie rien au serveur — il ouvre juste le lien. En loguant ce clic côté backend (l'apprenant est déjà authentifié, donc identité certaine), on obtient sans nouvelle intégration : qui a cliqué, quand, et depuis quelle IP — capturée automatiquement par le serveur.</div>
+      <div class="callout warn" style="margin:0;">
+        <strong>Nuance essentielle&nbsp;:</strong> ce signal ne prouve la présence <em>que de l'apprenant qui a cliqué</em> — il ne dit rien sur le coach, et l'absence de clic n'est <strong>pas</strong> une preuve de fraude en soi (un apprenant peut légitimement être absent, cas déjà géré par le statut "absent" que le coach coche). Ce qui compte, c'est l'<strong>écart</strong> entre la présence déclarée par le coach et le clic réellement observé — pas l'absence de clic isolée. Croiser les deux (couche A) est ce qui donne un signal exploitable.
+      </div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Quasi gratuit — un point d'accroche déjà présent dans le code, juste jamais instrumenté</li>
+          <li>Identité certaine (apprenant authentifié), pas une déduction</li>
+          <li>Croisé avec l'IP du coach, détecte le cas de fraude le plus courant : le coach ouvre les deux côtés lui-même</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Ne prouve qu'un instant T, pas une présence continue toute la séance</li>
+          <li>Inopérant si le coach envoie le lien hors plateforme (WhatsApp direct) — l'apprenant ne passe alors jamais par ce bouton</li>
+          <li>IP fragile en soi (VPN, réseau mobile qui change) — signal d'appoint, pas une preuve isolée</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">M · Détection de chevauchement d'horaires impossible</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort très faible</span><span class="tag robust-hi">Preuve quasi certaine</span></div>
+      </div>
+      <div class="layer-desc">Si un même coach déclare deux séances "terminées" sur des créneaux qui se chevauchent (deux groupes différents à la même heure), c'est physiquement impossible — pas juste suspect. Règle simple à isoler de la couche A car c'est une preuve directe, pas un indice statistique.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Aucune ambiguïté possible — un chevauchement horaire n'a pas d'explication légitime</li>
+          <li>Pur croisement de données déjà en base, aucune nouvelle collecte</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Ne détecte que ce cas précis — un coach prudent qui ne chevauche jamais ses créneaux y échappe totalement</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">N · Lien de session à token unique et fenêtre de validité</span>
+        <div class="layer-meta"><span class="tag effort-mid">Effort moyen</span><span class="tag robust-hi">Renforce L, C et F</span></div>
+      </div>
+      <div class="layer-desc">Générer un token signé, valable seulement autour de l'heure planifiée (ex. ±15&nbsp;min), unique par identité (coach et apprenant reçoivent chacun le leur). Empêche un lien réutilisé, partagé à l'avance, ou ouvert hors créneau.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Rend le lien non rejouable — condition nécessaire pour que L (clic apprenant) ait une vraie valeur de preuve</li>
+          <li>Prépare le terrain pour C/F en garantissant que la salle correspond bien à la séance planifiée</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>N'a de sens que si le lien passe par la plateforme (voir P) — inopérant si le coach partage un lien externe</li>
+          <li>Ajoute de la friction si la fenêtre de validité est mal calibrée (retard légitime bloqué)</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">O · Paiement différé plutôt qu'instantané</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible (process)</span><span class="tag robust-hi">Levier structurel fort</span></div>
+      </div>
+      <div class="layer-desc">Purement organisationnel — aucun nouveau code de détection. Retenir le déclenchement de l'honoraire quelques jours après la clôture (<code class="k">seances.js:425</code>) au lieu de le payer instantanément, le temps qu'un signal A/J/L/M remonte ou qu'un audit G ait eu l'occasion de passer.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Supprime l'incitation "récompense instantanée" sans construire aucune nouvelle détection</li>
+          <li>Donne une fenêtre réelle pour intercepter une fraude avant que l'argent parte</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Retarde le paiement des coachs honnêtes (la grande majorité) — à communiquer avec soin en interne</li>
+          <li>N'a de valeur que combiné à au moins un signal de détection (A, J, L, M) — seul, ce n'est qu'un délai</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">P · Imposer Jitsi comme plateforme unique pour les séances en ligne</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible (process)</span><span class="tag robust-hi">Prérequis pour C/F/H/N</span></div>
+      </div>
+      <div class="layer-desc">Tant que les coachs choisissent librement entre Zoom/Meet/Teams/Webex/Jitsi, aucune des couches instrumentées côté serveur (C, F, H, N) ne peut couvrir 100% des séances — elles ne fonctionnent nativement que sur Jitsi. Standardiser la plateforme est un préalable politique, pas technique.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Débloque toute la valeur des couches techniques déjà proposées, sans lesquelles elles restent partielles</li>
+          <li>Coût de mise en œuvre quasi nul — c'est une consigne, pas un développement</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Réduit la liberté de choix des coachs habitués à une autre plateforme — conduite du changement à prévoir</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-head">
+        <span class="layer-title">Q · Canal de signalement libre pour l'apprenant</span>
+        <div class="layer-meta"><span class="tag effort-low">Effort faible</span><span class="tag effort-mid">Complète I</span></div>
+      </div>
+      <div class="layer-desc">Distinct du bot WhatsApp (I) qui pose une question active après coup — un bouton "Signaler un problème avec ce cours" toujours visible dans l'historique de l'apprenant, disponible à tout moment plutôt que sur sollicitation.</div>
+      <div class="proscons">
+        <div class="pc pro"><div class="pc-head">Avantages</div><ul>
+          <li>Certains apprenants n'osent pas répondre "non" à une notification active par pression sociale envers le coach — un canal passif capte ce qu'un canal actif rate</li>
+          <li>Coût de développement minime (un bouton + une route de signalement)</li>
+        </ul></div>
+        <div class="pc con"><div class="pc-head">Inconvénients</div><ul>
+          <li>Purement déclaratif — reste une déclaration d'apprenant, pas une preuve technique</li>
+          <li>Sous-utilisé si mal mis en avant dans l'interface</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <div class="callout ok">
+      <strong>Levier complémentaire, non technique&nbsp;:</strong> une gamification déjà en place mensuellement pour les coachs (<code class="k">gamificationCoachMensuel.js</code>) pourrait intégrer un bonus de réputation pour les coachs dont les signaux (A/J/L/M) restent propres dans la durée — la carotte à côté du bâton, souvent plus efficace que la seule dissuasion pour réduire la tentation de frauder.
+    </div>
+
+    <div class="further">
+      <div class="section-note" style="max-width:100%;"><strong>Plus loin, plus intrusif</strong> — à ne considérer qu'en dernier recours, une fois les couches ci-dessus jugées insuffisantes, et après discussion consentement/vie privée avec coachs et apprenants.</div>
+      <div class="further-item">
+        <div class="t">Analyse IA du contenu (transcription + LLM)</div>
+        <div class="d">Vérifie que la conversation correspond bien au niveau/sujet déclaré. Nécessite l'enregistrement (couche E) comme prérequis — <span class="pill bug">très intrusif</span>.</div>
+      </div>
+      <div class="further-item">
+        <div class="t">Vérification vocale biométrique</div>
+        <div class="d">Confirme que c'est bien la voix du coach inscrit — empêche un remplacement non déclaré. Même infra que l'analyse IA, encore plus intrusif — <span class="pill bug">très intrusif</span>.</div>
+      </div>
+      <div class="further-item">
+        <div class="t">Captures d'écran aléatoires ponctuelles</div>
+        <div class="d">Liveness check léger — moins lourd qu'un enregistrement complet, mais mêmes questions de consentement à plus petite échelle — <span class="pill warn">intrusif</span>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ 04 — Recommandation ═══════ -->
+  <section id="recommandation">
+    <div class="section-head">
+      <span class="section-tag">04</span>
+      <h2>Recommandation</h2>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Ordre</th><th>Couche</th><th>Pourquoi cet ordre</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="pill ok">1er</span></td>
+            <td class="desc"><strong>A — Détection d'anomalies</strong> + <strong>J — Corrélation pédagogique</strong> + <strong>L — Clic "Rejoindre" apprenant</strong></td>
+            <td class="desc">Gain immédiat, zéro ou quasi zéro nouvelle dépendance technique — les trois exploitent des données déjà en base ou un point d'accroche déjà existant. L doit toujours être lu en écart avec la présence déclarée par le coach (A), jamais isolément.</td>
+          </tr>
+          <tr>
+            <td><span class="pill ok">2e</span></td>
+            <td class="desc"><strong>I — Bot WhatsApp</strong> (remplace/complète B)</td>
+            <td class="desc">Referme la faille la plus fréquente (cours non tenu, sans collusion) via un canal à fort taux de réponse, pour un coût de développement faible.</td>
+          </tr>
+          <tr>
+            <td><span class="pill ok">3e</span></td>
+            <td class="desc"><strong>G — Audit humain structuré et aléatoire</strong></td>
+            <td class="desc">Transforme la supervision actuelle (ad-hoc, en échec) en processus systématique et imprévisible pour les coachs — sans nouvelle intégration technique, juste un outil de sélection.</td>
+          </tr>
+          <tr>
+            <td><span class="pill warn">4e</span></td>
+            <td class="desc"><strong>C — Jitsi IFrame API</strong> ou <strong>F — Bot observateur</strong> (+ <strong>H</strong> en option)</td>
+            <td class="desc">La vraie preuve technique de connexion. C est plus léger à construire (branché sur le client existant) ; F est plus robuste (témoin indépendant, couvre 100% des séances) mais demande une infrastructure à opérer. À trancher selon le budget.</td>
+          </tr>
+          <tr>
+            <td><span class="pill warn">5e</span></td>
+            <td class="desc"><strong>K — Score de risque évolutif</strong></td>
+            <td class="desc">Une fois l'historique de A/F/G/J accumulé, pour rendre les audits humains (G) encore plus ciblés.</td>
+          </tr>
+          <tr>
+            <td><span class="pill bug">Plus tard</span></td>
+            <td class="desc"><strong>D/E — Zoom webhooks / enregistrement</strong></td>
+            <td class="desc">À activer seulement si les couches précédentes ne suffisent pas, ou si un cas de fraude avéré nécessite une preuve irréfutable.</td>
+          </tr>
+          <tr>
+            <td><span class="pill bug">Dernier recours</span></td>
+            <td class="desc">Analyse IA du contenu / biométrie vocale / captures aléatoires</td>
+            <td class="desc">Seulement si un problème persiste malgré tout ce qui précède, et après validation du consentement coachs/apprenants.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <strong>En attente de discussion&nbsp;:</strong> rien n'est implémenté. Le point à trancher en premier — jusqu'où BET veut aller entre "dissuasion + détection" (A+I+G, rapide, coût humain modéré) et "preuve technique systématique" (C ou F, qui suppose de restreindre ou encadrer le choix de plateforme visio des coachs).
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
