@@ -204,27 +204,62 @@ async function resoudreEmails(destinataires) {
 
 // Envoie réellement une campagne déjà créée (brouillon ou programmée) et met à jour son statut.
 // Exportée pour être appelée aussi bien depuis la route manuelle que depuis le job cron.
+//
+// LA CAMPAGNE EST RÉSERVÉE AVANT L'ENVOI, ET C'EST TOUT L'INTÉRÊT DE CETTE FONCTION.
+//
+// Lire le statut puis n'écrire "envoyee" qu'à la fin laisse une fenêtre grande ouverte : celle
+// de l'envoi lui-même, qui dure autant que la liste est longue. Deux appels simultanés y lisent
+// tous les deux "programmee", passent tous les deux les contrôles, et la campagne part deux fois.
+//
+// Cette fenêtre n'était pas atteignable sur Vercel - un seul déclencheur, toutes les 15 minutes.
+// Sur le VPS, `demarrerEnvoiCampagnesProgrammees()` interroge la base TOUTES LES 60 SECONDES, et
+// `setInterval` n'attend pas que la passe précédente ait fini : une campagne de 2 000 adresses
+// qui met trois minutes à partir est relue trois fois, donc envoyée trois fois. Le job garde
+// aussi sa propre protection, mais elle ne couvre pas la route manuelle ni le double-clic.
+//
+// La réservation est un `update` conditionné au statut qu'on vient de lire. La base arbitre :
+// le premier appel modifie une ligne, les suivants zéro, et s'arrêtent là.
 export async function envoyerCampagneParId(id) {
   const { data: c, error } = await supabase.from("newsletter_campagnes").select("*").eq("id", id).single();
   if (error || !c) throw new Error("Campagne introuvable");
   if (c.statut === "envoyee") throw new Error("Campagne déjà envoyée");
   if (c.statut === "annulee") throw new Error("Campagne annulée");
 
+  // Résolu AVANT la réservation : cette lecture peut échouer (sélection vide), et un échec
+  // ici ne doit pas laisser derrière lui une campagne marquée envoyée.
   const emails = await resoudreEmails(c.destinataires);
   if (!emails.length) throw new Error("Aucun destinataire à contacter pour cette sélection");
 
-  const { sent, failed } = await sendNewsletterCampaign({
-    emails,
-    sujet: c.sujet,
-    contenu: c.contenu,
-    piece_jointe_url: c.piece_jointe_url,
-    piece_jointe_nom: c.piece_jointe_nom,
-    tagCampagne: c.tag_brevo,
-  });
+  const debut = new Date().toISOString();
+  const { data: reservees, error: errReservation } = await supabase
+    .from("newsletter_campagnes")
+    .update({ statut: "envoyee", date_envoi: debut, updated_at: debut })
+    .eq("id", id)
+    .eq("statut", c.statut)      // ← l'arbitrage : personne ne l'a touchée entre-temps
+    .select("id");
+  if (errReservation) throw new Error(errReservation.message);
+  if (!reservees?.length) throw new Error("Campagne déjà prise en charge par un autre envoi");
+
+  let sent = 0, failed = 0;
+  try {
+    ({ sent, failed } = await sendNewsletterCampaign({
+      emails,
+      sujet: c.sujet,
+      contenu: c.contenu,
+      piece_jointe_url: c.piece_jointe_url,
+      piece_jointe_nom: c.piece_jointe_nom,
+      tagCampagne: c.tag_brevo,
+    }));
+  } catch (err) {
+    // L'envoi n'a pas eu lieu : on rend la campagne à son statut d'origine, sinon elle
+    // resterait « envoyée » sans que personne ne l'ait reçue, et deviendrait irrécupérable.
+    await supabase.from("newsletter_campagnes")
+      .update({ statut: c.statut, date_envoi: c.date_envoi || null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    throw err;
+  }
 
   await supabase.from("newsletter_campagnes").update({
-    statut: "envoyee",
-    date_envoi: new Date().toISOString(),
     total_destinataires: emails.length,
     nb_envoyes: sent,
     nb_echecs: failed,

@@ -30,9 +30,9 @@ après le premier démarrage**, à toute sa liste de destinataires. Sur Vercel, 
 
 ```sql
 -- Aucune campagne ne doit être en attente avec une date passée
-select id, objet, statut, date_envoi_programme
+select id, sujet, statut, date_programmee
 from newsletter_campagnes
-where statut = 'programmee' and date_envoi_programme <= now();
+where statut = 'programmee' and date_programmee <= now();
 ```
 
 S'il y en a, décidez de leur sort (les envoyer sciemment, ou passer leur statut à
