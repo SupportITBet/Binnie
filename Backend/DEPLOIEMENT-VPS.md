@@ -52,6 +52,22 @@ S'il y en a, décidez de leur sort (les envoyer sciemment, ou passer leur statut
 Décochez « Share document root » : ce sous-domaine ne sert aucun fichier, il ne fait que
 relayer vers Node.
 
+En ligne de commande, l'équivalent est :
+
+```bash
+uapi --user=binniesenglish SubDomain addsubdomain \
+     domain=api rootdomain=binniesenglish.net dir=/home/binniesenglish/api-bet
+mkdir -p /home/binniesenglish/api-bet            # ← ne PAS omettre
+chown binniesenglish:binniesenglish /home/binniesenglish/api-bet
+chmod 755 /home/binniesenglish/api-bet
+```
+
+> **Le `mkdir` n'est pas une précaution, c'est une étape.** `uapi` inscrit le chemin dans la
+> configuration Apache **sans créer le dossier**. Un vhost dont le `DocumentRoot` n'existe pas
+> répond **500 à toutes les requêtes** — et il le fait avant d'ouvrir le journal du domaine,
+> donc `logs/api.binniesenglish.net.error.log` reste vide, voire inexistant. Un 500 sans
+> aucune trace de log est la signature de ce cas précis : cherchez le dossier, pas le code.
+
 ---
 
 ## 2. Le code et les dépendances
@@ -119,31 +135,81 @@ curl -s http://127.0.0.1:5001/api/equipe-photos/defilement
 
 ## 5. Le relais HTTPS
 
-Node écoute en local ; Apache l'expose. Dans cPanel, *Domains → api.binniesenglish.net*,
-ou directement dans la configuration Apache du sous-domaine :
-
-```apache
-RewriteEngine On
-RewriteRule ^(.*)$ http://127.0.0.1:5001/$1 [P,L]
-ProxyPreserveHost On
-RequestHeader set X-Forwarded-Proto "https"
-```
-
-`app.set("trust proxy", 1)` est déjà en place dans `app.js` : c'est ce qui permet au serveur
-de connaître la vraie adresse du visiteur derrière Apache, et donc de limiter correctement
-les tentatives de connexion. **À vérifier après coup** — si les limitations bloquent tout le
-monde d'un coup, c'est que toutes les requêtes arrivent avec l'adresse d'Apache.
-
-Puis le certificat : cPanel → *SSL/TLS Status* → cochez le sous-domaine → *Run AutoSSL*.
+Node écoute en local ; Apache l'expose. **Pas par un `.htaccess`** : par un *include userdata*
+cPanel, qui survit aux régénérations de `httpd.conf` et accepte `ProxyPass` — plus fiable que
+`RewriteRule [P]`, qui réécrit l'URL avant de la relayer et abîme les chaînes de requête.
 
 ```bash
-curl -s https://api.binniesenglish.net/api/equipe-photos/defilement
-# attendu : {"duree":50}
+for MODE in std ssl; do
+  [ "$MODE" = ssl ] && PROTO=https || PROTO=http
+  D=/etc/apache2/conf.d/userdata/$MODE/2_4/binniesenglish/api.binniesenglish.net
+  mkdir -p "$D"
+  cat > "$D/proxy.conf" <<EOF
+ProxyPreserveHost On
+ProxyPass /.well-known/ !
+ProxyPass        / http://127.0.0.1:5001/
+ProxyPassReverse / http://127.0.0.1:5001/
+RequestHeader set X-Forwarded-Proto "$PROTO"
+EOF
+done
+
+/scripts/ensure_vhost_includes --user=binniesenglish
+apachectl configtest && apachectl graceful     # configtest AVANT graceful, toujours
 ```
+
+Trois détails qui ne sont pas des détails :
+
+- **`ProxyPass /.well-known/ !`** — sans cette exclusion, le défi ACME part vers Node, qui
+  répond 404, et **AutoSSL échoue sans dire pourquoi**.
+- **`std` et `ssl` séparés, avec le bon `X-Forwarded-Proto`** — c'est ce que lit
+  `app.set("trust proxy", 1)` dans `app.js` pour décider si un cookie peut être marqué
+  `secure`. Annoncer `https` sur du trafic `http` produit des cookies que le navigateur
+  refuse de renvoyer.
+- **`configtest` avant `graceful`** — un include mal formé ferait tomber le site principal
+  `binniesenglish.net` avec le sous-domaine.
+
+`trust proxy` gouverne aussi la limitation de débit : **à vérifier après coup** — si les
+limitations bloquent tout le monde d'un coup, c'est que toutes les requêtes arrivent avec
+l'adresse d'Apache.
+
+Puis le certificat :
+
+```bash
+/usr/local/cpanel/bin/autossl_check --user=binniesenglish
+curl -s https://api.binniesenglish.net/api/equipe-photos/defilement   # attendu : {"duree":50}
+```
+
+> **Ne vous laissez pas égarer par la sortie d'AutoSSL.** Elle signale en vrac des dizaines de
+> `Local HTTP DCV error` et des `Impediment: NO_UNSECURED_DOMAIN_PASSED_DCV` : ce sont les
+> alias que cPanel fabrique d'office (`www.api.`, `webmail.`, `cpanel.`, `autodiscover.`…) et
+> qui n'ont aucun DNS. Le seul juge est le `curl` **sans `-k`** : s'il répond, le certificat
+> couvre le sous-domaine. Pour en être sûr :
+>
+> ```bash
+> echo | openssl s_client -connect api.binniesenglish.net:443 \
+>        -servername api.binniesenglish.net 2>/dev/null \
+>   | openssl x509 -noout -subject -ext subjectAltName
+> ```
+
+Enfin, le contrôle qui ne se voit qu'au navigateur — CORS, depuis les trois origines :
+
+```bash
+for O in https://binniesenglish.net https://app.binnie.purepro-technologie.ci \
+         https://e-learning.purepro-technologie.ci; do
+  printf "%-46s " "$O"
+  curl -s -X OPTIONS -D - -o /dev/null -H "Origin: $O" \
+       -H "Access-Control-Request-Method: POST" \
+       https://api.binniesenglish.net/api/touchpoint/initiate \
+    | grep -i "access-control-allow-origin" || echo "AUCUN EN-TÊTE CORS"
+done
+```
+
+Une origine absente de `ALLOWED_ORIGINS` passe parfaitement en `curl` direct et échoue pour
+tous les visiteurs : le test en ligne de commande sans `Origin` ne le décèle jamais.
 
 ---
 
-## 6. Les quatre tâches planifiées
+## 6. Les trois tâches planifiées
 
 Vercel les déclenchait ; le VPS doit prendre le relais. **Sans elles, aucune mensualité ne
 se génère et aucun rappel de séance ne part** — en silence.
@@ -153,23 +219,30 @@ crontab -e
 ```
 
 ```cron
-SECRET=<la même valeur que CRON_SECRET>
-
-0 5 * * *  curl -fsS -H "Authorization: Bearer $SECRET" https://api.binniesenglish.net/api/jobs/rappels-seances      >> /var/log/bet-cron.log 2>&1
-0 6 * * *  curl -fsS -H "Authorization: Bearer $SECRET" https://api.binniesenglish.net/api/jobs/paiements-mensuels   >> /var/log/bet-cron.log 2>&1
-0 7 * * *  curl -fsS -H "Authorization: Bearer $SECRET" https://api.binniesenglish.net/api/jobs/badges-fidelite      >> /var/log/bet-cron.log 2>&1
-0 8 * * *  curl -fsS -H "Authorization: Bearer $SECRET" https://api.binniesenglish.net/api/jobs/newsletter-programmee >> /var/log/bet-cron.log 2>&1
+0 5 * * *  /opt/bet/scripts/cron-bet.sh rappels-seances    >> /var/log/bet-cron.log 2>&1
+0 6 * * *  /opt/bet/scripts/cron-bet.sh paiements-mensuels >> /var/log/bet-cron.log 2>&1
+0 7 * * *  /opt/bet/scripts/cron-bet.sh badges-fidelite    >> /var/log/bet-cron.log 2>&1
 ```
 
-Le lendemain, vérifiez que quelque chose s'est passé :
+`scripts/cron-bet.sh` lit `CRON_SECRET` dans `Backend/.env` et appelle `127.0.0.1` : le
+secret n'est pas recopié, et une tâche ne peut pas cesser de s'exécuter parce qu'un
+certificat a expiré. Son en-tête explique le reste.
+
+> **Trois lignes, pas quatre — `newsletter-programmee` n'en fait pas partie.** Sur un VPS,
+> `server.js` lance `demarrerEnvoiCampagnesProgrammees()`, qui fait *exactement* la même
+> chose **toutes les 60 secondes**. Ajouter le cron ne servirait à rien et ferait courir un
+> risque de double envoi à toute la liste de diffusion.
+
+Vérification immédiate, sans attendre l'heure dite :
 
 ```bash
-tail -20 /var/log/bet-cron.log
+/opt/bet/scripts/cron-bet.sh badges-fidelite    # la plus inoffensive des trois
+tail -5 /var/log/bet-cron.log
 ```
 
 **Tant que Vercel tourne aussi, ces tâches s'exécuteront en double.** Ce n'est pas grave
-pour les trois premières — elles vérifient l'état avant d'agir — mais coupez les crons
-Vercel dès que le VPS est en place, pour ne pas envoyer deux fois les mêmes rappels.
+pour ces trois-là — elles vérifient l'état avant d'agir — mais coupez les crons Vercel dès
+que le VPS est en place, pour ne pas envoyer deux fois les mêmes rappels.
 
 ---
 
