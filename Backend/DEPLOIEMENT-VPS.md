@@ -48,11 +48,17 @@ S'il y en a, décidez de leur sort (les envoyer sciemment, ou passer leur statut
 |---|---|---|---|
 | A | `api` | `191.101.80.79` | 300 |
 
-**cPanel** — *Domains → Create A New Domain* → `api.binniesenglish.net`.
-Décochez « Share document root » : ce sous-domaine ne sert aucun fichier, il ne fait que
-relayer vers Node.
+**Le sous-domaine** — l'interface cPanel n'est pas accessible sur ce compte : tout se fait
+depuis la console root de hPanel, qui a davantage de pouvoir qu'elle. Correspondances utiles :
 
-En ligne de commande, l'équivalent est :
+| Dans l'interface cPanel | En console root |
+|---|---|
+| Domains → liste | `uapi --user=binniesenglish DomainInfo list_domains` |
+| Domains → Create A New Domain | `uapi --user=binniesenglish SubDomain addsubdomain …` |
+| SSL/TLS Status → Run AutoSSL | `/usr/local/cpanel/bin/autossl_check --user=binniesenglish` |
+| Gestionnaire de fichiers | le shell, et `scp` depuis le poste |
+
+La création du sous-domaine, donc :
 
 ```bash
 uapi --user=binniesenglish SubDomain addsubdomain \
@@ -138,6 +144,9 @@ curl -s http://127.0.0.1:5001/api/equipe-photos/defilement
 Node écoute en local ; Apache l'expose. **Pas par un `.htaccess`** : par un *include userdata*
 cPanel, qui survit aux régénérations de `httpd.conf` et accepte `ProxyPass` — plus fiable que
 `RewriteRule [P]`, qui réécrit l'URL avant de la relayer et abîme les chaînes de requête.
+
+Cet include s'écrit en console : il n'a aucun équivalent dans l'interface cPanel, ce qui tombe
+bien puisqu'elle n'est pas accessible ici.
 
 ```bash
 for MODE in std ssl; do

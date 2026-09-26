@@ -188,14 +188,37 @@ La sortie nomme le domaine principal (`binniesenglish.com` → `public_html`) et
 ajoutés avec leur racine. `binniesenglish.net` a été créé après le 20 septembre : il n'existe
 probablement plus après restauration. Le recréer avec **sa propre racine**, jamais partagée :
 
+> **L'interface cPanel n'est pas accessible sur ce compte.** Tout se fait depuis la console
+> root de hPanel — qui peut davantage. Ne cherchez donc pas les écrans « Domains » ou
+> « SSL/TLS Status » : leurs équivalents en commandes figurent dans `DEPLOIEMENT-VPS.md`, §1.
+
+**Ne créez rien avant d'avoir lu la sortie de `list_domains`.** Trois cas possibles, et ils
+n'appellent pas la même commande :
+
+| Ce que dit `list_domains` | Ce qu'il faut faire |
+|---|---|
+| `binniesenglish.net` absent | le créer, avec sa racine propre |
+| présent dans `addon_domains` avec une racine à lui | rien à créer — déployer dedans |
+| présent dans `parked_domains` *(alias)* | **le cas dangereux** : un alias partage la racine du principal. Il faut le retirer des alias et le recréer en domaine ajouté, sinon le déploiement retombe dans `public_html` |
+
+Envoyez-moi cette sortie plutôt que de deviner : le troisième cas est celui qui a causé
+l'incident, et la commande pour en sortir dépend de la version de cPanel installée.
+
+Pour mémoire, la création d'un sous-domaine — celle qui a fonctionné pour `api` :
+
 ```bash
 uapi --user=binniesenglish SubDomain addsubdomain \
      domain=bet rootdomain=binniesenglish.net dir=/home/binniesenglish/bet-site
-# ou, pour un domaine ajouté :
-#   cPanel → Domains → Create A New Domain → décocher « Share document root »
 mkdir -p /home/binniesenglish/bet-site
 chown binniesenglish:binniesenglish /home/binniesenglish/bet-site
 chmod 755 /home/binniesenglish/bet-site
+```
+
+Puis les repères qui rendront la confusion impossible — voir `deploiement/LISEZ-MOI.md` :
+
+```bash
+cp /opt/bet/deploiement/binniesenglish.com/0-RACINE-*.txt /home/binniesenglish/public_html/
+# et, dans la racine du .net : index.html, 0-RACINE-*.txt, .deploiement-bet
 ```
 
 Puis, et seulement alors :
