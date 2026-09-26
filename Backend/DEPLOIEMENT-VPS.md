@@ -53,19 +53,23 @@ depuis la console root de hPanel, qui a davantage de pouvoir qu'elle. Correspond
 
 | Dans l'interface cPanel | En console root |
 |---|---|
-| Domains → liste | `uapi --user=binniesenglish DomainInfo list_domains` |
-| Domains → Create A New Domain | `uapi --user=binniesenglish SubDomain addsubdomain …` |
-| SSL/TLS Status → Run AutoSSL | `/usr/local/cpanel/bin/autossl_check --user=binniesenglish` |
+| Domains → liste | `uapi --user=betnet DomainInfo list_domains` |
+| Domains → Create A New Domain | `uapi --user=betnet SubDomain addsubdomain …` |
+| SSL/TLS Status → Run AutoSSL | `/usr/local/cpanel/bin/autossl_check --user=betnet` |
 | Gestionnaire de fichiers | le shell, et `scp` depuis le poste |
+
+**Le compte est `betnet`, pas `binniesenglish`.** `api.binniesenglish.net` appartient au
+domaine `.net`, donc au compte qui le sert. Viser l'autre compte écrirait un include que
+le serveur ignore en silence — et on chercherait la panne du côté de Node.
 
 La création du sous-domaine, donc :
 
 ```bash
-uapi --user=binniesenglish SubDomain addsubdomain \
-     domain=api rootdomain=binniesenglish.net dir=/home/binniesenglish/api-bet
-mkdir -p /home/binniesenglish/api-bet            # ← ne PAS omettre
-chown binniesenglish:binniesenglish /home/binniesenglish/api-bet
-chmod 755 /home/binniesenglish/api-bet
+uapi --user=betnet SubDomain addsubdomain \
+     domain=api rootdomain=binniesenglish.net dir=/home/betnet/public_html/api-bet
+mkdir -p /home/betnet/public_html/api-bet        # ← ne PAS omettre
+chown betnet:betnet /home/betnet/public_html/api-bet
+chmod 755 /home/betnet/public_html/api-bet
 ```
 
 > **Le `mkdir` n'est pas une précaution, c'est une étape.** `uapi` inscrit le chemin dans la
@@ -151,7 +155,7 @@ bien puisqu'elle n'est pas accessible ici.
 ```bash
 for MODE in std ssl; do
   [ "$MODE" = ssl ] && PROTO=https || PROTO=http
-  D=/etc/apache2/conf.d/userdata/$MODE/2_4/binniesenglish/api.binniesenglish.net
+  D=/etc/apache2/conf.d/userdata/$MODE/2_4/betnet/api.binniesenglish.net
   mkdir -p "$D"
   cat > "$D/proxy.conf" <<EOF
 ProxyPreserveHost On
@@ -162,7 +166,7 @@ RequestHeader set X-Forwarded-Proto "$PROTO"
 EOF
 done
 
-/scripts/ensure_vhost_includes --user=binniesenglish
+/scripts/ensure_vhost_includes --user=betnet
 apachectl configtest && apachectl graceful     # configtest AVANT graceful, toujours
 ```
 
@@ -184,7 +188,7 @@ l'adresse d'Apache.
 Puis le certificat :
 
 ```bash
-/usr/local/cpanel/bin/autossl_check --user=binniesenglish
+/usr/local/cpanel/bin/autossl_check --user=betnet
 curl -s https://api.binniesenglish.net/api/equipe-photos/defilement   # attendu : {"duree":50}
 ```
 
