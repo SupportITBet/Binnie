@@ -31,7 +31,7 @@ import { preparerContacts, exporterVcards, exporterNumeros, decouperEnListes, MA
    `REACT_APP_PUBLIC_URL` reste lue en premier : si vous la définissez un jour pour pointer
    ailleurs que le site principal, elle l'emportera sans qu'on touche à ce fichier. */
 const PUBLIC_URL =
-  process.env.REACT_APP_PUBLIC_URL || "https://binnie.pureprocleaners.ci";
+  process.env.REACT_APP_PUBLIC_URL || "https://binniesenglish.net";
 
 const TYPES_CHAMP = [
   { v: "texte",          l: "Texte court",      i: "✏️" },

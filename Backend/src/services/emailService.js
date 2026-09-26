@@ -19,7 +19,7 @@ const SENDER_NAME     = process.env.BREVO_SENDER_NAME  || "Binnie's English Trai
    donnent entre elles (`REACT_APP_DASH_URL` du site public, `REACT_APP_FRONTEND_URL` du
    tableau de bord). Un repli doit être une valeur juste, pas un pense-bête. */
 const DASH_URL  = process.env.DASHBOARD_URL || "https://app.binnie.purepro-technologie.ci";
-const FRONT_URL = process.env.FRONTEND_URL  || "https://binnie.pureprocleaners.ci";
+const FRONT_URL = process.env.FRONTEND_URL  || "https://binniesenglish.net";
 /* Le lien de désinscription vise le SERVEUR, jamais le site : il doit fonctionner depuis
    un client mail, sans dépendre du chargement d'une application React - et la page qu'il
    visait côté site n'a d'ailleurs jamais existé. */
