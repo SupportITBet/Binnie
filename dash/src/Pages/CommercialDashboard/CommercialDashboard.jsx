@@ -4291,6 +4291,12 @@ export default function CommercialDashboard() {
             centre_coaching:      (!isEnLigneCp && assistanteTypeCours === "presentiel" && cp.lieu === "cabinet") ? (assistanteCentreId || null) : (isEnLigneCp ? null : (cp.centre || null)),
             adresse_coaching:     isEnLigneCp ? null : (cp.adresse || null),
             disponibilites:       cp.dispos?.length ? { horaires: cp.dispos } : null,
+            /* Les autres personnes du foyer. Envoyées au serveur, qui les nettoie et les
+               range dans `suivi_demarrage.membres_foyer` — un seul dossier pour tout le
+               foyer, donc un seul montant et un seul échéancier. Les lignes laissées vides
+               sont écartées ici comme côté serveur : une ligne ajoutée puis abandonnée ne
+               doit pas compter comme un apprenant. */
+            membres_foyer:        (cp.membres_foyer || []).filter(m => (m?.prenom || "").trim() || (m?.nom || "").trim()),
             notes:                cp.notes_pa || null,
             niveau_client:        insc.niveauTest || null,
             objectif_client:      (insc.objectif_client || "").trim() || null,
@@ -12584,7 +12590,13 @@ export default function CommercialDashboard() {
               niveau: niveauSuggere || sd.niveau_prospect || "",
               filiere:"Anglais Pro", type_cours:"presentiel", coach_id:"", centre_id: assistanteCentreId || "",
               date_debut: sd.date_debut_formation || assignCentreTarget.date_debut_formation || "",
-              date_fin:"", capacite_max: isPrive ? 1 : 20, horaire: horairePrefill,
+              /* Capacité = le payeur + les autres personnes du foyer. La commerciale
+                 peut encore la corriger dans le formulaire ; on lui propose simplement la
+                 valeur juste plutôt que 1, qui l'obligeait à la rectifier à la main. */
+              date_fin:"", horaire: horairePrefill,
+              capacite_max: isPrive
+                ? 1 + (Array.isArray(sd.membres_foyer) ? sd.membres_foyer.length : 0)
+                : 20,
             });
             setClasseCoachSearch("");
             setShowCreateClasseInAssign(true);
@@ -14973,6 +14985,11 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
     dispos:        initialData?.cp_dispos         || [],
     notes_pa:      initialData?.cp_notes_pa       || "",
     date_debut:    initialData?.cp_date_debut     || "",
+    /* LES AUTRES PERSONNES DU FOYER — un couple ou une famille qui prend un coaching privé
+       ensemble. Le client saisi en haut du formulaire reste LE PAYEUR : un seul dossier, un
+       seul montant, un seul échéancier. Ces personnes-là sont des apprenants supplémentaires,
+       pas des dossiers supplémentaires. */
+    membres_foyer: initialData?.cp_membres_foyer  || [],
   });
 
   const estPriveForm = cpForm?._mode === "prive" || (!cpForm?._mode && isOffreCoachingPrive(form.offre));
@@ -15766,6 +15783,81 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                 style={{ ...inputSt, border:"1.5px solid #c4b5fd" }}
                 value={cpForm.date_debut}
                 onChange={e => setCpForm(p => ({ ...p, date_debut: e.target.value }))} />
+            </div>
+
+            {/* ── AUTRES PERSONNES DU FOYER ──────────────────────────────────────────
+                Un couple ou une famille qui s'inscrit ensemble en coaching privé. Le client
+                saisi en haut du formulaire reste LE PAYEUR ; les personnes ajoutées ici sont
+                des apprenants supplémentaires, pas des dossiers supplémentaires.
+
+                POURQUOI ICI, sous les disponibilités et la date : un foyer partage ses
+                créneaux - c'est une seule séance pour tout le monde, pas trois séances à
+                caler. Et ce bloc ne s'affiche que pour le coaching privé, parce qu'une
+                formation en groupe n'a pas de foyer : chacun s'y inscrit pour soi.
+
+                LE TARIF RESTE GLOBAL et ne se multiplie pas par le nombre de personnes :
+                c'est un forfait négocié, saisi librement plus haut. */}
+            <div style={{ border:"1.5px dashed #c4b5fd", borderRadius:10, padding:"12px 14px", background:"#faf9ff" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom: cpForm.membres_foyer.length ? 10 : 6 }}>
+                <label style={{ ...labelSt, color:"#6d28d9", margin:0 }}>
+                  👥 Autres personnes du foyer
+                  {cpForm.membres_foyer.length > 0 && (
+                    <span style={{ marginLeft:8, fontSize:10, fontWeight:800, padding:"1px 8px", borderRadius:999, background:"#ede9fe", color:"#6d28d9" }}>
+                      {cpForm.membres_foyer.length}
+                    </span>
+                  )}
+                </label>
+                <button type="button"
+                  onClick={() => setCpForm(p => ({ ...p, membres_foyer: [...p.membres_foyer, { prenom:"", nom:"", age:"", niveau:"" }] }))}
+                  style={{ padding:"5px 12px", borderRadius:8, border:"1.5px solid #c4b5fd", background:"#fff",
+                    color:"#6d28d9", fontWeight:700, fontSize:11.5, cursor:"pointer", flexShrink:0 }}>
+                  + Ajouter une personne
+                </button>
+              </div>
+
+              {cpForm.membres_foyer.length === 0 ? (
+                <p style={{ fontSize:10.5, color:"#94a3b8", margin:0, lineHeight:1.5 }}>
+                  Laissez vide pour un coaching individuel. Ajoutez une ligne par personne
+                  supplémentaire si un couple ou une famille suit la formation ensemble —
+                  le tarif saisi plus haut reste global pour le foyer.
+                </p>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                  {cpForm.membres_foyer.map((m, i) => (
+                    <div key={i} style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                      {[
+                        { cle:"prenom", ph:"Prénom *", largeur:"1 1 110px" },
+                        { cle:"nom",    ph:"Nom",      largeur:"1 1 110px" },
+                        { cle:"age",    ph:"Âge",      largeur:"0 0 62px"  },
+                      ].map(({ cle, ph, largeur }) => (
+                        <input key={cle} type="text" placeholder={ph} value={m[cle] || ""}
+                          onChange={e => setCpForm(p => ({ ...p,
+                            membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, [cle]: e.target.value } : x) }))}
+                          style={{ flex:largeur, minWidth:0, padding:"6px 9px", borderRadius:7,
+                            border:"1px solid #c4b5fd", fontSize:11.5, outline:"none" }} />
+                      ))}
+                      <select value={m.niveau || ""}
+                        onChange={e => setCpForm(p => ({ ...p,
+                          membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, niveau: e.target.value } : x) }))}
+                        style={{ flex:"0 0 96px", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
+                          fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
+                        <option value="">Niveau</option>
+                        {["A1","A2","B1","B2","C1","C2"].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                      <button type="button"
+                        onClick={() => setCpForm(p => ({ ...p, membres_foyer: p.membres_foyer.filter((_, j) => j !== i) }))}
+                        title="Retirer cette personne"
+                        style={{ background:"none", border:"none", color:"#ef4444", cursor:"pointer",
+                          fontSize:14, lineHeight:1, padding:"0 2px", flexShrink:0 }}>×</button>
+                    </div>
+                  ))}
+                  <p style={{ fontSize:10, color:"#94a3b8", margin:"2px 0 0", lineHeight:1.5 }}>
+                    Le prénom suffit pour enregistrer une personne. La classe sera créée pour{" "}
+                    <strong style={{ color:"#6d28d9" }}>{1 + cpForm.membres_foyer.filter(m => (m.prenom||"").trim() || (m.nom||"").trim()).length} apprenant(s)</strong>,
+                    et le coach pointera leurs présences séparément.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* CHAMP « Notes pour le PA Advisor » RETIRÉ.

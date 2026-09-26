@@ -499,6 +499,28 @@ async function creerAssignationCore(body, ctx = {}) {
     const resolvedCentre   = centre_coaching   || sdFromBody.centre_coaching   || null;
     const resolvedAdresse  = adresse_coaching  || sdFromBody.adresse_coaching  || null;
     const resolvedCout     = body.cout_formation || sdFromBody.cout_formation || null;
+    /* LES AUTRES PERSONNES DU FOYER (coaching privé d'un couple ou d'une famille).
+       Un seul dossier, un seul montant, un seul échéancier - mais plusieurs apprenants.
+       Elles vivent ici plutôt que dans des dossiers séparés : trois dossiers auraient
+       produit trois échéanciers et obligé à découper un forfait global en trois parts
+       arbitraires.
+       Chaque entrée est nettoyée et bornée : ce tableau est recopié tel quel dans un JSONB,
+       donc ce qui entre ici est ce qui sera relu partout ensuite. Une saisie libre non
+       filtrée y laisserait des champs parasites qu'aucun écran ne saurait afficher. */
+    const resolvedMembresFoyer = (() => {
+      const bruts = body.membres_foyer || sdFromBody.membres_foyer || null;
+      if (!Array.isArray(bruts) || bruts.length === 0) return null;
+      const membres = bruts
+        .map(m => ({
+          prenom: String(m?.prenom || "").trim() || null,
+          nom:    String(m?.nom    || "").trim() || null,
+          age:    m?.age ? String(m.age).trim() : null,
+          niveau: String(m?.niveau || "").trim() || null,
+        }))
+        .filter(m => m.prenom || m.nom)   // une ligne sans identité n'est pas une personne
+        .slice(0, 9);                     // un foyer, pas une classe : garde-fou de saisie
+      return membres.length ? membres : null;
+    })();
     /* La formule acceptée sous deux formes : l'objet complet envoyé par les écrans à jour,
        ou le simple libellé des anciens appels - qu'on normalise pour que l'onboarding lise
        toujours la même structure. */
@@ -595,7 +617,7 @@ async function creerAssignationCore(body, ctx = {}) {
       notes:                notes               || null,
       profil_type:          profil_type         || "adulte",
       suivi_demarrage:    (() => {
-        const hasCoaching = resolvedDispos || resolvedPack || inferredLieu || resolvedFormation || inferredCentre || resolvedAdresse || resolvedFormuleGroupe;
+        const hasCoaching = resolvedDispos || resolvedPack || inferredLieu || resolvedFormation || inferredCentre || resolvedAdresse || resolvedFormuleGroupe || resolvedMembresFoyer;
         const hasEnfant   = profil_type === "enfant" && (prenom_enfant || nom_enfant || age_enfant || niveau_classe_enfant);
         if (!hasCoaching && !hasEnfant) return null;
         return {
@@ -614,6 +636,7 @@ async function creerAssignationCore(body, ctx = {}) {
                groupe le placer, et devait rappeler la commerciale pour le demander.
                On y range donc l'identifiant, le libellé, le rythme et le tarif retenu. */
             formule_groupe:      resolvedFormuleGroupe || null,
+            membres_foyer:       resolvedMembresFoyer  || null,
           } : {}),
           ...(hasEnfant ? {
             prenom_enfant:        prenom_enfant        || null,

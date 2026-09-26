@@ -10783,6 +10783,37 @@ export default function PedagogicalAdvisorDashboard() {
                             </div>
                           </div>
 
+                          {/* LE FOYER, quand le coaching est pris à plusieurs.
+                              Un couple ou une famille = UN dossier, UN montant, UN échéancier,
+                              mais plusieurs apprenants. Le PA doit le savoir avant d'affecter
+                              un coach : trois personnes dans la même séance, ce n'est pas le
+                              même exercice qu'un tête-à-tête, et la classe devra être créée
+                              avec la bonne capacité. */}
+                          {Array.isArray(sd.membres_foyer) && sd.membres_foyer.length > 0 && (
+                            <div style={{ background:"#eff6ff", border:"1.5px solid #bfdbfe", borderRadius:8, padding:"10px 12px" }}>
+                              <div style={{ fontSize:10, fontWeight:700, letterSpacing:".04em", textTransform:"uppercase",
+                                color:"#1d4ed8", marginBottom:6 }}>
+                                👥 Coaching en foyer · {1 + sd.membres_foyer.length} apprenants
+                              </div>
+                              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                                <span style={{ fontSize:11.5, fontWeight:700, padding:"3px 10px", borderRadius:999,
+                                  background:"#1d4ed8", color:"#fff" }}>
+                                  {p.prospect_nom} · payeur
+                                </span>
+                                {sd.membres_foyer.map((m, i) => (
+                                  <span key={i} style={{ fontSize:11.5, fontWeight:700, padding:"3px 10px", borderRadius:999,
+                                    background:"#dbeafe", color:"#1e40af" }}>
+                                    {[m.prenom, m.nom].filter(Boolean).join(" ")}
+                                    {m.age ? ` · ${m.age} ans` : ""}{m.niveau ? ` · ${m.niveau}` : ""}
+                                  </span>
+                                ))}
+                              </div>
+                              <div style={{ fontSize:10, color:"#64748b", marginTop:6, lineHeight:1.5 }}>
+                                Le tarif du dossier est global pour le foyer : il ne se multiplie pas par le nombre de personnes.
+                              </div>
+                            </div>
+                          )}
+
                           {(() => {
                             const _dsp = sd.disponibilites || {};
                             const _hor = Array.isArray(_dsp.horaires) && _dsp.horaires.length > 0 ? _dsp.horaires : [];

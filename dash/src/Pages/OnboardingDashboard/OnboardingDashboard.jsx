@@ -3160,7 +3160,16 @@ export default function OnboardingDashboard() {
             coach_id:     sd.coach_id || null,
             date_debut:   dossierNouveauGroupe.date_debut || sd.date_debut_formation || dossierForm.date_debut_supposee || null,
             date_fin:     dossierNouveauGroupe.date_fin   || null,
-            capacite_max: isPrivateFlow ? 1 : (dossierNouveauGroupe.capacite_max || 20),
+            /* LA CAPACITÉ D'UN COACHING PRIVÉ N'EST PLUS FIGÉE À 1.
+               Un couple ou une famille prend un coaching privé ensemble : un seul dossier,
+               un seul montant, mais plusieurs apprenants. La classe doit naître à la bonne
+               taille, sinon l'onboarding ne peut y inscrire que le payeur.
+               `is_prive` accompagne la capacité : c'est lui qui dit désormais qu'une classe
+               est privée, la capacité ayant cessé de pouvoir le faire (cf. utils/classePrivee.js). */
+            capacite_max: isPrivateFlow
+              ? 1 + (Array.isArray(sd.membres_foyer) ? sd.membres_foyer.length : 0)
+              : (dossierNouveauGroupe.capacite_max || 20),
+            is_prive:     isPrivateFlow || undefined,
             horaire:      dossierNouveauGroupe.horaire?.length > 0
                             ? dossierNouveauGroupe.horaire
                             : horaireDepuisDispo.length > 0 ? horaireDepuisDispo : null,
