@@ -16922,8 +16922,10 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
                         const isIncompatible = !!(niveauClient && cl.niveau && cl.niveau !== niveauClient);
                         // Un niveau différent ALERTE, il ne bloque pas : une réaffectation sert
                         // justement à acter une progression ou une régression. Seule une classe
-                        // COMPLÈTE reste réellement inaccessible - notamment les coachings privés,
-                        // qui n'ont qu'une place, par construction déjà occupée.
+                        // COMPLÈTE reste réellement inaccessible. Un coaching privé n'a plus
+                        // « une place par construction » : depuis qu'un foyer peut s'inscrire
+                        // ensemble, sa capacité vaut le nombre de personnes, et il reste
+                        // sélectionnable tant que la famille n'y est pas entière.
                         const isDisabled     = isFull;
                         return (
                           <tr key={cl.id}

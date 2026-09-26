@@ -3068,7 +3068,11 @@ export default function OnboardingDashboard() {
 
       const nomGroupe = `Coaching privé - ${parts[0]} ${parts.slice(1).join(" ")} ${niveau}`.trim();
       setDossierCreerGroupe(true);
-      setDossierNouveauGroupe({ nom: nomGroupe, date_debut: sd.date_debut_formation || a.date_debut_formation || "", date_fin: "", capacite_max: 1, horaire: horairePrefill });
+      /* La capacité proposée suit le foyer : le payeur plus les personnes saisies à
+         l'inscription. Figée à 1, elle affichait « 1 place » sur une classe qui en
+         accueille trois, et l'onboarding ne pouvait y inscrire que le payeur. */
+      setDossierNouveauGroupe({ nom: nomGroupe, date_debut: sd.date_debut_formation || a.date_debut_formation || "", date_fin: "",
+        capacite_max: 1 + (Array.isArray(sd.membres_foyer) ? sd.membres_foyer.length : 0), horaire: horairePrefill });
     } else {
       setDossierCreerGroupe(false);
       setDossierNouveauGroupe({ nom:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });

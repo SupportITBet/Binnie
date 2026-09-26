@@ -437,7 +437,7 @@ async function traiterPrive(ligne, ctx, importId) {
     if (pmt.erreur) { await nettoyerLigne(trace); return { statut: "erreur", nom: nomComplet, detail: "Versements : " + pmt.erreur }; }
     trace.paiement_ids = pmt.ids;
 
-    // 3. Classe privée dédiée (1 place) avec le coach déjà assigné.
+    // 3. Classe privée dédiée (1 place : un import = une personne) avec le coach assigné.
     const { data: grp, error: grpErr } = await supabase.from("groupes").insert({
       nom:          `Coaching privé - ${nomComplet}`,
       niveau:       ligne.niveau || null,
@@ -446,6 +446,10 @@ async function traiterPrive(ligne, ctx, importId) {
       coach_id:     ligne.coach_id || null,
       centre_id:    enLigne ? null : (ctx.centre_id || null),
       capacite_max: 1,
+      /* Une ligne d'import = une personne, donc une place - c'est légitime ici. Mais la
+         classe doit le DIRE au lieu de le laisser deviner par sa capacité : depuis que le
+         privé peut accueillir un foyer, `capacite_max === 1` n'est plus un signal fiable. */
+      is_prive:     true,
       date_debut:   ligne.date_debut || null,
       date_fin:     ligne.date_fin || null,
       horaire:      ligne.horaire || [],
