@@ -99,7 +99,16 @@ etape "Publication vers $CIBLE"
 PROPRIO=$(stat -c '%U:%G' "$CIBLE" 2>/dev/null || stat -f '%Su:%Sg' "$CIBLE")
 # `--delete` retire du site les fichiers disparus du build : sans lui, les anciens
 # fragments JavaScript s'accumulent indéfiniment à chaque déploiement.
-rsync -a --delete build/ "$CIBLE/"
+#
+# `--exclude` : ces dossiers n'appartiennent pas au build, et `--delete` les emporterait.
+#   .well-known  Let's Encrypt y dépose son défi de validation. Supprimé au mauvais moment,
+#                AutoSSL échoue et le certificat du domaine expire — trois mois plus tard,
+#                sans que rien n'ait l'air de s'être passé le jour du déploiement.
+#   cgi-bin      créé par cPanel à la création du compte.
+rsync -a --delete \
+      --exclude='.well-known/' \
+      --exclude='cgi-bin/' \
+      build/ "$CIBLE/"
 chown -R "$PROPRIO" "$CIBLE"
 echo "  propriétaire rétabli : $PROPRIO"
 
