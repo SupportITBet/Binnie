@@ -59,7 +59,8 @@ router.get("/onboarding/publiques", authenticateUser, async (req, res) => {
     // n'a pas le même sens pour un cours en groupe que pour du coaching privé, donc on filtre
     // en conséquence. `groupes.circuit` n'existe pas en base (seule la table `seances` a ce
     // champ) - le vrai signal fiable et déjà utilisé partout ailleurs pour repérer une classe
-    // de coaching privé est `capacite_max === 1` (cf. création des classes "Coaching privé -
+    // de coaching privé est `is_prive === true`, avec repli sur `capacite_max === 1` pour les
+    // classes créées avant que cette colonne soit écrite (cf. dash/src/utils/classePrivee.js
     // ..." dans CommercialDashboard.jsx/OnboardingDashboard.jsx). Si le type ne peut pas être
     // déterminé (aucun groupe encore assigné), on ne montre que les contenus "tous" - le choix
     // le plus sûr plutôt que de deviner ou de tout afficher par défaut.

@@ -39,6 +39,7 @@ import { uploadFichier, maxMoPour } from "../../utils/uploadFichier";
 import { fetchUpload } from "../../utils/fetchUpload";
 import NomAvecSurnom from "../../Components/NomAvecSurnom";
 import VisionneuseImage from "../../Components/VisionneuseImage";
+import { estClassePrivee } from "../../utils/classePrivee";
 const API_URL        = process.env.REACT_APP_API_URL        || "http://localhost:5001";
 const FRONTEND_URL   = process.env.REACT_APP_FRONTEND_URL   || "http://localhost:3000";
 const ELEARNING_URL  = process.env.REACT_APP_ELEARNING_URL  || "http://localhost:3002";
@@ -19793,7 +19794,7 @@ export default function SuperAdminDashboard() {
                               privé-en-groupe) ici même, pas juste un renvoi vers l'onglet Groupes. */}
                           {contratsAffiches.length === 0 && groupesAffiches.length > 0 ? (() => {
                             const TYPE_COURS_PRIVE = ["prive", "domicile", "centre", "cours_prive"];
-                            const estPrive = g => g.capacite_max === 1 || TYPE_COURS_PRIVE.includes(g.type_cours);
+                            const estPrive = g => estClassePrivee(g) || TYPE_COURS_PRIVE.includes(g.type_cours);
                             const CS_DEF = {
                               actif:    { label:"Actif",    color:"#16a34a", bg:"#dcfce7" },
                               cloture:  { label:"Clôturé",  color:"#6b7280", bg:"#f3f4f6" },

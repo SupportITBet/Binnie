@@ -432,7 +432,7 @@ router.get("/prospect-info", async (req, res) => {
     let coach  = null;
     const { data: ga } = await supabase
       .from("groupes_apprenants")
-      .select("id, groupe_id, groupes(id, nom, niveau, filiere, type_cours, horaire, date_debut, coach_id, capacite_max)")
+      .select("id, groupe_id, groupes(id, nom, niveau, filiere, type_cours, horaire, date_debut, coach_id, capacite_max, is_prive)")
       .ilike("email_apprenant", email.trim())
       .neq("statut", "retire")
       .order("date_ajout", { ascending: false })
@@ -442,7 +442,7 @@ router.get("/prospect-info", async (req, res) => {
       const g = ga.groupes;
       let horaire = [];
       try { horaire = Array.isArray(g.horaire) ? g.horaire : (g.horaire ? JSON.parse(g.horaire) : []); } catch {}
-      groupe = { id: g.id, nom: g.nom, niveau: g.niveau, filiere: g.filiere, type_cours: g.type_cours, horaire, date_debut: g.date_debut, est_prive: g.capacite_max === 1, ga_id: ga.id };
+      groupe = { id: g.id, nom: g.nom, niveau: g.niveau, filiere: g.filiere, type_cours: g.type_cours, horaire, date_debut: g.date_debut, est_prive: g.is_prive === true || g.capacite_max === 1, ga_id: ga.id };
       if (g.coach_id) {
         const { data: coachData } = await supabase
           .from("utilisateurs")

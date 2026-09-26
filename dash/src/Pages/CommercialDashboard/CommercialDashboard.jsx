@@ -46,6 +46,7 @@ import { useGroupesChatUnreadTotal, useGroupesLibresNonLus } from "../../hooks/u
 import { uploadFichier, maxMoPour } from "../../utils/uploadFichier";
 import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
+import { estClassePrivee } from "../../utils/classePrivee";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("admin_token")}` });
@@ -6399,7 +6400,7 @@ export default function CommercialDashboard() {
                                     ) : <span style={{ color:"#d1d5db" }}>-</span>}
                                   </td>
                                   <td style={{ padding:"12px 14px", fontSize:12, color:"#475569", whiteSpace:"nowrap" }}>
-                                    {cl.capacite_max === 1 && <span style={{ display:"block", fontSize:9, fontWeight:800, color:"#9333ea", marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
+                                    {estClassePrivee(cl) && <span style={{ display:"block", fontSize:9, fontWeight:800, color:"#9333ea", marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
                                     {cl.type_cours === "en_ligne" ? "🌐 En ligne" : cl.type_cours === "presentiel" ? "🏢 Présentiel" : cl.type_cours === "domicile" ? "🏠 Domicile" : cl.type_cours === "hybride" ? "⚡ Hybride" : cl.type_cours || "-"}
                                   </td>
                                   <td style={{ padding:"12px 14px", minWidth:160 }}>

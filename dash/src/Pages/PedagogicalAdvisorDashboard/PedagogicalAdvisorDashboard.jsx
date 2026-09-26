@@ -44,6 +44,7 @@ import BadgeCategorieCoach from "../../Components/BadgeCategorieCoach";
 import { LIBELLES_CRITERES, libelleLecon, libelleObservation, libelleInternet } from "../../utils/criteresObservation";
 import { CATEGORIES_COACH, CATEGORIE_SANS_NOTE, categorieCoach } from "../../utils/categorieCoach";
 import { NOTE_COULEUR as NOTE_COULEUR_CAT, NOTE_FOND as NOTE_FOND_CAT } from "../../utils/categorieCoach";
+import { estClassePrivee } from "../../utils/classePrivee";
 /* ═══════════════════════════════════════════════════════
    CHARTE COULEURS - Pedagogical Advisor (violet)
 ═══════════════════════════════════════════════════════ */
@@ -59,7 +60,7 @@ const PA_COLOR    = (() => { try { return JSON.parse(localStorage.getItem("admin
 const PA_DARK     = PA_COLOR;
 // « prive » est la convention BET pour une classe de coaching prive EN LIGNE : le type
 // doit donc se lire comme « en ligne », et la capacite 1 comme le marqueur « prive ».
-const paEstPrive  = (g) => g?.capacite_max === 1 || g?.type_cours === "prive";
+const paEstPrive  = (g) => estClassePrivee(g) || g?.type_cours === "prive";
 const paCadreType = (g, t) => t === "en_ligne"  ? (g?.type_cours === "en_ligne" || g?.type_cours === "prive")
                             : t === "presentiel" ? (g?.type_cours === "presentiel" || g?.type_cours === "centre")
                             : g?.type_cours === t;
@@ -826,7 +827,7 @@ export default function PedagogicalAdvisorDashboard() {
   useEffect(() => {
     if (activeTab !== "apprenants") return;
     const groupeIdsPrives = allApprenantsGroupes
-      .filter(ga => ga.groupe_is_prive || ga.groupe_capacite_max === 1)
+      .filter(ga => estClassePrivee(ga))
       .map(ga => ga.groupe_id);
     const groupeIdsParcours = prospects.filter(p => p.statut === "converti").map(p => p.groupe_id);
     const groupeIds = [...new Set([...groupeIdsPrives, ...groupeIdsParcours])].filter(Boolean);
@@ -3070,7 +3071,7 @@ export default function PedagogicalAdvisorDashboard() {
             // === 1 est le signal fiable posé par le flux de création (cf. même correctif déjà
             // appliqué côté Onboarding). Sans ce repli, des apprenants en coaching privé
             // disparaissaient purement et simplement de cet onglet.
-            const apprenantsPrive = allApprenantsGroupes.filter(ga => ga.groupe_is_prive || ga.groupe_capacite_max === 1).map(ga => {
+            const apprenantsPrive = allApprenantsGroupes.filter(ga => estClassePrivee(ga)).map(ga => {
               const seancesReelles = paSeancesParGroupe[ga.groupe_id] || { realisees: 0, total: 0 };
               return {
               ...ga, // conserve tous les champs réels (assiduite, progression, coach_nom, groupe_nom, note_obj…) pour le modal de détail
@@ -4693,7 +4694,7 @@ export default function PedagogicalAdvisorDashboard() {
                             </td>
                             <td style={{ padding:"12px 16px", color:"#64748b" }}>{g.filiere || "-"}</td>
                             <td style={{ padding:"12px 16px", fontSize:12, color:"#475569", whiteSpace:"nowrap" }}>
-                              {g.capacite_max === 1 && <span style={{ display:"block", fontSize:9, fontWeight:800, color:"#9333ea", marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
+                              {estClassePrivee(g) && <span style={{ display:"block", fontSize:9, fontWeight:800, color:"#9333ea", marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
                               {g.type_cours==="en_ligne"||g.type_cours==="prive" ? "💻 En ligne" : g.type_cours==="domicile" ? "🏠 Domicile" : g.type_cours==="presentiel"||g.type_cours==="centre" ? "🏢 Présentiel" : "-"}
                             </td>
                             <td style={{ padding:"12px 16px", color: g.coach_nom ? "#374151" : "#f59e0b", fontWeight:600 }}>
@@ -11889,7 +11890,7 @@ export default function PedagogicalAdvisorDashboard() {
                       // Capacité max === 1 est le marqueur fiable d'une classe privée (posé à la
                       // création par le flux coaching privé) - la colonne is_prive en base n'est
                       // jamais renseignée par le code et reste incohérente sur les anciennes lignes.
-                      const estPrive = g => g.capacite_max === 1;
+                      const estPrive = g => estClassePrivee(g);
                       const classesFiltrees = paCoachGroupes.filter(g => {
                         const d = g.date_debut ? new Date(g.date_debut) : null;
                         if (classeDateFrom && d && d < new Date(classeDateFrom)) return false;

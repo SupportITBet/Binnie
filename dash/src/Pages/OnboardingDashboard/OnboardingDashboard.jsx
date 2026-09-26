@@ -36,6 +36,7 @@ import { useGroupesChatUnreadTotal, useGroupesLibresNonLus } from "../../hooks/u
 import { uploadFichier, libelleLimite } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
+import { estClassePrivee } from "../../utils/classePrivee";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -4385,7 +4386,7 @@ export default function OnboardingDashboard() {
                   // « prive » est la convention BET pour un coaching privé EN LIGNE : le filtre
                   // Type doit donc le ramener avec les cours en ligne, sans quoi ces classes
                   // n'apparaissent sous aucun type.
-                  const estPrive  = g => g.capacite_max === 1 || g.type_cours === "prive";
+                  const estPrive  = g => estClassePrivee(g) || g.type_cours === "prive";
                   const cadreType = (g,t) => t === "en_ligne"
                     ? (g.type_cours === "en_ligne" || g.type_cours === "prive")
                     : g.type_cours === t;
@@ -4439,7 +4440,7 @@ export default function OnboardingDashboard() {
                                 const nbApp = g.nb_apprenants||0;
                                 const cap = g.capacite_max||20;
                                 const pct = Math.min(100,Math.round((nbApp/cap)*100));
-                                const estPriveRow = g.capacite_max === 1;
+                                const estPriveRow = estClassePrivee(g);
                                 const NIVEAUX_COLORS = { A1:"#6b7280",A2:"#0891b2",B1:"#16a34a",B2:"#7c3aed",C1:"#d97706",C2:"#dc2626" };
                                 return (
                                   <tr key={g.id}
@@ -4619,7 +4620,7 @@ export default function OnboardingDashboard() {
                         const coachNomInfos = c ? `${c.prenom||""} ${c.nom||""}`.trim() : (selectedGroupe.coach_nom||"-");
                         const hs = Array.isArray(selectedGroupe.horaire)?selectedGroupe.horaire:(typeof selectedGroupe.horaire==="string"?(()=>{try{return JSON.parse(selectedGroupe.horaire);}catch{return[];}})():[]);
                         const nbActifs = groupeDetail.apprenants.filter(a=>a.statut!=="retire").length;
-                        const estPriveInfos = selectedGroupe.capacite_max === 1;
+                        const estPriveInfos = estClassePrivee(selectedGroupe);
                         return (
                           <div style={{ display:"grid",gap:16 }}>
 
@@ -7875,7 +7876,7 @@ export default function OnboardingDashboard() {
                           // Capacité max === 1 est le marqueur fiable d'une classe privée (posé à la
                           // création par le flux coaching privé) - la colonne is_prive en base n'est
                           // jamais renseignée par le code et reste incohérente sur les anciennes lignes.
-                          const estPrive = g => g.capacite_max === 1;
+                          const estPrive = g => estClassePrivee(g);
                           const classesFiltrees = paCoachGroupes.filter(g => {
                             const d = g.date_debut ? new Date(g.date_debut) : null;
                             if (classeDateFrom && d && d < new Date(classeDateFrom)) return false;

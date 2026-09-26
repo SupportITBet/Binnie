@@ -2724,7 +2724,9 @@ router.get("/:id", authenticateAdmin, async (req, res) => {
     // - l'adresse, pourtant importée, n'était visible nulle part. Elle vit dans le dossier
     // (suivi_demarrage), pas sur la classe : on la remonte ici, une fois, pour les trois
     // dashboards qui appellent cette route plutôt que de la refaire chercher par chacun.
-    if (groupe.capacite_max === 1) {
+    // `is_prive` d'abord, la capacité en repli : les classes créées avant l'écriture de
+    // cette colonne n'ont que leur capacité pour dire ce qu'elles sont.
+    if (groupe.is_prive === true || groupe.capacite_max === 1) {
       const premier = (apprenantsFinal || [])[0];
       let dossier = null;
       if (premier) {
@@ -2928,7 +2930,7 @@ router.post("/:id/presences", authenticateAdmin, async (req, res) => {
 ══════════════════════════════════════════════════════════════ */
 router.post("/", authenticateAdmin, requirePermission("classes", "create"), async (req, res) => {
   try {
-    const { nom, niveau, filiere, type_cours, coach_id, centre_id, horaire, date_debut, date_fin, capacite_max } = req.body;
+    const { nom, niveau, filiere, type_cours, coach_id, centre_id, horaire, date_debut, date_fin, capacite_max, is_prive } = req.body;
     if (!nom) return res.status(400).json({ error: "Le nom du groupe est requis" });
 
     const createdByNom = [req.profil.prenom, req.profil.nom].filter(Boolean).join(" ") || req.profil.email || "Inconnu";
@@ -2943,6 +2945,15 @@ router.post("/", authenticateAdmin, requirePermission("classes", "create"), asyn
       date_debut:      date_debut   || null,
       date_fin:        date_fin     || null,
       capacite_max:    capacite_max || 20,
+      /* QU'UNE CLASSE SOIT PRIVÉE DOIT ÊTRE ÉCRIT, PAS DEVINÉ.
+         Jusqu'ici, « privé » se déduisait de `capacite_max === 1`, à seize endroits du code.
+         Cette déduction interdisait le cas le plus banal du coaching privé : un couple ou
+         une famille qui s'inscrit ensemble. Monter la capacité à 3 pour les loger faisait
+         basculer la classe en « groupe » partout - planning, écrans du PA, du coach,
+         indicateurs - sans que personne l'ait demandé.
+         La colonne existait depuis le début et n'était jamais écrite. Elle l'est désormais,
+         et `capacite_max` redevient ce qu'elle dit être : une capacité. */
+      is_prive:        is_prive === true || capacite_max === 1 || capacite_max === "1",
       statut:          "actif",
       created_by:      req.profil.id,
       created_by_nom:  createdByNom,
@@ -2984,6 +2995,22 @@ router.post("/", authenticateAdmin, requirePermission("classes", "create"), asyn
       error  = retry.error;
     }
 
+    // is_prive : même prudence que ci-dessus. La colonne existe en base, mais une création
+    // de classe ne doit pas échouer pour un champ de confort - la détection garde de toute
+    // façon son repli sur `capacite_max === 1`.
+    if (error && (
+      error.code === "42703" || error.code === "PGRST204" ||
+      (error.message || "").toLowerCase().includes("is_prive") ||
+      (error.message || "").includes("Could not find") ||
+      (error.message || "").includes("column")
+    )) {
+      console.warn("Colonne 'is_prive' absente, réessai sans :", error.message);
+      const { is_prive: _p, ...payloadSansPrive } = payload;
+      const retry = await supabase.from("groupes").insert(payloadSansPrive).select().single();
+      groupe = retry.data;
+      error  = retry.error;
+    }
+
     if (error) {
       console.error("Supabase groupes insert error:", JSON.stringify(error));
       return res.status(500).json({ error: error.message || "Erreur création groupe", code: error.code, detail: error.details });
@@ -2993,7 +3020,7 @@ router.post("/", authenticateAdmin, requirePermission("classes", "create"), asyn
     if (coach_id) {
       const coachUserId = await resolveCoachUserId(coach_id);
       if (coachUserId) {
-        const isPrivate = (capacite_max === 1 || capacite_max === "1");
+        const isPrivate = (is_prive === true || capacite_max === 1 || capacite_max === "1");
         if (isPrivate) {
           const lieuLabel = type_cours === "domicile" ? "🏠 À domicile"
                           : type_cours === "centre"   ? "🏢 Au cabinet"

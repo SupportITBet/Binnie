@@ -20,6 +20,7 @@ import ChatGroupe from "../../Components/ChatGroupe";
 import { fetchUpload } from "../../utils/fetchUpload";
 import AppreciationSeance, { BandeauAppreciation, useSeancesANoter } from "../../Components/AppreciationSeance";
 import { suivreFenetreLive } from "../../utils/inactivite";
+import { estClassePrivee } from "../../utils/classePrivee";
 
 /* OUVERTURE DE LA SALLE VIRTUELLE. Cet écran-ci ne connaissait AUCUNE règle d'heure :
    l'apprenant pouvait rejoindre une session - ou copier son lien - le jour même dès le
@@ -1280,7 +1281,7 @@ export default function EspaceApprenant() {
 
   // ── Détection du type de coaching ──────────────────────────
   const isCoachingPrive = !!(
-    realGI?.capacite_max === 1 ||
+    estClassePrivee(realGI) ||
     (realGI?.nom || "").toLowerCase().includes("priv") ||
     ["prive", "domicile", "centre"].includes(realParcours?.type_cours)
   );
