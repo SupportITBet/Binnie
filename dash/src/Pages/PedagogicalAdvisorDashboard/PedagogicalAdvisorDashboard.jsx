@@ -569,100 +569,133 @@ export default function PedagogicalAdvisorDashboard() {
 
      LA FICHE PORTE L'IDENTITÉ DU PROSPECT, décision assumée : les coachs
      prennent eux-mêmes contact. Elle devient donc un document diffusable
-     contenant des coordonnées personnelles - d'où la mention de
-     confidentialité en pied de page, et le nom du conseiller émetteur : un
-     document qui circule doit dire d'où il vient et à quoi il engage.
+     contenant des coordonnées personnelles - d'où l'encart de confidentialité
+     et le nom du conseiller émetteur : un document qui circule doit dire d'où
+     il vient et à quoi il engage.
+
+     MÊME TECHNIQUE QUE LE REÇU DE PAIEMENT ci-dessous : un modèle HTML
+     imprimé dans une fenêtre, et non jsPDF. Ce document sort de l'entreprise ;
+     il doit porter l'en-tête BET comme les reçus, et une mise en page HTML le
+     permet là où autoTable ne produit que des tableaux. Les styles sont ceux
+     du reçu, à l'identique - deux documents officiels de la même maison ne
+     doivent pas avoir l'air de venir de deux logiciels différents.
   */
-  const exporterFicheRechercheCoachPDF = async (p) => {
+  const exporterFicheRechercheCoachPDF = (p) => {
     try {
-      const { jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
       const sd  = p.suivi_demarrage || {};
-      const doc = new jsPDF();
-      const ref = `PRV-${String(p.id || "").replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+      const ref = `BET-CCH-${String(p.id || "").replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+      const now = new Date().toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" });
+      const emetteur = [profil?.prenom, profil?.nom].filter(Boolean).join(" ") || "Conseiller pédagogique";
 
-      doc.setFontSize(16); doc.setTextColor(15, 23, 42);
-      doc.text("Recherche de coach - dossier de coaching privé", 14, 16);
-      doc.setFontSize(10); doc.setTextColor(100);
-      doc.text(`Référence ${ref}  ·  généré le ${new Date().toLocaleDateString("fr-FR")}`, 14, 23);
+      const row = (lbl, val) => val == null || val === "" ? "" :
+        `<tr><td class="lbl">${lbl}</td><td class="val">${val}</td></tr>`;
 
-      let y = 30;
-      const section = (titre, couleur, corps) => {
-        const lignes = corps.filter(([, v]) => v !== null && v !== undefined && v !== "");
-        if (!lignes.length) return;
-        autoTable(doc, {
-          startY: y, head: [[titre, ""]], body: lignes, theme: "striped",
-          headStyles: { fillColor: couleur }, styles: { fontSize: 9 },
-          columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" } },
-        });
-        y = doc.lastAutoTable.finalY + 8;
-      };
-
-      /* L'objectif d'abord : un lecteur pressé lit la première section et décide. */
       const objectif = (p.objectif_client || "").trim();
-      autoTable(doc, {
-        startY: y,
-        head: [["Objectif du client"]],
-        body: [[objectif || "NON RENSEIGNÉ - à obtenir auprès de l'assistante avant d'affecter un coach."]],
-        theme: "grid",
-        headStyles: { fillColor: objectif ? [109, 40, 217] : [180, 83, 9] },
-        styles: { fontSize: objectif ? 11 : 9.5, cellPadding: 5, textColor: objectif ? [15, 23, 42] : [146, 64, 14] },
-      });
-      y = doc.lastAutoTable.finalY + 8;
-
-      const lieu = { cabinet: "Au cabinet", domicile: "À domicile", en_ligne: "En ligne" }[sd.lieu_coaching] || "-";
+      const lieu = { cabinet:"🏢 Au cabinet", domicile:"🏠 À domicile", en_ligne:"💻 En ligne" }[sd.lieu_coaching] || "-";
       const centre = paCentresList.find(c => c.key === sd.centre_coaching)?.name || sd.centre_coaching || "";
+
       const dsp = sd.disponibilites || {};
       const hor = Array.isArray(dsp.horaires) && dsp.horaires.length ? dsp.horaires : [];
       const leg = hor.length === 0 ? [...(dsp.jours || []), ...(dsp.creneaux || [])] : [];
       const creneaux = hor.length
-        ? hor.map(h => `${h.jour} ${h.debut}${h.fin ? `-${h.fin}` : ""}`).join("  ·  ")
-        : (leg.length ? leg.join("  ·  ") : "Non renseignées");
-
-      section("Besoin pédagogique", [22, 163, 74], [
-        ["Niveau évalué",     sd.niveau_prospect || p.niveau_client || "-"],
-        ["Formation",         sd.formation_souhaitee || p.inscription_offre || "-"],
-        ["Rythme",            sd.type_coaching === "intensive"
-                                ? "Intensive - 5 séances/semaine"
-                                : "Classique - 3 séances x 2h/semaine"],
-        ["Durée",             sd.nb_seances_souhaitees ? `${sd.nb_seances_souhaitees} mois` : "-"],
-        ["Date de début",     (p.date_debut_formation || sd.date_debut_formation)
-                                ? new Date(p.date_debut_formation || sd.date_debut_formation).toLocaleDateString("fr-FR")
-                                : "-"],
-      ]);
-
-      section("Lieu et disponibilités", [217, 119, 6], [
-        ["Lieu du coaching",  lieu],
-        ["Centre",            sd.lieu_coaching === "cabinet"  ? (centre || "-") : ""],
-        ["Adresse",           sd.lieu_coaching === "domicile" ? (sd.adresse_coaching || "-") : ""],
-        ["Créneaux",          creneaux],
-      ]);
+        ? hor.map(h => `<span class="chip">${h.jour} ${h.debut}${h.fin ? `–${h.fin}` : ""}</span>`).join(" ")
+        : (leg.length ? leg.map(j => `<span class="chip">${j}</span>`).join(" ") : "");
 
       const estEnfant = p.profil_type === "enfant";
-      section("Apprenant", [8, 145, 178], [
-        ["Profil",            estEnfant ? "Enfant" : "Adulte"],
-        ["Nom",               estEnfant
-                                ? [p.prenom_enfant || sd.prenom_enfant, p.nom_enfant || sd.nom_enfant].filter(Boolean).join(" ") || p.prospect_nom || "-"
-                                : (p.prospect_nom || "-")],
-        ["Âge",               estEnfant ? (p.age_enfant || sd.age_enfant || "") : ""],
-        ["Classe",            estEnfant ? (p.niveau_classe_enfant || sd.niveau_classe_enfant || "") : ""],
-        ["Téléphone",         estEnfant ? (p.telephone_parent || p.prospect_telephone || "-") : (p.prospect_telephone || "-")],
-        ["E-mail",            estEnfant ? (p.email_parent || p.prospect_email || "-") : (p.prospect_email || "-")],
-        ["Contact parent",    estEnfant ? (p.nom_parent || "") : ""],
-      ]);
+      const nomApprenant = estEnfant
+        ? ([p.prenom_enfant || sd.prenom_enfant, p.nom_enfant || sd.nom_enfant].filter(Boolean).join(" ") || p.prospect_nom)
+        : p.prospect_nom;
 
-      const emetteur = [profil?.prenom, profil?.nom].filter(Boolean).join(" ") || "Conseiller pédagogique";
-      doc.setFontSize(8); doc.setTextColor(120);
-      doc.text(
-        `Document interne BET - émis par ${emetteur}. Contient les coordonnées d'un prospect : à ne pas rediffuser hors du réseau de coachs.`,
-        14, Math.min(y + 4, 285), { maxWidth: 182 }
-      );
+      const w = window.open("", "_blank", "width=760,height=920");
+      w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Fiche de recherche de coach - ${nomApprenant || ref}</title>
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:Arial,sans-serif;margin:0;padding:40px;color:#1e293b;background:#fff}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:20px;margin-bottom:28px}
+        .logo{font-size:28px;font-weight:900;color:#7c3aed;letter-spacing:-1px}
+        .logo span{color:#0f172a}
+        .logo-sub{font-size:11px;color:#6b7280;margin-top:4px}
+        h2{margin:0 0 4px;font-size:20px;font-weight:800;color:#0f172a}
+        .num{font-size:11px;color:#6b7280;margin-top:2px}
+        section{margin-bottom:20px}
+        .section-title{font-size:11px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;border-bottom:1px solid #ede9fe;padding-bottom:5px}
+        table{width:100%;border-collapse:collapse}
+        td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:top}
+        .lbl{color:#6b7280;font-weight:500;width:42%}
+        .val{font-weight:600;color:#0f172a}
+        .objectif{background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:12px;padding:18px 20px;margin-bottom:22px}
+        .objectif .tag{display:inline-block;background:#ede9fe;color:#5b21b6;padding:4px 14px;border-radius:20px;font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px}
+        .objectif .txt{font-size:15px;font-weight:700;color:#0f172a;line-height:1.55;white-space:pre-wrap}
+        .objectif.vide{background:#fffbeb;border-color:#fde68a}
+        .objectif.vide .tag{background:#fef3c7;color:#92400e}
+        .objectif.vide .txt{font-size:13px;font-weight:600;color:#92400e}
+        .chip{display:inline-block;background:#ede9fe;color:#5b21b6;padding:3px 11px;border-radius:20px;font-weight:700;font-size:11.5px;margin:2px 3px 2px 0}
+        .confid{margin-top:26px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:11px 14px;font-size:10.5px;color:#b91c1c;line-height:1.6}
+        .footer{margin-top:20px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:10px;color:#9ca3af;text-align:center;line-height:1.7}
+        @media print{body{padding:20px}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}}
+      </style></head><body>
+      <div class="header">
+        <div>
+          <div class="logo">BET<span>Languages</span></div>
+          <div class="logo-sub">Centre de langues - Abidjan, Côte d'Ivoire</div>
+          <div class="logo-sub" style="margin-top:2px">📧 contact@binniesenglish.com · 📞 +225 27 22 40 71 99</div>
+        </div>
+        <div style="text-align:right">
+          <h2>FICHE DE RECHERCHE DE COACH</h2>
+          <div class="num">N° ${ref}</div>
+          <div class="num">Émise le ${now}</div>
+        </div>
+      </div>
 
-      doc.save(`fiche-coach-${ref}.pdf`);
-      toast.success("Fiche générée ✓");
+      <div class="objectif${objectif ? "" : " vide"}">
+        <div class="tag">🎯 Objectif du client</div>
+        <div class="txt">${objectif || "Non renseigné — à obtenir auprès de l'assistante commerciale avant d'affecter un coach."}</div>
+      </div>
+
+      <section><div class="section-title">🎓 Besoin pédagogique</div><table>
+        ${row("Niveau évalué",   sd.niveau_prospect || p.niveau_client)}
+        ${row("Formation",       sd.formation_souhaitee || p.inscription_offre)}
+        ${row("Rythme",          sd.type_coaching === "intensive" ? "Intensive - 5 séances/semaine" : "Classique - 3 séances × 2h/semaine")}
+        ${row("Durée",           sd.nb_seances_souhaitees ? `${sd.nb_seances_souhaitees} mois` : null)}
+        ${row("Date de début",   (p.date_debut_formation || sd.date_debut_formation)
+                                   ? new Date(p.date_debut_formation || sd.date_debut_formation).toLocaleDateString("fr-FR")
+                                   : null)}
+      </table></section>
+
+      <section><div class="section-title">📍 Lieu et disponibilités</div><table>
+        ${row("Lieu du coaching", lieu)}
+        ${row("Centre",           sd.lieu_coaching === "cabinet"  ? centre : null)}
+        ${row("Adresse",          sd.lieu_coaching === "domicile" ? sd.adresse_coaching : null)}
+        ${row("Créneaux",         creneaux || "Non renseignés")}
+      </table></section>
+
+      <section><div class="section-title">👤 Apprenant</div><table>
+        ${row("Profil",          estEnfant ? "Enfant" : "Adulte")}
+        ${row("Nom",             nomApprenant)}
+        ${row("Âge",             estEnfant ? (p.age_enfant || sd.age_enfant) : null)}
+        ${row("Classe",          estEnfant ? (p.niveau_classe_enfant || sd.niveau_classe_enfant) : null)}
+        ${row("Contact parent",  estEnfant ? p.nom_parent : null)}
+        ${row("Téléphone",       estEnfant ? (p.telephone_parent || p.prospect_telephone) : p.prospect_telephone)}
+        ${row("E-mail",          estEnfant ? (p.email_parent || p.prospect_email) : p.prospect_email)}
+      </table></section>
+
+      <div class="confid">
+        🔒 Document interne — émis par ${emetteur}. Il contient les coordonnées d'un prospect qui n'est pas encore client :
+        à ne transmettre qu'aux coachs consultés pour ce dossier, et à ne pas rediffuser au-delà.
+      </div>
+
+      <div class="footer">
+        Fiche générée automatiquement par le système BET Languages pour l'affectation d'un coach.<br/>
+        BET Languages · Centre de langues agréé · Abidjan, Côte d'Ivoire<br/>
+        contact@binniesenglish.com · +225 27 22 40 71 99
+      </div>
+      <script>window.onload=()=>window.print();</script>
+      </body></html>`);
+      w.document.close();
+      toast.success("Fiche coach exportée en PDF");
     } catch (e) {
       console.error("Fiche recherche coach:", e);
-      toast.error("Impossible de générer la fiche");
+      toast.error("Erreur lors de l'export de la fiche");
     }
   };
 
