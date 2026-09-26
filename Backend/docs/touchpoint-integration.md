@@ -144,7 +144,7 @@ Le passage à TouchPoint a entraîné la désactivation complète de CinetPay (d
 
 1. Récupérer `TOUCHPOINT_AGENCY_CODE` / `TOUCHPOINT_SECURE_CODE` / `TOUCHPOINT_DOMAIN_NAME` (ticket support déjà envoyé à TouchPoint) et les renseigner dans `Backend/.env` (+ config Vercel en prod)
 2. ~~Exécuter `Backend/sql/touchpoint_migration.sql` dans Supabase~~ — fait (2026-08-19)
-3. Confirmer auprès de TouchPoint l'URL à déclarer comme callback (`https://backend-binnie.vercel.app/api/touchpoint/callback` en prod) — probablement à renseigner dans le BO Partenaire, menu "Notifications" ou "Callback"
+3. Confirmer auprès de TouchPoint l'URL à déclarer comme callback (`https://api.binniesenglish.net/api/touchpoint/callback` en prod) — probablement à renseigner dans le BO Partenaire, menu "Notifications" ou "Callback"
 4. ~~Brancher le paiement dans les modales de parcours publiques~~ — fait, voir tableau ci-dessus
 5. ~~Reconstruire le flux de paiement espace apprenant sur TouchPoint~~ — fait, voir ci-dessus
 6. Tester un paiement de bout en bout en sandbox dès que les identifiants marchand sont disponibles (rien n'est testable tant que `TOUCHPOINT_AGENCY_CODE`/`SECURE_CODE`/`DOMAIN_NAME` sont vides — toutes les routes `/initiate` répondent `503`)

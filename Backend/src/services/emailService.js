@@ -23,7 +23,7 @@ const FRONT_URL = process.env.FRONTEND_URL  || "https://binniesenglish.net";
 /* Le lien de désinscription vise le SERVEUR, jamais le site : il doit fonctionner depuis
    un client mail, sans dépendre du chargement d'une application React - et la page qu'il
    visait côté site n'a d'ailleurs jamais existé. */
-const API_PUBLIQUE = process.env.BACKEND_URL || "https://backend-binnie.vercel.app";
+const API_PUBLIQUE = process.env.BACKEND_URL || "https://api.binniesenglish.net";
 // Hébergé sur Cloudinary (et non sur FRONT_URL) car ce dernier pointe vers localhost en dev -
 // une URL inaccessible depuis les serveurs de Brevo/les clients mail des destinataires.
 const LOGO_URL  = "https://res.cloudinary.com/nvp7nxqp/image/upload/v1788473005/bet/branding/bet-logo.png";

@@ -100,9 +100,15 @@ import { requestContext, plateformeDepuisOrigine } from "./middlewares/requestCo
 
 const app = express();
 
-// Déployé derrière le proxy Vercel (vercel.json) - sans ceci, req.ip renvoie l'IP
-// du proxy Vercel pour TOUT le monde, et express-rate-limit (accessGateLimiter,
-// authLimiter, publicFormLimiter...) bloque/débloque tous les visiteurs en même temps.
+// Déployé derrière Apache, qui relaie api.binniesenglish.net vers ce processus (voir
+// DEPLOIEMENT-VPS.md §5) - sans ceci, req.ip renvoie l'IP du relais pour TOUT le monde,
+// et express-rate-limit (accessGateLimiter, authLimiter, publicFormLimiter...)
+// bloque/débloque tous les visiteurs en même temps.
+//
+// Le « 1 » compte UN relais de confiance. Il valait pour le proxy Vercel, il vaut pour
+// Apache : dans les deux cas une seule couche s'intercale. À revoir le jour où un CDN
+// viendrait se placer devant - binniesenglish.com passe déjà par Cloudflare, et si l'API
+// devait en faire autant, ce nombre passerait à 2.
 app.set("trust proxy", 1);
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')

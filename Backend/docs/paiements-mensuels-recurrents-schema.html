@@ -341,7 +341,7 @@
       <td><span class="sev" style="color:var(--rouge);background:rgba(248,113,113,.15);">❌ Non fiable sur Vercel</span></td>
     </tr>
     <tr>
-      <td>Route HTTP dédiée + Vercel Cron (<code>vercel.json</code> → <code>crons</code>) appelant cette route 1×/jour</td>
+      <td>Route HTTP dédiée + cron système du VPS (<code>scripts/cron-bet.sh</code>, voir <code>crontab -l</code>) appelant cette route 1×/jour</td>
       <td><span class="sev fait">✅ Retenu</span></td>
     </tr>
   </table>

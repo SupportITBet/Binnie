@@ -13,7 +13,7 @@ export function getPlateformeOrigine() {
 // vraiment fiable : un rôle peut être utilisé des deux côtés (façade bet-elearning), un
 // module peut être générique, mais l'app qui a réellement émis la requête ne ment jamais.
 // Convention de ports en dev (voir dash/.env et bet-elearning/.env) : dash = 3001,
-// bet-elearning = 3002. En prod (voir Backend/.env.vercel, ALLOWED_ORIGINS) : domaines
+// bet-elearning = 3002. En prod (voir Backend/.env sur le VPS, ALLOWED_ORIGINS) : domaines
 // distincts app.binnie... (dash) vs e-learning... (bet-elearning).
 export function plateformeDepuisOrigine(req) {
   const src = req.headers.origin || req.headers.referer || "";
