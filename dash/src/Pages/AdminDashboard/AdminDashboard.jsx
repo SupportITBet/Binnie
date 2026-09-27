@@ -18349,7 +18349,6 @@ export default function AdminDashboard() {
                     ponctualite:             { label:"Ponctualité",            icon:"⏰" },
                     qualite_pedagogique:     { label:"Qualité pédagogique",    icon:"📚" },
                     satisfaction_apprenants: { label:"Satisfaction apprenants",icon:"😊" },
-                    respect_programme:       { label:"Respect du programme",   icon:"📋" },
                     communication:           { label:"Communication",          icon:"💬" },
                   };
                   const nc  = n => !n ? "#9ca3af" : n >= 4.5 ? "#16a34a" : n >= 3.5 ? "#0891b2" : n >= 2.5 ? "#f59e0b" : "#ef4444";

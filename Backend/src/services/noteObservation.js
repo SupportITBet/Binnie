@@ -14,7 +14,7 @@
  * compte que CINQ, pondérés. Un coach faible en pédagogie mais ponctuel passait devant un
  * coach meilleur en classe.
  *
- * C'est le barème officiel qui fait foi. La note est donc le `TOTAL /70` ramené sur 5,
+ * C'est le barème officiel qui fait foi. La note est donc le `TOTAL /35` ramené sur 5,
  * c'est-à-dire une MOYENNE PONDÉRÉE des notes /5 par le poids de chaque critère :
  *
  *     note = Σ(note_i × poids_i) / Σ(poids_i)
@@ -23,21 +23,36 @@
  * tombe toujours juste : le total affiché dans la feuille et la note ne peuvent plus
  * diverger d'un dixième.
  *
- * Ponctualité, Professionnalisme, Interactivité et Grammaire restent saisis et affichés
- * comme APPRÉCIATIONS - ils informent le conseil pédagogique - mais ne pèsent plus sur la
- * note ni, par conséquent, sur la catégorie de contrat.
+ * Interactivité et Grammaire restent des APPRÉCIATIONS qualitatives, hors note. Ponctualité
+ * et Professionnalisme, eux, sont entrés dans le calcul le 27/09/2026 (voir plus bas).
  */
 
-/** Le barème officiel de la feuille d'appraisal BET. La somme des poids fait 70. */
+/**
+ * ── BARÈME RÉVISÉ LE 27/09/2026 ────────────────────────────────────────────────────
+ *
+ * SEPT CRITÈRES, CHACUN SUR 5, TOTAL SUR 35. La pondération précédente (5/20/20/15/10
+ * sur 70) est abandonnée à la demande de la direction : la feuille d'appraisal officielle
+ * note désormais chaque critère sur 5, sans poids.
+ *
+ * CE QUE CE CHANGEMENT DÉPLACE, et il faut le savoir en relisant un classement :
+ * Ponctualité et Professionnalisme entraient jusqu'ici dans le rapport comme de simples
+ * appréciations, hors de la note. Ils y pèsent maintenant autant que la pédagogie - qui
+ * passe de 28,6 % à 14,3 %. Un coach régulier et irréprochable sur la forme remonte donc
+ * face à un meilleur pédagogue. C'est une décision de management, pas un effet de bord.
+ *
+ * `respect_programme` ne figure ni ici ni ailleurs : retiré du produit le même jour.
+ */
 export const CRITERES_NOTES = [
-  { cle: "preparation",           poids: 5,  libelle: "Lesson preparation & Planning" },
-  { cle: "pedagogie",             poids: 20, libelle: "Teaching Methodology" },
-  { cle: "expression_engagement", poids: 20, libelle: "Speaking & Learner Engagement" },
-  { cle: "gestion_classe",        poids: 15, libelle: "Classroom Management" },
-  { cle: "feedback_correction",   poids: 10, libelle: "Feedback & Error Correction" },
+  { cle: "preparation",           poids: 5, libelle: "Class Organization" },
+  { cle: "pedagogie",             poids: 5, libelle: "Teaching Methodology" },
+  { cle: "expression_engagement", poids: 5, libelle: "Speaking & Learner Engagement" },
+  { cle: "gestion_classe",        poids: 5, libelle: "Classroom Management" },
+  { cle: "feedback_correction",   poids: 5, libelle: "Feedback & Error Correction" },
+  { cle: "ponctualite",           poids: 5, libelle: "Punctuality" },
+  { cle: "professionnalisme",     poids: 5, libelle: "Professionalism (Behaviour, Hw, sheet, Meet; administrative compliance)" },
 ];
 
-export const BAREME_TOTAL = CRITERES_NOTES.reduce((s, c) => s + c.poids, 0);   // 70
+export const BAREME_TOTAL = CRITERES_NOTES.reduce((s, c) => s + c.poids, 0);   // 35
 
 /** Une note saisie, ou `null`. Le formulaire envoie 0 pour « non noté ». */
 const noteValide = (v) => {
@@ -46,10 +61,10 @@ const noteValide = (v) => {
 };
 
 /**
- * Le total sur 70, et le barème réellement applicable.
+ * Le total sur 35, et le barème réellement applicable.
  *
  * Un critère non noté est exclu AVEC SON POIDS : un rapport où seules Pédagogie et
- * Feedback sont remplies se calcule sur 30, pas sur 70. Le compter sur 70 rendrait tout
+ * Feedback sont remplies se calcule sur 10, pas sur 35. Le compter sur 70 rendrait tout
  * rapport partiel catastrophique, ce qui punirait l'observateur pressé plutôt que le coach.
  */
 export function totalObservation(rapport = {}) {

@@ -3696,7 +3696,6 @@ export default function SuperviseurDashboard() {
           ponctualite:            { label:"Ponctualité",            icon:"⏰" },
           qualite_pedagogique:    { label:"Qualité pédagogique",    icon:"📚" },
           satisfaction_apprenants:{ label:"Satisfaction apprenants",icon:"😊" },
-          respect_programme:      { label:"Respect du programme",   icon:"📋" },
           communication:          { label:"Communication",          icon:"💬" },
         };
         // Les observations retenues par le filtre de dates. Bornes INCLUSES des deux côtés :

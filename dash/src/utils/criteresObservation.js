@@ -21,14 +21,15 @@ export const CRITERES_OBSERVATION = [
 /**
  * Critères qui ne sont plus saisis mais que portent les rapports antérieurs.
  *
- * `respect_programme` posait une AUTRE question que `professionnalisme` - « a-t-il suivi
- * le programme ? » n'est pas « est-il professionnel ? ». Réutiliser la colonne aurait fait
- * relire les notes déjà données comme des notes de professionnalisme, ce qu'elles ne sont
- * pas. Elles restent donc affichées sous leur vrai nom, et signalées comme héritées.
+ * `respect_programme` y figurait jusqu'au 27/09/2026 : il n'était plus saisi ni compté
+ * dans la note, mais restait affiché sur les anciens rapports sous son vrai nom. La
+ * direction a demandé son retrait complet des écrans.
+ *
+ * LES NOTES RESTENT EN BASE, dans la colonne du même nom - rien n'a été supprimé. Elles ne
+ * sont simplement plus lisibles nulle part. Si ce critère devait réapparaître un jour, il
+ * suffirait de le remettre dans cette liste : les données l'attendent.
  */
-export const CRITERES_HERITES = [
-  { cle: "respect_programme", label: "Respect du programme", icon: "📋", herite: true },
-];
+export const CRITERES_HERITES = [];
 
 /** Tout ce qu'un écran de LECTURE doit savoir afficher : l'actuel et l'hérité. */
 export const CRITERES_LECTURE = [...CRITERES_OBSERVATION, ...CRITERES_HERITES];

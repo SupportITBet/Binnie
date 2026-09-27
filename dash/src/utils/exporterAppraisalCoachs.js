@@ -46,14 +46,29 @@ const PASTILLE_SYNTHESE = {
   a_accompagner: { t: 'Needs improvement',        c: ROUGE },
 };
 
-/** Les cinq critères chiffrés, avec le barème de la feuille. */
+/**
+ * Les SEPT critères chiffrés, chacun sur 5 - barème révisé le 27/09/2026.
+ *
+ * L'ancienne feuille pondérait cinq critères sur 70 (5/20/20/15/10). Ponctualité et
+ * Professionnalisme n'y figuraient pas : ils étaient consignés comme appréciations, hors
+ * note. Ils comptent désormais, au même poids que la pédagogie.
+ *
+ * L'ORDRE EST CELUI DE LA FEUILLE OFFICIELLE et doit le rester : c'est un document que
+ * vos équipes lisent en diagonale, colonne après colonne, et qu'elles comparent d'un mois
+ * à l'autre. Une ligne déplacée fait relire un critère pour un autre.
+ */
 const CRITERES_CHIFFRES = [
-  { cle: 'preparation',           libelle: 'Lesson preparation & Planning /5',  bareme: 5  },
-  { cle: 'pedagogie',             libelle: 'Teaching Methodology /20',          bareme: 20 },
-  { cle: 'expression_engagement', libelle: 'Speaking & Learner Engagement /20', bareme: 20 },
-  { cle: 'gestion_classe',        libelle: 'Classroom Management /15',          bareme: 15 },
-  { cle: 'feedback_correction',   libelle: 'Feedback & Error Correction /10',   bareme: 10 },
+  { cle: 'preparation',           libelle: 'Class Organization /5',             bareme: 5 },
+  { cle: 'pedagogie',             libelle: 'Teaching Methodology /5',           bareme: 5 },
+  { cle: 'expression_engagement', libelle: 'Speaking & Learner Engagement /5',  bareme: 5 },
+  { cle: 'gestion_classe',        libelle: 'Classroom Management /5',           bareme: 5 },
+  { cle: 'feedback_correction',   libelle: 'Feedback & Error Correction /5',    bareme: 5 },
+  { cle: 'ponctualite',           libelle: 'Punctuality /5',                    bareme: 5 },
+  { cle: 'professionnalisme',     libelle: 'Professionalism (Behaviour, Hw, sheet, Meet; administrative compliance) /5', bareme: 5 },
 ];
+
+/** Le barème complet de la feuille : sept critères sur 5. */
+const BAREME_FEUILLE = CRITERES_CHIFFRES.reduce((s, c) => s + c.bareme, 0);   // 35
 
 /** Une note sur 5 ramenée au barème de la feuille. `null` si le critère n'a pas été renseigné. */
 function surBareme(note, bareme) {
@@ -191,7 +206,7 @@ export async function exporterAppraisalCoachs({ rapports = [], nomFichier = 'app
       // Total - absent de la feuille d'origine, et c'est justement ce qui empêchait d'y voir
       // une progression : deux observations pouvaient donner le même total sans que personne
       // ne le remarque.
-      ws.getCell(ligne, 2).value = 'TOTAL /70';
+      ws.getCell(ligne, 2).value = 'TOTAL /35';
       ws.getCell(ligne, 2).font = { bold: true, size: 11 };
       const totaux = colonnes.map(r => {
         // Le barème RÉELLEMENT applicable : un critère non noté est écarté avec son poids,
@@ -207,7 +222,10 @@ export async function exporterAppraisalCoachs({ rapports = [], nomFichier = 'app
       });
       totaux.forEach((t, i) => {
         const cell = ws.getCell(ligne, 3 + i);
-        if (t.points > 0) cell.value = t.bareme === 70 ? t.points : `${t.points} / ${t.bareme}`;
+        /* « 18 » quand les sept critères sont notés, « 12 / 25 » sinon : sans cette
+           mention, un rapport partiel afficherait un total qui paraîtrait catastrophique
+           alors qu'il est simplement incomplet. */
+        if (t.points > 0) cell.value = t.bareme === BAREME_FEUILLE ? t.points : `${t.points} / ${t.bareme}`;
         cell.font = { bold: true };
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
         cell.border = { top: { style: 'thin', color: { argb: 'FF94A3B8' } } };
@@ -215,9 +233,9 @@ export async function exporterAppraisalCoachs({ rapports = [], nomFichier = 'app
       ligne++;
 
       /* LA NOTE SUR 5, DÉRIVÉE DU TOTAL CI-DESSUS - et non relue depuis la base.
-         Les deux chiffres vivaient séparément : la feuille montrait un total /70 sur cinq
-         critères, le tableau de bord une moyenne sur neuf, et le classement s'inversait de
-         l'un à l'autre. Calculée ici depuis le total, la note ne PEUT plus le contredire. */
+         Les deux chiffres ont vécu séparément : la feuille montrait un total pondéré, le
+         tableau de bord une moyenne, et le classement s'inversait de l'un à l'autre.
+         Calculée ici depuis le total, la note ne PEUT plus le contredire. */
       ws.getCell(ligne, 2).value = 'Note globale /5';
       ws.getCell(ligne, 2).font = { bold: true, size: 11 };
       totaux.forEach((t, i) => {

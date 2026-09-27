@@ -7747,7 +7747,6 @@ export default function OnboardingDashboard() {
                           preparation:       { label:"Préparation",          icon:"📝" },
                           pedagogie:         { label:"Pédagogie",            icon:"🎓" },
                           gestion_classe:    { label:"Gestion de classe",    icon:"🧑‍🏫" },
-                          respect_programme: { label:"Respect du programme", icon:"📋" },
                         };
                         const nc2  = n => !n ? "#9ca3af" : n >= 4.5 ? "#16a34a" : n >= 3.5 ? "#0891b2" : n >= 2.5 ? "#f59e0b" : "#ef4444";
                         const nbg2 = n => !n ? "#f3f4f6" : n >= 4.5 ? "#dcfce7" : n >= 3.5 ? "#e0f2fe" : n >= 2.5 ? "#fef3c7" : "#fee2e2";
