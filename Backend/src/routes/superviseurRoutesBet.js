@@ -417,7 +417,7 @@ router.post("/rapports-deputy", authenticateAdmin, requireSuperviseurRole, requi
                  + (data.note_globale ? ` - note ${data.note_globale}/5` : "")
                  + (data.synthese === "a_accompagner" ? " ⚠️ à accompagner" : "")
                  + ".",
-          source:  "superviseur",
+          source:  "bet-elearning",
           meta:    { rapport_id: data.id, coach_id, deputy_id: req.profil?.id, synthese: data.synthese || null },
           lu:      false,
         })));
@@ -528,7 +528,7 @@ router.patch("/rapports-deputy/:id", authenticateAdmin, requireGlobalSuperviseur
             // que le deputy reçoit sur son travail, il ne doit pas rester dans un écran
             // qu'il faut penser à ouvrir.
             message: n.message + (commentaire_superviseur ? ` - « ${commentaire_superviseur} »` : ""),
-            source:  "superviseur",
+            source:  "bet-elearning",
             meta:    { rapport_id: id, statut, coach_id: data.coach?.id || null },
             lu:      false,
           });
@@ -628,7 +628,7 @@ router.post("/eligibilite/soumettre-pa", authenticateAdmin, requireGlobalSupervi
       type:            "eligibilite_paiement",
       titre:           `Liste d'éligibilité - ${periode}`,
       message:         `Le Superviseur Général a soumis la liste de ${coach_ids.length} coachs éligibles au paiement pour la période ${periode}.`,
-      source:          "superviseur",
+      source:          "bet-elearning",
       meta:            { periode, coach_ids, soumis_par: req.profil.id, soumis_le: new Date().toISOString() },
       lu:              false,
     }));
@@ -714,7 +714,7 @@ router.post("/anomalies", authenticateAdmin, requireSuperviseurRole, requirePerm
         type:            "anomalie_coach",
         titre:           `Anomalie signalée - ${type_anomalie}`,
         message:         description,
-        source:          "superviseur",
+        source:          "bet-elearning",
         meta:            { anomalie_id: data.id, coach_id, gravite },
         lu:              false,
       })));
@@ -822,7 +822,7 @@ router.post("/deputies/:id/missions", authenticateAdmin, requireGlobalSuperviseu
       type:            "nouvelle_mission",
       titre:           `Nouvelle mission : ${titre}`,
       message:         description || `Type : ${type_mission}`,
-      source:          "superviseur",
+      source:          "bet-elearning",
       meta:            { mission_id: data.id },
       lu:              false,
     }).catch(() => {});

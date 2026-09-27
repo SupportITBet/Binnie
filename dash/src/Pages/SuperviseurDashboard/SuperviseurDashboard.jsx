@@ -35,6 +35,8 @@ import BadgeCategorieCoach from "../../Components/BadgeCategorieCoach";
 import ContenuElearningDetail from "../../Components/ContenuElearningDetail";
 import PlanningClasse, { SESSION_CLOSE, RAISON_CLOSE } from "../../Components/PlanningClasse";
 import { estClassePrivee } from "../../utils/classePrivee";
+import { FiltrePeriode, BarrePagination, paginer, dansLaPeriode } from "../../Components/FiltrePeriode";
+import { urlDocument } from "../../utils/urlDocument";
 import { CRITERES_OBSERVATION, CRITERES_LECTURE, LIBELLES_CRITERES,
          TYPES_OBSERVATION, TYPES_LECON, ETATS_INTERNET,
          libelleLecon, libelleObservation, libelleInternet } from "../../utils/criteresObservation";
@@ -338,6 +340,9 @@ export default function SuperviseurDashboard() {
   const [groupeSeancesLoading, setGroupeSeancesLoading] = useState(false);
   const [groupePresences,   setGroupePresences]   = useState([]);
   const [groupePresencesLoading, setGroupePresencesLoading] = useState(false);
+  // Filtres de période et pagination des onglets Présences et Fichiers du détail de classe.
+  const [presDu, setPresDu] = useState(""); const [presAu, setPresAu] = useState(""); const [presPage, setPresPage] = useState(1);
+  const [fichDu, setFichDu] = useState(""); const [fichAu, setFichAu] = useState(""); const [fichPage, setFichPage] = useState(1);
   const [groupeSubTab,      setGroupeSubTab]      = useState("apprenants");
   // ─ États deputy spécifiques
   const [classes,       setClasses]       = useState([]);
@@ -534,6 +539,10 @@ export default function SuperviseurDashboard() {
     setGroupeSubTab("infos");
     setGroupeDetail({ apprenants:[], fichiers:[] });
     setGroupeSeances([]); setGroupePresences([]);
+    // Les filtres appartiennent à la classe consultée : les laisser en place ferait
+    // ouvrir la classe suivante sur une période choisie pour la précédente.
+    setPresDu(""); setPresAu(""); setPresPage(1);
+    setFichDu(""); setFichAu(""); setFichPage(1);
     setGroupeDetailLoading(true);
     try {
       const r = await fetch(`${API_URL}/api/groupes/${groupe.id}`, { headers: authHdrs() });
@@ -3592,10 +3601,25 @@ export default function SuperviseurDashboard() {
                                 excuse:{ l:"Excusé", c:"#1d4ed8", bg:"#dbeafe" },  absent:{ l:"Absent", c:"#b91c1c", bg:"#fee2e2" } };
                   const parDate = {};
                   groupePresences.forEach(p => { (parDate[p.date_seance] ||= []).push(p); });
-                  const dates = Object.keys(parDate).sort().reverse();
+                  // On pagine des FEUILLES D'APPEL, pas des lignes : couper au milieu d'une
+                  // séance donnerait un taux de présence calculé sur une demi-classe.
+                  const toutesDates = Object.keys(parDate).sort().reverse();
+                  const datesFiltrees = toutesDates.filter(d => dansLaPeriode(d, presDu, presAu));
+                  const pg = paginer(datesFiltrees, presPage, 10);
                   return (
+                    <div>
+                      <FiltrePeriode du={presDu} au={presAu}
+                        onChange={(d,a)=>{ setPresDu(d); setPresAu(a); setPresPage(1); }}
+                        accent={BET_COLOR} total={toutesDates.length} affiches={datesFiltrees.length} labelItem="feuille" />
+
+                      {datesFiltrees.length === 0 ? (
+                        <div style={{ textAlign:"center", padding:"30px 20px", background:"#fff7ed", borderRadius:10, border:"1px dashed #fed7aa", fontSize:12.5, color:"#9a3412" }}>
+                          <div style={{ fontSize:30, marginBottom:8 }}>📊</div>
+                          Aucune feuille de présence sur cette période. Les {toutesDates.length} feuilles de la classe sont en dehors des dates choisies.
+                        </div>
+                      ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                      {dates.map(d => {
+                      {pg.items.map(d => {
                         const liste = parDate[d];
                         const presents = liste.filter(p => p.statut === "present" || p.statut === "retard").length;
                         const taux = Math.round(presents / liste.length * 100);
@@ -3624,6 +3648,9 @@ export default function SuperviseurDashboard() {
                         );
                       })}
                     </div>
+                      )}
+                      <BarrePagination page={pg.page} totalPages={pg.totalPages} onPage={setPresPage} accent={BET_COLOR} />
+                    </div>
                   );
                 })()
               )}
@@ -3639,9 +3666,23 @@ export default function SuperviseurDashboard() {
                     <div style={{ fontWeight:600 }}>Aucun fichier partagé</div>
                     <div style={{ fontSize:12, marginTop:4 }}>Rien n'a été déposé dans cette classe.</div>
                   </div>
-                ) : (
+                ) : (() => {
+                  const filtres = groupeDetail.fichiers.filter(f => dansLaPeriode(f.created_at, fichDu, fichAu));
+                  const pg = paginer(filtres, fichPage, 10);
+                  return (
+                  <div>
+                    <FiltrePeriode du={fichDu} au={fichAu}
+                      onChange={(d,a)=>{ setFichDu(d); setFichAu(a); setFichPage(1); }}
+                      accent={BET_COLOR} total={groupeDetail.fichiers.length} affiches={filtres.length} labelItem="fichier" />
+
+                    {filtres.length === 0 ? (
+                      <div style={{ textAlign:"center", padding:"30px 20px", background:"#fff7ed", borderRadius:10, border:"1px dashed #fed7aa", fontSize:12.5, color:"#9a3412" }}>
+                        <div style={{ fontSize:30, marginBottom:8 }}>📂</div>
+                        Aucun fichier déposé sur cette période. Les {groupeDetail.fichiers.length} fichiers de la classe sont en dehors des dates choisies.
+                      </div>
+                    ) : (
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {groupeDetail.fichiers.map((f, i) => (
+                    {pg.items.map((f, i) => (
                       <div key={f.id||i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#fff", border:"1px solid #e2e8f0", borderRadius:10, flexWrap:"wrap" }}>
                         <span style={{ fontSize:18 }}>📄</span>
                         <div style={{ minWidth:0, flex:1 }}>
@@ -3654,14 +3695,26 @@ export default function SuperviseurDashboard() {
                             ].filter(Boolean).join(" · ")}
                           </div>
                         </div>
+                        {/* JAMAIS l'URL Cloudinary en direct : le compte refuse la livraison
+                            publique des PDF et des ZIP (401 Unauthorized), et c'est ce que
+                            voyaient superviseurs et deputies en cliquant. Le relais du backend
+                            signe la requête. Voir utils/urlDocument.js. */}
                         {f.url && (
-                          <a href={f.url} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize:11.5, fontWeight:700, color:"#1d4ed8", textDecoration:"none", whiteSpace:"nowrap" }}>Ouvrir ↗</a>
+                          <div style={{ display:"flex", gap:10, whiteSpace:"nowrap" }}>
+                            <a href={urlDocument(f.url, { nom: f.nom, inline: true })} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize:11.5, fontWeight:700, color:"#1d4ed8", textDecoration:"none" }}>Ouvrir ↗</a>
+                            <a href={urlDocument(f.url, { nom: f.nom })}
+                              style={{ fontSize:11.5, fontWeight:700, color:"#64748b", textDecoration:"none" }}>Télécharger ⬇</a>
+                          </div>
                         )}
                       </div>
                     ))}
                   </div>
-                )
+                    )}
+                    <BarrePagination page={pg.page} totalPages={pg.totalPages} onPage={setFichPage} accent={BET_COLOR} />
+                  </div>
+                  );
+                })()
               )}
 
               {/* ─ Apprenants ─ */}
