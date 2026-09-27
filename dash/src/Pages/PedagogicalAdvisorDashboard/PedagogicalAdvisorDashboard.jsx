@@ -10805,6 +10805,7 @@ export default function PedagogicalAdvisorDashboard() {
                                     background:"#dbeafe", color:"#1e40af" }}>
                                     {[m.prenom, m.nom].filter(Boolean).join(" ")}
                                     {m.lien ? ` · ${m.lien}` : ""}{m.niveau ? ` · ${m.niveau}` : ""}
+                                    {(m.telephone || m.email) ? ` · ${m.telephone || m.email}` : ""}
                                   </span>
                                 ))}
                               </div>

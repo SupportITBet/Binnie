@@ -15808,7 +15808,7 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                   )}
                 </label>
                 <button type="button"
-                  onClick={() => setCpForm(p => ({ ...p, membres_foyer: [...p.membres_foyer, { prenom:"", nom:"", lien:"", niveau:"" }] }))}
+                  onClick={() => setCpForm(p => ({ ...p, membres_foyer: [...p.membres_foyer, { prenom:"", nom:"", telephone:"", email:"", lien:"", niveau:"" }] }))}
                   style={{ padding:"5px 12px", borderRadius:8, border:"1.5px solid #c4b5fd", background:"#fff",
                     color:"#6d28d9", fontWeight:700, fontSize:11.5, cursor:"pointer", flexShrink:0 }}>
                   + Ajouter une personne
@@ -15823,48 +15823,61 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                 </p>
               ) : (
                 <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
-                  {cpForm.membres_foyer.map((m, i) => (
-                    <div key={i} style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-                      {[
-                        { cle:"prenom", ph:"Prénom *", largeur:"1 1 120px" },
-                        { cle:"nom",    ph:"Nom",      largeur:"1 1 120px" },
-                      ].map(({ cle, ph, largeur }) => (
-                        <input key={cle} type="text" placeholder={ph} value={m[cle] || ""}
-                          onChange={e => setCpForm(p => ({ ...p,
-                            membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, [cle]: e.target.value } : x) }))}
-                          style={{ flex:largeur, minWidth:0, padding:"6px 9px", borderRadius:7,
-                            border:"1px solid #c4b5fd", fontSize:11.5, outline:"none" }} />
-                      ))}
-                      {/* LE LIEN PLUTÔT QUE L'ÂGE. Demander son âge au conjoint d'un client
-                          est inutile et intrusif, et donnait au formulaire l'allure d'une fiche
-                          scolaire. Ce que le PA et le coach ont besoin de savoir, c'est QUI ils
-                          auront en face : un conjoint et un enfant ne se coachent pas pareil.
-                          « Enfant » porte l'information d'âge utile sans avoir à la demander. */}
-                      <select value={m.lien || ""}
-                        onChange={e => setCpForm(p => ({ ...p,
-                          membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, lien: e.target.value } : x) }))}
-                        style={{ flex:"0 0 112px", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
-                          fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
-                        <option value="">Lien</option>
-                        {["Conjoint(e)","Enfant","Parent","Autre"].map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                      <select value={m.niveau || ""}
-                        onChange={e => setCpForm(p => ({ ...p,
-                          membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, niveau: e.target.value } : x) }))}
-                        style={{ flex:"0 0 92px", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
-                          fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
-                        <option value="">Niveau</option>
-                        {["A1","A2","B1","B2","C1","C2"].map(n => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                      <button type="button"
-                        onClick={() => setCpForm(p => ({ ...p, membres_foyer: p.membres_foyer.filter((_, j) => j !== i) }))}
-                        title="Retirer cette personne"
-                        style={{ background:"none", border:"none", color:"#ef4444", cursor:"pointer",
-                          fontSize:14, lineHeight:1, padding:"0 2px", flexShrink:0 }}>×</button>
-                    </div>
-                  ))}
+                  {cpForm.membres_foyer.map((m, i) => {
+                    /* UNE FICHE PAR PERSONNE, pas une ligne. Ces personnes deviendront des
+                       apprenants à part entière : elles auront un espace personnel, des
+                       présences, des ressources. Il leur faut donc de quoi créer un accès -
+                       un e-mail ou un téléphone - au même titre que le payeur.
+                       Sans coordonnées, l'Onboarding ne peut pas leur ouvrir de compte et
+                       devrait rappeler le client pour les réclamer. */
+                    const majMembre = (cle, val) => setCpForm(p => ({ ...p,
+                      membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, [cle]: val } : x) }));
+                    const champ = (cle, ph, type = "text") => (
+                      <input type={type} placeholder={ph} value={m[cle] || ""}
+                        onChange={e => majMembre(cle, e.target.value)}
+                        style={{ width:"100%", padding:"6px 9px", borderRadius:7,
+                          border:"1px solid #c4b5fd", fontSize:11.5, outline:"none" }} />
+                    );
+                    return (
+                      <div key={i} style={{ border:"1px solid #ddd6fe", borderRadius:9, padding:"9px 10px", background:"#fff" }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:7 }}>
+                          <span style={{ fontSize:10, fontWeight:800, color:"#6d28d9", letterSpacing:".04em" }}>
+                            PERSONNE {i + 1}
+                          </span>
+                          <button type="button"
+                            onClick={() => setCpForm(p => ({ ...p, membres_foyer: p.membres_foyer.filter((_, j) => j !== i) }))}
+                            title="Retirer cette personne"
+                            style={{ background:"none", border:"none", color:"#ef4444", cursor:"pointer",
+                              fontSize:14, lineHeight:1, padding:"0 2px" }}>×</button>
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
+                          {champ("prenom", "Prénom *")}
+                          {champ("nom", "Nom")}
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
+                          {champ("telephone", "Téléphone", "tel")}
+                          {champ("email", "Email", "email")}
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                          <select value={m.lien || ""} onChange={e => majMembre("lien", e.target.value)}
+                            style={{ width:"100%", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
+                              fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
+                            <option value="">Lien avec le client</option>
+                            {["Conjoint(e)","Enfant","Parent","Frère / Sœur","Autre"].map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                          <select value={m.niveau || ""} onChange={e => majMembre("niveau", e.target.value)}
+                            style={{ width:"100%", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
+                              fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
+                            <option value="">Niveau CECRL</option>
+                            {["A1","A2","B1","B2","C1","C2"].map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })}
                   <p style={{ fontSize:10, color:"#94a3b8", margin:"2px 0 0", lineHeight:1.5 }}>
-                    Le prénom suffit pour enregistrer une personne. La classe sera créée pour{" "}
+                    Le prénom suffit pour enregistrer une personne, mais un e-mail ou un téléphone
+                    est nécessaire pour lui ouvrir un espace apprenant. La classe sera créée pour{" "}
                     {(() => {
                       const n = 1 + cpForm.membres_foyer.filter(m => (m.prenom||"").trim() || (m.nom||"").trim()).length;
                       return <strong style={{ color:"#6d28d9" }}>{n} apprenant{n > 1 ? "s" : ""}</strong>;
