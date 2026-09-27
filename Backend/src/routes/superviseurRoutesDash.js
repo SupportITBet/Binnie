@@ -296,6 +296,35 @@ router.post("/rapports-deputy", authenticateAdmin, requireSuperviseurRole, async
       return res.status(400).json({ error: "coach_id et date_observation sont requis" });
     }
 
+    /* LES SEPT CRITÈRES NOTÉS SONT OBLIGATOIRES.
+       Un critère vide est écarté AVEC SON POIDS par le barème : le rapport se calcule alors
+       sur 30 au lieu de 35, et sa note cesse d'être comparable à celle des autres coachs.
+       C'est arrivé sur quatre rapports de septembre 2026, où le professionnalisme n'avait
+       pas été saisi - leur coach s'est retrouvé noté sur une échelle qui n'était pas celle
+       de ses collègues, sans que personne ne le voie.
+       La règle est posée ICI et non seulement dans l'écran : un formulaire se contourne,
+       une route non. */
+    const REQUIS = {
+      preparation:           "Organisation du cours",
+      pedagogie:             "Pédagogie",
+      expression_engagement: "Expression & engagement",
+      gestion_classe:        "Gestion de classe",
+      feedback_correction:   "Feedback & correction",
+      ponctualite:           "Ponctualité",
+      professionnalisme:     "Professionnalisme",
+    };
+    const valeurs = { preparation, pedagogie, expression_engagement, gestion_classe,
+                      feedback_correction, ponctualite, professionnalisme };
+    const absents = Object.entries(REQUIS)
+      .filter(([cle]) => !(parseFloat(valeurs[cle]) > 0))
+      .map(([, libelle]) => libelle);
+    if (absents.length) {
+      return res.status(400).json({
+        error: `Critère(s) non noté(s) : ${absents.join(", ")}. Les sept critères sont requis pour que la note soit calculée sur 35.`,
+        criteres_manquants: absents,
+      });
+    }
+
     // 0 = "non noté" côté formulaire - la contrainte de la table interdit 0 sur ces
     // colonnes (note attendue entre 1 et 5), donc on normalise en null comme le fait
     // déjà le calcul de note_globale ci-dessous.

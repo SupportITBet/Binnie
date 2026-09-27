@@ -167,6 +167,23 @@ const EtoileRating = ({ value, onChange }) => (
   </div>
 );
 
+/* Valeurs de départ du formulaire de correction : celles du deputy, jamais des cases vides.
+   Le superviseur corrige une erreur ponctuelle, il ne ressaisit pas le rapport.
+   Fonction partagée par les deux points d'entrée (carte et modal) pour qu'ils ne divergent pas. */
+const formCorrectionDepuis = (r) => ({
+  ponctualite:           r.ponctualite ?? "",
+  preparation:           r.preparation ?? "",
+  pedagogie:             r.pedagogie ?? "",
+  gestion_classe:        r.gestion_classe ?? "",
+  professionnalisme:     r.professionnalisme ?? "",
+  interactivite_classe:  r.interactivite_classe ?? "",
+  approche_grammaticale: r.approche_grammaticale ?? "",
+  expression_engagement: r.expression_engagement ?? "",
+  feedback_correction:   r.feedback_correction ?? "",
+  observations:          r.observations || "",
+  recommandations:       r.recommandations || "",
+});
+
 /* ══════════════════════════════════════════════════════════
    COMPOSANT PRINCIPAL
 ══════════════════════════════════════════════════════════ */
@@ -822,6 +839,32 @@ export default function SuperviseurDashboard() {
   const soumettrRapport = async () => {
     if (rapportSaving) return;
     if (!rapportForm.coach_id || !rapportForm.date_observation) { toast.error("Coach et date requis"); return; }
+
+    /* LES SEPT CRITÈRES SONT OBLIGATOIRES, et c'est le barème qui l'impose.
+       Un critère laissé vide est écarté AVEC SON POIDS : le rapport se calcule alors sur 30
+       au lieu de 35, et sa note cesse d'être comparable à celle des autres. Quatre rapports
+       de septembre 2026 sont dans ce cas - le professionnalisme n'y avait pas été saisi -
+       et leur coach apparaît sur une échelle qui n'est pas celle de ses collègues.
+       Mieux vaut refuser un rapport incomplet que le laisser fausser un classement. */
+    const CRITERES_REQUIS = [
+      ["preparation",           "Organisation du cours"],
+      ["pedagogie",             "Pédagogie"],
+      ["expression_engagement", "Expression & engagement"],
+      ["gestion_classe",        "Gestion de classe"],
+      ["feedback_correction",   "Feedback & correction"],
+      ["ponctualite",           "Ponctualité"],
+      ["professionnalisme",     "Professionnalisme"],
+    ];
+    const manquants = CRITERES_REQUIS.filter(([cle]) => !(Number(rapportForm[cle]) > 0)).map(([, l]) => l);
+    if (manquants.length) {
+      toast.error(
+        manquants.length === 1
+          ? `Critère non noté : ${manquants[0]}. Les sept critères sont requis pour que la note soit sur 35.`
+          : `${manquants.length} critères non notés : ${manquants.join(", ")}. Les sept sont requis pour que la note soit sur 35.`,
+        { duration: 7000 }
+      );
+      return;
+    }
 
     // Confirmation avant envoi : un rapport d'observation porte une appréciation nominative
     // sur une personne, il part au Superviseur Général puis au conseil pédagogique, et rien
@@ -1850,6 +1893,10 @@ export default function SuperviseurDashboard() {
                         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                           {r.statut === "soumis" && <button disabled={rapportActionLoading.has(r.id)} onClick={e=>{ e.stopPropagation(); marquerLu(r.id); }} style={{ padding:"6px 14px", background:"#e0f2fe", border:"1px solid #bae6fd", borderRadius:7, fontSize:12, color:"#0369a1", fontWeight:600, cursor:rapportActionLoading.has(r.id)?"not-allowed":"pointer" }}>👁 Marquer lu</button>}
                           {["soumis","lu"].includes(r.statut) && <button disabled={rapportActionLoading.has(r.id)||!peut("rapports","manage")} title={permBtnTitle("Transmettre au PA",peut("rapports","manage"))} onClick={e=>{ e.stopPropagation(); transmettrePA(r.id); }} style={permBtnStyle({ padding:"6px 14px", background:BET_COLOR, border:"none", borderRadius:7, fontSize:12, color:"#fff", fontWeight:600, cursor:rapportActionLoading.has(r.id)?"not-allowed":"pointer" },peut("rapports","manage"))}>{peut("rapports","manage")?"📤":"🔒"} Transmettre au PA</button>}
+                          {/* La correction se fait AVANT la transmission : une fois le rapport parti
+                              chez le conseiller pédagogique, la note a déjà crédité le coach.
+                              D'où le bouton ici, sur la carte, et non caché derrière « Commenter ». */}
+                          {["soumis","lu"].includes(r.statut) && <button disabled={rapportActionLoading.has(r.id)||!peut("rapports","manage")} title={permBtnTitle("Corriger une erreur de saisie du deputy",peut("rapports","manage"))} onClick={e=>{ e.stopPropagation(); setRapportDetail(r); setCorrectionForm(formCorrectionDepuis(r)); setMotifCorrection(""); }} style={permBtnStyle({ padding:"6px 14px", background:"#fff", border:"1.5px solid #c4b5fd", borderRadius:7, fontSize:12, color:"#6d28d9", fontWeight:600, cursor:rapportActionLoading.has(r.id)?"not-allowed":"pointer" },peut("rapports","manage"))}>{peut("rapports","manage")?"✏️":"🔒"} Corriger</button>}
                           <button onClick={e=>{ e.stopPropagation(); setRapportDetail(r); }} style={{ padding:"6px 14px", background:"#f1f5f9", border:"1px solid #e2e8f0", borderRadius:7, fontSize:12, color:"#374151", fontWeight:600, cursor:"pointer" }}>💬 Commenter</button>
                         </div>
                       )}
@@ -1903,19 +1950,7 @@ export default function SuperviseurDashboard() {
               title={rapportDetail.statut === "transmis_pa"
                 ? "Rapport déjà transmis au conseiller pédagogique - la correction n'est plus possible"
                 : "Corriger une erreur de saisie du deputy"}
-              onClick={() => setCorrectionForm({
-                ponctualite:           rapportDetail.ponctualite ?? "",
-                preparation:           rapportDetail.preparation ?? "",
-                pedagogie:             rapportDetail.pedagogie ?? "",
-                gestion_classe:        rapportDetail.gestion_classe ?? "",
-                professionnalisme:     rapportDetail.professionnalisme ?? "",
-                interactivite_classe:  rapportDetail.interactivite_classe ?? "",
-                approche_grammaticale: rapportDetail.approche_grammaticale ?? "",
-                expression_engagement: rapportDetail.expression_engagement ?? "",
-                feedback_correction:   rapportDetail.feedback_correction ?? "",
-                observations:          rapportDetail.observations || "",
-                recommandations:       rapportDetail.recommandations || "",
-              })}
+              onClick={() => setCorrectionForm(formCorrectionDepuis(rapportDetail))}
               style={{ padding:"8px 16px", background:"#fff", border:"1.5px solid #c4b5fd", borderRadius:8,
                 color:"#6d28d9", fontSize:12.5, fontWeight:700,
                 cursor: rapportDetail.statut === "transmis_pa" ? "not-allowed" : "pointer",
@@ -2016,7 +2051,7 @@ export default function SuperviseurDashboard() {
               try {
                 const v=document.getElementById("cmtSup")?.value;
                 const r=await fetch(`${API_URL}/api/superviseur/rapports-deputy/${rapportDetail.id}`,{method:"PATCH",headers:authHdrs(),body:JSON.stringify({commentaire_superviseur:v})});
-                if(r.ok){toast.success("Commentaire enregistré");setRapportDetail(null);fetchRapports();}
+                if(r.ok){toast.success("Commentaire enregistré");setRapportDetail(null);setCorrectionForm(null);setMotifCorrection("");fetchRapports();}
               } finally { setRapportActionLoading(prev => { const n = new Set(prev); n.delete(rapportDetail.id); return n; }); }
             }}
             style={{ padding:"9px 18px", background:BET_COLOR, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:600, cursor:rapportActionLoading.has(rapportDetail.id)?"wait":"pointer" }}>
@@ -2258,10 +2293,10 @@ export default function SuperviseurDashboard() {
 
           {/* Critères */}
           <div style={{ background:"#f8fafc", borderRadius:12, padding:16, marginBottom:16, border:"1px solid #e2e8f0" }}>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:12, color:"#374151" }}>📊 Critères d'évaluation (1 à 5 étoiles)</div>
+            <div style={{ fontWeight:700, fontSize:13, marginBottom:12, color:"#374151" }}>📊 Critères d'évaluation (1 à 5 étoiles) <span style={{ color:"#dc2626" }}>*</span><div style={{ fontSize:11, fontWeight:500, color:"#64748b", marginTop:3 }}>Les sept critères sont requis : un critère laissé vide calculerait la note sur 30 au lieu de 35, et elle cesserait d'être comparable à celle des autres coachs.</div></div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {CRITERES_OBSERVATION.map(c=>(
-                <div key={c.cle} style={{ display:"flex", alignItems:"center", gap:10, background:"#fff", borderRadius:8, padding:"10px 12px", border:"1px solid #e5e7eb" }}>
+                <div key={c.cle} style={{ display:"flex", alignItems:"center", gap:10, background:"#fff", borderRadius:8, padding:"10px 12px", border:`1px solid ${(Number(rapportForm[c.cle]) > 0) ? "#e2e8f0" : "#fca5a5"}`, background: (Number(rapportForm[c.cle]) > 0) ? "#fff" : "#fffbfb" }}>
                   <div style={{ fontSize:12, color:"#475569", fontWeight:600, minWidth:160 }}>{c.icon} {c.label}</div>
                   <EtoileRating value={rapportForm[c.cle]||0} onChange={v=>setRapportForm(p=>({...p,[c.cle]:v}))} />
                   <span style={{ fontSize:11, color:"#94a3b8", marginLeft:"auto" }}>{rapportForm[c.cle]||0}/5</span>
