@@ -33,6 +33,8 @@ import { exporterClassementCoachs } from "../../utils/exporterClassementCoachs";
 import EvaluationsParents from "../../Components/EvaluationsParents";
 import BadgeCategorieCoach from "../../Components/BadgeCategorieCoach";
 import ContenuElearningDetail from "../../Components/ContenuElearningDetail";
+import PlanningClasse, { SESSION_CLOSE, RAISON_CLOSE } from "../../Components/PlanningClasse";
+import { estClassePrivee } from "../../utils/classePrivee";
 import { CRITERES_OBSERVATION, CRITERES_LECTURE, LIBELLES_CRITERES,
          TYPES_OBSERVATION, TYPES_LECON, ETATS_INTERNET,
          libelleLecon, libelleObservation, libelleInternet } from "../../utils/criteresObservation";
@@ -59,10 +61,9 @@ const STATUT_SEANCE_SUP = {
   en_cours:  { lib:"En cours",  bg:"#FEF3C7", c:"#92400E" },
 };
 
-const SESSION_CLOSE = (statut) => ["realisee", "terminee", "annulee"].includes(statut);
-const RAISON_CLOSE  = (statut) => statut === "annulee"
-  ? "Séance annulée - aucune salle à rejoindre"
-  : "Séance terminée - la salle est fermée";
+/* SESSION_CLOSE / RAISON_CLOSE vivent désormais dans PlanningClasse, avec le seul écran
+   qui dessine une séance. Les garder ici en aurait fait deux définitions de « une séance
+   est-elle encore ouverte ? » — exactement la divergence que ce composant supprime. */
 
 // Une salle ouverte et jamais refermée reste « en_cours » indéfiniment en base : sans borne,
 // elle s'afficherait « En cours » pendant des jours et le superviseur croirait à un cours en
@@ -237,6 +238,11 @@ export default function SuperviseurDashboard() {
     { key:"dashboard",      icon:"🏠", label:"Vue d'ensemble" },
     { key:"plannings",      icon:"📅", label:"Plannings" },
     { key:"observer-cours", icon:"👁️",  label:"Observer un cours" },
+    /* Le deputy prépare son observation en lisant le cahier du coach - jours, heures et lien
+       de la classe - avant de s'y rendre. L'onglet est le même que celui du Superviseur
+       Général : lecture seule de bout en bout, le signalement d'anomalie restant réservé
+       au global (voir les gardes IS_GENERAL sur les boutons « Signaler »). */
+    { key:"cahiers",        icon:"📓", label:"Cahiers coachs" },
     { key:"rapports",       icon:"📋", label:"Mes rapports" },
     { key:"missions",       icon:"🎯", label:"Mes missions" },
     { key:"messagerie",     icon:"💬", label:"Messagerie" },
@@ -328,6 +334,10 @@ export default function SuperviseurDashboard() {
   const [selectedGroupe,    setSelectedGroupe]    = useState(null);
   const [groupeDetail,      setGroupeDetail]      = useState({ apprenants:[], fichiers:[] });
   const [groupeDetailLoading,setGroupeDetailLoading]= useState(false);
+  const [groupeSeances,     setGroupeSeances]     = useState([]);
+  const [groupeSeancesLoading, setGroupeSeancesLoading] = useState(false);
+  const [groupePresences,   setGroupePresences]   = useState([]);
+  const [groupePresencesLoading, setGroupePresencesLoading] = useState(false);
   const [groupeSubTab,      setGroupeSubTab]      = useState("apprenants");
   // ─ États deputy spécifiques
   const [classes,       setClasses]       = useState([]);
@@ -514,17 +524,41 @@ export default function SuperviseurDashboard() {
     finally { setCoachCoursLoading(false); }
   };
 
+  /* Détail d'une classe, ouvert depuis le Cahier coachs (coach → Classes → une classe).
+     `/api/groupes/:id` renvoie la classe ENRICHIE - coach (nom, email, téléphone), centre
+     (nom, ville, adresse) et toutes les colonnes, dont l'horaire hebdomadaire. Cet écran
+     n'en gardait que les apprenants et les fichiers, et se rabattait sur la ligne du
+     tableau pour l'onglet Infos : d'où huit champs figés là où l'API en offrait vingt. */
   const openGroupeDetail = async (groupe) => {
     setSelectedGroupe(groupe);
-    setGroupeSubTab("apprenants");
+    setGroupeSubTab("infos");
     setGroupeDetail({ apprenants:[], fichiers:[] });
+    setGroupeSeances([]); setGroupePresences([]);
     setGroupeDetailLoading(true);
     try {
       const r = await fetch(`${API_URL}/api/groupes/${groupe.id}`, { headers: authHdrs() });
       const d = await r.json();
       setGroupeDetail({ apprenants: d.apprenants || [], fichiers: d.fichiers || [] });
+      // La ligne du tableau reste la base : elle porte nb_apprenants, que le détail ne calcule pas.
+      if (d.groupe) setSelectedGroupe(g => (g && g.id === groupe.id) ? { ...g, ...d.groupe } : g);
     } catch {}
     finally { setGroupeDetailLoading(false); }
+
+    // Séances et présences en parallèle : deux onglets distincts, aucune raison
+    // d'attendre l'un pour afficher l'autre.
+    setGroupeSeancesLoading(true);
+    fetch(`${API_URL}/api/seances?groupe_id=${groupe.id}`, { headers: authHdrs() })
+      .then(r => r.ok ? r.json() : { seances: [] })
+      .then(d => setGroupeSeances(d.seances || []))
+      .catch(() => setGroupeSeances([]))
+      .finally(() => setGroupeSeancesLoading(false));
+
+    setGroupePresencesLoading(true);
+    fetch(`${API_URL}/api/groupes/${groupe.id}/presences`, { headers: authHdrs() })
+      .then(r => r.ok ? r.json() : { presences: [] })
+      .then(d => setGroupePresences(d.presences || []))
+      .catch(() => setGroupePresences([]))
+      .finally(() => setGroupePresencesLoading(false));
   };
 
   const fetchRapports = useCallback(async () => {
@@ -3145,105 +3179,14 @@ export default function SuperviseurDashboard() {
               )
             )}
 
-            {classeModalTab === "disponibilite" && (() => {
-              const JOURS_ORDER = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
-              const horaire = Array.isArray(classeDetail.horaire) ? classeDetail.horaire : [];
-              const parseHM = (h) => { const [hh,mm] = (h||"").split(":").map(Number); return hh*60+(mm||0); };
-              const now = Date.now();
-              const sessionsTriees = [...classeSessions].sort((a,b) => (a.date_seance||"").localeCompare(b.date_seance||""));
-              // Le découpage se faisait sur la seule date : quatre séances clôturées par le
-              // coach mais programmées la semaine prochaine étaient annoncées « À venir ».
-              // Une séance close appartient au passé, quelle que soit sa date.
-              const encoreAVenir = (x) =>
-                !SESSION_CLOSE(x.statut) &&
-                x.date_seance && new Date(`${x.date_seance}T${x.heure_debut||"00:00"}`).getTime() >= now;
-              const aVenir  = sessionsTriees.filter(encoreAVenir);
-              const passees = sessionsTriees.filter(s => s.date_seance && !encoreAVenir(s)).reverse();
-              const statutCol = st => st==="realisee"||st==="terminee" ? {c:"#16a34a",bg:"#dcfce7"} : st==="annulee" ? {c:"#dc2626",bg:"#fee2e2"} : {c:"#d97706",bg:"#fef9c3"};
-              return (
-                <div>
-                  {/* Emploi du temps hebdomadaire (récurrent) */}
-                  <div style={{ marginBottom:22 }}>
-                    <div style={{ fontSize:13, fontWeight:800, color:"#0f172a", marginBottom:10 }}>🗓️ Emploi du temps hebdomadaire</div>
-                    {horaire.length === 0 ? (
-                      <div style={{ textAlign:"center", padding:20, color:"#94a3b8", background:"#f8fafc", borderRadius:10, border:"1px dashed #e2e8f0", fontSize:12 }}>
-                        Aucun créneau récurrent renseigné pour cette classe.
-                      </div>
-                    ) : (
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-                        {JOURS_ORDER.filter(j => horaire.some(h => h.jour === j)).map(jour => (
-                          <div key={jour} style={{ background:BET_LIGHT, borderRadius:10, padding:"10px 12px", border:`1px solid ${BET_COLOR}30` }}>
-                            <div style={{ fontSize:12, fontWeight:800, color:BET_COLOR, marginBottom:6 }}>{jour}</div>
-                            {horaire.filter(h => h.jour === jour).sort((a,b)=>parseHM(a.debut)-parseHM(b.debut)).map((h,i) => (
-                              <div key={i} style={{ fontSize:12, color:"#374151" }}>{h.debut} – {h.fin}</div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Séances programmées / réalisées */}
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:800, color:"#0f172a", marginBottom:10 }}>📋 Séances ({classeSessions.length})</div>
-                    {classeSessionsLoading ? (
-                      <div style={{ textAlign:"center", padding:30, color:"#94a3b8" }}>Chargement des séances…</div>
-                    ) : classeSessions.length === 0 ? (
-                      <div style={{ textAlign:"center", padding:20, color:"#94a3b8", background:"#f8fafc", borderRadius:10, border:"1px dashed #e2e8f0", fontSize:12 }}>
-                        Aucune séance programmée pour cette classe.
-                      </div>
-                    ) : (
-                      <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                        {aVenir.length > 0 && (
-                          <div>
-                            <div style={{ fontSize:11, fontWeight:700, color:"#64748b", marginBottom:6, textTransform:"uppercase" }}>À venir ({aVenir.length})</div>
-                            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                              {aVenir.map(s => { const sc = statutCol(s.statut); const estLien = s.lieu && /^https?:\/\//.test(s.lieu); return (
-                                <div key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:"#fff", border:"1px solid #e2e8f0", borderRadius:9, flexWrap:"wrap" }}>
-                                  <span style={{ fontSize:12, fontWeight:700, color:"#0f172a", minWidth:90 }}>{s.date_seance ? fmtDate(s.date_seance) : "-"}</span>
-                                  <span style={{ fontSize:12, color:"#64748b" }}>{s.heure_debut||"-"} · {s.duree_h ? `${s.duree_h}h` : "-"}</span>
-                                  {estLien && !SESSION_CLOSE(s.statut) ? (
-                                    <a href={s.lieu} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:"#1d4ed8", fontWeight:700, textDecoration:"none" }}>🎥 Rejoindre</a>
-                                  ) : estLien ? (
-                                    <span title={RAISON_CLOSE(s.statut)} style={{ fontSize:11, color:"#cbd5e1", fontWeight:700, cursor:"not-allowed" }}>🎥 Rejoindre</span>
-                                  ) : s.lieu && <span style={{ fontSize:11, color:"#94a3b8" }}>· {s.lieu}</span>}
-                                  <span style={{ marginLeft:"auto", background:sc.bg, color:sc.c, borderRadius:99, padding:"2px 9px", fontSize:10, fontWeight:700 }}>{s.statut||"planifiée"}</span>
-                                </div>
-                              );})}
-                            </div>
-                          </div>
-                        )}
-                        {passees.length > 0 && (
-                          <div>
-                            <div style={{ fontSize:11, fontWeight:700, color:"#64748b", marginBottom:6, textTransform:"uppercase" }}>Passées ({passees.length})</div>
-                            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                              {passees.map(s => { const sc = statutCol(s.statut); const estLien = s.lieu && /^https?:\/\//.test(s.lieu); const estRealisee = s.statut==="realisee"||s.statut==="terminee"; return (
-                                <div key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:"#fafafa", border:"1px solid #f1f5f9", borderRadius:9, flexWrap:"wrap" }}>
-                                  <span style={{ fontSize:12, fontWeight:700, color:"#374151", minWidth:90 }}>{s.date_seance ? fmtDate(s.date_seance) : "-"}</span>
-                                  <span style={{ fontSize:12, color:"#94a3b8" }}>{s.heure_debut||"-"} · {s.duree_h ? `${s.duree_h}h` : "-"}</span>
-                                  {estLien ? (
-                                    <a href={s.lieu} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:"#1d4ed8", fontWeight:700, textDecoration:"none" }}>🎥 Lien</a>
-                                  ) : s.lieu && <span style={{ fontSize:11, color:"#94a3b8" }}>· {s.lieu}</span>}
-                                  {estRealisee && s.nb_presences_total != null && (
-                                    <span style={{ fontSize:10, fontWeight:700, color: s.nb_presents>0 ? "#16a34a" : "#dc2626", background: s.nb_presents>0 ? "#dcfce7" : "#fee2e2", borderRadius:99, padding:"2px 9px" }}>
-                                      👥 {s.nb_presents}/{s.nb_presences_total} présent{s.nb_presents>1?"s":""}
-                                    </span>
-                                  )}
-                                  {estRealisee && s.nb_presences_total == null && (
-                                    <span style={{ fontSize:10, fontWeight:700, color:"#d97706", background:"#fef9c3", borderRadius:99, padding:"2px 9px" }}>⚠️ Présences non renseignées</span>
-                                  )}
-                                  <span style={{ marginLeft:"auto", background:sc.bg, color:sc.c, borderRadius:99, padding:"2px 9px", fontSize:10, fontWeight:700 }}>{s.statut||"-"}</span>
-                                </div>
-                              );})}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+            {classeModalTab === "disponibilite" && (
+              <PlanningClasse
+                horaire={classeDetail.horaire}
+                sessions={classeSessions}
+                loading={classeSessionsLoading}
+                accent={BET_COLOR}
+              />
+            )}
           </Modal>
         )}
       </div>
@@ -3516,12 +3459,12 @@ export default function SuperviseurDashboard() {
       {/* ════ MODAL DÉTAIL GROUPE / APPRENANTS ════ */}
       {selectedGroupe && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1100 }}
-          onClick={e=>{ if(e.target===e.currentTarget){ setSelectedGroupe(null); setGroupeDetail({ apprenants:[], fichiers:[] }); }}}>
+          onClick={e=>{ if(e.target===e.currentTarget){ setSelectedGroupe(null); setGroupeDetail({ apprenants:[], fichiers:[] }); setGroupeSeances([]); setGroupePresences([]); }}}>
           <div style={{ background:"#fff", borderRadius:16, width:"85vw", height:"85vh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
             {/* Header */}
             <div style={{ background:BET_GRADIENT, padding:"20px 24px", borderRadius:"16px 16px 0 0", flexShrink:0, position:"relative" }}>
-              <button onClick={()=>{ setSelectedGroupe(null); setGroupeDetail({ apprenants:[], fichiers:[] }); }}
+              <button onClick={()=>{ setSelectedGroupe(null); setGroupeDetail({ apprenants:[], fichiers:[] }); setGroupeSeances([]); setGroupePresences([]); }}
                 style={{ position:"absolute", top:14, right:14, background:"rgba(255,255,255,0.2)", border:"none", borderRadius:"50%", width:30, height:30, cursor:"pointer", color:"#fff", fontSize:16 }}>✕</button>
               <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)", fontWeight:600, marginBottom:4 }}>👥 Groupe de cours</div>
               <div style={{ fontSize:20, fontWeight:800, color:"#fff", marginBottom:6 }}>{selectedGroupe.nom || "-"}</div>
@@ -3537,8 +3480,11 @@ export default function SuperviseurDashboard() {
             {/* Sous-onglets */}
             <div style={{ display:"flex", borderBottom:"2px solid #e5e7eb", background:"#fafafa", flexShrink:0, overflowX:"auto" }}>
               {[
-                { id:"apprenants", label:"🎓 Apprenants" },
                 { id:"infos",      label:"📋 Infos classe" },
+                { id:"apprenants", label:`🎓 Apprenants${groupeDetail.apprenants.length ? ` (${groupeDetail.apprenants.length})` : ""}` },
+                { id:"planning",   label:`📅 Planning & séances${groupeSeances.length ? ` (${groupeSeances.length})` : ""}` },
+                { id:"presences",  label:`📊 Présences${groupePresences.length ? ` (${groupePresences.length})` : ""}` },
+                { id:"fichiers",   label:`📂 Fichiers${groupeDetail.fichiers.length ? ` (${groupeDetail.fichiers.length})` : ""}` },
               ].map(t => (
                 <button key={t.id} onClick={()=>setGroupeSubTab(t.id)}
                   style={{ padding:"12px 20px", border:"none", borderBottom:`3px solid ${groupeSubTab===t.id?BET_COLOR:"transparent"}`,
@@ -3552,22 +3498,170 @@ export default function SuperviseurDashboard() {
             {/* Contenu */}
             <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
 
-              {/* ─ Infos ─ */}
-              {groupeSubTab === "infos" && (
-                <div style={{ background:"#f8fafc", borderRadius:12, border:"1px solid #e2e8f0", padding:"16px 18px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px 20px", fontSize:13 }}>
-                  {[
-                    ["Nom",         selectedGroupe.nom||"-"],
-                    ["Niveau",      selectedGroupe.niveau||"-"],
-                    ["Filière",     selectedGroupe.filiere||"-"],
-                    ["Type",        selectedGroupe.type_cours==="en_ligne"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":"🏢 Présentiel"],
-                    ["Apprenants",  `${selectedGroupe.nb_apprenants??0} / ${selectedGroupe.capacite_max||20}`],
-                    ["Statut",      selectedGroupe.statut||"-"],
-                    ["Début",       selectedGroupe.date_debut ? fmtDate(selectedGroupe.date_debut) : "-"],
-                    ["Fin",         selectedGroupe.date_fin   ? fmtDate(selectedGroupe.date_fin)   : "-"],
-                  ].map(([l,v])=>(
-                    <div key={l}><span style={{ color:"#9ca3af", fontWeight:600 }}>{l} : </span><strong>{v}</strong></div>
-                  ))}
-                </div>
+              {/* ─ Infos ─ Trois blocs plutôt qu'une grille unique : la classe, le coach et
+                   le lieu répondent à trois questions différentes, et le superviseur qui
+                   prépare une observation cherche l'une des trois, pas les vingt champs. */}
+              {groupeSubTab === "infos" && (() => {
+                const Bloc = ({ titre, lignes }) => {
+                  const remplies = lignes.filter(([, v]) => v !== null && v !== undefined && v !== "" && v !== "-");
+                  if (!remplies.length) return null;
+                  return (
+                    <div style={{ background:"#f8fafc", borderRadius:12, border:"1px solid #e2e8f0", padding:"14px 18px", marginBottom:14 }}>
+                      <div style={{ fontSize:11, fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:".05em", marginBottom:10 }}>{titre}</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"9px 20px", fontSize:13 }}>
+                        {remplies.map(([l,v])=>(
+                          <div key={l}><span style={{ color:"#9ca3af", fontWeight:600 }}>{l} : </span><strong style={{ color:"#0f172a" }}>{v}</strong></div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                };
+                const g = selectedGroupe;
+                const creneaux = Array.isArray(g.horaire) ? g.horaire : [];
+                return (
+                  <div>
+                    <Bloc titre="La classe" lignes={[
+                      ["Nom",        g.nom||"-"],
+                      ["Code",       g.code||"-"],
+                      ["Niveau",     g.niveau||"-"],
+                      ["Filière",    g.filiere||"-"],
+                      ["Type",       g.type_cours==="en_ligne"?"💻 En ligne":g.type_cours==="domicile"?"🏠 Domicile":"🏢 Présentiel"],
+                      ["Effectif",   `${g.nb_apprenants ?? groupeDetail.apprenants.length ?? 0} / ${g.capacite_max||20}`],
+                      ["Statut",     g.statut||"-"],
+                      ["Début",      g.date_debut ? fmtDate(g.date_debut) : "-"],
+                      ["Fin",        g.date_fin   ? fmtDate(g.date_fin)   : "-"],
+                      ["Coaching privé", estClassePrivee(g) ? "Oui" : "-"],
+                    ]} />
+
+                    <Bloc titre="Le coach" lignes={[
+                      ["Nom",       g.coach_nom||"-"],
+                      ["Email",     g.coach_email||"-"],
+                      ["Téléphone", g.coach_telephone||"-"],
+                      ["Grade",     g.coach_grade||"-"],
+                    ]} />
+
+                    <Bloc titre="Le lieu" lignes={[
+                      ["Centre",  g.centre_nom||"-"],
+                      ["Ville",   g.centre_ville||"-"],
+                      ["Adresse", g.centre_adresse||"-"],
+                    ]} />
+
+                    {/* L'emploi du temps EST une info de classe - c'est ce que BET demande de
+                        voir « à l'avance ». Le détail séance par séance vit dans l'onglet Planning. */}
+                    <div style={{ background:"#f8fafc", borderRadius:12, border:"1px solid #e2e8f0", padding:"14px 18px" }}>
+                      <div style={{ fontSize:11, fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:".05em", marginBottom:10 }}>Horaires hebdomadaires</div>
+                      {creneaux.length === 0 ? (
+                        <div style={{ fontSize:12, color:"#94a3b8" }}>Aucun créneau récurrent renseigné pour cette classe.</div>
+                      ) : (
+                        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                          {creneaux.map((h,i) => (
+                            <span key={i} style={{ background:BET_LIGHT, border:`1px solid ${BET_COLOR}30`, borderRadius:99, padding:"4px 12px", fontSize:12, fontWeight:700, color:BET_COLOR }}>
+                              {h.jour} · {h.debut} – {h.fin}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ─ Planning & séances ─ même composant que l'onglet Plannings du dashboard. */}
+              {groupeSubTab === "planning" && (
+                <PlanningClasse
+                  horaire={selectedGroupe.horaire}
+                  sessions={groupeSeances}
+                  loading={groupeSeancesLoading}
+                  accent={BET_COLOR}
+                />
+              )}
+
+              {/* ─ Présences ─ La feuille d'appel telle que le coach l'a remplie, séance par
+                   séance. C'est la pièce que le superviseur vient vérifier dans un cahier. */}
+              {groupeSubTab === "presences" && (
+                groupePresencesLoading ? (
+                  <div style={{ textAlign:"center", padding:"40px 0", color:"#94a3b8" }}>Chargement des présences…</div>
+                ) : groupePresences.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"50px 0", color:"#9ca3af" }}>
+                    <div style={{ fontSize:40, marginBottom:10 }}>📊</div>
+                    <div style={{ fontWeight:600 }}>Aucune feuille de présence</div>
+                    <div style={{ fontSize:12, marginTop:4 }}>Le coach n'a encore pointé aucune séance pour cette classe.</div>
+                  </div>
+                ) : (() => {
+                  const LIB = { present:{ l:"Présent", c:"#15803d", bg:"#dcfce7" }, retard:{ l:"Retard", c:"#b45309", bg:"#fef3c7" },
+                                excuse:{ l:"Excusé", c:"#1d4ed8", bg:"#dbeafe" },  absent:{ l:"Absent", c:"#b91c1c", bg:"#fee2e2" } };
+                  const parDate = {};
+                  groupePresences.forEach(p => { (parDate[p.date_seance] ||= []).push(p); });
+                  const dates = Object.keys(parDate).sort().reverse();
+                  return (
+                    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                      {dates.map(d => {
+                        const liste = parDate[d];
+                        const presents = liste.filter(p => p.statut === "present" || p.statut === "retard").length;
+                        const taux = Math.round(presents / liste.length * 100);
+                        const c = taux>=80?"#15803d":taux>=60?"#b45309":"#b91c1c";
+                        const bg = taux>=80?"#dcfce7":taux>=60?"#fef3c7":"#fee2e2";
+                        return (
+                          <div key={d} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:11, padding:"12px 16px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+                              <span style={{ fontSize:13, fontWeight:800, color:"#0f172a" }}>{fmtDate(d)}</span>
+                              <span style={{ background:bg, color:c, borderRadius:99, padding:"2px 10px", fontSize:11, fontWeight:800 }}>{taux}% · {presents}/{liste.length}</span>
+                            </div>
+                            <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+                              {liste.map((p, i) => {
+                                const s = LIB[p.statut] || { l:p.statut||"-", c:"#475569", bg:"#f1f5f9" };
+                                return (
+                                  <span key={p.id||i} title={p.note || undefined}
+                                    style={{ background:s.bg, color:s.c, border:`1px solid ${s.c}25`, borderRadius:8, padding:"4px 10px", fontSize:11.5, fontWeight:600 }}>
+                                    {[p.prenom_apprenant, p.nom_apprenant].filter(Boolean).join(" ") || "-"}
+                                    <span style={{ opacity:.75, fontWeight:800 }}> · {s.l}</span>
+                                    {p.note ? <span style={{ opacity:.6 }}> 📝</span> : null}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+
+              {/* ─ Fichiers ─ Déjà chargés par /api/groupes/:id depuis toujours, et affichés
+                   nulle part : le fetch existait, l'écran ne les montrait pas. */}
+              {groupeSubTab === "fichiers" && (
+                groupeDetailLoading ? (
+                  <div style={{ textAlign:"center", padding:"40px 0", color:"#94a3b8" }}>Chargement…</div>
+                ) : groupeDetail.fichiers.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"50px 0", color:"#9ca3af" }}>
+                    <div style={{ fontSize:40, marginBottom:10 }}>📂</div>
+                    <div style={{ fontWeight:600 }}>Aucun fichier partagé</div>
+                    <div style={{ fontSize:12, marginTop:4 }}>Rien n'a été déposé dans cette classe.</div>
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {groupeDetail.fichiers.map((f, i) => (
+                      <div key={f.id||i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#fff", border:"1px solid #e2e8f0", borderRadius:10, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:18 }}>📄</span>
+                        <div style={{ minWidth:0, flex:1 }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:"#0f172a", wordBreak:"break-word" }}>{f.nom || "Fichier"}</div>
+                          <div style={{ fontSize:11, color:"#94a3b8" }}>
+                            {[f.created_at ? fmtDate(f.created_at) : null,
+                              f.type_fichier && f.type_fichier !== "autre" ? f.type_fichier : null,
+                              f.taille_ko ? `${Math.round(f.taille_ko)} Ko` : null,
+                              f.visible === false ? "🔒 masqué aux apprenants" : null,
+                            ].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        {f.url && (
+                          <a href={f.url} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize:11.5, fontWeight:700, color:"#1d4ed8", textDecoration:"none", whiteSpace:"nowrap" }}>Ouvrir ↗</a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
 
               {/* ─ Apprenants ─ */}
