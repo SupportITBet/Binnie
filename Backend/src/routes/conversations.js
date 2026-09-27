@@ -349,8 +349,18 @@ router.get("/apprenants", authenticateAdmin, requireCreateur, async (req, res) =
 /* La photo du groupe : une URL Cloudinary, ou rien. On refuse tout ce qui n'est pas une
    adresse http(s) - une valeur libre finirait dans un attribut `src`, où une chaîne
    `javascript:` serait exécutée par le navigateur de chaque membre. */
+/**
+ * Valide une photo de groupe. Rend l'URL, `null` s'il n'y en a pas, ou `undefined` si la
+ * valeur fournie est inexploitable - c'est ce `undefined` que l'appelant refuse.
+ *
+ * `v === undefined` SIGNIFIE « CHAMP ABSENT », PAS « PHOTO INVALIDE ». La création de groupe
+ * n'envoie pas `photo_url` du tout : `String(undefined)` valait `"undefined"`, la regex le
+ * rejetait, et toute création répondait 400 « Photo de groupe invalide » - un message qui ne
+ * pouvait que dérouter, puisque aucune photo n'avait été proposée. Créer un groupe libre
+ * était donc impossible depuis l'ajout de cette fonctionnalité.
+ */
 const photoValide = (v) => {
-  if (v === null || v === "") return null;
+  if (v === undefined || v === null || v === "") return null;
   const s = String(v).trim();
   return /^https?:\/\//i.test(s) && s.length <= 500 ? s : undefined;   // undefined = refusée
 };
