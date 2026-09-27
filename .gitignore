@@ -6,6 +6,14 @@
 .env.*.local
 !.env.example
 
+# Compte de service Firebase : clé privée donnant un accès administrateur COMPLET à
+# Firestore (lecture, écriture et suppression de toutes les collections). Le fichier doit
+# être déposé à la main sur chaque machine, jamais versionné.
+firebase-key.json
+**/firebase-key.json
+*-serviceaccount.json
+*service-account*.json
+
 # Dépendances / builds
 node_modules/
 build/

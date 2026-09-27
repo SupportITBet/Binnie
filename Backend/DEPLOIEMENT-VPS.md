@@ -121,6 +121,37 @@ chmod 600 /opt/bet/Backend/.env
 `CRON_SECRET` protège les quatre routes de tâches planifiées : sans lui, n'importe qui
 pourrait déclencher la génération des mensualités depuis l'extérieur.
 
+### 3 bis. La clé Firebase — un fichier, pas une variable
+
+Le serveur a besoin d'un accès administrateur à Firestore pour **supprimer un groupe de
+discussion** : les messages y vivent sous `chats/libre_{id}/messages`, et une suppression
+qui ne les effacerait pas laisserait le fil entier lisible derrière elle.
+
+Contrairement au reste, ce secret est un **fichier** et non une variable : le SDK Firebase
+attend `Backend/firebase-key.json` sur le disque. Il est dans `.gitignore` — c'est une clé
+privée donnant un accès complet en lecture, écriture et suppression sur toutes vos
+collections Firestore.
+
+Depuis votre poste, une fois le fichier obtenu (Firebase Console → ⚙️ Paramètres du projet
+→ Comptes de service → « Générer une nouvelle clé privée ») :
+
+```bash
+# ── SUR VOTRE MAC ──
+scp Backend/firebase-key.json root@<IP_DU_VPS>:/opt/bet/Backend/firebase-key.json
+```
+
+```bash
+# ── SUR LE VPS ──
+chmod 600 /opt/bet/Backend/firebase-key.json
+pm2 restart bet-api
+pm2 logs bet-api --lines 30 | grep -i firebase
+```
+
+La dernière commande doit afficher `✅ Firebase initialisé`. Si elle affiche
+`⚠️ Firebase non initialisé`, la suppression d'un groupe répondra **503** avec un message
+explicite — c'est délibéré : mieux vaut un groupe encore présent qu'un groupe effacé de
+l'écran dont les messages restent accessibles.
+
 ---
 
 ## 4. Le processus, et sa survie aux redémarrages
