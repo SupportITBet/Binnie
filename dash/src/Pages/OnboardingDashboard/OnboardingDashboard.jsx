@@ -3068,11 +3068,11 @@ export default function OnboardingDashboard() {
 
       const nomGroupe = `Coaching privé - ${parts[0]} ${parts.slice(1).join(" ")} ${niveau}`.trim();
       setDossierCreerGroupe(true);
-      /* La capacité proposée suit le foyer : le payeur plus les personnes saisies à
+      /* La capacité proposée suit la famille : le payeur plus les personnes saisies à
          l'inscription. Figée à 1, elle affichait « 1 place » sur une classe qui en
          accueille trois, et l'onboarding ne pouvait y inscrire que le payeur. */
       setDossierNouveauGroupe({ nom: nomGroupe, date_debut: sd.date_debut_formation || a.date_debut_formation || "", date_fin: "",
-        capacite_max: 1 + (Array.isArray(sd.membres_foyer) ? sd.membres_foyer.length : 0), horaire: horairePrefill });
+        capacite_max: 1 + (Array.isArray(sd.membres_famille) ? sd.membres_famille.length : 0), horaire: horairePrefill });
     } else {
       setDossierCreerGroupe(false);
       setDossierNouveauGroupe({ nom:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
@@ -3171,7 +3171,7 @@ export default function OnboardingDashboard() {
                `is_prive` accompagne la capacité : c'est lui qui dit désormais qu'une classe
                est privée, la capacité ayant cessé de pouvoir le faire (cf. utils/classePrivee.js). */
             capacite_max: isPrivateFlow
-              ? 1 + (Array.isArray(sd.membres_foyer) ? sd.membres_foyer.length : 0)
+              ? 1 + (Array.isArray(sd.membres_famille) ? sd.membres_famille.length : 0)
               : (dossierNouveauGroupe.capacite_max || 20),
             is_prive:     isPrivateFlow || undefined,
             horaire:      dossierNouveauGroupe.horaire?.length > 0
@@ -3217,6 +3217,72 @@ export default function OnboardingDashboard() {
         const d2 = await r2.json();
         if (!r2.ok) throw new Error(d2.error || "Erreur ajout apprenant au groupe");
         setGroupes(prev => prev.map(g => g.id===groupeId ? {...g, nb_apprenants:(g.nb_apprenants||0)+1} : g));
+
+        /* ── LES AUTRES PERSONNES DE LA FAMILLE ───────────────────────────────────────────
+           Un couple ou une famille inscrit en coaching privé : un seul dossier, un seul
+           montant, mais plusieurs apprenants. La classe a été créée à la bonne taille
+           quelques lignes plus haut ; il reste à y inscrire les personnes, faute de quoi
+           l'onboarding devait les ajouter une à une à la main - avec le risque d'en
+           oublier une et de laisser un coach découvrir un élève non déclaré.
+
+           CHACUNE PORTE LE MÊME `assignation_id` dans sa note : c'est ce lien qui rattache
+           tout la famille au dossier payeur. Sans lui, ces apprenants flotteraient sans
+           paiement ni parcours rattaché, et les écrans qui remontent du dossier vers la
+           classe ne les verraient pas.
+
+           ÉCHECS TOLÉRÉS, et c'est délibéré : une adresse déjà utilisée ou un doublon ne
+           doit pas faire échouer l'affectation du payeur, qui est l'acte principal. On
+           compte les réussites et on le dit - une inscription partielle annoncée vaut
+           mieux qu'une inscription complète supposée. */
+        /* Dérivé ici et non repris du bloc de création de classe : `sd` y est déclaré dans
+           une portée plus étroite, et cette inscription-ci s'exécute aussi quand la classe
+           existait déjà - donc quand ce bloc n'a pas tourné. */
+        const sdFamille = dossierTarget?.suivi_demarrage || {};
+        const membresFamille = Array.isArray(sdFamille.membres_famille) ? sdFamille.membres_famille : [];
+        if (membresFamille.length > 0) {
+          let ajoutes = 0;
+          const echecs = [];
+          for (const membre of membresFamille) {
+            const prenomM = (membre?.prenom || "").trim();
+            const nomM    = (membre?.nom || "").trim();
+            if (!prenomM && !nomM) continue;
+            try {
+              const rm = await fetch(`${API_URL}/api/groupes/${groupeId}/apprenants`, {
+                method: "POST",
+                headers: { Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
+                body: JSON.stringify({
+                  nom_apprenant:    nomM || dossierForm.nom,
+                  prenom_apprenant: prenomM,
+                  email_apprenant:  (membre?.email || "").trim() || null,
+                  telephone:        (membre?.telephone || "").trim() || null,
+                  niveau:           membre?.niveau || dossierForm.niveau,
+                  note: JSON.stringify({
+                    programme:      dossierForm.programme,
+                    date_debut:     dossierForm.date_debut_supposee,
+                    assignation_id: assIdPourNote,
+                    membre_famille:   true,
+                    lien_famille:     membre?.lien || null,
+                  }),
+                }),
+              });
+              if (rm.ok) ajoutes++;
+              else {
+                const dm = await rm.json().catch(() => ({}));
+                echecs.push(`${prenomM || nomM} : ${dm.error || `erreur ${rm.status}`}`);
+              }
+            } catch (e) {
+              echecs.push(`${prenomM || nomM} : ${e.message}`);
+            }
+          }
+          if (ajoutes > 0) {
+            setGroupes(prev => prev.map(g => g.id===groupeId ? {...g, nb_apprenants:(g.nb_apprenants||0)+ajoutes} : g));
+            toast.success(`👥 ${ajoutes} personne${ajoutes > 1 ? "s" : ""} de la famille inscrite${ajoutes > 1 ? "s" : ""} dans la classe`);
+          }
+          if (echecs.length > 0) {
+            toast.error(`Famille - ${echecs.length} non inscrite(s) : ${echecs[0]}`, { duration: 8000 });
+            console.warn("[famille] échecs d'inscription :", echecs);
+          }
+        }
       }
 
       setApprenants(prev => prev.map(ap => ap.id === dossierTarget.id

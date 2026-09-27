@@ -448,7 +448,7 @@ async function traiterPrive(ligne, ctx, importId) {
       capacite_max: 1,
       /* Une ligne d'import = une personne, donc une place - c'est légitime ici. Mais la
          classe doit le DIRE au lieu de le laisser deviner par sa capacité : depuis que le
-         privé peut accueillir un foyer, `capacite_max === 1` n'est plus un signal fiable. */
+         privé peut accueillir une famille, `capacite_max === 1` n'est plus un signal fiable. */
       is_prive:     true,
       date_debut:   ligne.date_debut || null,
       date_fin:     ligne.date_fin || null,

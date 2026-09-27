@@ -4291,12 +4291,12 @@ export default function CommercialDashboard() {
             centre_coaching:      (!isEnLigneCp && assistanteTypeCours === "presentiel" && cp.lieu === "cabinet") ? (assistanteCentreId || null) : (isEnLigneCp ? null : (cp.centre || null)),
             adresse_coaching:     isEnLigneCp ? null : (cp.adresse || null),
             disponibilites:       cp.dispos?.length ? { horaires: cp.dispos } : null,
-            /* Les autres personnes du foyer. Envoyées au serveur, qui les nettoie et les
-               range dans `suivi_demarrage.membres_foyer` — un seul dossier pour tout le
-               foyer, donc un seul montant et un seul échéancier. Les lignes laissées vides
+            /* Les autres personnes de la famille. Envoyées au serveur, qui les nettoie et les
+               range dans `suivi_demarrage.membres_famille` — un seul dossier pour tout le
+               famille, donc un seul montant et un seul échéancier. Les lignes laissées vides
                sont écartées ici comme côté serveur : une ligne ajoutée puis abandonnée ne
                doit pas compter comme un apprenant. */
-            membres_foyer:        (cp.membres_foyer || []).filter(m => (m?.prenom || "").trim() || (m?.nom || "").trim()),
+            membres_famille:        (cp.membres_famille || []).filter(m => (m?.prenom || "").trim() || (m?.nom || "").trim()),
             notes:                cp.notes_pa || null,
             niveau_client:        insc.niveauTest || null,
             objectif_client:      (insc.objectif_client || "").trim() || null,
@@ -12590,12 +12590,12 @@ export default function CommercialDashboard() {
               niveau: niveauSuggere || sd.niveau_prospect || "",
               filiere:"Anglais Pro", type_cours:"presentiel", coach_id:"", centre_id: assistanteCentreId || "",
               date_debut: sd.date_debut_formation || assignCentreTarget.date_debut_formation || "",
-              /* Capacité = le payeur + les autres personnes du foyer. La commerciale
+              /* Capacité = le payeur + les autres personnes de la famille. La commerciale
                  peut encore la corriger dans le formulaire ; on lui propose simplement la
                  valeur juste plutôt que 1, qui l'obligeait à la rectifier à la main. */
               date_fin:"", horaire: horairePrefill,
               capacite_max: isPrive
-                ? 1 + (Array.isArray(sd.membres_foyer) ? sd.membres_foyer.length : 0)
+                ? 1 + (Array.isArray(sd.membres_famille) ? sd.membres_famille.length : 0)
                 : 20,
             });
             setClasseCoachSearch("");
@@ -14985,11 +14985,11 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
     dispos:        initialData?.cp_dispos         || [],
     notes_pa:      initialData?.cp_notes_pa       || "",
     date_debut:    initialData?.cp_date_debut     || "",
-    /* LES AUTRES PERSONNES DU FOYER — un couple ou une famille qui prend un coaching privé
+    /* LES AUTRES PERSONNES DE LA FAMILLE — un couple ou une famille qui prend un coaching privé
        ensemble. Le client saisi en haut du formulaire reste LE PAYEUR : un seul dossier, un
        seul montant, un seul échéancier. Ces personnes-là sont des apprenants supplémentaires,
        pas des dossiers supplémentaires. */
-    membres_foyer: initialData?.cp_membres_foyer  || [],
+    membres_famille: initialData?.cp_membres_famille  || [],
   });
 
   const estPriveForm = cpForm?._mode === "prive" || (!cpForm?._mode && isOffreCoachingPrive(form.offre));
@@ -15046,6 +15046,15 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
      recalcule le tarif, et sans lui la mensualité négociée serait écrasée à chaque
      clic - la négociation disparaîtrait sous les doigts de l'assistante. */
   const [mensTouchee, setMensTouchee] = React.useState(false);
+  /* LE MONTANT NÉGOCIÉ NE DOIT PAS ÊTRE ÉCRASÉ PAR LA GRILLE.
+     Le tarif d'un coaching privé se recalcule automatiquement à chaque changement de
+     formule ou de lieu. C'est utile tant que personne n'a rien saisi - mais sur un
+     coaching en famille, le montant EST négocié : la commerciale l'entre, puis corrige le
+     lieu, et son prix disparaît sans le moindre message.
+     On initialise à `true` quand on ouvre un dossier qui a déjà un montant : rouvrir une
+     inscription pour changer un détail ne doit pas rétablir le tarif catalogue à son insu.
+     Le bouton « Tarif public » permet de revenir en arrière volontairement. */
+  const [montantTouche, setMontantTouche] = React.useState(!!initialData?.montant);
   React.useEffect(() => {
     if (mensTouchee || !tarifCatalogue) return;
     setForm(f => (Number(f.mensualite_negociee) === tarifCatalogue ? f : { ...f, mensualite_negociee: tarifCatalogue }));
@@ -15154,10 +15163,11 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
     const isPriveActive = cpForm._mode === "prive" || (!cpForm._mode && isOffreCoachingPrive(form.offre));
     if (!isPriveActive) return;
     const lieuKey = isEnLigne ? "en_ligne" : (cpForm.lieu === "domicile" ? "domicile" : "cabinet");
+    if (montantTouche) return;   // un montant négocié prime sur la grille
     const tarif = grillePriveInsc[cpForm.type_coaching]?.[lieuKey];
     if (tarif) setForm(f => (f.montant === tarif ? f : { ...f, montant: tarif }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cpForm.type_coaching, cpForm.lieu, cpForm._mode, form.offre, isEnLigne]);
+  }, [cpForm.type_coaching, cpForm.lieu, cpForm._mode, form.offre, isEnLigne, montantTouche]);
 
   const formatSize = (b) => {
     if (!b) return "";
@@ -15479,7 +15489,32 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
           </div>
           <div><label style={labelSt}>Date d'inscription</label><input type="date" style={inputSt} value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></div>
           {!(cpForm._mode === "prive" || (!cpForm._mode && isOffreCoachingPrive(form.offre))) && <div><label style={labelSt}>Date de début formation *</label><input type="date" style={inputSt} value={form.dateDebut} onChange={e=>setForm({...form,dateDebut:e.target.value})} /></div>}
-          <div><label style={labelSt}>Montant (FCFA)</label><input type="number" style={inputSt} value={form.montant} onChange={e=>setForm({...form,montant:Number(e.target.value)})} /></div>
+          <div>
+            <label style={labelSt}>Montant (FCFA)</label>
+            <div style={{ display:"flex", gap:6 }}>
+              <input type="number" style={{ ...inputSt, flex:1 }} value={form.montant}
+                onChange={e => { setMontantTouche(true); setForm({ ...form, montant: Number(e.target.value) }); }} />
+              {montantTouche && estPriveForm && (
+                <button type="button"
+                  onClick={() => {
+                    setMontantTouche(false);
+                    const lieuKey = isEnLigne ? "en_ligne" : (cpForm.lieu === "domicile" ? "domicile" : "cabinet");
+                    const tarif = grillePriveInsc[cpForm.type_coaching]?.[lieuKey];
+                    if (tarif) setForm(f => ({ ...f, montant: tarif }));
+                  }}
+                  title="Reprendre le tarif de la grille"
+                  style={{ padding:"0 12px", borderRadius:8, border:"1px solid #cbd5e1", background:"#fff",
+                    color:"#475569", fontSize:12, fontWeight:700, whiteSpace:"nowrap", cursor:"pointer" }}>
+                  Tarif grille
+                </button>
+              )}
+            </div>
+            {montantTouche && estPriveForm && (
+              <div style={{ fontSize:10, color:"#6d28d9", marginTop:3 }}>
+                Montant négocié — il ne sera plus recalculé si vous changez de formule ou de lieu.
+              </div>
+            )}
+          </div>
 
           {/* Code promo - vérifié avant d'être retenu, jamais appliqué sur parole. */}
           <div>
@@ -15785,45 +15820,45 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                 onChange={e => setCpForm(p => ({ ...p, date_debut: e.target.value }))} />
             </div>
 
-            {/* ── AUTRES PERSONNES DU FOYER ──────────────────────────────────────────
+            {/* ── AUTRES PERSONNES DE LA FAMILLE ──────────────────────────────────────────
                 Un couple ou une famille qui s'inscrit ensemble en coaching privé. Le client
                 saisi en haut du formulaire reste LE PAYEUR ; les personnes ajoutées ici sont
                 des apprenants supplémentaires, pas des dossiers supplémentaires.
 
-                POURQUOI ICI, sous les disponibilités et la date : un foyer partage ses
+                POURQUOI ICI, sous les disponibilités et la date : une famille partage ses
                 créneaux - c'est une seule séance pour tout le monde, pas trois séances à
                 caler. Et ce bloc ne s'affiche que pour le coaching privé, parce qu'une
-                formation en groupe n'a pas de foyer : chacun s'y inscrit pour soi.
+                formation en groupe n'a pas de famille : chacun s'y inscrit pour soi.
 
                 LE TARIF RESTE GLOBAL et ne se multiplie pas par le nombre de personnes :
                 c'est un forfait négocié, saisi librement plus haut. */}
             <div style={{ border:"1.5px dashed #c4b5fd", borderRadius:10, padding:"12px 14px", background:"#faf9ff" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom: cpForm.membres_foyer.length ? 10 : 6 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom: cpForm.membres_famille.length ? 10 : 6 }}>
                 <label style={{ ...labelSt, color:"#6d28d9", margin:0 }}>
-                  👥 Autres personnes du foyer
-                  {cpForm.membres_foyer.length > 0 && (
+                  👥 Autres personnes de la famille
+                  {cpForm.membres_famille.length > 0 && (
                     <span style={{ marginLeft:8, fontSize:10, fontWeight:800, padding:"1px 8px", borderRadius:999, background:"#ede9fe", color:"#6d28d9" }}>
-                      {cpForm.membres_foyer.length}
+                      {cpForm.membres_famille.length}
                     </span>
                   )}
                 </label>
                 <button type="button"
-                  onClick={() => setCpForm(p => ({ ...p, membres_foyer: [...p.membres_foyer, { prenom:"", nom:"", telephone:"", email:"", lien:"", niveau:"" }] }))}
+                  onClick={() => setCpForm(p => ({ ...p, membres_famille: [...p.membres_famille, { prenom:"", nom:"", telephone:"", email:"", lien:"", niveau:"" }] }))}
                   style={{ padding:"5px 12px", borderRadius:8, border:"1.5px solid #c4b5fd", background:"#fff",
                     color:"#6d28d9", fontWeight:700, fontSize:11.5, cursor:"pointer", flexShrink:0 }}>
                   + Ajouter une personne
                 </button>
               </div>
 
-              {cpForm.membres_foyer.length === 0 ? (
+              {cpForm.membres_famille.length === 0 ? (
                 <p style={{ fontSize:10.5, color:"#94a3b8", margin:0, lineHeight:1.5 }}>
                   Laissez vide pour un coaching individuel. Ajoutez une ligne par personne
                   supplémentaire si un couple ou une famille suit la formation ensemble —
-                  le tarif saisi plus haut reste global pour le foyer.
+                  le tarif saisi plus haut reste global pour la famille.
                 </p>
               ) : (
                 <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
-                  {cpForm.membres_foyer.map((m, i) => {
+                  {cpForm.membres_famille.map((m, i) => {
                     /* UNE FICHE PAR PERSONNE, pas une ligne. Ces personnes deviendront des
                        apprenants à part entière : elles auront un espace personnel, des
                        présences, des ressources. Il leur faut donc de quoi créer un accès -
@@ -15831,7 +15866,7 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                        Sans coordonnées, l'Onboarding ne peut pas leur ouvrir de compte et
                        devrait rappeler le client pour les réclamer. */
                     const majMembre = (cle, val) => setCpForm(p => ({ ...p,
-                      membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, [cle]: val } : x) }));
+                      membres_famille: p.membres_famille.map((x, j) => j === i ? { ...x, [cle]: val } : x) }));
                     const champ = (cle, ph, type = "text") => (
                       <input type={type} placeholder={ph} value={m[cle] || ""}
                         onChange={e => majMembre(cle, e.target.value)}
@@ -15845,7 +15880,7 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                             PERSONNE {i + 1}
                           </span>
                           <button type="button"
-                            onClick={() => setCpForm(p => ({ ...p, membres_foyer: p.membres_foyer.filter((_, j) => j !== i) }))}
+                            onClick={() => setCpForm(p => ({ ...p, membres_famille: p.membres_famille.filter((_, j) => j !== i) }))}
                             title="Retirer cette personne"
                             style={{ background:"none", border:"none", color:"#ef4444", cursor:"pointer",
                               fontSize:14, lineHeight:1, padding:"0 2px" }}>×</button>
@@ -15879,7 +15914,7 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                     Le prénom suffit pour enregistrer une personne, mais un e-mail ou un téléphone
                     est nécessaire pour lui ouvrir un espace apprenant. La classe sera créée pour{" "}
                     {(() => {
-                      const n = 1 + cpForm.membres_foyer.filter(m => (m.prenom||"").trim() || (m.nom||"").trim()).length;
+                      const n = 1 + cpForm.membres_famille.filter(m => (m.prenom||"").trim() || (m.nom||"").trim()).length;
                       return <strong style={{ color:"#6d28d9" }}>{n} apprenant{n > 1 ? "s" : ""}</strong>;
                     })()}, et le coach pointera leurs présences séparément.
                   </p>
@@ -16950,7 +16985,7 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
                         // Un niveau différent ALERTE, il ne bloque pas : une réaffectation sert
                         // justement à acter une progression ou une régression. Seule une classe
                         // COMPLÈTE reste réellement inaccessible. Un coaching privé n'a plus
-                        // « une place par construction » : depuis qu'un foyer peut s'inscrire
+                        // « une place par construction » : depuis qu'une famille peut s'inscrire
                         // ensemble, sa capacité vaut le nombre de personnes, et il reste
                         // sélectionnable tant que la famille n'y est pas entière.
                         const isDisabled     = isFull;
