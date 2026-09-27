@@ -3684,6 +3684,64 @@ export default function CommercialDashboard() {
             note:             JSON.stringify({ assignation_id: assignationId }),
           }),
         });
+
+        /* ── LES AUTRES PERSONNES DE LA FAMILLE ──────────────────────────────────────
+           UNE ASSISTANTE PRÉSENTIEL N'A PAS D'ONBOARDING : elle affecte la classe
+           elle-même, et ce code est alors le SEUL passage où la famille peut être
+           inscrite. La même logique existe côté Onboarding pour le circuit en ligne ;
+           l'oublier ici aurait laissé les familles du présentiel avec un seul apprenant
+           inscrit, sans que rien ne le signale.
+
+           C'est aussi ici que les accès sont générés : l'endpoint crée le compte de
+           chaque personne et lui envoie son mot de passe temporaire. Les membres d'une
+           famille n'ont donc d'espace apprenant qu'à partir de l'affectation de classe -
+           pas avant, puisque rien ne les rattache encore à un coach ni à un planning.
+
+           Échecs tolérés : une adresse déjà utilisée ne doit pas faire échouer
+           l'affectation du payeur, qui est l'acte principal. */
+        const sdFamilleComm = assignation.suivi_demarrage || {};
+        const membresFamilleComm = Array.isArray(sdFamilleComm.membres_famille) ? sdFamilleComm.membres_famille : [];
+        if (membresFamilleComm.length > 0) {
+          let ajoutesFam = 0;
+          const echecsFam = [];
+          for (const membre of membresFamilleComm) {
+            const prenomM = (membre?.prenom || "").trim();
+            const nomM    = (membre?.nom || "").trim();
+            if (!prenomM && !nomM) continue;
+            try {
+              const rm = await fetch(`${API_URL}/api/groupes/${data.classeId}/apprenants`, {
+                method: "POST", headers: authHeaders(),
+                body: JSON.stringify({
+                  nom_apprenant:    nomM || prenomM,
+                  prenom_apprenant: nomM ? prenomM : "",
+                  email_apprenant:  (membre?.email || "").trim() || "",
+                  telephone:        (membre?.telephone || "").trim() || "",
+                  niveau:           membre?.niveau || assignation.niveau_client || "",
+                  note: JSON.stringify({
+                    assignation_id: assignationId,
+                    membre_famille: true,
+                    lien_famille:   membre?.lien || null,
+                  }),
+                }),
+              });
+              if (rm.ok) ajoutesFam++;
+              else {
+                const dm = await rm.json().catch(() => ({}));
+                echecsFam.push(`${prenomM || nomM} : ${dm.error || `erreur ${rm.status}`}`);
+              }
+            } catch (e) {
+              echecsFam.push(`${prenomM || nomM} : ${e.message}`);
+            }
+          }
+          if (ajoutesFam > 0) {
+            toast.success(`👥 ${ajoutesFam} personne${ajoutesFam > 1 ? "s" : ""} de la famille inscrite${ajoutesFam > 1 ? "s" : ""} - accès créés et envoyés`);
+          }
+          if (echecsFam.length > 0) {
+            toast.error(`Famille - ${echecsFam.length} non inscrite(s) : ${echecsFam[0]}`, { duration: 8000 });
+            console.warn("[famille] échecs d'inscription :", echecsFam);
+          }
+        }
+
         fetchClasses();
         // Rafraîchir commClasseInfo pour que le modal apprenant affiche la classe/coach
         // immédiatement - assignation_id en plus de l'email, seul repère fiable pour un
