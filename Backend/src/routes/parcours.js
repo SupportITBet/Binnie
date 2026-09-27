@@ -514,7 +514,10 @@ async function creerAssignationCore(body, ctx = {}) {
         .map(m => ({
           prenom: String(m?.prenom || "").trim() || null,
           nom:    String(m?.nom    || "").trim() || null,
-          age:    m?.age ? String(m.age).trim() : null,
+          /* Le LIEN de parenté, et non l'âge : demander son âge au conjoint d'un client est
+             inutile et intrusif. « Enfant » porte l'information d'âge réellement utile au
+             coach sans avoir à la réclamer. */
+          lien:   String(m?.lien   || "").trim() || null,
           niveau: String(m?.niveau || "").trim() || null,
         }))
         .filter(m => m.prenom || m.nom)   // une ligne sans identité n'est pas une personne

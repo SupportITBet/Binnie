@@ -10804,7 +10804,7 @@ export default function PedagogicalAdvisorDashboard() {
                                   <span key={i} style={{ fontSize:11.5, fontWeight:700, padding:"3px 10px", borderRadius:999,
                                     background:"#dbeafe", color:"#1e40af" }}>
                                     {[m.prenom, m.nom].filter(Boolean).join(" ")}
-                                    {m.age ? ` · ${m.age} ans` : ""}{m.niveau ? ` · ${m.niveau}` : ""}
+                                    {m.lien ? ` · ${m.lien}` : ""}{m.niveau ? ` · ${m.niveau}` : ""}
                                   </span>
                                 ))}
                               </div>

@@ -15808,7 +15808,7 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                   )}
                 </label>
                 <button type="button"
-                  onClick={() => setCpForm(p => ({ ...p, membres_foyer: [...p.membres_foyer, { prenom:"", nom:"", age:"", niveau:"" }] }))}
+                  onClick={() => setCpForm(p => ({ ...p, membres_foyer: [...p.membres_foyer, { prenom:"", nom:"", lien:"", niveau:"" }] }))}
                   style={{ padding:"5px 12px", borderRadius:8, border:"1.5px solid #c4b5fd", background:"#fff",
                     color:"#6d28d9", fontWeight:700, fontSize:11.5, cursor:"pointer", flexShrink:0 }}>
                   + Ajouter une personne
@@ -15826,9 +15826,8 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                   {cpForm.membres_foyer.map((m, i) => (
                     <div key={i} style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
                       {[
-                        { cle:"prenom", ph:"Prénom *", largeur:"1 1 110px" },
-                        { cle:"nom",    ph:"Nom",      largeur:"1 1 110px" },
-                        { cle:"age",    ph:"Âge",      largeur:"0 0 62px"  },
+                        { cle:"prenom", ph:"Prénom *", largeur:"1 1 120px" },
+                        { cle:"nom",    ph:"Nom",      largeur:"1 1 120px" },
                       ].map(({ cle, ph, largeur }) => (
                         <input key={cle} type="text" placeholder={ph} value={m[cle] || ""}
                           onChange={e => setCpForm(p => ({ ...p,
@@ -15836,10 +15835,23 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                           style={{ flex:largeur, minWidth:0, padding:"6px 9px", borderRadius:7,
                             border:"1px solid #c4b5fd", fontSize:11.5, outline:"none" }} />
                       ))}
+                      {/* LE LIEN PLUTÔT QUE L'ÂGE. Demander son âge au conjoint d'un client
+                          est inutile et intrusif, et donnait au formulaire l'allure d'une fiche
+                          scolaire. Ce que le PA et le coach ont besoin de savoir, c'est QUI ils
+                          auront en face : un conjoint et un enfant ne se coachent pas pareil.
+                          « Enfant » porte l'information d'âge utile sans avoir à la demander. */}
+                      <select value={m.lien || ""}
+                        onChange={e => setCpForm(p => ({ ...p,
+                          membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, lien: e.target.value } : x) }))}
+                        style={{ flex:"0 0 112px", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
+                          fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
+                        <option value="">Lien</option>
+                        {["Conjoint(e)","Enfant","Parent","Autre"].map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
                       <select value={m.niveau || ""}
                         onChange={e => setCpForm(p => ({ ...p,
                           membres_foyer: p.membres_foyer.map((x, j) => j === i ? { ...x, niveau: e.target.value } : x) }))}
-                        style={{ flex:"0 0 96px", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
+                        style={{ flex:"0 0 92px", padding:"6px 8px", borderRadius:7, border:"1px solid #c4b5fd",
                           fontSize:11.5, outline:"none", background:"#fff", cursor:"pointer" }}>
                         <option value="">Niveau</option>
                         {["A1","A2","B1","B2","C1","C2"].map(n => <option key={n} value={n}>{n}</option>)}
@@ -15853,8 +15865,10 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                   ))}
                   <p style={{ fontSize:10, color:"#94a3b8", margin:"2px 0 0", lineHeight:1.5 }}>
                     Le prénom suffit pour enregistrer une personne. La classe sera créée pour{" "}
-                    <strong style={{ color:"#6d28d9" }}>{1 + cpForm.membres_foyer.filter(m => (m.prenom||"").trim() || (m.nom||"").trim()).length} apprenant(s)</strong>,
-                    et le coach pointera leurs présences séparément.
+                    {(() => {
+                      const n = 1 + cpForm.membres_foyer.filter(m => (m.prenom||"").trim() || (m.nom||"").trim()).length;
+                      return <strong style={{ color:"#6d28d9" }}>{n} apprenant{n > 1 ? "s" : ""}</strong>;
+                    })()}, et le coach pointera leurs présences séparément.
                   </p>
                 </div>
               )}
