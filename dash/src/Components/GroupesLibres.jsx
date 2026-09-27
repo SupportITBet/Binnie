@@ -516,6 +516,11 @@ function ModalMembres({ conversation, hdr, accent, accentClair, onFermer, onChan
   // retrait implique - la personne perd l'accès au fil, historique compris.
   const [aRetirer, setARetirer] = useState(null);
   const [ongletAjout, setOngletAjout] = useState("personnel");
+  // Suppression du groupe : le nom recopié sert de garde-fou, et `suppression` verrouille
+  // le dialogue pendant l'appel - la purge des messages peut prendre quelques secondes.
+  const [aSupprimer, setASupprimer] = useState(false);
+  const [saisieNom, setSaisieNom] = useState("");
+  const [suppression, setSuppression] = useState(false);
 
   const charger = useCallback(async () => {
     try {
@@ -578,6 +583,29 @@ function ModalMembres({ conversation, hdr, accent, accentClair, onFermer, onChan
     } catch (e) {
       toast.error(e.message || "Photo impossible à enregistrer");
     } finally { setEnvoiPhoto(false); }
+  };
+
+  /* Retire tous les membres et efface le groupe avec ses messages. Le serveur refuse si
+     l'appelant n'est pas le créateur (ou super admin), si la conversation appartient à une
+     classe, ou s'il ne peut pas atteindre Firestore - on relaie son message tel quel plutôt
+     que d'en inventer un : il dit précisément laquelle des trois raisons s'applique. */
+  const supprimerGroupe = async () => {
+    if (saisieNom.trim() !== (conversation.nom || "").trim()) return;
+    setSuppression(true);
+    try {
+      const r = await fetch(`${API_URL}/api/conversations/${conversation.id}`, {
+        method: "DELETE", headers: hdr(),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Suppression impossible");
+      toast.success(`Groupe « ${d.nom || conversation.nom} » supprimé ✓`);
+      setASupprimer(false);
+      onChange?.();
+      onFermer?.();       // le groupe n'existe plus : rester sur son panneau n'aurait pas de sens
+    } catch (e) {
+      toast.error(e.message || "Suppression impossible");
+      setSuppression(false);
+    }
   };
 
   const enregistrerNom = async () => {
@@ -743,7 +771,63 @@ function ModalMembres({ conversation, hdr, accent, accentClair, onFermer, onChan
                 Seul le créateur du groupe peut en modifier les membres.
               </div>
             )}
+
+            {/* SUPPRIMER LE GROUPE. Séparé du reste par un trait : ce n'est pas une action
+                de gestion courante, et rien ne doit la faire côtoyer « Ajouter des membres ».
+                Le serveur reste seul juge du droit - le bouton s'affiche pour le créateur,
+                et un super admin non créateur y accède par l'API. */}
+            {estAdmin && (
+              <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid #f1f5f9" }}>
+                <button onClick={() => { setSaisieNom(""); setASupprimer(true); }}
+                  style={{ ...bouton("#fff"), width: "100%", padding: 11, color: "#b91c1c", border: "1.5px solid #fecaca" }}>
+                  🗑 Supprimer ce groupe
+                </button>
+                <div style={{ fontSize: 11.5, color: "#94a3b8", textAlign: "center", marginTop: 7, lineHeight: 1.6 }}>
+                  Retire tous les membres et efface définitivement la conversation.
+                </div>
+              </div>
+            )}
           </>
+        )}
+
+        {/* Confirmation de la suppression. On efface les messages de TOUT LE MONDE, pas les
+            siens, et rien ne les rétablira : recopier le nom du groupe empêche le clic de
+            trop sans gêner celui qui sait ce qu'il fait. */}
+        {aSupprimer && (
+          <div onClick={e => { if (e.target === e.currentTarget && !suppression) setASupprimer(false); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 9950, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ ...carte, width: "100%", maxWidth: 460 }}>
+              <div style={{ fontSize: 30, textAlign: "center", marginBottom: 8 }}>🗑</div>
+              <div style={{ fontSize: 16.5, fontWeight: 800, color: "#0f172a", textAlign: "center", marginBottom: 6 }}>
+                Supprimer « {conversation.nom} » ?
+              </div>
+              <div style={{ fontSize: 12.5, color: "#64748b", textAlign: "center", lineHeight: 1.6, marginBottom: 14 }}>
+                Les <strong>{membres.length} membre{membres.length > 1 ? "s" : ""}</strong> seront retirés et
+                <strong> tous les messages du groupe seront effacés</strong>, pour tout le monde.
+                Cette action est définitive : rien ne permettra de les rétablir.
+              </div>
+
+              <div style={{ fontSize: 12, color: "#334155", marginBottom: 6 }}>
+                Pour confirmer, recopiez le nom du groupe :
+              </div>
+              <input value={saisieNom} onChange={e => setSaisieNom(e.target.value)} autoFocus
+                placeholder={conversation.nom}
+                onKeyDown={e => { if (e.key === "Enter" && saisieNom.trim() === (conversation.nom || "").trim()) supprimerGroupe(); }}
+                style={{ ...champ, width: "100%", marginBottom: 16, boxSizing: "border-box" }} />
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setASupprimer(false)} disabled={suppression}
+                  style={{ ...bouton("#f1f5f9"), color: "#374151", flex: 1, padding: 12 }}>Annuler</button>
+                <button onClick={supprimerGroupe}
+                  disabled={suppression || saisieNom.trim() !== (conversation.nom || "").trim()}
+                  style={{ ...bouton(saisieNom.trim() === (conversation.nom || "").trim() ? "#b91c1c" : "#cbd5e1"),
+                    flex: 1.3, padding: 12,
+                    cursor: saisieNom.trim() === (conversation.nom || "").trim() && !suppression ? "pointer" : "not-allowed" }}>
+                  {suppression ? "Suppression…" : "Supprimer définitivement"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Confirmation du retrait. Un retrait ne se rattrape pas : la personne perd

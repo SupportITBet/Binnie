@@ -2,6 +2,8 @@ import express from "express";
 import supabase from "../config/supabase.js";
 import { authenticateAdmin, authenticateUser } from "../middlewares/requireAdmin.js";
 import { notifyUsers } from "../services/notifyRole.js";
+import { db } from "../config/firebase.js";
+import { logAudit } from "../middlewares/logAudit.js";
 
 const router = express.Router();
 
@@ -601,6 +603,106 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
   } catch (err) {
     console.error("[conversations PATCH]", err.message || err);
     res.status(500).json({ error: "Modification impossible" });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════
+   DELETE /api/conversations/:id - supprimer un groupe libre
+══════════════════════════════════════════════════════════════ */
+/**
+ * Retire tous les membres et efface le groupe avec tout son contenu.
+ *
+ * UN GROUPE LIBRE VIT À DEUX ENDROITS, et c'est ce qui rend cette route moins triviale
+ * qu'elle n'en a l'air : l'appartenance est dans Supabase (`conversations_groupes` +
+ * `conversation_membres`), mais LES MESSAGES SONT DANS FIRESTORE, sous
+ * `chats/libre_{id}/messages`. Se contenter d'effacer les lignes Supabase ferait
+ * disparaître le groupe de l'application en laissant le fil entier derrière lui - et les
+ * règles Firestore de ce projet sont aujourd'hui ouvertes (voir l'avertissement en tête de
+ * fichier). Un fil orphelin n'est donc pas un détail de ménage.
+ *
+ * DEUX PIÈGES FIRESTORE :
+ *   · supprimer un document N'EFFACE PAS ses sous-collections - il faut parcourir
+ *     `messages` et le supprimer document par document, par lots ;
+ *   · `db` vaut `null` si `firebase-key.json` est absent du serveur. On REFUSE alors la
+ *     suppression au lieu de la faire à moitié : mieux vaut un groupe encore là qu'un
+ *     groupe effacé de l'écran dont les messages restent lisibles.
+ *
+ * L'ordre compte : Firestore d'abord. Si l'on commençait par Supabase et que la purge
+ * échouait, le groupe serait devenu introuvable - donc impossible à repurger.
+ */
+router.delete("/:id", authenticateAdmin, async (req, res) => {
+  try {
+    const ctx = await contexte(req.params.id, req.profil.id);
+    if (!ctx) return res.status(404).json({ error: "Conversation introuvable" });
+
+    // Le créateur gère ses groupes ; le super admin sert de recours quand le créateur a
+    // quitté BET - sans lui, un tel groupe resterait insupprimable à jamais.
+    const estSuperAdmin = req.role === "super_admin";
+    if (!ctx.estAdmin && !estSuperAdmin) {
+      return res.status(403).json({ error: "Seul le créateur du groupe peut le supprimer." });
+    }
+
+    /* JAMAIS UNE CLASSE. La conversation d'une classe est la vie de cette classe - son
+       coach, ses apprenants, ses consignes - et elle n'a pas à disparaître par cette route,
+       qui ne connaît que les groupes de discussion créés à la main. */
+    if (ctx.conv.type && ctx.conv.type !== "libre") {
+      return res.status(403).json({
+        error: "Cette conversation appartient à une classe : elle ne peut pas être supprimée ici.",
+      });
+    }
+
+    if (!db) {
+      return res.status(503).json({
+        error: "Suppression impossible : le serveur n'atteint pas la messagerie (Firebase non initialisé). "
+             + "Les messages du groupe resteraient stockés. Contactez l'administrateur technique.",
+      });
+    }
+
+    // 1. Purger les messages. Par lots : une conversation active en compte des milliers,
+    //    et Firestore limite chaque écriture groupée à 500 opérations.
+    const fil = db.collection("chats").doc(docFirestore(ctx.conv.id)).collection("messages");
+    let effaces = 0;
+    for (;;) {
+      const lot = await fil.limit(400).get();
+      if (lot.empty) break;
+      const batch = db.batch();
+      lot.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      effaces += lot.size;
+      if (lot.size < 400) break;
+    }
+    // Puis le document du fil lui-même, qui porte ses méta-données.
+    await db.collection("chats").doc(docFirestore(ctx.conv.id)).delete().catch(() => {});
+
+    // 2. Retirer tous les membres, puis le groupe. Dans cet ordre : l'inverse laisserait
+    //    des lignes d'appartenance pointant vers une conversation qui n'existe plus.
+    const nbMembres = ctx.membres.length;
+    const { error: errMembres } = await supabase
+      .from("conversation_membres").delete().eq("conversation_id", ctx.conv.id);
+    if (errMembres) throw errMembres;
+
+    const { error: errConv } = await supabase
+      .from("conversations_groupes").delete().eq("id", ctx.conv.id);
+    if (errConv) throw errConv;
+
+    logAudit({
+      acteur_id:   req.profil.id,
+      acteur_nom:  `${req.profil.prenom || ""} ${req.profil.nom || ""}`.trim(),
+      acteur_email: req.profil.email,
+      acteur_role: req.role,
+      action_type: "suppression",
+      module:      "support",
+      entite_type: "conversation_groupe",
+      entite_id:   ctx.conv.id,
+      detail:      `Suppression du groupe libre "${ctx.conv.nom}" - ${nbMembres} membre(s) retiré(s), ${effaces} message(s) effacé(s)`
+                 + (estSuperAdmin && !ctx.estAdmin ? " (par le super admin, non créateur)" : ""),
+      metadata:    { nom: ctx.conv.nom, nb_membres: nbMembres, nb_messages: effaces, cree_par: ctx.conv.cree_par },
+    }).catch(e => console.warn("[conversations DELETE] audit:", e.message));
+
+    res.json({ ok: true, nom: ctx.conv.nom, membres_retires: nbMembres, messages_effaces: effaces });
+  } catch (err) {
+    console.error("[conversations DELETE]", err.message || err);
+    res.status(500).json({ error: "Suppression impossible" });
   }
 });
 
