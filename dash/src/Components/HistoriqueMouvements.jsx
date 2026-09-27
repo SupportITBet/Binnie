@@ -128,6 +128,31 @@ export function ParcoursApprenant({ gaId, authHdrs }) {
                     {h.date_retrait ? ` → ${dateLongue(h.date_retrait)}` : actuel ? " → aujourd'hui" : ""}
                   </div>
 
+                  {/* L'ASSIDUITÉ DE CETTE ÉTAPE. Un transfert clôt une inscription et en ouvre
+                      une autre : sans ce rappel, les présences d'avant le dernier changement
+                      de classe n'apparaissaient nulle part, et le parcours se réduisait à une
+                      liste de noms de classes. `null` = rien n'a été pointé, ce qui n'est pas
+                      la même chose que 0 %. */}
+                  {h.seances_pointees > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      {(() => {
+                        const t = h.taux_presence;
+                        const c = t >= 80 ? "#15803d" : t >= 60 ? "#b45309" : "#b91c1c";
+                        const bg = t >= 80 ? "#dcfce7" : t >= 60 ? "#fef3c7" : "#fee2e2";
+                        return (
+                          <span title={`${h.presences} présence(s) sur ${h.seances_pointees} séance(s) pointée(s)`}
+                            style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 9px", borderRadius: 99, background: bg, color: c }}>
+                            📊 {t}% d'assiduité
+                          </span>
+                        );
+                      })()}
+                      <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 9px", borderRadius: 99, background: "#f1f5f9", color: "#475569" }}>
+                        {h.presences} présent{h.presences > 1 ? "s" : ""} · {h.absences} absent{h.absences > 1 ? "s" : ""}
+                        {h.retards > 0 ? ` · ${h.retards} retard${h.retards > 1 ? "s" : ""}` : ""}
+                      </span>
+                    </div>
+                  )}
+
                   {h.motif && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4, fontStyle: "italic" }}>💬 {h.motif}</div>}
                 </div>
 

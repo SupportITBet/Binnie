@@ -127,12 +127,19 @@ async function checkAutoSuspension(gaId, declencheurId) {
     // sans jamais atteindre 4 sur une seule - le compteur affiché côté commerciale
     // (GET /apprenants/acces-status, même agrégation) disait alors "bloqué" alors que
     // acces_bloque restait à false ici, faute de compter le bon périmètre.
+    /* LES ABSENCES SUIVENT LA PERSONNE, PAS L'INSCRIPTION. `transfere` était exclu de ce
+       filtre : un transfert de classe fermant l'ancienne ligne, les absences qui y étaient
+       rattachées cessaient d'être comptées. Un apprenant à trois absences sur quatre
+       repartait donc de zéro en changeant de classe - sans décision de personne, par simple
+       effet de bord du transfert.
+       Le pardon a déjà son levier explicite, `absences_reset_at`, posé à la réintégration.
+       En garder un second, implicite, rendait la règle imprévisible. */
     const resetAt = authData?.user?.app_metadata?.absences_reset_at;
     const { data: gasApprenant } = await supabase
       .from("groupes_apprenants")
       .select("id")
       .eq("apprenant_id", ga.apprenant_id)
-      .in("statut", ["actif", "periode_test"]);
+      .in("statut", ["actif", "periode_test", "transfere", "archive", "retire"]);
     const gaIdsApprenant = (gasApprenant || []).map(g => g.id);
     if (!gaIdsApprenant.length) return;
 
@@ -1379,7 +1386,10 @@ router.get("/apprenants/acces-status", authenticateAdmin, async (req, res) => {
       .from("groupes_apprenants")
       .select("id")
       .eq("apprenant_id", apprenant_id)
-      .in("statut", ["actif", "periode_test"]);
+      // Mêmes statuts que la suspension automatique (voir son commentaire) : les absences
+      // suivent la personne, donc les inscriptions closes par un transfert comptent aussi.
+      // Compter autrement ici ferait diverger le chiffre affiché de celui qui bloque.
+      .in("statut", ["actif", "periode_test", "transfere", "archive", "retire"]);
     const gaIds = (gas || []).map(g => g.id);
 
     let nbAbsences = 0;
@@ -1420,7 +1430,10 @@ router.get("/mon-acces-status", authenticateApprenant, async (req, res) => {
       .from("groupes_apprenants")
       .select("id")
       .eq("apprenant_id", apprenantId)
-      .in("statut", ["actif", "periode_test"]);
+      // Mêmes statuts que la suspension automatique (voir son commentaire) : les absences
+      // suivent la personne, donc les inscriptions closes par un transfert comptent aussi.
+      // Compter autrement ici ferait diverger le chiffre affiché de celui qui bloque.
+      .in("statut", ["actif", "periode_test", "transfere", "archive", "retire"]);
     const gaIds = (gas || []).map(g => g.id);
 
     let nbAbsences = 0;
@@ -1931,11 +1944,40 @@ router.get("/apprenants/:gaId/historique", authenticateAdmin, async (req, res) =
       (users || []).forEach(u => { addedByMap[u.id] = { nom: `${u.prenom||""} ${u.nom||""}`.trim(), role: u.role }; });
     }
 
+    /* L'ASSIDUITÉ DE CHAQUE ÉTAPE. L'historique ne donnait que l'itinéraire - quelles classes,
+       quand, pourquoi - et le staff perdait de vue tout ce que l'apprenant avait fait avant
+       son dernier transfert : ses présences restent en base, rattachées à l'ancienne ligne,
+       mais aucun écran ne les relisait. On les compte ici, par étape, pour que la fiche
+       raconte un parcours et non le seul dernier épisode. */
+    const gaIdsParcours = (lignes || []).map(l => l.id);
+    const bilanParGa = {};
+    if (gaIdsParcours.length) {
+      const { data: presences } = await supabase
+        .from("groupes_presences")
+        .select("ga_id, statut")
+        .in("ga_id", gaIdsParcours);
+      (presences || []).forEach(p => {
+        const b = bilanParGa[p.ga_id] || (bilanParGa[p.ga_id] = { presences: 0, absences: 0, retards: 0, pointees: 0 });
+        b.pointees += 1;
+        if (p.statut === "present")      b.presences += 1;
+        else if (p.statut === "retard") { b.retards += 1; b.presences += 1; }  // présent, en retard
+        else if (p.statut === "absent")  b.absences += 1;
+      });
+    }
+
     const historique = (lignes || []).map(l => {
       let motif = null;
       try { motif = JSON.parse(l.note || "{}").dernier_transfert?.motif || null; } catch {}
       const groupe = groupeMap[l.groupe_id] || {};
+      const b = bilanParGa[l.id] || null;
       return {
+        // `null` et non 0 quand rien n'a été pointé : afficher 0 % laisserait croire que
+        // l'apprenant n'est jamais venu, alors que le coach n'a simplement rien saisi.
+        presences:       b ? b.presences : 0,
+        absences:        b ? b.absences  : 0,
+        retards:         b ? b.retards   : 0,
+        seances_pointees:b ? b.pointees  : 0,
+        taux_presence:   b && b.pointees ? Math.round(b.presences / b.pointees * 100) : null,
         id:          l.id,
         groupe_id:   l.groupe_id,
         groupe_nom:  groupe.nom || "-",
@@ -2238,6 +2280,11 @@ router.post("/:id/cloture", authenticateAdmin, requirePermission("classes", "upd
       .from("groupes_apprenants")
       .select("id, apprenant_id, note, email_apprenant")
       .eq("groupe_id", id)
+      /* CEUX QUI SONT ENCORE LÀ, et eux seuls. Cette liste sert à notifier la clôture et à
+         geler la facturation : y faire entrer les inscriptions closes préviendrait de la
+         fermeture d'une classe des apprenants qui l'ont quittée depuis des mois, et
+         toucherait au plan de paiement de leur classe actuelle. Rien à voir avec le comptage
+         des absences, qui lui suit la personne. */
       .in("statut", ["actif", "periode_test"]);
 
     // Geler la facturation de chaque apprenant de la classe. Sans cela, une classe

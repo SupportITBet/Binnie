@@ -4745,7 +4745,20 @@ export default function EspaceApprenant() {
                                   <div style={{ fontSize:16 }}>✔️</div>
                                 </div>
                                 <div style={{ flex:1 }}>
-                                  <div style={{ fontWeight:600, fontSize:13, color:"#374151" }}>{c.objectif || "Cours de groupe"}</div>
+                                  <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
+                                    <span style={{ fontWeight:600, fontSize:13, color:"#374151" }}>{c.objectif || "Cours de groupe"}</span>
+                                    {/* CE QUI A ÉTÉ TRAITÉ AVANT SON ARRIVÉE. Ces cours étaient
+                                        purement masqués : un apprenant intégrant une classe déjà
+                                        commencée ne pouvait pas savoir ce qu'il avait à rattraper.
+                                        Montré, donc - mais marqué, pour qu'il ne croie pas y avoir
+                                        assisté : ces séances ne comptent dans aucune de ses présences. */}
+                                    {c.avant_mon_arrivee && (
+                                      <span title="Cours dispensé par la classe avant votre arrivée - vous n'y étiez pas, mais son contenu vous aide à rattraper le programme."
+                                        style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:99, background:"#f1f5f9", color:"#64748b", border:"1px solid #e2e8f0" }}>
+                                        Avant mon arrivée
+                                      </span>
+                                    )}
+                                  </div>
                                   {c.grammaire && <div style={{ fontSize:12, color:"#9ca3af" }}>Grammaire : {c.grammaire}</div>}
                                   {c.sujet_discussion && <div style={{ fontSize:12, color:"#9ca3af" }}>Sujet : {c.sujet_discussion}</div>}
                                   <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>📅 {formatDateFull(c.date_cours)}</div>

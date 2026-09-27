@@ -58,42 +58,62 @@ router.get("/profil", authenticateUser, async (req, res) => {
   }
 });
 
-// Helper : récupérer l'assignation_id et le ga_id depuis un email
+const CHAMPS_GA = "id, groupe_id, apprenant_id, nom_apprenant, prenom_apprenant, statut, note, date_ajout, date_retrait";
+
+/* Les statuts d'une inscription encore « vivante » pour l'apprenant : celle qui décrit où il
+   en est. `transfere` en est absent - c'est une inscription CLOSE - mais elle appartient
+   pleinement à son passé, d'où sa présence dans `parcours` ci-dessous. */
+const STATUTS_COURANTS = ["actif", "archive", "retire"];
+
+/**
+ * L'apprenant, son inscription courante ET tout son parcours.
+ *
+ * POURQUOI `parcours` EXISTE
+ * Cette fonction ne renvoyait qu'UNE ligne `groupes_apprenants`, la plus récente, en excluant
+ * les lignes `transfere`. Or un transfert de classe ne déplace rien : il clôt une ligne et en
+ * ouvre une autre, avec un nouvel identifiant. Toutes les lectures qui suivent partant de
+ * cette ligne unique - présences, séances, ressources -, l'apprenant transféré perdait d'un
+ * coup l'intégralité de son historique : ses présences restaient en base, rattachées à
+ * l'ancienne classe, et plus aucun écran ne les lisait.
+ *
+ * `ga` garde donc exactement son sens d'avant (l'inscription courante, pour « où j'en suis »),
+ * et `parcours` porte la suite complète des inscriptions, transferts inclus, pour « ce que
+ * j'ai fait ». Chaque ligne y conserve sa fenêtre date_ajout → date_retrait : lire une classe
+ * sans sa fenêtre montrerait à l'apprenant une période où il n'y était pas.
+ */
 async function getIds(email) {
-  const [{ data: ass }, { data: gaByEmail }] = await Promise.all([
+  const propre = email.trim();
+
+  const [{ data: ass }, { data: compte }] = await Promise.all([
     supabase.from("assignations_parcours")
       .select("id")
-      .ilike("prospect_email", email.trim())
+      .ilike("prospect_email", propre)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase.from("groupes_apprenants")
-      .select("id, groupe_id, nom_apprenant, prenom_apprenant, statut, note, date_ajout, date_retrait")
-      .ilike("email_apprenant", email.trim())
-      .in("statut", ["actif", "archive", "retire"])
-      .order("date_ajout", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    // L'email de connexion réel (identifiant technique d'un enfant sans email propre) peut
+    // différer de groupes_apprenants.email_apprenant, jamais rétro-mis à jour après création
+    // du compte. Sans ce second axe, ces apprenants ne retrouvent rien.
+    supabase.from("utilisateurs").select("id").ilike("email", propre).maybeSingle(),
   ]);
 
-  let ga = gaByEmail || null;
-  // Fallback par apprenant_id : l'email de connexion réel (ex : identifiant technique généré
-  // pour un enfant sans email propre) peut différer de groupes_apprenants.email_apprenant,
-  // qui n'est jamais rétro-mis à jour après la création du compte. Sans ce fallback, ces
-  // apprenants ne retrouvent ni leurs présences, ni leurs séances, ni leurs ressources.
-  if (!ga) {
-    const { data: compte } = await supabase.from("utilisateurs").select("id").ilike("email", email.trim()).maybeSingle();
-    if (compte?.id) {
-      const { data: gaById } = await supabase.from("groupes_apprenants")
-        .select("id, groupe_id, nom_apprenant, prenom_apprenant, statut, note, date_ajout, date_retrait")
-        .eq("apprenant_id", compte.id)
-        .in("statut", ["actif", "archive", "retire"])
-        .order("date_ajout", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      ga = gaById || null;
-    }
-  }
+  const [{ data: parEmail }, { data: parId }] = await Promise.all([
+    supabase.from("groupes_apprenants").select(CHAMPS_GA).ilike("email_apprenant", propre),
+    compte?.id
+      ? supabase.from("groupes_apprenants").select(CHAMPS_GA).eq("apprenant_id", compte.id)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // Les deux axes se recouvrent le plus souvent : on déduplique sur l'identifiant de ligne.
+  const parId_ = new Map();
+  [...(parEmail || []), ...(parId || [])].forEach(l => parId_.set(l.id, l));
+  const parcours = [...parId_.values()]
+    .sort((a, b) => String(a.date_ajout || "").localeCompare(String(b.date_ajout || "")));
+
+  // `ga` = l'inscription courante, choisie comme avant : la plus récente hors `transfere`.
+  const ga = [...parcours]
+    .filter(l => STATUTS_COURANTS.includes(l.statut))
+    .sort((a, b) => String(b.date_ajout || "").localeCompare(String(a.date_ajout || "")))[0] || null;
 
   // assignation_id posé dans groupes_apprenants.note à la création de la classe privée -
   // lien direct et fiable, prioritaire sur le match par prospect_email ci-dessus qui échoue
@@ -104,7 +124,48 @@ async function getIds(email) {
     try { assignationIdParNote = JSON.parse(ga.note).assignation_id || null; } catch {}
   }
 
-  return { assignation_id: assignationIdParNote || ass?.id || null, ga };
+  return { assignation_id: assignationIdParNote || ass?.id || null, ga, parcours };
+}
+
+/**
+ * Lit une table rattachée à une classe sur TOUT le parcours, chaque classe bornée à la
+ * fenêtre où l'apprenant y était réellement inscrit.
+ *
+ * Le bornage n'est pas un raffinement : un apprenant peut quitter une classe puis y revenir,
+ * et sans lui il verrait les séances de la période où il n'y était pas. `bornerAFenetre` sait
+ * déjà traiter plusieurs périodes par inscription (note.periodes).
+ *
+ * Chaque ligne repart avec `_classe` : deux présences du même jour dans deux classes
+ * différentes seraient sinon indistinguables une fois fusionnées.
+ */
+async function lireSurLeParcours(parcours, table, champs, dateDe, affiner) {
+  const lignes = (parcours || []).filter(l => l.groupe_id);
+  if (!lignes.length) return [];
+
+  const resultats = await Promise.all(lignes.map(async (ratt) => {
+    let q = supabase.from(table).select(champs).eq("groupe_id", ratt.groupe_id);
+    if (affiner) q = affiner(q, ratt);
+    const { data, error } = await q;
+    if (error) {
+      console.warn(`[lireSurLeParcours] ${table} / groupe ${ratt.groupe_id}:`, error.message);
+      return [];
+    }
+    return bornerAFenetre(data || [], ratt, dateDe)
+      .map(x => ({ ...x, _classe: { groupe_id: ratt.groupe_id, ga_id: ratt.id, statut: ratt.statut,
+                                    date_ajout: ratt.date_ajout, date_retrait: ratt.date_retrait } }));
+  }));
+
+  return resultats.flat();
+}
+
+/** Les noms des classes traversées, pour que l'apprenant sache d'où vient chaque ligne. */
+async function nomsDesClasses(parcours) {
+  const ids = [...new Set((parcours || []).map(l => l.groupe_id).filter(Boolean))];
+  if (!ids.length) return {};
+  const { data } = await supabase.from("groupes").select("id, nom, niveau").in("id", ids);
+  const map = {};
+  (data || []).forEach(g => { map[g.id] = g; });
+  return map;
 }
 
 // GET /api/mon-espace/seances?email=xxx
@@ -116,24 +177,26 @@ router.get("/seances", authenticateUser, async (req, res) => {
   const email = await emailAutorise(req.user, req.query.email);
   if (!email) return res.status(403).json({ error: "Accès refusé à ces données" });
   try {
-    const { assignation_id, ga } = await getIds(email);
+    const { assignation_id, ga, parcours } = await getIds(email);
     let data = [];
 
-    // Source actuelle : table unifiée `seances` (remplace seances_privees - le coach
-    // l'utilise désormais pour toutes ses séances via groupe_id), sans quoi une séance
-    // récente n'apparaît jamais côté apprenant alors qu'elle est bien comptée dans les
-    // honoraires du coach.
-    if (ga?.groupe_id) {
-      let q = supabase
-        .from("seances")
-        .select("*")
-        .eq("groupe_id", ga.groupe_id);
-      // Exclut les séances tenues avant l'arrivée de l'apprenant dans cette classe
-      // (transfert, ou ajout tardif) - sinon un ancien planning de classe déjà donné
-      // avant son arrivée s'affichait dans son propre espace.
-      if (ga.date_ajout) q = q.gte("date_seance", ga.date_ajout.slice(0, 10));
-      const { data: seancesNew } = await q.order("date_seance", { ascending: false });
-      data = seancesNew || [];
+    /* Source actuelle : table unifiée `seances` (remplace seances_privees - le coach
+       l'utilise désormais pour toutes ses séances via groupe_id), sans quoi une séance
+       récente n'apparaît jamais côté apprenant alors qu'elle est bien comptée dans les
+       honoraires du coach.
+
+       LU SUR TOUT LE PARCOURS, et non sur la seule classe du moment : les séances suivies
+       dans une classe précédente sont les siennes, il les a faites. Chacune reste bornée à
+       la fenêtre de l'inscription correspondante - les séances tenues avant son arrivée ou
+       après son départ ne lui appartiennent pas, et c'est ce bornage, pas l'identité de la
+       classe, qui doit les écarter. */
+    if (parcours?.length) {
+      const brutes = await lireSurLeParcours(parcours, "seances", "*", s => s.date_seance);
+      const classes = await nomsDesClasses(parcours);
+      data = brutes
+        .map(s => ({ ...s, classe_nom: classes[s._classe.groupe_id]?.nom || null,
+                           classe_passee: s._classe.statut === "transfere" }))
+        .sort((a, b) => String(b.date_seance || "").localeCompare(String(a.date_seance || "")));
     }
 
     if (data.length === 0 && assignation_id) {
@@ -189,34 +252,38 @@ router.get("/presences", authenticateUser, async (req, res) => {
       }
     }
 
-    // 2. Présences de groupe (groupe coaching ET sessions live)
-    if (ga) {
-      const { data: gpData } = await supabase
-        .from("groupes_presences")
-        .select("*")
-        .eq("groupe_id", ga.groupe_id)
-        .order("date_seance", { ascending: false });
-
-      const gpFiltered = (gpData || []).filter(p =>
-        String(p.ga_id) === String(ga.id) ||
-        (p.nom_apprenant === ga.nom_apprenant && p.prenom_apprenant === ga.prenom_apprenant)
-      );
+    /* 2. Présences de groupe (groupe coaching ET sessions live) - SUR TOUT LE PARCOURS.
+       Une présence appartient à l'apprenant, pas à la classe : celles d'une classe qu'il a
+       quittée restaient en base sans qu'aucun écran ne les lise, et son assiduité repartait
+       de zéro à chaque transfert. Le rattachement se fait sur le ga_id de CHAQUE inscription,
+       avec le repli sur le nom pour les feuilles d'appel saisies sans ga_id. */
+    if (parcours?.length) {
+      const gpFiltered = (await lireSurLeParcours(
+        parcours, "groupes_presences", "*", p => p.date_seance,
+      )).filter(p => {
+        const ratt = parcours.find(l => l.id === p._classe.ga_id);
+        return String(p.ga_id) === String(p._classe.ga_id) ||
+          (!!ratt && p.nom_apprenant === ratt.nom_apprenant && p.prenom_apprenant === ratt.prenom_apprenant);
+      });
 
       if (gpFiltered.length > 0) {
+        const classes = await nomsDesClasses(parcours);
         /* Croiser avec sessions_live - en RETENANT LA PLATEFORME.
            Seule la date était rapportée, si bien que toute séance issue d'une session
            portait l'étiquette « Session Live » chez l'apprenant, présentiel compris : les
            cinq séances en salle de cette classe s'affichaient comme des visios. */
         const { data: liveSessions } = await supabase
           .from("sessions_live")
-          .select("date, plateforme, titre")
-          .eq("groupe_id", ga.groupe_id)
+          .select("date, plateforme, titre, groupe_id")
+          .in("groupe_id", [...new Set(parcours.map(l => l.groupe_id).filter(Boolean))])
           .eq("statut", "terminee");
 
-        const parDate = new Map((liveSessions || []).map(s => [s.date, s]));
+        // Clé CLASSE + DATE : sur plusieurs classes, deux séances du même jour se
+        // confondraient et l'une hériterait de la plateforme de l'autre.
+        const parDate = new Map((liveSessions || []).map(s => [`${s.groupe_id}|${s.date}`, s]));
 
         const gpMapped = gpFiltered.map(p => {
-          const sl = parDate.get(p.date_seance) || null;
+          const sl = parDate.get(`${p._classe.groupe_id}|${p.date_seance}`) || null;
           return {
             ...p,
             source: sl ? "session_live" : "cours",
@@ -224,6 +291,8 @@ router.get("/presences", authenticateUser, async (req, res) => {
             // l'écran qui décide du libellé, pas le serveur.
             plateforme: sl?.plateforme || null,
             session_titre: sl?.titre || null,
+            classe_nom: classes[p._classe.groupe_id]?.nom || null,
+            classe_passee: p._classe.statut === "transfere",
           };
         });
 
@@ -296,22 +365,31 @@ router.get("/cours-groupe", authenticateUser, async (req, res) => {
     const { ga } = await getIds(email);
     if (!ga?.groupe_id) return res.json({ cours: [], groupe: null });
 
-    // Exclut les cours tenus avant l'arrivée de l'apprenant dans cette classe
-    // (transfert, ou ajout tardif) - même logique que /seances.
-    let coursQuery = supabase.from("groupes_cours")
+    /* CE CAHIER DE TEXTE EST CELUI DE LA CLASSE, PAS LE JOURNAL DE L'APPRENANT.
+       Les deux requêtes étaient bornées à sa date d'arrivée : un apprenant intégrant une
+       classe déjà commencée - ou transféré, sa date d'arrivée devenant celle du transfert -
+       ne voyait rien de ce qui avait été traité avant lui. Il ne pouvait donc pas rattraper
+       le programme, alors que c'est précisément ce qu'on attend d'un cahier de texte.
+
+       La borne est levée ici, et ICI SEULEMENT. `/seances` reste bornée : elle répond à
+       « quelles séances me concernent » et alimente présences et honoraires. Ce qui précède
+       l'arrivée est donc montré, mais MARQUÉ `avant_mon_arrivee` - lisible sans être
+       confondu avec ce que l'apprenant a suivi. */
+    const debut = ga.date_ajout ? ga.date_ajout.slice(0, 10) : null;
+    const avant = (d) => !!debut && !!d && String(d).slice(0, 10) < debut;
+
+    const coursQuery = supabase.from("groupes_cours")
       .select("id, date_cours, objectif, grammaire, sujet_discussion, statut, commentaire, created_at")
       .eq("groupe_id", ga.groupe_id);
-    if (ga.date_ajout) coursQuery = coursQuery.gte("date_cours", ga.date_ajout.slice(0, 10));
 
     // `groupes_cours` a été remplacée par la table unifiée `seances` : elle est VIDE (0 ligne
     // au total), et cette route n'interrogeait qu'elle. Résultat : l'onglet Planning de tout
     // apprenant en groupe était vide, alors que son coach y avait bien programmé ses séances.
     // On fusionne les deux sources, exactement comme GET /api/groupes/:id/cours.
-    let seancesQuery = supabase.from("seances")
+    const seancesQuery = supabase.from("seances")
       .select("id, date_seance, heure_debut, heure_fin, titre, objectif, statut, notes, duree_h")
       .eq("groupe_id", ga.groupe_id)
       .neq("statut", "corbeille");
-    if (ga.date_ajout) seancesQuery = seancesQuery.gte("date_seance", ga.date_ajout.slice(0, 10));
 
     const [{ data: cours }, { data: seancesNew }, { data: groupe }] = await Promise.all([
       coursQuery.order("date_cours", { ascending: false }),
@@ -325,16 +403,17 @@ router.get("/cours-groupe", authenticateUser, async (req, res) => {
     // L'écran de l'apprenant trie et affiche sur `date_cours` : on expose ce nom plutôt que
     // de faire porter le renommage à chaque lecteur.
     const tous = [
-      ...(cours || []),
+      ...(cours || []).map((c) => ({ ...c, avant_mon_arrivee: avant(c.date_cours) })),
       ...(seancesNew || []).map((s) => ({
         ...s,
         date_cours: s.date_seance,
         objectif: s.objectif || s.titre,
         commentaire: s.notes || null,
+        avant_mon_arrivee: avant(s.date_seance),
       })),
     ].sort((a, b) => String(b.date_cours || "").localeCompare(String(a.date_cours || "")));
 
-    res.json({ cours: tous, groupe: groupe || null });
+    res.json({ cours: tous, groupe: groupe || null, date_arrivee: debut });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
