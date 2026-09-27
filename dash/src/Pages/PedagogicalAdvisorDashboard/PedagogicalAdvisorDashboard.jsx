@@ -8339,6 +8339,25 @@ export default function PedagogicalAdvisorDashboard() {
                                       <p style={{ margin:0, fontSize:12, color:"#14532d", lineHeight:1.6 }}>{rp.recommandations}</p>
                                     </div>
                                   )}
+                                  {/* UN RAPPORT CORRIGÉ N'EST PLUS TOUT À FAIT LE TÉMOIGNAGE DU DEPUTY.
+                                      Le conseiller décide de l'affectation et de la catégorie de contrat
+                                      d'un coach sur cette note : il doit savoir qu'elle a été rectifiée,
+                                      par qui et pourquoi, avant d'en tirer une conclusion. Conserver la
+                                      trace sans la montrer au dernier lecteur n'aurait servi à rien. */}
+                                  {rp.correction_superviseur && (
+                                    <div style={{ gridColumn:"1/-1", background:"#fffbeb", borderRadius:9, padding:"10px 13px", border:"1px solid #fde68a" }}>
+                                      <div style={{ fontSize:11, fontWeight:800, color:"#92400e", marginBottom:5 }}>✏️ Rapport corrigé par le superviseur</div>
+                                      <p style={{ margin:0, fontSize:12, color:"#78350f", lineHeight:1.6 }}>
+                                        Par {[rp.correction_superviseur.par?.prenom, rp.correction_superviseur.par?.nom].filter(Boolean).join(" ") || "le superviseur"}
+                                        {rp.correction_superviseur.le ? ` le ${new Date(rp.correction_superviseur.le).toLocaleDateString("fr-FR")}` : ""}.
+                                        {rp.correction_superviseur.motif ? ` Motif : « ${rp.correction_superviseur.motif} ».` : ""}
+                                        {rp.correction_superviseur.original?.note_globale != null && rp.note_globale != null
+                                          && String(rp.correction_superviseur.original.note_globale) !== String(rp.note_globale)
+                                          ? ` Note du deputy : ${rp.correction_superviseur.original.note_globale}/5 → ${rp.note_globale}/5.`
+                                          : ""}
+                                      </p>
+                                    </div>
+                                  )}
                                   {rp.commentaire_superviseur && (
                                     <div style={{ gridColumn:"1/-1", background:"#fef9c3", borderRadius:9, padding:"10px 13px", border:"1px solid #fde047" }}>
                                       <div style={{ fontSize:11, fontWeight:800, color:"#854d0e", marginBottom:5 }}>💬 Note du Superviseur</div>

@@ -584,6 +584,55 @@ router.patch("/rapports-deputy/:id", authenticateAdmin, requireGlobalSuperviseur
       })();
     }
 
+    /* ── PRÉVENIR LE DEPUTY QUE SON RAPPORT A ÉTÉ CORRIGÉ ────────────────────────────
+       La notification ci-dessus ne part qu'au changement de STATUT. Une correction n'en
+       change aucun : sans ce second envoi, le deputy verrait un jour son observation
+       porter des notes qu'il n'a pas mises, sans avoir jamais été informé - et
+       l'apprendrait au mieux par le coach concerné.
+
+       ON LUI DIT CE QUI A CHANGÉ, pas seulement qu'on a changé quelque chose : la note
+       d'origine, la nouvelle, et le motif. Une notification qui annonce une correction
+       sans la montrer oblige à rouvrir l'écran pour comprendre, et se lit comme un
+       reproche là où c'est souvent une simple faute de frappe. */
+    if (correctionAppliquee && data?.deputy?.id) {
+      (async () => {
+        try {
+          const supNom = `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim() || "Le Superviseur Général";
+          const coachNom = data.coach
+            ? `${data.coach.prenom || ""} ${data.coach.nom || ""}`.trim()
+            : "un coach";
+          const dateObs = data.date_observation
+            ? new Date(data.date_observation).toLocaleDateString("fr-FR")
+            : "";
+          const avant = correctionAppliquee.original?.note_globale;
+          const apres = data.note_globale;
+          const noteChangee = avant != null && apres != null && String(avant) !== String(apres);
+
+          await supabase.from("notifications").insert({
+            user_id: data.deputy.id,
+            type:    "rapport_observation",
+            titre:   "✏️ Votre rapport a été corrigé",
+            message: `${supNom} a corrigé votre observation sur ${coachNom}${dateObs ? ` du ${dateObs}` : ""}.`
+              + (noteChangee ? ` Note : ${avant}/5 → ${apres}/5.` : "")
+              + (correctionAppliquee.motif ? ` Motif : « ${correctionAppliquee.motif} ».` : "")
+              + " Vos valeurs d'origine sont conservées et restent lisibles sur le rapport.",
+            source:  "superviseur",
+            meta:    {
+              rapport_id:    id,
+              correction:    true,
+              note_avant:    avant ?? null,
+              note_apres:    apres ?? null,
+              motif:         correctionAppliquee.motif || null,
+              coach_id:      data.coach?.id || null,
+            },
+            lu: false,
+          });
+        } catch (e) {
+          console.warn("[rapports-deputy PATCH] notification correction:", e.message);
+        }
+      })();
+    }
+
     /* `correction` remonte explicitement pour que l'écran puisse le confirmer : une
        correction silencieuse laisserait le superviseur incertain de ce qu'il vient
        d'enregistrer - et c'est justement l'acte qui demande le plus de certitude. */
