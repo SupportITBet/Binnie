@@ -10377,6 +10377,51 @@ export default function CommercialDashboard() {
                               <span>Dossier converti - verrouillé.</span>
                             </div>
                           )}
+                          {/* LA FAMILLE, sur la fiche que la commerciale rouvre.
+                              Elle a saisi un couple ou une famille à l'inscription ; rouvrir
+                              le dossier ne lui montrait qu'un nom. Impossible de vérifier, de
+                              corriger une coordonnée, ou même de se rappeler qui est concerné
+                              avant de transmettre au PA. */}
+                          {(() => {
+                            const membresF = (a.suivi_demarrage?.membres_famille || [])
+                              .filter(m => (m?.prenom || "").trim() || (m?.nom || "").trim());
+                            if (membresF.length === 0) return null;
+                            const sansNiveau = membresF.filter(m => !m?.niveau).length;
+                            return (
+                              <div style={{ background:"#eff6ff", border:"1.5px solid #bfdbfe", borderRadius:10, padding:"11px 14px", marginBottom:10 }}>
+                                <div style={{ fontSize:10.5, fontWeight:800, color:"#1d4ed8", textTransform:"uppercase", letterSpacing:".04em", marginBottom:7 }}>
+                                  👥 Coaching en famille · {1 + membresF.length} apprenants
+                                </div>
+                                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                                  <span style={{ fontSize:11.5, fontWeight:700, padding:"3px 10px", borderRadius:999, background:"#1d4ed8", color:"#fff" }}>
+                                    {a.prospect_nom} · payeur
+                                  </span>
+                                  {membresF.map((m, i) => (
+                                    <span key={i} style={{ fontSize:11.5, fontWeight:700, padding:"3px 10px", borderRadius:999, background:"#dbeafe", color:"#1e40af" }}>
+                                      {[m.prenom, m.nom].filter(Boolean).join(" ")}
+                                      {m.lien ? ` · ${m.lien}` : ""}
+                                      {m.niveau ? ` · ${m.niveau}` : ""}
+                                    </span>
+                                  ))}
+                                </div>
+                                {/* LE NIVEAU DE CHAQUE PERSONNE conditionne l'affectation : un coach
+                                    ne prépare pas la même séance pour un A1 et un C1 assis côte à
+                                    côte. Un niveau manquant se signale ici, pendant qu'il est encore
+                                    temps de faire passer le test - pas après l'affectation. */}
+                                {sansNiveau > 0 && (
+                                  <div style={{ marginTop:8, fontSize:11, color:"#92400e", background:"#fffbeb",
+                                    border:"1px solid #fde68a", borderRadius:7, padding:"7px 10px", lineHeight:1.55 }}>
+                                    ⚠️ {sansNiveau} personne{sansNiveau > 1 ? "s" : ""} sans niveau évalué.
+                                    Faites passer le test depuis l'onglet « Tests de niveau », puis renseignez-le ici —
+                                    le PA en a besoin pour affecter un coach.
+                                  </div>
+                                )}
+                                <div style={{ fontSize:10, color:"#64748b", marginTop:7, lineHeight:1.5 }}>
+                                  Un seul dossier, un seul montant, un seul échéancier. Les accès sont créés à l'affectation de la classe.
+                                </div>
+                              </div>
+                            );
+                          })()}
                           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
                             <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                               <label style={{ fontSize:11, fontWeight:700, color:"#374151" }}>Niveau détecté *</label>
@@ -16211,7 +16256,16 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
           ...(assistanteTypeCours !== "en_ligne" && confirmPayload.coachingPriveData?.lieu !== "domicile" && confirmPayload.coachingPriveData?.centre ? [{ label:"Centre", value: confirmPayload.coachingPriveData.centre }] : []),
           ...(assistanteTypeCours !== "en_ligne" && confirmPayload.coachingPriveData?.lieu === "domicile" && confirmPayload.coachingPriveData?.adresse ? [{ label:"Adresse", value: confirmPayload.coachingPriveData.adresse }] : []),
         ] : [];
-        const rows = [...baseRows, ...priveRows];
+        /* LE MONTANT MANQUAIT au récapitulatif, alors que c'est la ligne qu'on relit en
+           premier avant d'enregistrer - surtout sur un forfait famille négocié à la main. */
+        const montantRows = [
+          ...(confirmPayload.montant ? [{ label:"Montant", value:`${Number(confirmPayload.montant).toLocaleString("fr-FR")} FCFA` }] : []),
+          ...(confirmPayload.mensualite_negociee ? [{ label:"Mensualité du contrat", value:`${Number(confirmPayload.mensualite_negociee).toLocaleString("fr-FR")} FCFA` }] : []),
+        ];
+        const rows = [...baseRows, ...priveRows, ...montantRows];
+        const membresRecap = (confirmPayload.coachingPriveData?.membres_famille || [])
+          .filter(m => (m?.prenom || "").trim() || (m?.nom || "").trim());
+        const objectifRecap = (confirmPayload.objectif_client || "").trim();
         return (
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:10000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
             <div style={{ background:"#fff", borderRadius:16, width:"100%", maxWidth:480, boxShadow:"0 20px 60px rgba(0,0,0,0.25)", overflow:"hidden" }}>
@@ -16230,6 +16284,48 @@ const InscriptionForm = ({ initialData, onSave, onCancel, finalisationMode, cata
                     <span style={{ color:"#0f172a", fontWeight:700, textAlign:"right", maxWidth:"60%" }}>{row.value}</span>
                   </div>
                 ))}
+
+                {/* L'OBJECTIF, en pleine largeur : c'est une phrase, et la seule information
+                    du dossier qui dise POURQUOI le client vient. Une ligne de tableau à deux
+                    colonnes l'aurait tronquée. */}
+                {objectifRecap && (
+                  <div style={{ background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:8, padding:"9px 12px" }}>
+                    <div style={{ fontSize:10, fontWeight:800, color:"#6d28d9", textTransform:"uppercase", letterSpacing:".04em", marginBottom:4 }}>
+                      🎯 Objectif du client
+                    </div>
+                    <div style={{ fontSize:12.5, lineHeight:1.55, color:"#0f172a", whiteSpace:"pre-wrap" }}>{objectifRecap}</div>
+                  </div>
+                )}
+
+                {/* LA FAMILLE. Enregistrer un dossier à trois apprenants sans que le
+                    récapitulatif ne les montre, c'est demander une confirmation sur ce qu'on
+                    ne voit pas - la commerciale ne pouvait pas vérifier une saisie qu'elle
+                    venait pourtant de faire. */}
+                {membresRecap.length > 0 && (
+                  <div style={{ background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:8, padding:"9px 12px" }}>
+                    <div style={{ fontSize:10, fontWeight:800, color:"#1d4ed8", textTransform:"uppercase", letterSpacing:".04em", marginBottom:6 }}>
+                      👥 Coaching en famille · {1 + membresRecap.length} apprenants
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#1e40af" }}>
+                        {confirmPayload.client || confirmPayload.contact} <span style={{ fontWeight:600, color:"#64748b" }}>· payeur</span>
+                      </div>
+                      {membresRecap.map((m, i) => (
+                        <div key={i} style={{ fontSize:12, color:"#0f172a" }}>
+                          {[m.prenom, m.nom].filter(Boolean).join(" ")}
+                          <span style={{ color:"#64748b" }}>
+                            {m.lien ? ` · ${m.lien}` : ""}
+                            {m.niveau ? ` · ${m.niveau}` : " · niveau à évaluer"}
+                            {(m.telephone || m.email) ? ` · ${m.telephone || m.email}` : " · sans coordonnées"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:6, lineHeight:1.5 }}>
+                      Le montant est global pour la famille. Les accès seront créés à l'affectation de la classe.
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{ display:"flex", gap:10, padding:"0 24px 20px" }}>
                 <button onClick={() => setConfirmPayload(null)}
