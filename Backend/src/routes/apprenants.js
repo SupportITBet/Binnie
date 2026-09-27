@@ -8,7 +8,7 @@ import supabase from "../config/supabase.js";
 import { authenticateAdmin, requirePermission } from "../middlewares/requireAdmin.js";
 import { logAudit } from "../middlewares/logAudit.js";
 import { sendApprenantWelcomeEmail, sendParentWelcomeEmail, sendNotificationEmail, sendContactNotificationEmail } from "../services/emailService.js";
-import { bloquerAcces, debloquerAcces, catalogueMotifs } from "../services/blocageAcces.js";
+import { bloquerAcces, debloquerAcces, catalogueMotifs, propagerALaFamille } from "../services/blocageAcces.js";
 import { assurerActiviteDuJour, attribuerPoints } from "../services/gamificationDash.js";
 import { enrichirPaiementsAvecTouchPoint } from "../utils/enrichirPaiementsTouchpoint.js";
 import { notifyRole, notifyUser, notifyOnboarding, ROLES_SUPERVISION_GLOBALE } from "../services/notifyRole.js";
@@ -257,6 +257,19 @@ router.patch("/:id/suspension", authenticateAdmin, async (req, res) => {
       : await debloquerAcces({ apprenantId: id });
     if (!resultat.ok) throw new Error(resultat.error);
 
+    /* COACHING PRIVÉ EN FAMILLE : un impayé vaut pour toute la famille.
+       Le forfait est global - bloquer le seul payeur pendant que son conjoint et ses
+       enfants continuent les séances viderait la sanction de son sens, le coach se
+       déplaçant de toute façon. La propagation ne concerne QUE le non-paiement : des
+       absences répétées sont le fait d'une personne, en punir sa famille serait absurde.
+       Non bloquant : un membre qui échoue n'annule pas l'action sur le payeur. */
+    const famille = await propagerALaFamille({
+      apprenantId: id,
+      bloque,
+      motif: motif || "manuel",
+      message: message || null,
+    });
+
     const { data: authData } = await supabase.auth.admin.getUserById(id);
     const authUser = authData?.user;
     const meta     = authUser?.user_metadata || {};
@@ -360,7 +373,10 @@ router.patch("/:id/suspension", authenticateAdmin, async (req, res) => {
       }
     })();
 
-    return res.json({ ok: true, acces_bloque: bloque });
+    /* `famille` remonte au client pour qu'il puisse le DIRE. Bloquer trois personnes d'un
+       geste sans l'annoncer serait une surprise désagréable, et l'assistante découvrirait
+       l'étendue de son action par les appels des intéressés. */
+    return res.json({ ok: true, acces_bloque: bloque, famille });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

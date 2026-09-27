@@ -160,3 +160,89 @@ export async function debloquerAcces({ apprenantId }) {
 
   return { ok: true, emailEnvoye: envoye };
 }
+
+/* ════════════════════════════════════════════════════════════════════════════════
+   LE COACHING PRIVÉ EN FAMILLE — un impayé vaut pour toute la famille
+   ════════════════════════════════════════════════════════════════════════════════
+
+   Un couple ou une famille qui prend un coaching privé ensemble partage UN dossier,
+   UN montant, UN échéancier. Bloquer le seul payeur pendant que son conjoint et ses
+   enfants continuent de suivre les séances viderait la sanction de son sens : le coach
+   se déplace quand même, et la formation continue d'être dispensée sans être payée.
+
+   MAIS SEULEMENT POUR L'IMPAYÉ. Des absences répétées sont le fait d'une personne : en
+   punir sa famille serait absurde, et c'est le genre d'automatisme qui fait perdre
+   confiance dans un outil. La propagation est donc conditionnée au motif, jamais
+   appliquée par défaut.
+
+   LE LIEN DE FAMILLE se lit dans `groupes_apprenants.note`, qui porte l'identifiant de
+   l'assignation payeuse pour chaque inscrit. Partager cette assignation, c'est être de
+   la même famille - il n'existe pas d'autre cas où plusieurs inscriptions pointent le
+   même dossier.
+   ════════════════════════════════════════════════════════════════════════════════ */
+
+/** Les comptes des AUTRES membres de la famille d'un apprenant (jamais lui-même). */
+export async function comptesDeLaFamille(apprenantId) {
+  if (!apprenantId) return [];
+  try {
+    const { data: siennes } = await supabase
+      .from("groupes_apprenants")
+      .select("note")
+      .eq("apprenant_id", apprenantId);
+
+    const assignations = new Set();
+    for (const ligne of siennes || []) {
+      try {
+        const id = JSON.parse(ligne.note || "{}").assignation_id;
+        if (id) assignations.add(id);
+      } catch { /* note libre ou illisible : cette ligne ne dit rien de la famille */ }
+    }
+    if (assignations.size === 0) return [];
+
+    // `note.ilike.%id%` plutôt qu'une jointure : le lien vit dans un JSON stocké en texte,
+    // sans clé étrangère. Même technique que la résolution de classe dans parcours.js.
+    const { data: parentes } = await supabase
+      .from("groupes_apprenants")
+      .select("apprenant_id, note")
+      .not("apprenant_id", "is", null)
+      .or([...assignations].map(id => `note.ilike.%${id}%`).join(","));
+
+    const comptes = new Set();
+    for (const ligne of parentes || []) {
+      if (!ligne.apprenant_id || ligne.apprenant_id === apprenantId) continue;
+      try {
+        const id = JSON.parse(ligne.note || "{}").assignation_id;
+        if (id && assignations.has(id)) comptes.add(ligne.apprenant_id);
+      } catch { /* ignorée */ }
+    }
+    return [...comptes];
+  } catch (e) {
+    console.warn("[blocageAcces] famille non résolue :", e.message);
+    return [];
+  }
+}
+
+/**
+ * Étend un blocage ou un déblocage aux autres membres de la famille.
+ *
+ * Silencieux par conception : un échec sur un membre ne doit pas faire échouer l'action
+ * principale sur le payeur, qui reste l'acte demandé. On retourne le compte de ce qui a
+ * été fait, pour que l'appelant puisse le dire - une propagation partielle annoncée vaut
+ * mieux qu'une propagation totale supposée.
+ */
+export async function propagerALaFamille({ apprenantId, bloque, motif = "non_paiement", message = null }) {
+  if (motif !== "non_paiement") return { concernes: 0, traites: 0 };
+
+  const comptes = await comptesDeLaFamille(apprenantId);
+  if (comptes.length === 0) return { concernes: 0, traites: 0 };
+
+  let traites = 0;
+  for (const id of comptes) {
+    const r = bloque
+      ? await bloquerAcces({ apprenantId: id, motif: "non_paiement", message })
+      : await debloquerAcces({ apprenantId: id });
+    if (r.ok) traites++;
+    else console.warn(`[blocageAcces] famille - ${id} non traité :`, r.error);
+  }
+  return { concernes: comptes.length, traites };
+}

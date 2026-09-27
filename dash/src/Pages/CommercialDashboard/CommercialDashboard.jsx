@@ -13416,10 +13416,19 @@ export default function CommercialDashboard() {
               }),
             });
             if (!r.ok) { const e = await r.json().catch(()=>({})); toast.error(e.error || "Erreur"); return; }
+            const rep = await r.json().catch(() => ({}));
             setCommAccesInfo(prev => prev ? { ...prev, profil: { ...prev.profil, acces_bloque: true } } : prev);
             setBlocageStatus(prev => prev ? { ...prev, acces_bloque: true } : prev);
             setBlocageModal(null);
             toast.success("🔒 Accès bloqué - l'apprenant a été prévenu par email");
+            /* COACHING EN FAMILLE : le serveur a pu bloquer d'autres personnes du même
+               dossier, sur un motif de non-paiement. On le DIT - bloquer trois personnes
+               d'un geste sans l'annoncer ferait découvrir l'étendue de l'action par les
+               appels des intéressés. */
+            if (rep?.famille?.traites > 0) {
+              toast(`👥 ${rep.famille.traites} autre${rep.famille.traites > 1 ? "s" : ""} personne${rep.famille.traites > 1 ? "s" : ""} de la famille également bloquée${rep.famille.traites > 1 ? "s" : ""} - le forfait est global`,
+                { icon: "🔒", duration: 8000 });
+            }
           } catch { toast.error("Erreur réseau"); }
           finally { setSuspensionLoading(false); }
         };
