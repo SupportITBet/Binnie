@@ -3111,8 +3111,14 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes", "update"), 
        On marque donc la classe AVANT d'appliquer la modification : si elle était privée à
        l'ancienne (capacité 1, `is_prive` jamais renseigné), elle le reste explicitement.
        La donnée se répare ainsi d'elle-même au fil des modifications, sans reprise globale
-       et sans qu'aucun utilisateur ait à savoir que cette colonne existe. */
-    if (ancien.is_prive == null && ancien.capacite_max === 1 && updates.is_prive === undefined) {
+       et sans qu'aucun utilisateur ait à savoir que cette colonne existe.
+
+       `is_prive !== true` et non `is_prive == null` : la colonne a une valeur PAR DÉFAUT
+       à `false`. Elle ne vaut donc jamais null, et un test sur null ne rattrape rien -
+       erreur que j'ai commise en supposant la forme de la donnée au lieu de la lire.
+       Comme rien n'a jamais écrit cette colonne, `false` y signifie « jamais renseignée »,
+       pas « explicitement pas privée ». */
+    if (ancien.is_prive !== true && ancien.capacite_max === 1 && updates.is_prive === undefined) {
       updates.is_prive = true;
     }
     const msgDelegueEdit = await refuserSiTitulaireDelegue(req.role === "coach" ? req.profil.id : null, id);

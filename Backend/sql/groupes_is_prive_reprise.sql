@@ -11,6 +11,10 @@
 --  sur tous les écrans à la fois : le badge « Coaching privé » disparaissait, et le
 --  sélecteur de classe la traitait comme une classe ordinaire.
 --
+--  ATTENTION AU CRITÈRE : la colonne a une valeur PAR DÉFAUT à `false`, elle ne vaut
+--  donc jamais `null`. Comme rien ne l'a jamais écrite, `false` y signifie « jamais
+--  renseignée » et non « explicitement pas privée » - d'où le `is not true` ci-dessous.
+--
 --  La colonne `is_prive` existait depuis le début sans jamais être renseignée. Elle l'est
 --  désormais à la création et se répare d'elle-même à chaque modification de classe. Ce
 --  script s'occupe des classes qui ne seront peut-être jamais modifiées.
@@ -26,7 +30,7 @@ alter table groupes add column if not exists is_prive boolean;
 --     Vérifiez cette liste : ce sont bien vos coachings privés, et rien d'autre.
 select id, nom, capacite_max, is_prive, statut, created_at
 from groupes
-where is_prive is null
+where is_prive is not true
   and (capacite_max = 1 or nom ilike 'coaching priv%')
 order by created_at desc;
 
@@ -37,16 +41,16 @@ order by created_at desc;
 --     varier sans effacer l'identité de la classe.
 update groupes
    set is_prive = true
- where is_prive is null
+ where is_prive is not true
    and (capacite_max = 1 or nom ilike 'coaching priv%');
 
 -- ── 4. Contrôle ─────────────────────────────────────────────────────────────────
 select
   count(*) filter (where is_prive is true)  as privees,
-  count(*) filter (where is_prive is null)  as non_marquees,
+  count(*) filter (where is_prive is not true) as non_marquees,
   count(*) filter (where is_prive is true and capacite_max > 1) as foyers
 from groupes;
 
 -- `non_marquees` doit ne contenir que des classes de groupe.
 -- Pour s'en assurer :
--- select nom, capacite_max from groupes where is_prive is null order by capacite_max;
+-- select nom, capacite_max from groupes where is_prive is not true order by capacite_max;
