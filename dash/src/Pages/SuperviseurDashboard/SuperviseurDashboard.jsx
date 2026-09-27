@@ -341,6 +341,8 @@ export default function SuperviseurDashboard() {
   const CLASSEMENT_PAR_PAGE = 8;
   const [rapportsLoading,  setRapportsLoading]   = useState(false);
   const [rapportDetail,    setRapportDetail]     = useState(null);
+  const [correctionForm,   setCorrectionForm]   = useState(null);   // null = mode lecture, jamais éditable par défaut
+  const [motifCorrection,  setMotifCorrection]  = useState("");
   const [showRapportForm,  setShowRapportForm]   = useState(false);
   const [rapportExpanded2, setRapportExpanded2]  = useState(new Set());
   const [rapportPage,      setRapportPage]       = useState(1);
@@ -1862,20 +1864,163 @@ export default function SuperviseurDashboard() {
       )}
 
       {rapportDetail && IS_GENERAL && (
-        <Modal title="Commentaire superviseur" onClose={()=>setRapportDetail(null)}>
+        <Modal title="Rapport du deputy" subtitle="Commentez, ou corrigez avant de transmettre au conseiller pédagogique" onClose={()=>{ setRapportDetail(null); setCorrectionForm(null); setMotifCorrection(""); }}>
+
+          {/* LA TRACE D'UNE CORRECTION ANTÉRIEURE, en tête et avant tout le reste.
+              Un rapport corrigé n'est plus tout à fait le témoignage du deputy : celui qui
+              le lit doit le savoir avant d'en tirer une conclusion sur un coach. */}
+          {rapportDetail.correction_superviseur && (
+            <div style={{ background:"#fffbeb", border:"1.5px solid #fde68a", borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
+              <div style={{ fontSize:10.5, fontWeight:800, color:"#92400e", textTransform:"uppercase", letterSpacing:".05em", marginBottom:6 }}>
+                ✏️ Rapport corrigé
+              </div>
+              <div style={{ fontSize:12.5, color:"#78350f", lineHeight:1.6 }}>
+                Par {[rapportDetail.correction_superviseur.par?.prenom, rapportDetail.correction_superviseur.par?.nom].filter(Boolean).join(" ") || "le superviseur"}
+                {rapportDetail.correction_superviseur.le ? ` le ${new Date(rapportDetail.correction_superviseur.le).toLocaleDateString("fr-FR", { day:"2-digit", month:"long", year:"numeric" })}` : ""}.
+                {rapportDetail.correction_superviseur.motif ? <> Motif : <strong>{rapportDetail.correction_superviseur.motif}</strong>.</> : null}
+              </div>
+              {rapportDetail.correction_superviseur.original && (
+                <div style={{ fontSize:11.5, color:"#92400e", marginTop:8, lineHeight:1.6 }}>
+                  Note d'origine du deputy :{" "}
+                  <strong>{rapportDetail.correction_superviseur.original.note_globale ?? "-"}/5</strong>
+                  {rapportDetail.note_globale ? <> · après correction : <strong>{rapportDetail.note_globale}/5</strong></> : null}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── MODE CORRECTION ───────────────────────────────────────────────────────
+              Ouvert à la demande, jamais par défaut : la relecture d'un rapport n'est pas
+              une réécriture, et un formulaire éditable d'emblée inviterait à modifier ce
+              qu'on venait seulement lire.
+
+              LA NOTE GLOBALE N'EST PAS SAISISSABLE - elle se recalcule côté serveur à
+              partir des cinq critères du barème officiel. La proposer ici laisserait croire
+              qu'on peut la fixer à la main, et elle serait écrasée au premier enregistrement. */}
+          {!correctionForm ? (
+            <button
+              disabled={!peut("rapports","manage") || rapportDetail.statut === "transmis_pa"}
+              title={rapportDetail.statut === "transmis_pa"
+                ? "Rapport déjà transmis au conseiller pédagogique - la correction n'est plus possible"
+                : "Corriger une erreur de saisie du deputy"}
+              onClick={() => setCorrectionForm({
+                ponctualite:           rapportDetail.ponctualite ?? "",
+                preparation:           rapportDetail.preparation ?? "",
+                pedagogie:             rapportDetail.pedagogie ?? "",
+                gestion_classe:        rapportDetail.gestion_classe ?? "",
+                professionnalisme:     rapportDetail.professionnalisme ?? "",
+                interactivite_classe:  rapportDetail.interactivite_classe ?? "",
+                approche_grammaticale: rapportDetail.approche_grammaticale ?? "",
+                expression_engagement: rapportDetail.expression_engagement ?? "",
+                feedback_correction:   rapportDetail.feedback_correction ?? "",
+                observations:          rapportDetail.observations || "",
+                recommandations:       rapportDetail.recommandations || "",
+              })}
+              style={{ padding:"8px 16px", background:"#fff", border:"1.5px solid #c4b5fd", borderRadius:8,
+                color:"#6d28d9", fontSize:12.5, fontWeight:700,
+                cursor: rapportDetail.statut === "transmis_pa" ? "not-allowed" : "pointer",
+                opacity: rapportDetail.statut === "transmis_pa" ? 0.5 : 1, marginBottom:16 }}>
+              ✏️ Corriger ce rapport
+            </button>
+          ) : (
+            <div style={{ background:"#faf9ff", border:"1.5px solid #ddd6fe", borderRadius:10, padding:"14px 16px", marginBottom:16 }}>
+              <div style={{ fontSize:11, fontWeight:800, color:"#6d28d9", textTransform:"uppercase", letterSpacing:".05em", marginBottom:10 }}>
+                ✏️ Correction du rapport
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+                {[
+                  ["ponctualite",           "Ponctualité"],
+                  ["preparation",           "Préparation"],
+                  ["pedagogie",             "Pédagogie"],
+                  ["gestion_classe",        "Gestion de classe"],
+                  ["professionnalisme",     "Professionnalisme"],
+                  ["interactivite_classe",  "Interactivité"],
+                  ["approche_grammaticale", "Approche grammaticale"],
+                  ["expression_engagement", "Expression & engagement"],
+                  ["feedback_correction",   "Feedback & correction"],
+                ].map(([cle, label]) => (
+                  <div key={cle}>
+                    <label style={{ fontSize:10.5, fontWeight:700, color:"#6b7280", display:"block", marginBottom:3 }}>{label}</label>
+                    <select value={correctionForm[cle]} onChange={e => setCorrectionForm(f => ({ ...f, [cle]: e.target.value }))}
+                      style={{ width:"100%", padding:"6px 8px", border:"1px solid #c4b5fd", borderRadius:7, fontSize:12, background:"#fff", cursor:"pointer" }}>
+                      <option value="">Non noté</option>
+                      {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}/5</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              {[["observations","Observations"],["recommandations","Recommandations"]].map(([cle,label]) => (
+                <div key={cle} style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:10.5, fontWeight:700, color:"#6b7280", display:"block", marginBottom:3 }}>{label}</label>
+                  <textarea rows={3} value={correctionForm[cle]} onChange={e => setCorrectionForm(f => ({ ...f, [cle]: e.target.value }))}
+                    style={{ width:"100%", padding:"8px 10px", border:"1px solid #c4b5fd", borderRadius:7, fontSize:12.5, resize:"vertical", boxSizing:"border-box" }} />
+                </div>
+              ))}
+
+              {/* LE MOTIF EST OBLIGATOIRE. Corriger le témoignage d'un collègue sans dire
+                  pourquoi rend la correction indéfendable le jour où le deputy ou le coach
+                  la conteste - et c'est la seule ligne que le conseiller lira pour comprendre. */}
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:10.5, fontWeight:700, color:"#6b7280", display:"block", marginBottom:3 }}>
+                  Motif de la correction <span style={{ color:"#dc2626" }}>*</span>
+                </label>
+                <input type="text" value={motifCorrection} onChange={e => setMotifCorrection(e.target.value)}
+                  placeholder="Ex : critère de ponctualité inversé lors de la saisie"
+                  style={{ width:"100%", padding:"8px 10px", border:`1.5px solid ${motifCorrection.trim() ? "#c4b5fd" : "#fca5a5"}`,
+                    borderRadius:7, fontSize:12.5, boxSizing:"border-box" }} />
+              </div>
+
+              <div style={{ fontSize:10.5, color:"#6b7280", lineHeight:1.55, marginBottom:12 }}>
+                La note globale sera recalculée à partir des critères du barème officiel.
+                Les valeurs d'origine du deputy sont conservées et resteront lisibles.
+              </div>
+
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => { setCorrectionForm(null); setMotifCorrection(""); }}
+                  style={{ padding:"8px 16px", background:"#fff", border:"1.5px solid #e2e8f0", borderRadius:8, color:"#64748b", fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+                  Annuler
+                </button>
+                <button
+                  disabled={!motifCorrection.trim() || rapportActionLoading.has(rapportDetail.id)}
+                  onClick={async () => {
+                    if (!motifCorrection.trim() || rapportActionLoading.has(rapportDetail.id)) return;
+                    setRapportActionLoading(prev => new Set(prev).add(rapportDetail.id));
+                    try {
+                      const r = await fetch(`${API_URL}/api/superviseur/rapports-deputy/${rapportDetail.id}`, {
+                        method:"PATCH", headers:authHdrs(),
+                        body: JSON.stringify({ correction: correctionForm, motif_correction: motifCorrection.trim() }),
+                      });
+                      const d = await r.json().catch(()=>({}));
+                      if (!r.ok) { toast.error(d.error || "Erreur lors de la correction"); return; }
+                      toast.success(`✏️ Rapport corrigé - note recalculée : ${d.rapport?.note_globale ?? "-"}/5`);
+                      setCorrectionForm(null); setMotifCorrection(""); setRapportDetail(null); fetchRapports();
+                    } catch { toast.error("Erreur réseau"); }
+                    finally { setRapportActionLoading(prev => { const n = new Set(prev); n.delete(rapportDetail.id); return n; }); }
+                  }}
+                  style={{ padding:"8px 16px", background: motifCorrection.trim() ? "#6d28d9" : "#cbd5e1", border:"none", borderRadius:8,
+                    color:"#fff", fontSize:12.5, fontWeight:700, cursor: motifCorrection.trim() ? "pointer" : "not-allowed" }}>
+                  {rapportActionLoading.has(rapportDetail.id) ? "⏳…" : "Enregistrer la correction"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <label style={{ fontSize:11, fontWeight:700, color:"#6b7280", display:"block", marginBottom:4 }}>Commentaire du superviseur</label>
           <textarea id="cmtSup" rows={5} defaultValue={rapportDetail.commentaire_superviseur||""} placeholder="Votre commentaire..."
-            style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:8, fontSize:13, resize:"vertical", boxSizing:"border-box", marginBottom:14 }} />
+            style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:8, fontSize:13, resize:"vertical", boxSizing:"border-box", marginBottom:12 }} />
           <button disabled={rapportActionLoading.has(rapportDetail.id)} onClick={async()=>{
               if (rapportActionLoading.has(rapportDetail.id)) return;
               setRapportActionLoading(prev => new Set(prev).add(rapportDetail.id));
               try {
                 const v=document.getElementById("cmtSup")?.value;
-                const r=await fetch(`${API_URL}/api/superviseur/rapports-deputy/${rapportDetail.id}`,{method:"PATCH",headers:authHdrs(),body:JSON.stringify({commentaire_superviseur:v,statut:"lu"})});
+                const r=await fetch(`${API_URL}/api/superviseur/rapports-deputy/${rapportDetail.id}`,{method:"PATCH",headers:authHdrs(),body:JSON.stringify({commentaire_superviseur:v})});
                 if(r.ok){toast.success("Commentaire enregistré");setRapportDetail(null);fetchRapports();}
               } finally { setRapportActionLoading(prev => { const n = new Set(prev); n.delete(rapportDetail.id); return n; }); }
             }}
-            style={{ padding:"9px 18px", background:BET_COLOR, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:600, cursor:rapportActionLoading.has(rapportDetail.id)?"not-allowed":"pointer" }}>
-            {rapportActionLoading.has(rapportDetail.id) ? "⏳…" : "Enregistrer"}
+            style={{ padding:"9px 18px", background:BET_COLOR, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:600, cursor:rapportActionLoading.has(rapportDetail.id)?"wait":"pointer" }}>
+            {rapportActionLoading.has(rapportDetail.id) ? "⏳…" : "Enregistrer le commentaire"}
           </button>
         </Modal>
       )}

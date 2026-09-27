@@ -210,7 +210,8 @@ router.get("/rapports-deputy", authenticateAdmin, requireSuperviseurRole, async 
         type_observation, type_lecon, internet,
         professionnalisme, incident_technique, incident_technique_detail,
         observations, recommandations, note_globale, synthese,
-        statut, commentaire_superviseur, transmis_pa_le, created_at
+        statut, commentaire_superviseur, transmis_pa_le, created_at,
+        correction_superviseur
       `)
       .eq("plateforme", PLATEFORME)
       .order("created_at", { ascending: false });
@@ -406,12 +407,84 @@ router.post("/rapports-deputy", authenticateAdmin, requireSuperviseurRole, async
 router.patch("/rapports-deputy/:id", authenticateAdmin, requireGlobalSuperviseur, requirePermission("rapports", "manage"), async (req, res) => {
   try {
     const { id } = req.params;
-    const { statut, commentaire_superviseur } = req.body;
+    const { statut, commentaire_superviseur, correction, motif_correction } = req.body;
 
     const updates = {};
     if (statut) updates.statut = statut;
     if (commentaire_superviseur !== undefined) updates.commentaire_superviseur = commentaire_superviseur;
     if (statut === "transmis_pa") updates.transmis_pa_le = new Date().toISOString();
+
+    /* ── CORRECTION DU RAPPORT PAR LE SUPERVISEUR ────────────────────────────────────
+       Il relit avant de transmettre au conseiller pédagogique, et une erreur de saisie du
+       deputy - un critère mal cliqué, une classe confondue - partait jusqu'ici telle quelle.
+       Ce n'est pas anodin : la note globale attribue des points au coach à la transmission
+       (+30 / +15 / −10) et pèse sur son classement et sa catégorie de contrat.
+
+       MAIS UN RAPPORT EST UN TÉMOIGNAGE. Le réécrire en silence ferait disparaître la
+       parole du deputy, et le document perdrait toute valeur de preuve le jour où un coach
+       conteste sa note. L'original est donc conservé, et il l'est UNE SEULE FOIS : à la
+       première correction. Sans cette précaution, deux corrections successives feraient
+       passer la première pour l'observation d'origine.
+
+       LA NOTE GLOBALE EST RECALCULÉE. La laisser en l'état après avoir changé les critères
+       attribuerait au coach des points fondés sur une note périmée - l'erreur qu'on vient
+       précisément de corriger continuerait de produire ses effets. */
+    let correctionAppliquee = null;
+    if (correction && typeof correction === "object" && Object.keys(correction).length > 0) {
+      const { data: avant, error: errAvant } = await supabase
+        .from("rapports_observation")
+        .select("*")
+        .eq("id", id)
+        .eq("plateforme", PLATEFORME)
+        .single();
+      if (errAvant || !avant) return res.status(404).json({ error: "Rapport introuvable" });
+
+      const CHAMPS_CORRIGEABLES = [
+        "ponctualite", "preparation", "pedagogie", "gestion_classe", "professionnalisme",
+        "interactivite_classe", "approche_grammaticale", "expression_engagement",
+        "feedback_correction", "type_observation", "type_lecon", "internet",
+        "observations", "recommandations", "centre", "classe", "date_observation",
+      ];
+      const NOTES = new Set([
+        "ponctualite", "preparation", "pedagogie", "gestion_classe", "professionnalisme",
+        "interactivite_classe", "approche_grammaticale", "expression_engagement", "feedback_correction",
+      ]);
+      // 0 signifie « non noté » côté formulaire, et la table refuse 0 sur ces colonnes :
+      // même normalisation que le POST, sans quoi une remise à zéro échouerait en base.
+      const norm = v => (v !== null && v !== undefined && parseFloat(v) > 0) ? parseFloat(v) : null;
+
+      for (const champ of CHAMPS_CORRIGEABLES) {
+        if (correction[champ] === undefined) continue;
+        updates[champ] = NOTES.has(champ) ? norm(correction[champ]) : correction[champ];
+      }
+
+      // Recalcul sur les valeurs APRÈS correction, en reprenant celles d'avant pour les
+      // critères que le superviseur n'a pas touchés.
+      const valeur = c => (updates[c] !== undefined ? updates[c] : norm(avant[c]));
+      updates.note_globale = noteObservation({
+        preparation:           valeur("preparation"),
+        pedagogie:             valeur("pedagogie"),
+        expression_engagement: valeur("expression_engagement"),
+        gestion_classe:        valeur("gestion_classe"),
+        feedback_correction:   valeur("feedback_correction"),
+      });
+      updates.synthese = syntheseObservation(updates.note_globale);
+
+      updates.correction_superviseur = {
+        // L'original ne s'écrit qu'une fois : il doit rester ce que le deputy a soumis.
+        original: avant.correction_superviseur?.original
+          || Object.fromEntries([...CHAMPS_CORRIGEABLES, "note_globale"].map(c => [c, avant[c]])),
+        par: {
+          id:     req.profil?.id || null,
+          nom:    req.profil?.nom || null,
+          prenom: req.profil?.prenom || null,
+          role:   req.role || "superviseur",
+        },
+        le:    new Date().toISOString(),
+        motif: (motif_correction || "").trim() || null,
+      };
+      correctionAppliquee = updates.correction_superviseur;
+    }
 
     const { data, error } = await supabase
       .from("rapports_observation")
@@ -420,6 +493,7 @@ router.patch("/rapports-deputy/:id", authenticateAdmin, requireGlobalSuperviseur
       .eq("plateforme", PLATEFORME)
       .select(`
         id, date_observation, classe, centre, note_globale, ponctualite,
+        synthese, correction_superviseur,
         coach:coach_id(id, nom, prenom),
         deputy:deputy_id(id, nom, prenom)
       `)
@@ -510,7 +584,10 @@ router.patch("/rapports-deputy/:id", authenticateAdmin, requireGlobalSuperviseur
       })();
     }
 
-    res.json({ rapport: data });
+    /* `correction` remonte explicitement pour que l'écran puisse le confirmer : une
+       correction silencieuse laisserait le superviseur incertain de ce qu'il vient
+       d'enregistrer - et c'est justement l'acte qui demande le plus de certitude. */
+    res.json({ rapport: data, correction: correctionAppliquee });
   } catch (err) {
     console.error("[superviseur/rapports-deputy PATCH]", err);
     res.status(500).json({ error: "Erreur interne" });
