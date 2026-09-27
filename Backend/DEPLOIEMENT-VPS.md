@@ -137,7 +137,10 @@ Depuis votre poste, une fois le fichier obtenu (Firebase Console → ⚙️ Para
 
 ```bash
 # ── SUR VOTRE MAC ──
-scp Backend/firebase-key.json root@<IP_DU_VPS>:/opt/bet/Backend/firebase-key.json
+# Le `cd` fait partie de la commande : `Backend/firebase-key.json` est un chemin RELATIF au
+# dépôt, et depuis votre dossier personnel il ne désigne rien.
+cd "/Users/doumbisss/Desktop/dossier sans titre/binnie"
+scp Backend/firebase-key.json root@191.101.80.79:/opt/bet/Backend/firebase-key.json
 ```
 
 ```bash
