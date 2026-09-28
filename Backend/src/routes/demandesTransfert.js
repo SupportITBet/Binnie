@@ -417,7 +417,7 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
         try {
           const { data: gaAvant } = await supabase
             .from("groupes_apprenants")
-            .select("niveau, apprenant_id, email_apprenant").eq("id", demande.ga_id).maybeSingle();
+            .select("niveau, apprenant_id, email_apprenant, note").eq("id", demande.ga_id).maybeSingle();
 
           /* SUR L'INSCRIPTION OÙ IL EST MAINTENANT, PAS SUR CELLE QU'IL VIENT DE QUITTER.
              Le transfert ne modifie pas la ligne existante : il la ferme et en crée une neuve
@@ -448,6 +448,29 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
             if (errNiveau && /niveau_precedent|niveau_change_le/.test(errNiveau.message || "")) {
               await supabase.from("groupes_apprenants")
                 .update({ niveau: demande.niveau_obtenu }).eq("id", cible);
+            }
+
+            /* LE DOSSIER COMMERCIAL AUSSI. « Le niveau de l'apprenant » s'écrit à deux endroits :
+               sur son inscription en classe (`groupes_apprenants.niveau`) et sur son dossier
+               (`assignations_parcours.niveau_client`). Les fiches de la commerciale et du
+               conseiller pédagogique lisent le SECOND. Ne mettre à jour que le premier laissait
+               donc l'apprenant affiché à son ancien niveau là où on le consulte le plus -
+               « A2 » sur sa fiche alors qu'il venait de passer B1. */
+            try {
+              let assignationId = null;
+              try { assignationId = JSON.parse(gaAvant?.note || "{}").assignation_id || null; } catch { /* note libre */ }
+              let maj = null;
+              if (assignationId) {
+                ({ data: maj } = await supabase.from("assignations_parcours")
+                  .update({ niveau_client: demande.niveau_obtenu }).eq("id", assignationId).select("id"));
+              }
+              if (!maj?.length && gaAvant?.email_apprenant) {
+                await supabase.from("assignations_parcours")
+                  .update({ niveau_client: demande.niveau_obtenu })
+                  .ilike("prospect_email", gaAvant.email_apprenant);
+              }
+            } catch (e) {
+              console.warn("[demandes-transfert PATCH] niveau_client non mis à jour:", e.message);
             }
           }
         } catch (e) {
