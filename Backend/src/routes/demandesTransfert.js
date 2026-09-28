@@ -321,18 +321,38 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
       if (demande.niveau_obtenu && demande.ga_id) {
         try {
           const { data: gaAvant } = await supabase
-            .from("groupes_apprenants").select("niveau").eq("id", demande.ga_id).maybeSingle();
+            .from("groupes_apprenants")
+            .select("niveau, apprenant_id, email_apprenant").eq("id", demande.ga_id).maybeSingle();
+
+          /* SUR L'INSCRIPTION OÙ IL EST MAINTENANT, PAS SUR CELLE QU'IL VIENT DE QUITTER.
+             Le transfert ne modifie pas la ligne existante : il la ferme et en crée une neuve
+             dans la classe d'arrivée, en y RECOPIANT l'ancien niveau. Écrire sur `demande.ga_id`
+             mettait donc à jour une ligne close que plus personne ne lit, pendant que la
+             nouvelle gardait le niveau périmé - l'apprenant s'affichait en C1 au milieu d'une
+             classe de B2, alors même que son test venait de dire B2. */
+          let cible = demande.ga_id;
+          if (req.body.groupe_cible_id) {
+            let q = supabase.from("groupes_apprenants")
+              .select("id, niveau").eq("groupe_id", req.body.groupe_cible_id).eq("statut", "actif")
+              .order("date_ajout", { ascending: false }).limit(1);
+            q = gaAvant?.apprenant_id
+              ? q.eq("apprenant_id", gaAvant.apprenant_id)
+              : q.ilike("email_apprenant", gaAvant?.email_apprenant || "");
+            const { data: nouvelle } = await q.maybeSingle();
+            if (nouvelle?.id) cible = nouvelle.id;
+          }
+
           const ancien = (gaAvant?.niveau || "").toUpperCase();
           if (ancien !== demande.niveau_obtenu.toUpperCase()) {
             const { error: errNiveau } = await supabase.from("groupes_apprenants").update({
               niveau:           demande.niveau_obtenu,
               niveau_precedent: gaAvant?.niveau || null,
               niveau_change_le: new Date().toISOString(),
-            }).eq("id", demande.ga_id);
+            }).eq("id", cible);
             // La migration peut ne pas être jouée : on écrit au moins le niveau.
             if (errNiveau && /niveau_precedent|niveau_change_le/.test(errNiveau.message || "")) {
               await supabase.from("groupes_apprenants")
-                .update({ niveau: demande.niveau_obtenu }).eq("id", demande.ga_id);
+                .update({ niveau: demande.niveau_obtenu }).eq("id", cible);
             }
           }
         } catch (e) {

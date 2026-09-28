@@ -132,6 +132,10 @@ export default function ArchiveApprenantsCoach({ coachId, coachNom, accent = "#0
         {/* Affiché seulement s'il y en a : une case « 0 revenu » occupe la place sans rien
             apprendre, sur un tableau de bord qui en compte déjà cinq. */}
         {nbRevenus > 0 && <Chiffre n={nbRevenus} l="sont revenus" c="#9a3412" />}
+        {/* Les transférés à part : ils n'ont pas arrêté, ils suivent leurs cours ailleurs.
+            Les fondre dans « ont arrêté » faisait baisser la rétention du coach pour des
+            apprenants que BET n'a jamais perdus. */}
+        {(t?.transferes ?? 0) > 0 && <Chiffre n={t.transferes} l="transférés" c="#1d4ed8" />}
         {/* Le taux n'a de sens qu'avec des apprenants : 0/0 n'est pas 0 %. */}
         <Chiffre n={t?.taux_retention == null ? "-" : `${t.taux_retention}%`} l="rétention" c={accent} />
         <Chiffre n={t?.duree_moyenne_mois == null ? "-" : `${t.duree_moyenne_mois} mois`} l="durée moyenne" c="#64748b" />
@@ -194,16 +198,18 @@ export default function ArchiveApprenantsCoach({ coachId, coachNom, accent = "#0
                       {a.niveau ? <span style={{ fontSize: 11, fontWeight: 700, background: "#e0f2fe", color: "#0369a1", borderRadius: 99, padding: "2px 8px" }}>{a.niveau}</span> : "-"}
                     </td>
                     <td style={{ padding: "10px 13px", color: "#64748b", whiteSpace: "nowrap" }}>{dateFr(a.date_arrivee)}</td>
-                    <td style={{ padding: "10px 13px", color: a.parti ? "#b91c1c" : a.revenu ? "#b45309" : "#cbd5e1", whiteSpace: "nowrap" }}>{dateFr(a.date_sortie)}</td>
+                    <td style={{ padding: "10px 13px", color: a.transfere ? "#1d4ed8" : a.parti ? "#b91c1c" : a.revenu ? "#b45309" : "#cbd5e1", whiteSpace: "nowrap" }}>{dateFr(a.date_sortie)}</td>
                     <td style={{ padding: "10px 13px", color: "#475569", whiteSpace: "nowrap" }}>{a.duree_texte || "-"}</td>
                     <td style={{ padding: "10px 13px" }}>
-                      {/* Trois états. « Revenu » n'est ni l'un ni l'autre : il est là
-                          aujourd'hui, mais il est parti entre-temps - et c'est cela que la
-                          feuille ON BREAK existe pour consigner. */}
+                      {/* Quatre états. « Revenu » n'est ni parti ni présent sans histoire : il
+                          est là aujourd'hui mais s'est absenté - c'est cela que la feuille
+                          ON BREAK consigne. Et « Transféré » n'est PAS un arrêt : l'apprenant
+                          suit toujours ses cours, ailleurs. Les confondre affichait « A arrêté »
+                          à quelqu'un qui n'avait jamais quitté BET. */}
                       <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: "2px 9px", whiteSpace: "nowrap",
-                        background: a.parti ? "#fee2e2" : a.revenu ? "#ffedd5" : "#dcfce7",
-                        color:      a.parti ? "#b91c1c" : a.revenu ? "#9a3412" : "#15803d" }}>
-                        {a.parti ? "A arrêté" : a.revenu ? "Revenu" : "En formation"}
+                        background: a.transfere ? "#dbeafe" : a.parti ? "#fee2e2" : a.revenu ? "#ffedd5" : "#dcfce7",
+                        color:      a.transfere ? "#1d4ed8" : a.parti ? "#b91c1c" : a.revenu ? "#9a3412" : "#15803d" }}>
+                        {a.transfere ? "Transféré" : a.parti ? "A arrêté" : a.revenu ? "Revenu" : "En formation"}
                       </span>
                       {a.revenu && a.date_reprise && (
                         <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 3 }}>
@@ -215,7 +221,7 @@ export default function ArchiveApprenantsCoach({ coachId, coachNom, accent = "#0
                     <td style={{ padding: "10px 13px", color: "#475569", maxWidth: 260 }}>
                       {/* Un départ SANS motif est dit comme tel : une case vide laisse
                           croire à un oubli d'affichage plutôt qu'à un oubli de saisie. */}
-                      {(a.parti || a.revenu)
+                      {(a.parti || a.revenu || a.transfere)
                         ? (a.motif
                           ? <>{libelleMotif(a.motif)}{a.detail_motif && <span style={{ color: "#94a3b8" }}> - {a.detail_motif}</span>}</>
                           : <span style={{ color: "#b45309", fontStyle: "italic" }}>motif non renseigné</span>)

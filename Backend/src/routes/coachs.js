@@ -1871,12 +1871,25 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
     const parId = Object.fromEntries((comptes || []).map(u => [u.id, u]));
     const parGroupe = Object.fromEntries(groupes.map(g => [g.id, g]));
 
-    /** Le motif d'arrêt, déplié depuis le JSON de `note`. */
+    /** Le motif du départ, déplié depuis le JSON de `note`. */
     const motifDe = (r) => {
       try {
         const n = typeof r.note === "string" ? JSON.parse(r.note) : r.note;
         const a = n?.arret_formation;
         if (a?.motif) return { motif: a.motif, detail: a.detail || null, par: a.par || null };
+        /* UN TRANSFERT N'EST PAS UN ARRÊT. L'apprenant n'a pas quitté BET : il a changé de
+           classe, souvent parce que le niveau ne lui convenait pas. Le classeur affichait
+           « A arrêté · motif non renseigné », ce qui dit exactement le contraire de ce qui
+           s'est passé et fausse le taux de rétention du coach. */
+        const d = n?.depart;
+        if (d?.motif) {
+          return {
+            motif:  d.motif,
+            detail: d.vers ? `Transféré vers « ${d.vers} »` : null,
+            par:    d.par || null,
+            transfert: d.type === "transfert",
+          };
+        }
       } catch { /* `note` peut contenir du texte libre : ce n'est pas une erreur */ }
       // Repli sur les colonnes de pause, renseignées par l'onglet Archive.
       return { motif: r.motif_pause || null, detail: r.detail_motif || null, par: null };
@@ -1987,6 +2000,10 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
           duree_mois: duree?.mois ?? null,
           statut: r.statut,
           parti,
+          /* TRANSFÉRÉ ≠ A ARRÊTÉ. L'un a changé de classe, l'autre a quitté BET. Les confondre
+             donnait « A arrêté » à un apprenant toujours en formation, et faisait baisser à
+             tort le taux de rétention du coach. L'écran et l'export distinguent désormais. */
+          transfere: r.statut === "transfere" || !!m.transfert,
           revenu,
           // La date de reprise et les pauses antérieures, pour l'écran et pour l'export.
           date_reprise: revenu ? derniere?.au || null : null,
@@ -2000,14 +2017,21 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
         };
       });
 
-    const partis = apprenants.filter(a => a.parti);
+    /* UN TRANSFÉRÉ N'A PAS ARRÊTÉ. Il a changé de classe et suit toujours ses cours - le
+       compter parmi les départs faisait baisser la rétention du coach pour un apprenant que
+       BET n'a jamais perdu, et sur un motif qui relevait souvent d'un mauvais niveau de départ.
+       Il reste visible dans la liste, avec son propre statut : c'est le comptage qui change,
+       pas la traçabilité. */
+    const partis     = apprenants.filter(a => a.parti && !a.transfere);
+    const transferes = apprenants.filter(a => a.transfere);
     res.json({
       apprenants,
       classes: groupes.map(g => ({ id: g.id, nom: g.nom, niveau: g.niveau })),
       totaux: {
         total: apprenants.length,
-        actifs: apprenants.length - partis.length,
+        actifs: apprenants.length - partis.length - transferes.length,
         partis: partis.length,
+        transferes: transferes.length,
         // Le taux n'a de sens qu'avec des apprenants : 0/0 n'est pas 0 %.
         taux_retention: apprenants.length
           ? Math.round(((apprenants.length - partis.length) / apprenants.length) * 100)

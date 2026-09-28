@@ -1768,9 +1768,26 @@ router.post("/transfert", authenticateAdmin, requirePermission("classes", "updat
       }
     }
 
-    // 3. Marquer l'ancien statut comme "transfere"
+    /* 3. Fermer l'ancienne inscription — EN Y INSCRIVANT LE MOTIF DU DÉPART.
+       Le motif n'était posé que sur la NOUVELLE ligne (`note.dernier_transfert`, plus bas) :
+       celle qui part n'en gardait aucune trace. Or c'est elle que lit l'archive du coach, et
+       le classeur « LEARNERS' PROFILE » affichait donc « motif non renseigné » pour un départ
+       qui en avait pourtant un - et le coach ne savait pas pourquoi son apprenant était parti. */
+    let noteDepart = {};
+    try { noteDepart = JSON.parse(ga.note || "{}"); } catch { /* note libre */ }
+    noteDepart.depart = {
+      type:   "transfert",
+      motif:  motif || "Changement de classe",
+      vers:   nouveauGroupe?.nom || null,
+      date:   new Date().toISOString(),
+      par:    req.profil?.id || null,
+    };
     await supabase.from("groupes_apprenants")
-      .update({ statut: "transfere", date_retrait: new Date().toISOString() })
+      .update({
+        statut: "transfere",
+        date_retrait: new Date().toISOString(),
+        note: JSON.stringify(noteDepart),
+      })
       .eq("id", ga_id);
 
     // 4. Insérer dans le nouveau groupe directement en "actif" - plus de période de test.
