@@ -342,6 +342,32 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
       maj.teste_par     = req.profil.id;
       maj.statut        = "test_fait";
       action = "test";
+
+      /* UN NIVEAU ÉVALUÉ EN PRÉSENTIEL EST UN TEST, et doit s'enregistrer comme tel.
+         Sans cela il ne vivait que sur ce dossier : la fiche de l'apprenant, son espace, les
+         exports et l'historique continuaient d'afficher son ancien niveau comme s'il n'avait
+         jamais repassé de test - « B1 » seul, là où la réalité est « B1 → C1 ».
+         On ne l'écrit QUE si l'agent a saisi le niveau à la main : quand il vient d'un test
+         passé en ligne (`level_test_id` fourni), l'enregistrement existe déjà et le dupliquer
+         inventerait un second passage. */
+      if (!req.body.level_test_id && demande.email_apprenant) {
+        try {
+          await supabase.from("level_test_results").insert({
+            fullname:     [demande.prenom_apprenant, demande.nom_apprenant].filter(Boolean).join(" ") || null,
+            email:        demande.email_apprenant,
+            level:        niveau,
+            source:       "oral",            // évalué par l'agent, pas passé en ligne
+            format_test:  "oral",
+            correction_statut: "manuelle",
+            notes_oral:   `Évaluation lors d'une demande de transfert — ${MOTIFS_TRANSFERT[demande.motif] || demande.motif}`,
+            submitted_at: new Date().toISOString(),
+          });
+        } catch (e) {
+          // Non bloquant : le niveau est porté par le dossier, qui suffit à débloquer la
+          // réaffectation. L'historique sera simplement incomplet, pas le circuit.
+          console.warn("[demandes-transfert PATCH] test non enregistré:", e.message);
+        }
+      }
     }
 
     /* ── L'onboarding referme le dossier ──────────────────────────────────────── */
