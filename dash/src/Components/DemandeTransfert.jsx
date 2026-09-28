@@ -175,6 +175,10 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
   const [demandes, setDemandes] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [nonInstalle, setNonInstalle] = useState(false);
+  /* LE SERVEUR DIT QUI PEUT AGIR, pas le rôle deviné côté écran. Une assistante EN LIGNE a
+     bien le rôle « commercial » mais ne réaffecte pas : c'est l'onboarding qui s'en charge
+     pour les classes en ligne. Elle garde la file en lecture - voir n'est pas décider. */
+  const [peutReaffecter, setPeutReaffecter] = useState(false);
   const [filtre, setFiltre] = useState("ouvertes");
   const [action, setAction] = useState(null);     // { demande, type: "test" | "refus" }
   const [valeur, setValeur] = useState("");
@@ -197,6 +201,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
       if (!r.ok) throw new Error(d.error || "Lecture impossible");
       setDemandes(d.demandes || []);
       setNonInstalle(!!d.non_installe);
+      setPeutReaffecter(!!d.je_peux_reaffecter);
     } catch (e) {
       toast.error(e.message || "Chargement impossible");
     } finally { setChargement(false); }
@@ -444,7 +449,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                     </>
                   )}
 
-                  {mode === "onboarding" && ["en_attente_test", "test_fait"].includes(d.statut) && (
+                  {mode === "onboarding" && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
                     <>
                       {/* GRISÉ TANT QUE LE TEST N'EST PAS REVENU, et l'infobulle dit pourquoi :
                           un bouton inerte sans explication passe pour une panne. */}
@@ -466,9 +471,18 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                     </>
                   )}
 
-                  {attendTest && mode === "onboarding" && (
+                  {attendTest && mode === "onboarding" && peutReaffecter && (
                     <span style={{ fontSize: 11.5, color: "#b45309", alignSelf: "center" }}>
                       ⏳ En attente du test de niveau
+                    </span>
+                  )}
+
+                  {/* DIRE POURQUOI IL N'Y A PAS DE BOUTON. Une carte sans action ressemble à une
+                      panne ; elle est ici une règle de métier - les classes en ligne sont
+                      réaffectées par l'onboarding, l'assistante en ligne suit le dossier. */}
+                  {mode === "onboarding" && !peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
+                    <span style={{ fontSize: 11.5, color: "#64748b", alignSelf: "center" }}>
+                      👁 Suivi seul — la réaffectation est faite par l'équipe onboarding
                     </span>
                   )}
                 </div>

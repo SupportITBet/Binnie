@@ -49,6 +49,26 @@ const ROLES_PLACEMENT  = ["placement_test", "admin_placement", "super_admin", "a
 const ROLES_COACH      = ["coach", "professeur_titulaire", "professeur_remplacant"];
 
 const estOnboarding = (r) => ROLES_ONBOARDING.includes(r);
+const estCommerciale = (r) => r === "commercial" || r === "admin_commercial";
+
+/**
+ * Cette commerciale peut-elle réaffecter ?
+ *
+ * SEULEMENT SI ELLE EST SUR LE PRÉSENTIEL. En présentiel, l'assistante est son propre
+ * onboarding : c'est elle qui affecte classe et coach, personne d'autre ne le fera. En ligne,
+ * ce travail revient à l'équipe onboarding - une assistante en ligne qui réaffecterait
+ * doublerait leur décision sans qu'ils le sachent.
+ *
+ * Elle garde l'onglet en LECTURE : elle suit ses apprenants et doit savoir qu'un transfert est
+ * demandé pour l'un d'eux. Voir n'est pas décider.
+ */
+async function commercialePeutReaffecter(profil) {
+  if (!profil?.email) return false;
+  const { data } = await supabase
+    .from("assistantes").select("type_cours").ilike("email", profil.email).maybeSingle();
+  // `type_cours` absent : on refuse. Un droit d'écriture ne s'accorde pas par défaut.
+  return data?.type_cours === "presentiel" || data?.type_cours === "les_deux";
+}
 const estPlacement  = (r) => ROLES_PLACEMENT.includes(r);
 const estCoach      = (r) => ROLES_COACH.includes(r);
 
@@ -238,8 +258,12 @@ router.get("/", authenticateAdmin, async (req, res) => {
     res.json({
       demandes: data || [],
       motifs: MOTIFS_TRANSFERT,
-      // L'écran sait ainsi quels boutons présenter, sans dupliquer la matrice des rôles.
-      je_peux_reaffecter: estOnboarding(req.role),
+      /* L'écran sait ainsi quels boutons présenter, sans dupliquer la matrice des rôles - et
+         sans se tromper : une assistante EN LIGNE voit la file mais ne réaffecte pas, ce que
+         son rôle seul ne suffit pas à dire. La réponse du serveur fait foi. */
+      je_peux_reaffecter: estCommerciale(req.role)
+        ? await commercialePeutReaffecter(req.profil)
+        : estOnboarding(req.role),
       je_peux_tester:     estPlacement(req.role),
     });
   } catch (err) {
@@ -285,6 +309,12 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
     if (req.body.statut === "traitee") {
       if (!estOnboarding(req.role)) {
         return res.status(403).json({ error: "Seule l'équipe onboarding peut réaffecter un apprenant." });
+      }
+      if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
+        return res.status(403).json({
+          error: "Les classes en ligne sont réaffectées par l'équipe onboarding. "
+               + "Vous suivez le dossier, mais le changement de classe ne vous revient pas.",
+        });
       }
       /* LE VERROU. Le niveau détermine la classe cible : refermer le dossier sans lui, ce
          serait replacer l'apprenant au jugé, et la demande n'aurait servi à rien. L'écran
@@ -365,6 +395,12 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
     if (req.body.statut === "refusee") {
       if (!estOnboarding(req.role)) {
         return res.status(403).json({ error: "Seule l'équipe onboarding peut refuser une demande." });
+      }
+      if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
+        return res.status(403).json({
+          error: "Les classes en ligne sont réaffectées par l'équipe onboarding. "
+               + "Vous suivez le dossier, mais le changement de classe ne vous revient pas.",
+        });
       }
       if (!String(req.body.motif_refus || "").trim()) {
         // Refuser sans dire pourquoi laisserait le coach sans réponse, et il réémettrait

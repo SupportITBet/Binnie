@@ -6307,142 +6307,9 @@ export default function OnboardingDashboard() {
                 </div>
               )}
 
-                {/* ── CREATE GROUPE MODAL - même modèle que "Nouvelle classe" chez l'assistante
-                     présentiel (CommercialDashboard.jsx) : cartes coach avec disponibilités
-                     réelles du mois, plutôt qu'un simple select. ── */}
-                {showCreateGroupe && (() => {
-                  const q = groupeCoachSearch.toLowerCase();
-                  const niveauGroupe = groupeForm.niveau || "";
-                  const filteredCoachsGrp = coaches
-                    .filter(c => {
-                      if (!q) return true;
-                      const name = [c.prenom, c.nom].filter(Boolean).join(" ").toLowerCase();
-                      return name.includes(q) || (c.grade||"").toLowerCase().includes(q) ||
-                        (c.specialites||[]).join(" ").toLowerCase().includes(q);
-                    })
-                    .sort((a,b) => {
-                      const aC = niveauGroupe && (a.niveaux_enseignes||[]).includes(niveauGroupe);
-                      const bC = niveauGroupe && (b.niveaux_enseignes||[]).includes(niveauGroupe);
-                      if (aC && !bC) return -1;
-                      if (!aC && bC) return 1;
-                      return 0;
-                    });
-                  return (
-                  <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",zIndex:1300,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}
-                    onClick={e => { if (e.target === e.currentTarget) setShowCreateGroupe(false); }}>
-                    <div style={{ background:"#fff",borderRadius:16,width:"90vw",maxWidth:"90vw",height:"90vh",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.25)" }}>
-
-                      {/* Header */}
-                      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 24px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto" }}>
-                        <h3 style={{ margin:0,fontSize:15,fontWeight:800,color:"#0f172a" }}>👥 Nouveau groupe</h3>
-                        <button onClick={()=>setShowCreateGroupe(false)} style={{ background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#6b7280" }}>✕</button>
-                      </div>
-
-                      <div style={{ padding:"20px 24px",overflowY:"auto",flex:"1 1 auto" }}>
-                        <div style={{ display:"grid", gap:14 }}>
-                          {/* Nom */}
-                          <div>
-                            <label style={lbl}>Nom du groupe *</label>
-                            <input style={inp} value={groupeForm.nom} onChange={e=>setGroupeForm(f=>({...f,nom:e.target.value}))} placeholder="ex: Anglais Pro B2 - Mardi/Jeudi" />
-                          </div>
-                          {/* Filière + Niveau */}
-                          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-                            <div>
-                              <label style={lbl}>Filière</label>
-                              {filieresCatalogue.length > 0 ? (
-                                <select style={inp} value={groupeForm.filiere} onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))}>
-                                  <option value="">- Sélectionner -</option>
-                                  {filieresCatalogue.map(f => <option key={f} value={f}>{f}</option>)}
-                                </select>
-                              ) : (
-                                <>
-                                  <input style={inp} value={groupeForm.filiere} placeholder="Libellé exact de l'offre"
-                                    onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))} />
-                                  <div style={{ fontSize:10, color:"#b45309", marginTop:3 }}>
-                                    Catalogue indisponible - saisissez le libellé exact d'une offre, sinon les
-                                    inscriptions de ce groupe seront exclues des statistiques.
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                            <div>
-                              <label style={lbl}>Niveau CECRL</label>
-                              <select style={inp} value={groupeForm.niveau} onChange={e=>setGroupeForm(f=>({...f,niveau:e.target.value}))}>
-                                <option value="">- Sélectionner -</option>
-                                {Object.keys(NIVEAUX).map(n => <option key={n} value={n}>{n}</option>)}
-                              </select>
-                            </div>
-                          </div>
-                          {/* Type de cours - onboarding ne gère que le en ligne : Hybride retiré,
-                              Présentiel grisé (non cliquable), seul En ligne reste actif. */}
-                          <div>
-                            <label style={lbl}>Type de cours</label>
-                            <div style={{ display:"flex", gap:8 }}>
-                              {TYPE_COURS_GRP.filter(t => t.id !== "hybride").map(t => {
-                                const disabled = t.id !== "en_ligne";
-                                return (
-                                  <button key={t.id} disabled={disabled} onClick={() => !disabled && setGroupeForm(f=>({...f,type_cours:t.id}))}
-                                    style={{ flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:700, cursor: disabled ? "not-allowed" : "pointer",
-                                      border: groupeForm.type_cours===t.id ? `2px solid ${C}` : "1px solid #e2e8f0",
-                                      background: disabled ? "#f1f5f9" : groupeForm.type_cours===t.id ? C_LIGHT : "#f8fafc",
-                                      color: disabled ? "#94a3b8" : groupeForm.type_cours===t.id ? C : "#64748b",
-                                      opacity: disabled ? 0.7 : 1 }}>{t.label}</button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          {/* Dates */}
-                          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-                            <div>
-                              <label style={lbl}>Date début</label>
-                              <input type="date" style={inp} value={groupeForm.date_debut} onChange={e=>setGroupeForm(f=>({...f,date_debut:e.target.value}))} />
-                            </div>
-                            <div>
-                              <label style={lbl}>Date fin</label>
-                              <input type="date" style={inp} value={groupeForm.date_fin} onChange={e=>setGroupeForm(f=>({...f,date_fin:e.target.value}))} />
-                            </div>
-                          </div>
-                          {/* Horaires */}
-                          <div>
-                            <label style={lbl}>Horaires</label>
-                            <div style={{ display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap" }}>
-                              <select style={{ ...inp,width:"auto",flex:"0 0 80px" }} value={horaireTmp.jour} onChange={e=>setHoraireTmp(h=>({...h,jour:e.target.value}))}>
-                                {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(j=><option key={j} value={j}>{j}</option>)}
-                              </select>
-                              <input type="time" style={{ ...inp,width:"auto",flex:"0 0 100px" }} value={horaireTmp.debut} onChange={e=>setHoraireTmp(h=>({...h,debut:e.target.value}))} />
-                              <span style={{ fontSize:12,color:"#6b7280",flexShrink:0 }}>→</span>
-                              <input type="time" style={{ ...inp,width:"auto",flex:"0 0 100px" }} value={horaireTmp.fin} onChange={e=>setHoraireTmp(h=>({...h,fin:e.target.value}))} />
-                              <button onClick={()=>setGroupeForm(f=>({...f,horaire:[...f.horaire,{...horaireTmp}]}))} style={{ ...btnP,flexShrink:0,whiteSpace:"nowrap" }}>+ Ajouter</button>
-                            </div>
-                            {groupeForm.horaire.length>0 && (
-                              <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
-                                {groupeForm.horaire.map((h,i)=>(
-                                  <span key={i} style={{ padding:"3px 10px",borderRadius:8,background:C_LIGHT,color:C,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5 }}>
-                                    {h.jour} {h.debut}–{h.fin}
-                                    <button onClick={()=>setGroupeForm(f=>({...f,horaire:f.horaire.filter((_,j)=>j!==i)}))} style={{ background:"none",border:"none",cursor:"pointer",color:C,fontWeight:900,fontSize:13,padding:0,lineHeight:1 }}>×</button>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {groupeForm.horaire.length === 0 && (
-                              <div style={{ fontSize:11, color:"#94a3b8", marginTop:5 }}>Aucun créneau ajouté - le groupe sera sans horaire fixe</div>
-                            )}
-                          </div>
-                          {/* Capacité */}
-                          <div>
-                            <label style={lbl}>Capacité max (apprenants)</label>
-                            <input type="number" min={1} max={50} style={{ ...inp, width:120 }} value={groupeForm.capacite_max} onChange={e=>setGroupeForm(f=>({...f,capacite_max:Number(e.target.value)}))} />
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display:"flex",justifyContent:"flex-end",gap:10,padding:"14px 24px",borderTop:"1px solid #e5e7eb",flex:"0 0 auto" }}>
-                        <button onClick={()=>setShowCreateGroupe(false)} style={btnS}>Annuler</button>
-                        <button onClick={createGroupe} disabled={groupeSaving||!peut("classes","create")} title={permBtnTitle("Créer le groupe",peut("classes","create"))} style={permBtnStyle({ ...btnP,opacity:groupeSaving?0.7:1 },peut("classes","create"))}>{groupeSaving?"Création…":peut("classes","create")?"✅ Créer le groupe":"🔒 Créer le groupe"}</button>
-                      </div>
-                    </div>
-                  </div>
-                  );
-                })()}
+                {/* Le modal de création de classe a été déplacé hors des onglets (voir plus bas) :
+                    son unique point d'entrée est « + Nouvelle classe » dans le modal de transfert,
+                    qui vit désormais au niveau du rendu. Enfermé ici, il n'était jamais monté. */}
 
                 {/* ══ MODAL IMPORT GROUPES - étape 1 : modèle + upload ══ */}
                 {showImportGroupesUpload && (
@@ -9376,6 +9243,143 @@ export default function OnboardingDashboard() {
           </div>
         </div>
       </div>
+
+                {/* ── CREATE GROUPE MODAL - même modèle que "Nouvelle classe" chez l'assistante
+                     présentiel (CommercialDashboard.jsx) : cartes coach avec disponibilités
+                     réelles du mois, plutôt qu'un simple select. ── */}
+                {showCreateGroupe && (() => {
+                  const q = groupeCoachSearch.toLowerCase();
+                  const niveauGroupe = groupeForm.niveau || "";
+                  const filteredCoachsGrp = coaches
+                    .filter(c => {
+                      if (!q) return true;
+                      const name = [c.prenom, c.nom].filter(Boolean).join(" ").toLowerCase();
+                      return name.includes(q) || (c.grade||"").toLowerCase().includes(q) ||
+                        (c.specialites||[]).join(" ").toLowerCase().includes(q);
+                    })
+                    .sort((a,b) => {
+                      const aC = niveauGroupe && (a.niveaux_enseignes||[]).includes(niveauGroupe);
+                      const bC = niveauGroupe && (b.niveaux_enseignes||[]).includes(niveauGroupe);
+                      if (aC && !bC) return -1;
+                      if (!aC && bC) return 1;
+                      return 0;
+                    });
+                  return (
+                  <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.6)",zIndex:1300,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}
+                    onClick={e => { if (e.target === e.currentTarget) setShowCreateGroupe(false); }}>
+                    <div style={{ background:"#fff",borderRadius:16,width:"90vw",maxWidth:"90vw",height:"90vh",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.25)" }}>
+
+                      {/* Header */}
+                      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 24px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto" }}>
+                        <h3 style={{ margin:0,fontSize:15,fontWeight:800,color:"#0f172a" }}>👥 Nouveau groupe</h3>
+                        <button onClick={()=>setShowCreateGroupe(false)} style={{ background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#6b7280" }}>✕</button>
+                      </div>
+
+                      <div style={{ padding:"20px 24px",overflowY:"auto",flex:"1 1 auto" }}>
+                        <div style={{ display:"grid", gap:14 }}>
+                          {/* Nom */}
+                          <div>
+                            <label style={lbl}>Nom du groupe *</label>
+                            <input style={inp} value={groupeForm.nom} onChange={e=>setGroupeForm(f=>({...f,nom:e.target.value}))} placeholder="ex: Anglais Pro B2 - Mardi/Jeudi" />
+                          </div>
+                          {/* Filière + Niveau */}
+                          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                            <div>
+                              <label style={lbl}>Filière</label>
+                              {filieresCatalogue.length > 0 ? (
+                                <select style={inp} value={groupeForm.filiere} onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))}>
+                                  <option value="">- Sélectionner -</option>
+                                  {filieresCatalogue.map(f => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              ) : (
+                                <>
+                                  <input style={inp} value={groupeForm.filiere} placeholder="Libellé exact de l'offre"
+                                    onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))} />
+                                  <div style={{ fontSize:10, color:"#b45309", marginTop:3 }}>
+                                    Catalogue indisponible - saisissez le libellé exact d'une offre, sinon les
+                                    inscriptions de ce groupe seront exclues des statistiques.
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            <div>
+                              <label style={lbl}>Niveau CECRL</label>
+                              <select style={inp} value={groupeForm.niveau} onChange={e=>setGroupeForm(f=>({...f,niveau:e.target.value}))}>
+                                <option value="">- Sélectionner -</option>
+                                {Object.keys(NIVEAUX).map(n => <option key={n} value={n}>{n}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          {/* Type de cours - onboarding ne gère que le en ligne : Hybride retiré,
+                              Présentiel grisé (non cliquable), seul En ligne reste actif. */}
+                          <div>
+                            <label style={lbl}>Type de cours</label>
+                            <div style={{ display:"flex", gap:8 }}>
+                              {TYPE_COURS_GRP.filter(t => t.id !== "hybride").map(t => {
+                                const disabled = t.id !== "en_ligne";
+                                return (
+                                  <button key={t.id} disabled={disabled} onClick={() => !disabled && setGroupeForm(f=>({...f,type_cours:t.id}))}
+                                    style={{ flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:700, cursor: disabled ? "not-allowed" : "pointer",
+                                      border: groupeForm.type_cours===t.id ? `2px solid ${C}` : "1px solid #e2e8f0",
+                                      background: disabled ? "#f1f5f9" : groupeForm.type_cours===t.id ? C_LIGHT : "#f8fafc",
+                                      color: disabled ? "#94a3b8" : groupeForm.type_cours===t.id ? C : "#64748b",
+                                      opacity: disabled ? 0.7 : 1 }}>{t.label}</button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {/* Dates */}
+                          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                            <div>
+                              <label style={lbl}>Date début</label>
+                              <input type="date" style={inp} value={groupeForm.date_debut} onChange={e=>setGroupeForm(f=>({...f,date_debut:e.target.value}))} />
+                            </div>
+                            <div>
+                              <label style={lbl}>Date fin</label>
+                              <input type="date" style={inp} value={groupeForm.date_fin} onChange={e=>setGroupeForm(f=>({...f,date_fin:e.target.value}))} />
+                            </div>
+                          </div>
+                          {/* Horaires */}
+                          <div>
+                            <label style={lbl}>Horaires</label>
+                            <div style={{ display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap" }}>
+                              <select style={{ ...inp,width:"auto",flex:"0 0 80px" }} value={horaireTmp.jour} onChange={e=>setHoraireTmp(h=>({...h,jour:e.target.value}))}>
+                                {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(j=><option key={j} value={j}>{j}</option>)}
+                              </select>
+                              <input type="time" style={{ ...inp,width:"auto",flex:"0 0 100px" }} value={horaireTmp.debut} onChange={e=>setHoraireTmp(h=>({...h,debut:e.target.value}))} />
+                              <span style={{ fontSize:12,color:"#6b7280",flexShrink:0 }}>→</span>
+                              <input type="time" style={{ ...inp,width:"auto",flex:"0 0 100px" }} value={horaireTmp.fin} onChange={e=>setHoraireTmp(h=>({...h,fin:e.target.value}))} />
+                              <button onClick={()=>setGroupeForm(f=>({...f,horaire:[...f.horaire,{...horaireTmp}]}))} style={{ ...btnP,flexShrink:0,whiteSpace:"nowrap" }}>+ Ajouter</button>
+                            </div>
+                            {groupeForm.horaire.length>0 && (
+                              <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
+                                {groupeForm.horaire.map((h,i)=>(
+                                  <span key={i} style={{ padding:"3px 10px",borderRadius:8,background:C_LIGHT,color:C,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5 }}>
+                                    {h.jour} {h.debut}–{h.fin}
+                                    <button onClick={()=>setGroupeForm(f=>({...f,horaire:f.horaire.filter((_,j)=>j!==i)}))} style={{ background:"none",border:"none",cursor:"pointer",color:C,fontWeight:900,fontSize:13,padding:0,lineHeight:1 }}>×</button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {groupeForm.horaire.length === 0 && (
+                              <div style={{ fontSize:11, color:"#94a3b8", marginTop:5 }}>Aucun créneau ajouté - le groupe sera sans horaire fixe</div>
+                            )}
+                          </div>
+                          {/* Capacité */}
+                          <div>
+                            <label style={lbl}>Capacité max (apprenants)</label>
+                            <input type="number" min={1} max={50} style={{ ...inp, width:120 }} value={groupeForm.capacite_max} onChange={e=>setGroupeForm(f=>({...f,capacite_max:Number(e.target.value)}))} />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display:"flex",justifyContent:"flex-end",gap:10,padding:"14px 24px",borderTop:"1px solid #e5e7eb",flex:"0 0 auto" }}>
+                        <button onClick={()=>setShowCreateGroupe(false)} style={btnS}>Annuler</button>
+                        <button onClick={createGroupe} disabled={groupeSaving||!peut("classes","create")} title={permBtnTitle("Créer le groupe",peut("classes","create"))} style={permBtnStyle({ ...btnP,opacity:groupeSaving?0.7:1 },peut("classes","create"))}>{groupeSaving?"Création…":peut("classes","create")?"✅ Créer le groupe":"🔒 Créer le groupe"}</button>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })()}
 
       {/* ══ MODAL TRANSFERT DE GROUPE ══
           HORS DES ONGLETS, et c'est essentiel : il vivait dans le bloc de l'onglet Groupes,
