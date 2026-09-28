@@ -171,6 +171,14 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
   const [valeur, setValeur] = useState("");
   const [occupe, setOccupe] = useState(false);
   const [verifie, setVerifie] = useState(null);   // dossier dont on interroge le résultat
+  /* Réaffectation : le dossier en cours de traitement et la classe choisie.
+     LE BOUTON NE DOIT PAS SE CONTENTER DE CLORE LE DOSSIER. Il le faisait : le dossier passait
+     à « Réaffecté » sans que personne ne bouge, et il quittait la file en laissant l'apprenant
+     dans sa classe d'origine - une disparition silencieuse, pire que l'absence de bouton. */
+  const [reaffectation, setReaffectation] = useState(null);   // { demande }
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+  const [classeChoisie, setClasseChoisie] = useState("");
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -253,6 +261,61 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
     } catch {
       toast.error("Vérification impossible");
     } finally { setVerifie(null); }
+  };
+
+  /* Ouvrir la réaffectation : charger les classes où l'apprenant pourrait aller.
+     On les charge à l'ouverture et non au montage : la liste des classes change souvent, et
+     la recharger à chaque affichage de la file pour un bouton rarement cliqué serait coûteux. */
+  const ouvrirReaffectation = async (d) => {
+    setReaffectation({ demande: d });
+    setClasseChoisie("");
+    setClassesLoading(true);
+    try {
+      const r = await fetch(`${API_URL}/api/groupes`, { headers: authHdrs() });
+      const j = await r.json();
+      const liste = (j.groupes || [])
+        // Ni la classe qu'il quitte, ni une classe fermée : les proposer serait proposer
+        // de ne rien faire, ou d'envoyer l'apprenant dans une classe qui n'existe plus.
+        .filter(g => g.id !== d.groupe_id && g.statut !== "cloture" && g.statut !== "termine")
+        .sort((a, b) => {
+          // Le niveau rendu par le test d'abord : c'est la raison même de la demande.
+          const pa = (a.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase() ? 0 : 1;
+          const pb = (b.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase() ? 0 : 1;
+          return pa - pb || String(a.nom || "").localeCompare(String(b.nom || ""));
+        });
+      setClasses(liste);
+    } catch {
+      toast.error("Chargement des classes impossible");
+      setClasses([]);
+    } finally { setClassesLoading(false); }
+  };
+
+  /* Exécuter le transfert, PUIS refermer le dossier. Dans cet ordre, et la seconde étape
+     seulement si la première a réussi : refermer un dossier dont le déplacement a échoué le
+     ferait disparaître de la file sans que rien n'ait bougé. */
+  const reaffecter = async () => {
+    const d = reaffectation?.demande;
+    if (!d || !classeChoisie) return;
+    setOccupe(true);
+    try {
+      const r = await fetch(`${API_URL}/api/groupes/transfert`, {
+        method: "POST", headers: authHdrs(),
+        body: JSON.stringify({
+          ga_id: d.ga_id,
+          nouveau_groupe_id: classeChoisie,
+          motif: MOTIFS[d.motif] || d.motif,
+          initiateur: "assistant",
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Transfert impossible");
+
+      await patch(d, { statut: "traitee", groupe_cible_id: classeChoisie },
+        `${[d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ")} a été transféré ✓`);
+      setReaffectation(null);
+    } catch (e) {
+      toast.error(e.message || "Transfert impossible");
+    } finally { setOccupe(false); }
   };
 
   const visibles = demandes.filter(d =>
@@ -378,7 +441,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                         title={attendTest
                           ? "Le test de niveau n'a pas encore été passé par l'agent placement test. C'est son résultat qui détermine la nouvelle classe."
                           : `Réaffecter ${nom} — niveau obtenu : ${d.niveau_obtenu}`}
-                        onClick={() => patch(d, { statut: "traitee" }, "Dossier marqué réaffecté ✓")}
+                        onClick={() => ouvrirReaffectation(d)}
                         style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit",
                           background: attendTest ? "#e2e8f0" : accent, color: attendTest ? "#94a3b8" : "#fff",
                           cursor: attendTest ? "not-allowed" : "pointer" }}>
@@ -402,6 +465,71 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
           })}
         </div>
       )}
+
+      {/* ── Choix de la nouvelle classe ──────────────────────────────────────── */}
+      {reaffectation && (() => {
+        const d = reaffectation.demande;
+        const nom = [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ") || "l'apprenant";
+        const auNiveau = classes.filter(g => (g.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase());
+        return (
+          <div onClick={ev => { if (ev.target === ev.currentTarget && !occupe) setReaffectation(null); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%", maxWidth: 540, maxHeight: "86vh", display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: 16.5, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+                Réaffecter {nom}
+              </div>
+              <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 14px" }}>
+                Test passé : niveau <strong style={{ color: "#15803d" }}>{d.niveau_obtenu}</strong>
+                {d.groupe_nom ? <> · quitte <strong>{d.groupe_nom}</strong></> : null}.
+                {" "}Le transfert est immédiat : l'apprenant change de classe et son ancienne inscription
+                se referme avec sa date de sortie et le motif.
+              </p>
+
+              {classesLoading ? (
+                <div style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>Chargement des classes…</div>
+              ) : classes.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 24, background: "#fff7ed", borderRadius: 10, border: "1px dashed #fed7aa", fontSize: 12.5, color: "#9a3412" }}>
+                  Aucune autre classe ouverte n'est disponible.
+                </div>
+              ) : (
+                <>
+                  {/* Les classes AU BON NIVEAU sont remontées en tête et signalées : c'est le
+                      résultat du test qui a motivé toute la demande, il doit guider le choix. */}
+                  {auNiveau.length > 0 && (
+                    <div style={{ fontSize: 11.5, color: "#15803d", fontWeight: 700, marginBottom: 6 }}>
+                      ✓ {auNiveau.length} classe{auNiveau.length > 1 ? "s" : ""} au niveau {d.niveau_obtenu}
+                    </div>
+                  )}
+                  <select value={classeChoisie} onChange={e => setClasseChoisie(e.target.value)}
+                    style={{ ...champ, marginBottom: 16 }}>
+                    <option value="">— Choisir la nouvelle classe —</option>
+                    {classes.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {(g.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase() ? "✓ " : ""}
+                        {g.nom}{g.niveau ? ` · ${g.niveau}` : ""}
+                        {g.nb_apprenants != null ? ` · ${g.nb_apprenants}/${g.capacite_max || 20}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: 10, marginTop: "auto" }}>
+                <button onClick={() => setReaffectation(null)} disabled={occupe}
+                  style={{ flex: 1, padding: 12, borderRadius: 9, border: "none", background: "#f1f5f9", color: "#374151", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                  Annuler
+                </button>
+                <button onClick={reaffecter} disabled={!classeChoisie || occupe}
+                  style={{ flex: 1.5, padding: 12, borderRadius: 9, border: "none", fontFamily: "inherit", fontWeight: 700, fontSize: 13, color: "#fff",
+                    background: classeChoisie ? accent : "#cbd5e1",
+                    cursor: classeChoisie && !occupe ? "pointer" : "not-allowed" }}>
+                  {occupe ? "Transfert…" : "Transférer dans cette classe"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Saisie du niveau, ou du motif de refus ───────────────────────────── */}
       {action && (

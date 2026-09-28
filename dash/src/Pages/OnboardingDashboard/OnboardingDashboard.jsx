@@ -5482,25 +5482,11 @@ export default function OnboardingDashboard() {
                                 </div>
                               </div>
                             </div>
-
-                            {/* Action : Changer de groupe */}
-                            <div style={{ paddingTop:4 }}>
-                              <button
-                                onClick={()=>{
-                                  setTransfertForm({ nouveau_groupe_id:"", motif:"", initiateur:"apprenant", jours:[] });
-                                  setGroupesCibles([]);
-                                  // Ouvrir sur TOUS les niveaux : un transfert acte souvent
-                                  // une progression ou une régression. S'ouvrir sur le seul
-                                  // niveau de l'apprenant masquait les autres classes et
-                                  // laissait croire qu'aucune n'était disponible.
-                                  setTransfertNiveauCible("tous");
-                                  searchGroupesCibles("tous");
-                                  setShowTransfert(true);
-                                }}
-                                style={{ width:"100%",padding:"11px 0",background:C_GRAD,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,letterSpacing:"0.02em" }}>
-                                🔄 Changer de groupe
-                              </button>
-                            </div>
+                            {/* LE CHANGEMENT DE GROUPE SE FAIT DEPUIS « Dossiers à réaffecter ».
+                                Le bouton vivait ici, hors du circuit : on pouvait déplacer un apprenant
+                                sans demande du coach ni test de niveau, donc sans savoir vers quelle
+                                classe. Le transfert part désormais d'une demande, passe par le test, et
+                                le niveau obtenu désigne la classe d'arrivée. */}
 
                           </div>
                         )}
@@ -6180,7 +6166,12 @@ export default function OnboardingDashboard() {
                 );
               })()}
 
-              {/* ── MODAL TRANSFERT DE GROUPE ── */}
+              {/* ── MODAL TRANSFERT DE GROUPE ──
+                  PLUS AUCUN BOUTON NE L'OUVRE. Son point d'entrée - « 🔄 Changer de groupe »
+                  dans la fiche apprenant - a été retiré : le transfert part désormais d'une
+                  demande du coach, passe par le test de niveau, et s'exécute depuis l'onglet
+                  « Dossiers à réaffecter ». Le code est conservé le temps que le nouveau
+                  circuit soit éprouvé en production ; il sera supprimé ensuite. */}
               {showTransfert && selectedApprenantGroupe && (
                 <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",zIndex:1200,display:"flex",alignItems:"center",justifyContent:"center",padding:12 }}
                   onClick={()=>setShowTransfert(false)}>
