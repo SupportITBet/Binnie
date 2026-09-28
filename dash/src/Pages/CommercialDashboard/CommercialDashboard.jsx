@@ -47,7 +47,7 @@ import { uploadFichier, maxMoPour } from "../../utils/uploadFichier";
 import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
-import FileDemandesTransfert from "../../Components/DemandeTransfert";
+import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
@@ -4008,6 +4008,8 @@ export default function CommercialDashboard() {
   // même quand l'onglet n'est pas ouvert.
   const groupesLibresNonLus = useGroupesLibresNonLus(localStorage.getItem("admin_token"), profil?.id);
   const { notifications: toutesNotifsCM, nbNonLues: notifNonLuesCM, marquerLue: marquerNotifLueCM } = useNotifications(profil?.id);
+  // Combien de dossiers de transfert attendent MON action - le badge de l'onglet.
+  const dossiersAReaffecter = useCompteDemandesTransfert(authHeaders, "onboarding");
   const [banderoleFermeeCM, setBanderoleFermeeCM] = useState(false);
   const notifsBanderoleCM = toutesNotifsCM.filter(n => !n.lu).slice(0, 3);
 
@@ -5123,7 +5125,7 @@ export default function CommercialDashboard() {
       { key:"apprenants",    label:"Mes apprenants",    icon:"🎓" },
       // En presentiel, c'est l'assistante qui affecte classe et coach : les demandes de
       // transfert emises par ses coachs lui reviennent, comme a l'onboarding pour le en ligne.
-      { key:"reaffecter",    label:"Dossiers à réaffecter", icon:"🔄" },
+      { key:"reaffecter",    label:"Dossiers à réaffecter", icon:"🔄", badge: dossiersAReaffecter || null },
       ...(isCommercialeCentre ? [
         { key:"suivi", label:"Suivi démarrage", icon:"✅", badge: suiviApprenants.filter(a=>!Object.values(suiviChecklistEffectif(a)).every(Boolean)).length || null },
       ] : []),

@@ -1769,17 +1769,33 @@ router.get("/mon-espace", async (req, res) => {
     // Requête sans jointure utilisateurs pour éviter erreur FK manquante
     // `date_retrait` : une formation arrêtée garde son espace, et l'écran doit pouvoir
     // dire depuis quand.
-    const GA_SELECT_SIMPLE = "id, groupe_id, statut, niveau, nom_apprenant, prenom_apprenant, email_apprenant, telephone, apprenant_id, date_ajout, date_retrait, note, groupes(id, nom, filiere, statut, coach_id)";
+    /* `niveau_precedent` / `niveau_change_le` : l'apprenant doit voir sa progression, pas
+       seulement son niveau du jour. Cette liste étant EXPLICITE, une colonne absente d'ici
+       n'atteint jamais l'écran même si elle existe en base - c'est la dérive de projection
+       qui a déjà fait disparaître plusieurs champs dans ce projet.
 
-    const queries = [
-      supabase.from("groupes_apprenants").select(GA_SELECT_SIMPLE).ilike("email_apprenant", email).order("date_ajout", { ascending: false }),
-      supabase.from("groupes_apprenants").select(GA_SELECT_SIMPLE).eq("apprenant_id", user.id).order("date_ajout", { ascending: false }),
-    ];
-    if (telDigits) {
-      queries.push(supabase.from("groupes_apprenants").select(GA_SELECT_SIMPLE).ilike("telephone", `%${telDigits}%`).order("date_ajout", { ascending: false }));
+       DEUX VARIANTES, parce que le SQL est livré à part : si la migration n'a pas encore été
+       jouée, demander une colonne inexistante ferait échouer la requête et viderait TOUT
+       l'espace de l'apprenant - pas seulement son niveau. On retombe alors sur l'ancienne
+       liste, et l'écran se comporte exactement comme avant. */
+    const GA_COLONNES = "id, groupe_id, statut, niveau, nom_apprenant, prenom_apprenant, email_apprenant, telephone, apprenant_id, date_ajout, date_retrait, note, groupes(id, nom, filiere, statut, coach_id)";
+    const GA_SELECT_SIMPLE = GA_COLONNES.replace("statut, niveau,", "statut, niveau, niveau_precedent, niveau_change_le,");
+
+    const requetes = (colonnes) => {
+      const q = [
+        supabase.from("groupes_apprenants").select(colonnes).ilike("email_apprenant", email).order("date_ajout", { ascending: false }),
+        supabase.from("groupes_apprenants").select(colonnes).eq("apprenant_id", user.id).order("date_ajout", { ascending: false }),
+      ];
+      if (telDigits) {
+        q.push(supabase.from("groupes_apprenants").select(colonnes).ilike("telephone", `%${telDigits}%`).order("date_ajout", { ascending: false }));
+      }
+      return Promise.all(q);
+    };
+
+    let results = await requetes(GA_SELECT_SIMPLE);
+    if (results.some(r => /niveau_precedent|niveau_change_le/.test(r?.error?.message || ""))) {
+      results = await requetes(GA_COLONNES);
     }
-
-    const results = await Promise.all(queries);
     const [resEmail, resId, resTel] = results;
     const gaByEmail = resEmail.data || [];
     const gaById    = resId.data    || [];

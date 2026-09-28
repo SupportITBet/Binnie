@@ -23,7 +23,7 @@ import MonProfilModal, { BoutonMonProfil } from "../../Components/MonProfilModal
 
 import { uploadFichier } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
-import FileDemandesTransfert from "../../Components/DemandeTransfert";
+import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 /* ═══════════════════════════════════════════════════════
    CHARTE COULEURS - Agent Placement Test
 ═══════════════════════════════════════════════════════ */
@@ -236,6 +236,8 @@ export default function PlacementTestDashboard() {
   };
 
   const { notifications: toutesNotifsPT, nbNonLues: notifNonLuesPT, marquerLue: marquerNotifLuePT } = useNotifications(profil?.id);
+  // Combien de dossiers de transfert attendent MON action - le badge de l'onglet.
+  const dossiersAReaffecter = useCompteDemandesTransfert(authHdrs, "placement");
   const [banderoleFermeePT, setBanderoleFermeePT] = useState(false);
   const notifsBanderolePT = toutesNotifsPT.filter(n => !n.lu).slice(0, 3);
 
@@ -245,7 +247,7 @@ export default function PlacementTestDashboard() {
     { key:"file",           label:"À corriger",      icon:"📥", badge:stats.aCorriger },
     // Les demandes de transfert des coachs : c'est l'agent placement test qui fait avancer
     // le dossier, en rendant le niveau qui determinera la nouvelle classe.
-    { key:"transferts",     label:"Demandes de transfert", icon:"🔄" },
+    { key:"transferts",     label:"Demandes de transfert", icon:"🔄", badge: dossiersAReaffecter || null },
     { key:"rapports",       label:"Rapports",        icon:"📊" },
     { key:"test_niveau",    label:"Test de niveau",  icon:"🧪" },
     { key:"resultats_candidats", label:"Résultats candidats", icon:"📋" },

@@ -37,6 +37,42 @@ const fmt = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit",
 
 const champ = { padding: "9px 12px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 13, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
 
+/**
+ * COMBIEN DE DOSSIERS M'ATTENDENT — pour le badge de l'onglet et la liste des tâches.
+ *
+ * Sans ce compte, un dossier prêt restait invisible tant que personne n'ouvrait l'onglet :
+ * la notification passait, et le transfert attendait qu'on y repense. Un badge rend l'attente
+ * visible depuis n'importe quel écran du tableau de bord.
+ *
+ * CHACUN SON COMPTE. Le placement test attend les dossiers `en_attente_test` - ceux où il doit
+ * agir ; l'onboarding et la commerciale attendent les `test_fait` - ceux qu'ils peuvent enfin
+ * réaffecter. Compter les mêmes dossiers pour les deux afficherait à chacun le travail de
+ * l'autre, et le badge cesserait de vouloir dire « à vous de jouer ».
+ */
+export function useCompteDemandesTransfert(authHdrs, mode = "onboarding") {
+  const [compte, setCompte] = useState(0);
+  const statut = mode === "placement" ? "en_attente_test" : "test_fait";
+
+  const relire = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_URL}/api/demandes-transfert?statut=${statut}`, { headers: authHdrs() });
+      if (!r.ok) return;
+      const d = await r.json();
+      setCompte((d.demandes || []).length);
+    } catch { /* un badge absent ne doit jamais casser l'écran qui le porte */ }
+  }, [authHdrs, statut]);
+
+  useEffect(() => {
+    relire();
+    // Le dossier avance dans un AUTRE tableau de bord : sans relecture, l'onboarding ne
+    // verrait le niveau arriver qu'en rechargeant sa page.
+    const t = setInterval(relire, 60000);
+    return () => clearInterval(t);
+  }, [relire]);
+
+  return compte;
+}
+
 /* ══════════════════════════════════════════════════════════════
    LE BOUTON DU COACH
 ══════════════════════════════════════════════════════════════ */

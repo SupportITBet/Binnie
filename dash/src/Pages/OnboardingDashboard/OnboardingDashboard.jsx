@@ -37,7 +37,7 @@ import { uploadFichier, libelleLimite } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 import { estClassePrivee } from "../../utils/classePrivee";
-import FileDemandesTransfert from "../../Components/DemandeTransfert";
+import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
@@ -3592,6 +3592,8 @@ export default function OnboardingDashboard() {
   // ── Badges d'onglets - signaux réels déjà chargés, pas de fetch supplémentaire ──
   const groupesSansCoach = useMemo(() => groupes.filter(g => g.statut==="actif" && !g.coach_id).length, [groupes]);
   const { notifications: toutesNotifs, nbNonLues: notifNonLues, marquerLue: marquerNotifLue } = useNotifications(profil?.id);
+  // Combien de dossiers de transfert attendent MON action - le badge de l'onglet.
+  const dossiersAReaffecter = useCompteDemandesTransfert(authHeaders, "onboarding");
   const [banderoleFermee, setBanderoleFermee] = useState(false);
   const notifsBanderole = toutesNotifs.filter(n => !n.lu).slice(0, 3);
   const { unreadTotal: msgNonLus } = useFirebaseChat();
@@ -3607,7 +3609,7 @@ export default function OnboardingDashboard() {
   const tachesApprenants = enAttente;
   const tachesSuivi      = mesApprenants.filter(a=>!Object.values(a.suivi_checklist||{}).every(Boolean)).length;
   const tachesGroupes    = groupesSansCoach;
-  const tachesTotal = tachesApprenants + tachesSuivi + tachesGroupes;
+  const tachesTotal = tachesApprenants + tachesSuivi + tachesGroupes + dossiersAReaffecter;
 
   // Le même planning que la commerciale : l'onboarding suit elle aussi les cours en ligne,
   // avec les liens Zoom/Teams, pour vérifier qu'ils ont bien eu lieu.
@@ -3623,7 +3625,7 @@ export default function OnboardingDashboard() {
     { key:"groupes",        label:"Groupes",                  icon:"👥", badge:groupesSansCoach || null },
     // Les demandes de transfert emises par les coachs. L'onboarding est le seul a
     // pouvoir reaffecter ; le dossier reste ferme tant que le test de niveau n'est pas revenu.
-    { key:"reaffecter",     label:"Dossiers à réaffecter",    icon:"🔄" },
+    { key:"reaffecter",     label:"Dossiers à réaffecter",    icon:"🔄", badge: dossiersAReaffecter || null },
     { key:"plannings",      label:"Plannings",                icon:"📅", badge: planning.planningsAAlerter || null },
     { key:"coachs",         label:"Coachs",                   icon:"👨‍🏫" },
     { key:"contenus",       label:"Contenus",                 icon:"📚" },
@@ -3797,6 +3799,10 @@ export default function OnboardingDashboard() {
                 { icon:"📥", label:"Apprenants en attente d'affectation", n:tachesApprenants, tab:"apprenants" },
                 { icon:"✅", label:"Suivis de démarrage incomplets",      n:tachesSuivi,       tab:"suivi" },
                 { icon:"👥", label:"Groupes actifs sans coach",           n:tachesGroupes,     tab:"groupes" },
+                // Le test est revenu, le niveau est connu : ces dossiers n'attendent plus que
+                // l'affectation a leur nouvelle classe. Sans cette ligne, ils dormaient dans
+                // leur onglet jusqu'a ce qu'on pense a l'ouvrir.
+                { icon:"🔄", label:"Transferts prêts à réaffecter",      n:dossiersAReaffecter, tab:"reaffecter" },
               ];
               const enCours = taches.filter(t => t.n > 0);
               return (
@@ -7206,11 +7212,14 @@ export default function OnboardingDashboard() {
               </div>
             )}
 
-            {/* ══ BILANS & RENOUVELLEMENTS ══ (désactivé temporairement)
+            {/* DOSSIERS À RÉAFFECTER. Placé AVANT le bloc commenté des bilans : inséré après,
+                il se retrouvait à l'intérieur du commentaire JSX qui les désactive, et l'onglet
+                s'affichait entièrement vide - pas même son message « aucun dossier ». */}
             {activeTab==="reaffecter" && (
               <FileDemandesTransfert accent={C} authHdrs={authHeaders} mode="onboarding" />
             )}
 
+            {/* ══ BILANS & RENOUVELLEMENTS ══ (désactivé temporairement)
             {activeTab==="bilans" && (
               <div>
                 <div style={{ marginBottom:18 }}>

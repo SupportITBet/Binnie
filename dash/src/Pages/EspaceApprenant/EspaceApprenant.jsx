@@ -1349,6 +1349,10 @@ export default function EspaceApprenant() {
     surnom:          realP.surnom     || "",
     adresse:         realP.adresse    || "",
     niveau:          realG?.niveau      || PROFIL_DEFAUT.niveau,
+    // Le niveau d'avant, pour que l'apprenant voie sa progression et pas seulement son
+    // etiquette du jour. `null` tant qu'aucun changement n'a eu lieu.
+    niveauPrecedent: realG?.niveau_precedent || null,
+    niveauChangeLe:  realG?.niveau_change_le || null,
     classe:          realGI?.nom        || PROFIL_DEFAUT.classe,
     typeCours:       realParcours?.type_cours || realGI?.type_cours || PROFIL_DEFAUT.typeCours,
     // Repli sur suivi_demarrage.niveau_prospect : pour le coaching privé, niveau_client
@@ -2436,6 +2440,13 @@ export default function EspaceApprenant() {
               <div style={{ fontSize:10, color:"#fecaca", marginBottom:2, fontWeight:600 }}>NIVEAU ACTUEL</div>
               <div style={{ fontSize:28, fontWeight:900 }}>{profil.niveau}</div>
               <div style={{ fontSize:10, color:"#fecaca" }}>{NIVEAU_META[profil.niveau]?.label}</div>
+              {/* LA PROGRESSION, PAS SEULEMENT L'ETIQUETTE. « B1 » ne dit rien de plus que le
+                  nom de la classe ; « A2 → B1 » dit a l'apprenant qu'il a avance. */}
+              {profil.niveauPrecedent && profil.niveauPrecedent !== profil.niveau && (
+                <div style={{ fontSize:10, color:"#fecaca", marginTop:4, opacity:.9 }}>
+                  ↑ depuis {profil.niveauPrecedent}
+                </div>
+              )}
             </div>
             <ApprenantColorPicker currentColor={PRIMARY_COLOR} />
             {/* Cloche notifications apprenant */}
