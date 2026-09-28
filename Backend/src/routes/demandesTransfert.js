@@ -296,8 +296,19 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
           en_attente_test: true,
         });
       }
+      /* PAS DE DOSSIER CLOS SANS CLASSE D'ARRIVÉE. « Réaffecté » veut dire que l'apprenant est
+         quelque part : sans `groupe_cible_id`, le dossier quittait la file alors que personne
+         n'avait bougé, et l'apprenant restait dans la classe qu'il devait justement quitter -
+         une disparition silencieuse, pire que l'absence de bouton. C'est arrivé.
+         L'écran demande désormais la classe avant d'appeler ; on l'exige aussi ici, car un
+         écran qui pose la question n'est pas une garantie que la réponse arrive. */
+      if (!req.body.groupe_cible_id) {
+        return res.status(400).json({
+          error: "Indiquez la classe d'arrivée : un dossier ne peut pas être marqué réaffecté sans elle.",
+        });
+      }
       maj.statut          = "traitee";
-      maj.groupe_cible_id = req.body.groupe_cible_id || null;
+      maj.groupe_cible_id = req.body.groupe_cible_id;
       maj.traite_le       = new Date().toISOString();
       maj.traite_par      = req.profil.id;
       action = "traitee";
