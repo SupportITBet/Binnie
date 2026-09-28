@@ -122,8 +122,44 @@ router.post("/", authenticateAdmin, async (req, res) => {
       ligne.coach_nom = c ? `${c.prenom || ""} ${c.nom || ""}`.trim() : null;
     }
 
-    const { data: demande, error } = await supabase
+    /* LE PROFIL DE L'APPRENANT, pour verrouiller le formulaire de test.
+       C'est un transfert, pas une première inscription : le profil est déjà connu, et le
+       laisser modifiable exposait à ce que l'apprenant le change par inadvertance - le
+       formulaire s'ouvre sur « Particulier » présélectionné par défaut.
+       On le cherche d'abord par le dossier posé dans `note` (lien direct et fiable), puis
+       par e-mail. Si rien ne sort, on laisse `null` : un choix ouvert vaut mieux qu'une
+       valeur figée à tort. */
+    try {
+      let assignationId = null;
+      try { assignationId = JSON.parse(ga.note || "{}").assignation_id || null; } catch { /* note libre */ }
+      let dossier = null;
+      if (assignationId) {
+        ({ data: dossier } = await supabase
+          .from("assignations_parcours").select("profil_type").eq("id", assignationId).maybeSingle());
+      }
+      if (!dossier?.profil_type && ligne.email_apprenant) {
+        ({ data: dossier } = await supabase
+          .from("assignations_parcours").select("profil_type")
+          .ilike("prospect_email", ligne.email_apprenant)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle());
+      }
+      if (dossier?.profil_type) ligne.profil_type = dossier.profil_type;
+    } catch (e) {
+      console.warn("[demandes-transfert POST] profil non résolu:", e.message);
+    }
+
+    let { data: demande, error } = await supabase
       .from("demandes_transfert").insert(ligne).select().single();
+
+    // `profil_type` a été ajouté après coup : sur une base où l'ALTER n'a pas encore été
+    // joué, on crée la demande sans lui plutôt que de la refuser. Le formulaire de test
+    // restera simplement modifiable, ce qui est l'ancien comportement.
+    if (error && /profil_type/.test(error.message || "")) {
+      const { profil_type: _absent, ...sansProfil } = ligne;
+      ({ data: demande, error } = await supabase
+        .from("demandes_transfert").insert(sansProfil).select().single());
+    }
+
     if (error) {
       if (tableAbsente(error)) {
         return res.status(503).json({ error: "Les demandes de transfert ne sont pas encore activées sur cette base (Backend/sql/demandes_transfert.sql)." });

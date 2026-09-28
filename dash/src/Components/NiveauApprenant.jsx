@@ -25,6 +25,28 @@ const fmtDate = (d) => d
   ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
   : null;
 
+/**
+ * L'ANCIEN NIVEAU SEUL, à poser À CÔTÉ d'un badge de niveau existant.
+ *
+ * Les tableaux de bord ont chacun leur façon d'afficher le niveau - couleurs, tailles,
+ * arrondis. Remplacer leur badge par le composant complet aurait uniformisé de force cinq
+ * écrans qui n'en demandaient pas tant, et fait courir un risque visuel là où l'ajout suffit.
+ * Cette pastille s'ajoute sans rien déplacer, et disparaît quand il n'y a rien à dire.
+ */
+export function AncienNiveau({ niveau, precedent, changeLe, taille = 10 }) {
+  const n = String(niveau || "").toUpperCase();
+  const p = String(precedent || "").toUpperCase();
+  if (!p || p === n) return null;
+  const date = fmtDate(changeLe);
+  return (
+    <span title={`Niveau ${p} avant ce changement${date ? ` — le ${date}` : ""}`}
+      style={{ fontSize: taille, fontWeight: 700, padding: "1px 7px", borderRadius: 99,
+        background: "#f1f5f9", color: "#94a3b8", whiteSpace: "nowrap" }}>
+      avant : {p}
+    </span>
+  );
+}
+
 export default function NiveauApprenant({ niveau, niveauPrecedent, changeLe, taille = 11, accent }) {
   if (!niveau && !niveauPrecedent) return <span style={{ color: "#cbd5e1" }}>-</span>;
 

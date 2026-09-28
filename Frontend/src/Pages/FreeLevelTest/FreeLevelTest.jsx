@@ -233,6 +233,10 @@ const Stepper = ({ current, alreadyAssigned }) => {
 ════════════════════════════════════════════════════════ */
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
+/* Les profils qu'un lien d'invitation peut transmettre. On ne verrouille QUE sur une de ces
+   valeurs : un parametre inattendu laisserait sinon le selecteur fige sur rien, donc bloquant. */
+const PROFILS_CONNUS = ["particulier", "etudiant", "professionnel", "enfant"];
+
 /* ────────────────────────────────────────────────────────
    COMPOSANT : Enregistreur audio (questions Speaking)
 ──────────────────────────────────────────────────────── */
@@ -606,6 +610,9 @@ export default function FreeLevelTest({ questions: propQ }) {
      mur de connexion le bloquait donc net. Pire : s'il ouvrait le lien depuis un poste où un
      autre compte était connecté, il se retrouvait à passer le test sous cette identité-là. */
   const [demandeIdFromUrl, setDemandeIdFromUrl] = useState(null);
+  // Profil transmis par le lien : le sélecteur « Vous êtes » devient alors une information
+  // affichée, plus un choix - on ne redemande pas ce qu'on sait déjà.
+  const [profilVerrouille, setProfilVerrouille] = useState(null);
   // Lien d'invitation émis par le staff (email + dossier précis, de parcours OU de transfert) :
   // autorise à sauter le mur de connexion, le destinataire étant déjà identifié par le lien.
   const hasInviteContext = !!(emailFromUrl && (assignationIdFromUrl || demandeIdFromUrl));
@@ -784,6 +791,15 @@ export default function FreeLevelTest({ questions: propQ }) {
     // Demande de transfert : même rôle que `assignation_id`, pour un apprenant déjà en classe.
     const demande = params.get("demande");
     if (demande) setDemandeIdFromUrl(demande);
+    /* PROFIL DÉJÀ CONNU. Sur un transfert, l'apprenant a un dossier : son profil n'est pas à
+       redemander. Sans cela il arrivait sur « Particulier », présélectionné par DÉFAUT et non
+       parce qu'on le savait - et pouvait le changer sans y penser, faussant le dossier que
+       l'agent placement test s'apprête à traiter. */
+    const profil = params.get("profil");
+    if (PROFILS_CONNUS.includes(profil)) {
+      setProfilVerrouille(profil);
+      setFormData(fd => ({ ...fd, profile: profil }));
+    }
   }, []);
 
   /* ── Invité via lien commercial (email + assignation_id dans l'URL) : la personne
@@ -1621,15 +1637,26 @@ export default function FreeLevelTest({ questions: propQ }) {
                 )}
 
                 {/* Profile */}
-                <label style={S.fieldLabel}>Vous êtes :</label>
+                <label style={S.fieldLabel}>
+                  Vous êtes :
+                  {profilVerrouille && <span style={{ marginLeft:6, fontSize:".72rem", color:"#059669", fontWeight:600 }}>✓ déjà renseigné</span>}
+                </label>
                 <div style={S.profileGrid}>
-                  {[{v:"particulier",l:"Particulier",i:"👤"},{v:"etudiant",l:"Étudiant",i:"🎒"},{v:"professionnel",l:"Professionnel",i:"💼"},{v:"enfant",l:"Enfant",i:"🧒"}].map(p => (
-                    <button key={p.v} className="flt-profile-btn" style={{ ...S.profileBtn, ...(formData.profile === p.v ? S.profileBtnActive : {}) }}
-                      onClick={() => setFormData(fd => ({ ...fd, profile:p.v }))}>
+                  {[{v:"particulier",l:"Particulier",i:"👤"},{v:"etudiant",l:"Étudiant",i:"🎒"},{v:"professionnel",l:"Professionnel",i:"💼"},{v:"enfant",l:"Enfant",i:"🧒"}].map(p => {
+                    // Profil connu : les autres choix s'effacent, celui-ci reste affiche mais inerte.
+                    const choisi = formData.profile === p.v;
+                    if (profilVerrouille && !choisi) return null;
+                    return (
+                    <button key={p.v} className="flt-profile-btn" disabled={!!profilVerrouille}
+                      title={profilVerrouille ? "Profil repris de votre dossier - il n'y a rien à modifier ici." : undefined}
+                      style={{ ...S.profileBtn, ...(choisi ? S.profileBtnActive : {}),
+                        ...(profilVerrouille ? { cursor:"default", opacity:.85 } : {}) }}
+                      onClick={() => { if (!profilVerrouille) setFormData(fd => ({ ...fd, profile:p.v })); }}>
                       <span style={{ fontSize:"1.3rem" }}>{p.i}</span>
                       <span style={{ fontSize:".76rem", fontWeight: formData.profile === p.v ? 800 : 600 }}>{p.l}</span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Fields */}

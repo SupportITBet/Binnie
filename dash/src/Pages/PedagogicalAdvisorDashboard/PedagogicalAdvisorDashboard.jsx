@@ -45,6 +45,7 @@ import { LIBELLES_CRITERES, libelleLecon, libelleObservation, libelleInternet } 
 import { CATEGORIES_COACH, CATEGORIE_SANS_NOTE, categorieCoach } from "../../utils/categorieCoach";
 import { NOTE_COULEUR as NOTE_COULEUR_CAT, NOTE_FOND as NOTE_FOND_CAT } from "../../utils/categorieCoach";
 import { estClassePrivee } from "../../utils/classePrivee";
+import { AncienNiveau } from "../../Components/NiveauApprenant";
 /* ═══════════════════════════════════════════════════════
    CHARTE COULEURS - Pedagogical Advisor (violet)
 ═══════════════════════════════════════════════════════ */
@@ -3391,7 +3392,10 @@ export default function PedagogicalAdvisorDashboard() {
                               </td>
                               <td style={{ padding:"12px 16px" }}>
                                 {a.niveau
-                                  ? <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:999, color:"#fff", background:niveauColor }}>{a.niveau}</span>
+                                  ? <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
+                                      <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:999, color:"#fff", background:niveauColor }}>{a.niveau}</span>
+                                      <AncienNiveau niveau={a.niveau} precedent={a.niveau_precedent} changeLe={a.niveau_change_le} />
+                                    </span>
                                   : <span style={{ color:"#94a3b8", fontSize:12 }}>-</span>
                                 }
                               </td>

@@ -71,6 +71,18 @@ create table if not exists demandes_transfert (
   updated_at        timestamptz not null default now()
 );
 
+-- ── Ajout après coup : le profil de l'apprenant ─────────────────────────────────
+-- Le lien de test pré-remplit le formulaire ; sans cette information, l'apprenant arrivait
+-- sur « Vous êtes : Particulier » sélectionné par DÉFAUT, et pouvait le changer par
+-- inadvertance alors que son profil est déjà connu - c'est un transfert, pas une première
+-- inscription. Écrit à la création de la demande quand il est résolvable, `null` sinon :
+-- mieux vaut laisser le choix ouvert que figer une valeur fausse.
+alter table demandes_transfert
+  add column if not exists profil_type text;
+
+comment on column demandes_transfert.profil_type is
+  'particulier | etudiant | professionnel | enfant — repris du dossier de l''apprenant pour verrouiller le formulaire de test. NULL = inconnu, le choix reste ouvert.';
+
 -- La file de travail se lit par statut et par date : c'est l'accès de tous les écrans.
 create index if not exists idx_demandes_transfert_statut  on demandes_transfert (statut, created_at desc);
 create index if not exists idx_demandes_transfert_ga      on demandes_transfert (ga_id);

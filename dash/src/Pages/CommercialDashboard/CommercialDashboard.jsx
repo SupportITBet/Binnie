@@ -48,6 +48,7 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
 import FileDemandesTransfert from "../../Components/DemandeTransfert";
+import { AncienNiveau } from "../../Components/NiveauApprenant";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("admin_token")}` });
@@ -7111,6 +7112,7 @@ export default function CommercialDashboard() {
                                     </div>
                                     <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
                                       {a.niveau && <span style={{ fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:6, background:niv.bg, color:niv.color }}>{a.niveau}</span>}
+                                      <AncienNiveau niveau={a.niveau} precedent={a.niveau_precedent} changeLe={a.niveau_change_le} />
                                       <span style={{ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background: a.statut==="actif"?"#dcfce7":"#fee2e2", color: a.statut==="actif"?"#16a34a":"#dc2626" }}>
                                         {a.statut || "actif"}
                                       </span>

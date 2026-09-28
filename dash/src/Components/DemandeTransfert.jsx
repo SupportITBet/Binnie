@@ -186,6 +186,9 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
     const nom = [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ");
     if (nom) p.set("nom", nom);
     p.set("demande", d.id);
+    // Le profil est déjà connu - c'est un transfert. Le transmettre évite que l'apprenant
+    // arrive sur « Particulier » présélectionné par défaut et le change sans y penser.
+    if (d.profil_type) p.set("profil", d.profil_type);
     return `${FRONTEND_URL}/test-niveau?${p}`;
   };
 

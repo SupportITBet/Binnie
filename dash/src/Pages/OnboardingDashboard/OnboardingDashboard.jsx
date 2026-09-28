@@ -38,6 +38,7 @@ import VisionneuseImage from "../../Components/VisionneuseImage";
 import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 import { estClassePrivee } from "../../utils/classePrivee";
 import FileDemandesTransfert from "../../Components/DemandeTransfert";
+import { AncienNiveau } from "../../Components/NiveauApprenant";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -4856,6 +4857,7 @@ export default function OnboardingDashboard() {
                                     <div style={{ fontSize:11,color:"#6b7280",display:"flex",gap:8,flexWrap:"wrap" }}>
                                       <span>{a.email_apprenant||"-"}</span>
                                       {a.niveau && <span style={{ padding:"1px 6px",borderRadius:99,background:C_LIGHT,color:C,fontWeight:700 }}>{a.niveau}</span>}
+                                      <AncienNiveau niveau={a.niveau} precedent={a.niveau_precedent} changeLe={a.niveau_change_le} />
                                       {noteObj.programme && <span style={{ color:"#9ca3af" }}>· {noteObj.programme}</span>}
                                     </div>
                                   </div>
