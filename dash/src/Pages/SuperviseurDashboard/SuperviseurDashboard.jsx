@@ -38,6 +38,7 @@ import { estClassePrivee } from "../../utils/classePrivee";
 import { FiltrePeriode, BarrePagination, paginer, dansLaPeriode } from "../../Components/FiltrePeriode";
 import { urlDocument } from "../../utils/urlDocument";
 import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
+import { exporterFicheApprenantPDF, ligneInfo } from "../../utils/fichePdfApprenant";
 import { CRITERES_OBSERVATION, CRITERES_LECTURE, LIBELLES_CRITERES,
          TYPES_OBSERVATION, TYPES_LECON, ETATS_INTERNET,
          libelleLecon, libelleObservation, libelleInternet } from "../../utils/criteresObservation";
@@ -3196,13 +3197,45 @@ export default function SuperviseurDashboard() {
                             <td style={{ padding:"8px 12px", fontSize:13, fontWeight:600, color:(a.nb_absences||a.absences||0)>3?"#dc2626":"#374151" }}>
                               {a.nb_absences??a.absences??'-'}{(a.nb_absences||a.absences||0)>3&&<span style={{ marginLeft:4, fontSize:10 }}>⚠️</span>}
                             </td>
-                            <td style={{ padding:"8px 12px" }}>
+                            <td style={{ padding:"8px 12px", whiteSpace:"nowrap" }}>
                               <button
                                 onClick={() => setSupTestsOuvert(ouvert ? null : (a.id || i))}
                                 style={{ padding:"4px 10px", borderRadius:6, border:"1px solid #e2e8f0",
                                   background: ouvert ? "#e0f2fe" : "#fff", color:"#0369a1",
                                   fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}
                               >🎓 {ouvert ? "Masquer" : "Tests"}</button>
+                              {/* LA FICHE EN PDF. Le superviseur n'avait aucun export d'un
+                                  apprenant - seulement des listes. C'est pourtant le document
+                                  qu'il emporte en point avec un coach sur un cas précis. */}
+                              <button
+                                title="Exporter la fiche de cet apprenant en PDF"
+                                onClick={() => exporterFicheApprenantPDF({
+                                  nom: `${a.prenom_apprenant||a.prenom||""} ${a.nom_apprenant||a.nom||""}`.trim(),
+                                  id: a.id,
+                                  tests: { apiUrl: API_URL, authHeaders: authHdrs, gaId: a.id || null, email: a.email_apprenant || a.email || null },
+                                  sections: [
+                                    { titre: "👤 Identité", lignes: [
+                                      ligneInfo("Prénom", a.prenom_apprenant || a.prenom),
+                                      ligneInfo("Nom", a.nom_apprenant || a.nom),
+                                      ligneInfo("Email", a.email_apprenant || a.email),
+                                      ligneInfo("Téléphone", a.telephone),
+                                    ]},
+                                    { titre: "🎓 Classe et niveau", lignes: [
+                                      ligneInfo("Classe", classeDetail?.nom),
+                                      ligneInfo("Coach", classeDetail?.coach_nom),
+                                      ligneInfo("Niveau", a.niveau),
+                                      ligneInfo("Niveau précédent", a.niveau_precedent && a.niveau_precedent !== a.niveau ? a.niveau_precedent : null),
+                                      ligneInfo("Statut", a.statut),
+                                    ]},
+                                  ],
+                                  kpis: [{ titre: "📅 Assiduité", cartes: [
+                                    { valeur: a.nb_presences ?? a.presences ?? "-", libelle: "Présences" },
+                                    { valeur: a.nb_absences ?? a.absences ?? "-", libelle: "Absences" },
+                                  ]}],
+                                }).catch(() => {})}
+                                style={{ marginLeft:6, padding:"4px 9px", borderRadius:6, border:"1px solid #e2e8f0",
+                                  background:"#fff", color:"#475569", fontSize:11, fontWeight:700, cursor:"pointer" }}
+                              >📄</button>
                             </td>
                           </tr>
                           {ouvert && (

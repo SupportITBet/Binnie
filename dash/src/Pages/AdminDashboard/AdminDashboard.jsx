@@ -40,6 +40,7 @@ import { uploadFichier, maxMoPour } from "../../utils/uploadFichier";
 import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
+import { exporterFicheApprenantPDF, ligneInfo, fmtDatePDF } from "../../utils/fichePdfApprenant";
 
 const API_URL        = process.env.REACT_APP_API_URL        || "http://localhost:5001";
 const FRONTEND_URL   = process.env.REACT_APP_FRONTEND_URL   || "http://localhost:3000";
@@ -18840,6 +18841,47 @@ export default function AdminDashboard() {
                 {/* Header */}
                 <div style={{ background:BET_GRADIENT, padding:"20px 24px", position:"relative", flexShrink:0 }}>
                   <button onClick={()=>setSelectedApprenant(null)} style={{ position:"absolute", top:14, right:14, background:"rgba(255,255,255,0.2)", border:"none", borderRadius:"50%", width:30, height:30, cursor:"pointer", color:"#fff", fontSize:17, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                  {/* EXPORT PDF DE LA FICHE. Cet écran n'en avait aucun pour un apprenant -
+                      seulement des exports de listes. Bâti sur utils/fichePdfApprenant.js :
+                      la charte et le tableau des tests ne se réécrivent pas par dashboard. */}
+                  <button
+                    onClick={() => exporterFicheApprenantPDF({
+                      nom: sa.nom,
+                      id: sa.id,
+                      tests: { apiUrl: API_URL, authHeaders, assignationId: sa.id || null, email: emailSA !== "-" ? emailSA : null },
+                      sections: [
+                        { titre: "👤 Informations personnelles", lignes: [
+                          ligneInfo("Nom complet", sa.nom),
+                          ligneInfo("Email", emailSA),
+                          ligneInfo("Téléphone", sa.telephone),
+                          ligneInfo("Statut", ST_LABELS[sa.statut] || sa.statut),
+                        ]},
+                        { titre: "🎓 Formation", lignes: [
+                          ligneInfo("Niveau", sa.niveau),
+                          ligneInfo("Type de cours", sa.type_cours === "en_ligne" ? "En ligne" : "Présentiel"),
+                          ligneInfo("Type de coaching", sa.type_coaching === "prive" ? "Privé" : "Groupe"),
+                          ligneInfo("Centre", sa.centre_nom),
+                          ligneInfo("Coach", sa.coach),
+                          ligneInfo("Conseillère", sa.commercial),
+                          ligneInfo("Conseiller PA", sa.pa_advisor),
+                          ligneInfo("Onboarding", sa.onboarding),
+                          ligneInfo("Formation souhaitée", sa.formation),
+                          ligneInfo("Début", sa.date_debut ? fmtDatePDF(sa.date_debut) : null),
+                          ligneInfo("Fin", sa.date_fin ? fmtDatePDF(sa.date_fin) : null),
+                        ]},
+                      ],
+                      tableaux: [
+                        { titre: "📆 Séances", entetes: ["Date","Heure","Durée","Statut"],
+                          lignes: (saSeancesPrivees || []).map(x => [
+                            x.date_seance ? fmtDatePDF(x.date_seance) : "-",
+                            x.heure_debut || "-",
+                            x.duree_minutes ? `${x.duree_minutes} min` : "-",
+                            x.statut || "-",
+                          ]) },
+                      ],
+                    }).catch(() => {})}
+                    style={{ position:"absolute", top:14, right:52, display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:"rgba(255,255,255,0.2)", border:"none", borderRadius:7, cursor:"pointer", color:"#fff", fontSize:12, fontWeight:700, whiteSpace:"nowrap" }}
+                  >📄 Export PDF</button>
                   <div style={{ display:"flex", alignItems:"center", gap:14 }}>
                     <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(255,255,255,0.18)", color:"#fff", fontWeight:800, fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden", border:"2px solid rgba(255,255,255,0.3)" }}>
                       {saAccesInfo?.profil?.avatar_url

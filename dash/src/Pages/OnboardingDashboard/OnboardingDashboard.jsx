@@ -39,8 +39,9 @@ import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 import { estClassePrivee } from "../../utils/classePrivee";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
-import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
-import HistoriqueTestsNiveau, { useHistoriqueTests, lignesTestsPourPDF } from "../../Components/HistoriqueTestsNiveau";
+import EvolutionNiveauTests from "../../Components/EvolutionNiveauTests";
+import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
+import { exporterFicheApprenantPDF, ligneInfo } from "../../utils/fichePdfApprenant";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -602,8 +603,6 @@ export default function OnboardingDashboard() {
   const [detailBilan, setDetailBilan] = useState(null);
 
   // Modaux
-  const [showAppModal, setShowAppModal]           = useState(false);
-  const [selectedApprenant, setSelectedApprenant] = useState(null);
   const [showPlanningModal, setShowPlanningModal] = useState(false);
   const [selectedPlanning, setSelectedPlanning]   = useState(null);
   const [showSuiviModal, setShowSuiviModal]       = useState(false);
@@ -5207,6 +5206,67 @@ export default function OnboardingDashboard() {
                 // Taux présences
                 const nbPresent = apprenantPresences.filter(p=>p.statut==="present").length;
                 const tauxPres = apprenantPresences.length ? Math.round(nbPresent/apprenantPresences.length*100) : null;
+
+                /* EXPORT PDF DE LA FICHE. Onboarding en avait un, accroché à un modal
+                   qu'aucun bouton n'ouvrait plus : la fonction existait, le document
+                   n'était jamais produit. Il vit maintenant sur la fiche réellement
+                   utilisée, et sur le constructeur partagé (utils/fichePdfApprenant.js) -
+                   la charte et le tableau des tests ne se réécrivent plus par service. */
+                const ga = selectedApprenantGroupe;
+                const exporterFichePDF = () => {
+                  const nomComplet = [ga.prenom_apprenant, ga.nom_apprenant].filter(Boolean).join(" ");
+                  exporterFicheApprenantPDF({
+                    nom: nomComplet,
+                    id: apprenantAssignation?.id || ga.id,
+                    tests: {
+                      apiUrl: API_URL, authHeaders,
+                      assignationId: apprenantAssignation?.id || null,
+                      gaId: ga.id || null,
+                      email: ga.email_apprenant || null,
+                    },
+                    sections: [
+                      { titre: "👤 Informations personnelles", lignes: [
+                        ligneInfo("Nom complet", nomComplet),
+                        ligneInfo("Email", ga.email_apprenant),
+                        ligneInfo("Téléphone", ga.telephone || apprenantAssignation?.prospect_telephone),
+                        ligneInfo("Profil", apprenantAssignation?.profil_type),
+                      ]},
+                      { titre: "🎓 Formation suivie", lignes: [
+                        ligneInfo("Classe", selectedGroupe?.nom || ga.groupe_nom),
+                        ligneInfo("Niveau", `${ga.niveau || "-"}${NIVEAUX_LABELS[ga.niveau] ? " - " + NIVEAUX_LABELS[ga.niveau] : ""}`),
+                        // L'ancien niveau à côté du nouveau : c'est lui qui explique le
+                        // changement de classe qu'on lit juste au-dessus.
+                        ligneInfo("Niveau précédent", ga.niveau_precedent && ga.niveau_precedent !== ga.niveau ? ga.niveau_precedent : null),
+                        ligneInfo("Coach", coachNom),
+                        ligneInfo("Conseillère", commercialNom),
+                        ligneInfo("Programme", noteObj.programme),
+                        ligneInfo("Inscrit le", ga.date_ajout ? fmtDatePDF(ga.date_ajout) : null),
+                        ligneInfo("Statut", { actif:"Actif", retire:"Retiré", archive:"Archivé", en_pause:"En pause" }[ga.statut] || ga.statut),
+                      ]},
+                    ],
+                    kpis: apprenantPresences.length ? [{ titre: "📅 Assiduité", cartes: [
+                      { valeur: apprenantPresences.length, libelle: "Séances" },
+                      { valeur: nbPresent, libelle: "Présences" },
+                      { valeur: apprenantPresences.length - nbPresent, libelle: "Absences" },
+                      { valeur: tauxPres !== null ? `${tauxPres}%` : "-", libelle: "Taux de présence" },
+                    ]}] : [],
+                    tableaux: [
+                      { titre: "📅 Détail des séances", entetes: ["Date","Statut"],
+                        lignes: apprenantPresences.map(p => [
+                          p.date_seance ? fmtDatePDF(p.date_seance) : "-",
+                          p.statut === "present" ? "Présent" : p.statut === "absent" ? "Absent" : (p.statut || "-"),
+                        ]) },
+                      { titre: "💰 Versements reçus", entetes: ["Date","Mode","Montant","Statut"],
+                        lignes: apprenantPmts.map(p => [
+                          p.date_paiement ? fmtDatePDF(p.date_paiement) : "-",
+                          p.mode_paiement || "-",
+                          p.montant_recu != null ? `${Number(p.montant_recu).toLocaleString("fr-FR")} FCFA` : "-",
+                          p.statut || "-",
+                        ]) },
+                    ],
+                  }).catch(() => toast.error("Erreur lors de l'export PDF"));
+                };
+
                 return (
                   <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",zIndex:1050,display:"flex",alignItems:"center",justifyContent:"center",padding:12 }}
                     onClick={()=>setSelectedApprenantGroupe(null)}>
@@ -5235,10 +5295,16 @@ export default function OnboardingDashboard() {
                             </div>
                           </div>
                           <div style={{ display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end",flexShrink:0 }}>
-                            <button onClick={()=>setSelectedApprenantGroupe(null)}
-                              style={{ background:"rgba(255,255,255,0.18)",border:"none",color:"#fff",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                              ✕
-                            </button>
+                            <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                              <button onClick={exporterFichePDF}
+                                style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.18)",color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap" }}>
+                                📄 Export PDF
+                              </button>
+                              <button onClick={()=>setSelectedApprenantGroupe(null)}
+                                style={{ background:"rgba(255,255,255,0.18)",border:"none",color:"#fff",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                                ✕
+                              </button>
+                            </div>
                             {/* Bouton créer accès */}
                             {selectedApprenantGroupe.apprenant_id ? (
                               <span style={{ padding:"4px 10px",borderRadius:99,background:"rgba(34,197,94,0.3)",fontSize:10,fontWeight:700,color:"#dcfce7",whiteSpace:"nowrap" }}>
@@ -9629,130 +9695,13 @@ export default function OnboardingDashboard() {
         />
       )}
 
-      {/* ══ MODAL DOSSIER APPRENANT ══ */}
-      {showAppModal&&selectedApprenant&&(()=>{
-        /* FICHE APPRENANT — même gabarit que celles de la commerciale et du PA.
-           Elle sortait de jsPDF : tableaux bruts, sans en-tête BET ni bandeau de titre.
-           Trois services produisant le même document ne peuvent pas le produire sous trois
-           apparences. `genererPDF` (utils/genererPDF.js) porte la charte commune et le logo. */
-        const exporterFicheApprenantPDF = () => {
-          try {
-            const num = `BET-FA-${String(selectedApprenant.id || "").replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-            const infoRow = (lbl, val) => val == null || val === "" ? "" :
-              `<div class="info-row"><span class="info-label">${lbl}</span><span class="info-value">${val}</span></div>`;
-            const section = (titre, lignes) => {
-              const corps = lignes.filter(Boolean).join("");
-              return corps ? `<div class="section-title">${titre}</div><div class="info-grid">${corps}</div>` : "";
-            };
-            const objectif = (selectedApprenant.objectif || "").trim();
-
-            genererPDF(`
-              <div class="doc-header">
-                <div>
-                  <div class="doc-header-logo">BET Languages</div>
-                  <div class="doc-header-sub">Centre de langues - Abidjan, Côte d'Ivoire</div>
-                  <div class="doc-header-sub">📧 contact@binniesenglish.com · 📞 +225 27 22 40 71 99</div>
-                </div>
-                <div class="doc-header-right">
-                  N° ${num}<br/>Émise le ${fmtDatePDF(new Date().toISOString())}
-                </div>
-              </div>
-              <div class="doc-title-band">🎓 FICHE APPRENANT - ${selectedApprenant.nom || ""}</div>
-              <div class="doc-body">
-
-                ${section("👤 Informations personnelles", [
-                  infoRow("Nom complet", selectedApprenant.nom),
-                  infoRow("Email", selectedApprenant.email),
-                  infoRow("Téléphone", selectedApprenant.telephone),
-                  infoRow("Profil", selectedApprenant.profil),
-                  infoRow("Entreprise", selectedApprenant.entreprise || "Particulier"),
-                ])}
-
-                ${/* Pleine largeur, hors grille : c'est une phrase, et la seule information
-                      de cette fiche qui dise POURQUOI la personne est là. Signalé quand il
-                      manque, pour qu'un oubli se voie au lieu de passer inaperçu. */
-                  objectif
-                    ? `<div class="section-title">🎯 Objectif du client</div>
-                       <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.65;color:#0F172A;white-space:pre-wrap">${objectif}</div>`
-                    : `<div class="section-title">🎯 Objectif du client</div>
-                       <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;font-size:12.5px;color:#92400E">Non renseigné — à demander à l'assistante commerciale.</div>`}
-
-                ${section("🎓 Formation assignée", [
-                  infoRow("Offre", selectedApprenant.offre),
-                  infoRow("Niveau test", `${selectedApprenant.niveau || "-"}${NIVEAUX[selectedApprenant.niveau] ? " - " + NIVEAUX[selectedApprenant.niveau] : ""}`),
-                  /* L'évolution dans le PDF aussi : ce document part au conseiller
-                     pédagogique et au coach, qui doivent savoir d'où vient ce niveau. */
-                  infoRow("Évolution du niveau", texteEvolutionNiveau([...apprenantTests].reverse())),
-                  infoRow("Coach", selectedApprenant.coach),
-                  infoRow("Conversion", formatDate(selectedApprenant.dateConversion)),
-                ])}
-
-                ${/* CHAQUE PASSAGE, daté et situé. La ligne « Évolution » ci-dessus résume ;
-                      ce tableau dit quand, avec quel score et par quelle voie - un niveau
-                      évalué en présentiel ne se lit pas comme un test passé en ligne. */""}
-                ${apprenantTests.length ? `<div class="section-title">📝 Tests de niveau</div>
-                  <table><thead><tr>${["Date","Niveau","Score","Origine"].map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>
-                    ${lignesTestsPourPDF(apprenantTests).map(l=>`<tr>${l.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}
-                  </tbody></table>` : ""}
-
-                <div class="section-title">📬 Envois Kick-off</div>
-                <table><thead><tr><th>Étape</th></tr></thead><tbody>
-                  ${CHECKLIST_ITEMS.map(item => `<tr><td>${item.label}</td></tr>`).join("")}
-                </tbody></table>
-
-                <div class="doc-footer">
-                  <span>BET Languages · Centre de langues agréé · Abidjan, Côte d'Ivoire</span>
-                  <span>contact@binniesenglish.com · +225 27 22 40 71 99</span>
-                </div>
-              </div>
-            `, `Fiche apprenant - ${selectedApprenant.nom || ""}`);
-            toast.success("Fiche apprenant exportée en PDF");
-          } catch (e) {
-            console.error("Fiche apprenant Onboarding:", e);
-            toast.error("Erreur lors de l'export PDF");
-          }
-        };
-        return (
-        <Modal title={`🎓 Dossier - ${selectedApprenant.nom}`} onClose={()=>{ setShowAppModal(false); setSelectedApprenant(null); }} wide
-          headerExtra={<button onClick={exporterFicheApprenantPDF} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:"#0891b2", color:"#fff", border:"none", borderRadius:6, cursor:"pointer", fontSize:12, fontWeight:700, whiteSpace:"nowrap" }}>📄 Export PDF</button>}
-        >
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16 }}>
-            <div style={{ padding:14,borderRadius:10,background:"#f0f9ff",border:"1px solid #bae6fd" }}>
-              <div style={{ fontSize:11,fontWeight:700,color:"#0369a1",marginBottom:10 }}>👤 Informations personnelles</div>
-              {[["Nom complet",selectedApprenant.nom],["Email",selectedApprenant.email],["Téléphone",selectedApprenant.telephone||"-"],["Profil",selectedApprenant.profil],["Entreprise",selectedApprenant.entreprise||"Particulier"]].map(([l,v])=>(
-                <div key={l} style={{ display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12 }}><span style={{ color:"#6b7280" }}>{l}</span><span style={{ fontWeight:600 }}>{v}</span></div>
-              ))}
-            </div>
-            <div style={{ padding:14,borderRadius:10,background:C_LIGHT,border:`1px solid ${C}30` }}>
-              <div style={{ fontSize:11,fontWeight:700,color:C,marginBottom:10 }}>📚 Formation assignée</div>
-              {[["Offre",selectedApprenant.offre],["Niveau test",selectedApprenant.niveau+" - "+NIVEAUX[selectedApprenant.niveau]],["Coach",selectedApprenant.coach],["Conversion",formatDate(selectedApprenant.dateConversion)]].map(([l,v])=>(
-                <div key={l} style={{ display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12 }}><span style={{ color:"#6b7280" }}>{l}</span><span style={{ fontWeight:600 }}>{v}</span></div>
-              ))}
-            </div>
-          </div>
-          <div style={{ padding:"12px 16px",borderRadius:10,background:"#fef9ee",border:"1px solid #fde68a",marginBottom:16 }}>
-            <div style={{ fontSize:11,fontWeight:700,color:"#92400e",marginBottom:4 }}>🎯 Objectif pédagogique</div>
-            <div style={{ fontSize:13,color:"#374151",lineHeight:1.6 }}>{selectedApprenant.objectif}</div>
-          </div>
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:12,fontWeight:700,color:"#374151",marginBottom:10 }}>🚀 Envois Kick-off à déclencher</div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-              {CHECKLIST_ITEMS.map(item=>(
-                <div key={item.id} style={{ padding:"8px 12px",borderRadius:8,background:"#f8fafc",border:"1px solid #e5e7eb",fontSize:12,display:"flex",alignItems:"center",gap:8 }}>
-                  <span style={{ fontSize:16,flexShrink:0 }}>{item.icon}</span>{item.label}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ padding:"8px 12px", borderRadius:8, background:"#f8fafc", border:"1px solid #e2e8f0", fontSize:12, color:"#6b7280", marginBottom:16 }}>
-            💡 Le suivi de démarrage démarre automatiquement dès que ce dossier est finalisé et affecté à un groupe - retrouvez-le ensuite dans l'onglet "Suivi démarrage".
-          </div>
-          <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>{ setShowAppModal(false); setSelectedApprenant(null); }} style={btnS}>Fermer</button>
-          </div>
-        </Modal>
-        );
-      })()}
+      /* LE MODAL « DOSSIER APPRENANT » A ÉTÉ RETIRÉ ICI.
+         Il n'était plus atteignable : `setShowAppModal(true)` n'existait nulle part, donc
+         ni le modal ni son export PDF ne s'ouvraient jamais. Son seul contenu utile - la
+         fiche en PDF - vit désormais sur la fiche réellement utilisée
+         (`selectedApprenantGroupe`, bouton « 📄 Export PDF » de son en-tête), bâtie sur
+         utils/fichePdfApprenant.js. Garder une copie morte du document, c'était garantir
+         qu'une correction de charte soit un jour appliquée à celle qu'on ne voit pas. */
 
       {/* ══ MODAL DOSSIER - 2 étapes : Dossier (lecture seule) → Groupe ══ */}
       {showDossierModal && dossierTarget && (

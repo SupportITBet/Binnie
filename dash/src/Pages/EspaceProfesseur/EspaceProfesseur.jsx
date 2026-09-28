@@ -41,6 +41,7 @@ import { BoutonDemandeTransfert } from "../../Components/DemandeTransfert";
 import { NOTE_COULEUR, NOTE_FOND, BAREME_TEXTE } from "../../utils/categorieCoach";
 import { suivreFenetreLive } from "../../utils/inactivite";
 import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
+import { exporterFicheApprenantPDF, ligneInfo } from "../../utils/fichePdfApprenant";
 
 /* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
    Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
@@ -11135,6 +11136,52 @@ const messagesFiltres = useMemo(() => {
                     authHdrs={() => ({ "Content-Type":"application/json", Authorization:`Bearer ${localStorage.getItem("coach_token")||localStorage.getItem("admin_token")}` })}
                   />
                 )}
+                {/* EXPORT PDF DE LA FICHE. Le coach n'en avait aucun : il pouvait exporter la
+                    LISTE de ses apprenants, jamais la fiche de l'un d'eux - or c'est ce
+                    document qu'il apporte en point pédagogique ou qu'il joint à une demande
+                    de transfert. Bâti sur le constructeur partagé, donc à la charte BET. */}
+                <button
+                  onClick={() => exporterFicheApprenantPDF({
+                    nom: nomComplet,
+                    id: a.id,
+                    tests: { apiUrl: API_URL, authHeaders, gaId: a.id || null, email: a.email_apprenant || null },
+                    sections: [
+                      { titre: "👤 Identité", lignes: [
+                        ligneInfo("Nom complet", nomComplet),
+                        ligneInfo("Email", a.email_apprenant),
+                        ligneInfo("Téléphone", a.telephone),
+                      ]},
+                      { titre: "🎓 Classe et niveau", lignes: [
+                        ligneInfo("Classe", selectedGroupe?.nom || a.groupe_nom),
+                        ligneInfo("Niveau", `${a.niveau || "-"}${NIVEAUX_LBL[a.niveau] ? " - " + NIVEAUX_LBL[a.niveau] : ""}`),
+                        ligneInfo("Niveau précédent", a.niveau_precedent && a.niveau_precedent !== a.niveau ? a.niveau_precedent : null),
+                        ligneInfo("Programme", noteObj?.programme),
+                        ligneInfo("Inscrit le", a.date_ajout ? fmtDatePDF(a.date_ajout) : null),
+                        ligneInfo("Statut", a.acces_bloque ? "Accès bloqué" : "Actif"),
+                      ]},
+                    ],
+                    kpis: presApp.length ? [{ titre: "📅 Assiduité", cartes: [
+                      { valeur: presApp.length, libelle: "Séances" },
+                      { valeur: nbPresent, libelle: "Présences" },
+                      { valeur: presApp.length - nbPresent, libelle: "Absences" },
+                      { valeur: tauxPres !== null ? `${tauxPres}%` : "-", libelle: "Taux de présence" },
+                    ]}] : [],
+                    tableaux: [
+                      { titre: "📅 Détail des séances", entetes: ["Date","Statut"],
+                        lignes: presApp.map(p => [
+                          p.date_seance ? fmtDatePDF(p.date_seance) : "-",
+                          p.statut === "present" ? "Présent" : p.statut === "absent" ? "Absent" : (p.statut || "-"),
+                        ]) },
+                      { titre: "📚 Devoirs et notes", entetes: ["Devoir","Date","Note"],
+                        lignes: (ficheDevoirsDB || []).map(d => [
+                          d.titre || d.nom || "-",
+                          d.date || d.created_at ? fmtDatePDF(d.date || d.created_at) : "-",
+                          d.note != null ? `${d.note}/20` : "-",
+                        ]) },
+                    ],
+                  }).catch(() => toast.error("Erreur lors de l'export PDF"))}
+                  style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.15)",color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap",flexShrink:0 }}
+                >📄 Export PDF</button>
                 <button onClick={()=>setApprenantDetail(null)} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
               </div>
 

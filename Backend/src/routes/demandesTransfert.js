@@ -357,6 +357,9 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
              `commercial_id`, la ligne partait donc dans « tests sans conseillère assignée » et
              la fiche de l'apprenant restait sur son ancien niveau. Le rapprochement par
              e-mail seul ne suffit pas non plus - un parent et son enfant la partagent.
+             La conseillère se lit dans `assistante_id` : la colonne `commercial_id` décrite
+             par sql/CONSOLIDATION_assignations_parcours.sql n'existe pas en base, et la
+             demander faisait échouer toute la requête - donc le rattachement entier.
              Vaut pour les DEUX voies : le test passé en ligne via le lien du transfert arrive
              lui aussi sans dossier, le lien ne transportant que l'e-mail et l'id de demande. */
           let assignation = null;
@@ -366,11 +369,11 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
           try { assignationId = JSON.parse(gaRow?.note || "{}").assignation_id || null; } catch { /* note libre */ }
           if (assignationId) {
             ({ data: assignation } = await supabase.from("assignations_parcours")
-              .select("id, commercial_id").eq("id", assignationId).maybeSingle());
+              .select("id, assistante_id").eq("id", assignationId).maybeSingle());
           }
           if (!assignation) {
             ({ data: assignation } = await supabase.from("assignations_parcours")
-              .select("id, commercial_id").ilike("prospect_email", demande.email_apprenant)
+              .select("id, assistante_id").ilike("prospect_email", demande.email_apprenant)
               .order("created_at", { ascending: false }).limit(1).maybeSingle());
           }
 
@@ -379,7 +382,7 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
                passage. On se contente de lui poser le dossier qui lui manque. */
             if (assignation?.id) {
               await supabase.from("level_test_results")
-                .update({ assignation_id: assignation.id, commercial_id: assignation.commercial_id || null })
+                .update({ assignation_id: assignation.id, commercial_id: assignation.assistante_id || null })
                 .eq("id", req.body.level_test_id).is("assignation_id", null);
             }
           } else {
@@ -391,7 +394,7 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
               fullname:     [demande.prenom_apprenant, demande.nom_apprenant].filter(Boolean).join(" ") || null,
               email:        demande.email_apprenant,
               assignation_id: assignation?.id || null,
-              commercial_id:  assignation?.commercial_id || null,
+              commercial_id:  assignation?.assistante_id || null,
               level:        niveau,
               source:       "oral",            // évalué par l'agent, pas passé en ligne
               format_test:  "oral",
