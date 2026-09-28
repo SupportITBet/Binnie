@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
+const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
+const FRONTEND_URL = process.env.REACT_APP_FRONTEND_URL || "https://binniesenglish.net";
 
 /**
  * DEMANDE DE TRANSFERT — un dossier qui traverse trois métiers.
@@ -133,6 +134,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
   const [action, setAction] = useState(null);     // { demande, type: "test" | "refus" }
   const [valeur, setValeur] = useState("");
   const [occupe, setOccupe] = useState(false);
+  const [verifie, setVerifie] = useState(null);   // dossier dont on interroge le résultat
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -163,6 +165,48 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
     } catch (e) {
       toast.error(e.message || "Mise à jour impossible");
     } finally { setOccupe(false); }
+  };
+
+  /* FAIRE PASSER LE TEST — les deux formes, comme pour un nouveau prospect.
+     EN LIGNE : un lien pré-rempli du nom et de l'e-mail de l'apprenant. Il le passe lui-même,
+     le résultat arrive dans « À corriger » comme n'importe quel candidat, et « Vérifier »
+     le rapatrie ici pour débloquer la réaffectation.
+     EN PRÉSENTIEL : l'agent teste l'apprenant devant lui et saisit le niveau directement.
+     Les deux chemins existent parce que les deux situations existent - n'en offrir qu'un
+     obligerait l'agent à contourner l'outil dans la moitié des cas. */
+  const lienTest = (d) => {
+    const p = new URLSearchParams();
+    if (d.email_apprenant) p.set("email", d.email_apprenant);
+    const nom = [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ");
+    if (nom) p.set("nom", nom);
+    return `${FRONTEND_URL}/test-niveau${p.toString() ? `?${p}` : ""}`;
+  };
+
+  const copierLien = (d) => {
+    navigator.clipboard.writeText(lienTest(d))
+      .then(() => toast.success("Lien du test copié — transmettez-le à l'apprenant"))
+      .catch(() => toast.error("Copie impossible"));
+  };
+
+  const verifierTest = async (d) => {
+    if (!d.email_apprenant) {
+      toast.error("Aucun e-mail connu pour cet apprenant : saisissez le niveau à la main.");
+      return;
+    }
+    setVerifie(d.id);
+    try {
+      const r = await fetch(`${API_URL}/api/level-test/result?email=${encodeURIComponent(d.email_apprenant)}`);
+      const res = await r.json();
+      const niveau = res?.result?.level;
+      if (!niveau) {
+        toast("⏳ L'apprenant n'a pas encore passé le test — ou il reste à corriger dans « À corriger ».");
+        return;
+      }
+      await patch(d, { niveau_obtenu: niveau, level_test_id: res.result.id || null },
+        `Niveau ${niveau} récupéré du test passé ✓`);
+    } catch {
+      toast.error("Vérification impossible");
+    } finally { setVerifie(null); }
   };
 
   const visibles = demandes.filter(d =>
@@ -259,10 +303,24 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                 {/* ── Les actions, selon le métier ─────────────────────────────── */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {mode === "placement" && attendTest && (
-                    <button onClick={() => { setAction({ demande: d, type: "test" }); setValeur(""); }}
-                      style={{ padding: "7px 14px", background: accent, border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                      🧪 Enregistrer le niveau obtenu
-                    </button>
+                    <>
+                      {/* EN LIGNE — le lien pré-rempli, exactement comme pour un prospect. */}
+                      <button onClick={() => copierLien(d)}
+                        title={d.email_apprenant ? `Lien pré-rempli pour ${d.email_apprenant}` : "Aucun e-mail connu : le lien ne sera pas pré-rempli"}
+                        style={{ padding: "7px 14px", background: "#fff", border: `1.5px solid ${accent}55`, borderRadius: 8, color: accent, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                        📋 Copier le lien du test
+                      </button>
+                      <button onClick={() => verifierTest(d)} disabled={verifie === d.id || occupe}
+                        title="Récupérer le résultat si l'apprenant a déjà passé le test en ligne"
+                        style={{ padding: "7px 14px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 12, fontWeight: 700, cursor: verifie === d.id ? "wait" : "pointer", fontFamily: "inherit" }}>
+                        {verifie === d.id ? "⏳ Vérification…" : "🔄 Vérifier si le test a été passé"}
+                      </button>
+                      {/* EN PRÉSENTIEL — l'agent teste l'apprenant devant lui et saisit le niveau. */}
+                      <button onClick={() => { setAction({ demande: d, type: "test" }); setValeur(""); }}
+                        style={{ padding: "7px 14px", background: accent, border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                        🧪 Saisir le niveau (test en présentiel)
+                      </button>
+                    </>
                   )}
 
                   {mode === "onboarding" && ["en_attente_test", "test_fait"].includes(d.statut) && (

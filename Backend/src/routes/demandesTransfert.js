@@ -40,7 +40,11 @@ export const MOTIFS_TRANSFERT = {
 
 const STATUTS = ["en_attente_test", "test_fait", "traitee", "refusee"];
 
-const ROLES_ONBOARDING = ["onboarding", "admin_onboarding", "super_admin", "admin"];
+/* LES ASSISTANTES PRÉSENTIEL RÉAFFECTENT AUSSI. L'onboarding ne s'occupe que des classes en
+   ligne ; en présentiel, c'est la commerciale qui affecte classe et coach. Réserver la
+   réaffectation à l'onboarding aurait laissé tous les dossiers présentiel sans personne pour
+   les traiter - le coach aurait émis sa demande dans le vide. */
+const ROLES_ONBOARDING = ["onboarding", "admin_onboarding", "commercial", "admin_commercial", "super_admin", "admin"];
 const ROLES_PLACEMENT  = ["placement_test", "admin_placement", "super_admin", "admin"];
 const ROLES_COACH      = ["coach", "professeur_titulaire", "professeur_remplacant"];
 
@@ -298,11 +302,36 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
         refusee: { titre: `↩️ Demande de transfert refusée — ${apprenant}`,
                    message: `${nomDe(req.profil)} n'a pas donné suite à votre demande concernant ${apprenant}. Motif : ${maj.motif_refus}` },
       };
-      const cible = action === "test" ? [demande.coach_id, demande.cree_par] : [demande.coach_id, demande.cree_par];
-      const ids = [...new Set(cible.filter(Boolean))];
+      const ids = [...new Set([demande.coach_id, demande.cree_par].filter(Boolean))];
       if (ids.length && messages[action]) {
         await notifyUsers(ids, { type: "demande_transfert", ...messages[action], meta: { demande_id: demande.id } })
           .catch(e => console.warn("[demandes-transfert PATCH] notification:", e.message));
+      }
+
+      /* LE RÉSULTAT DU TEST VA AUSSI À CEUX QUI RÉAFFECTENT. C'est le moment où le dossier
+         devient actionnable pour eux : sans cette notification, il resterait à attendre dans
+         l'onglet que quelqu'un pense à l'ouvrir. On prévient l'onboarding ET les assistantes
+         présentiel, puisque les deux réaffectent selon le type de classe. */
+      if (action === "test") {
+        try {
+          const { data: reaffecteurs } = await supabase
+            .from("utilisateurs").select("id")
+            .in("role", ROLES_ONBOARDING.filter(r => r !== "super_admin" && r !== "admin"))
+            .eq("actif", true);
+          const pour = (reaffecteurs || []).map(u => u.id).filter(id => !ids.includes(id));
+          if (pour.length) {
+            await notifyUsers(pour, {
+              type:  "demande_transfert",
+              titre: `✅ Niveau connu — ${apprenant} peut être réaffecté`,
+              message: `Le test de ${apprenant} rend le niveau ${maj.niveau_obtenu}`
+                     + `${demande.groupe_nom ? ` (actuellement en ${demande.groupe_nom})` : ""}. `
+                     + `Le dossier est prêt dans l'onglet « Dossiers à réaffecter ».`,
+              meta: { demande_id: demande.id, niveau: maj.niveau_obtenu },
+            });
+          }
+        } catch (e) {
+          console.warn("[demandes-transfert PATCH] notification réaffecteurs:", e.message);
+        }
       }
     })();
 

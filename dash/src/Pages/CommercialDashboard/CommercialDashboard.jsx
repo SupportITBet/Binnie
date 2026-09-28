@@ -47,6 +47,7 @@ import { uploadFichier, maxMoPour } from "../../utils/uploadFichier";
 import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
+import FileDemandesTransfert from "../../Components/DemandeTransfert";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("admin_token")}` });
@@ -5119,6 +5120,9 @@ export default function CommercialDashboard() {
       { key:"classes",       label:"Mes classes",        icon:"📚" },
       { key:"plannings",     label:"Plannings",         icon:"📅", badge: planning.planningsAAlerter || null },
       { key:"apprenants",    label:"Mes apprenants",    icon:"🎓" },
+      // En presentiel, c'est l'assistante qui affecte classe et coach : les demandes de
+      // transfert emises par ses coachs lui reviennent, comme a l'onboarding pour le en ligne.
+      { key:"reaffecter",    label:"Dossiers à réaffecter", icon:"🔄" },
       ...(isCommercialeCentre ? [
         { key:"suivi", label:"Suivi démarrage", icon:"✅", badge: suiviApprenants.filter(a=>!Object.values(suiviChecklistEffectif(a)).every(Boolean)).length || null },
       ] : []),
@@ -6328,6 +6332,10 @@ export default function CommercialDashboard() {
                 exactement le même. Le dupliquer aurait produit deux écrans décrivant
                 différemment le même cours, chacun corrigé de son côté. */}
             {activeTab === "plannings" && <PlanningSeances {...planning} />}
+
+            {activeTab === "reaffecter" && (
+              <FileDemandesTransfert accent={BET_COLOR} authHdrs={authHeaders} mode="onboarding" />
+            )}
 
             {activeTab === "classes" && (() => {
               // NIVEAUX, FILIERES, TYPE_COURS, CECRL_COLORS, STATUT_CLASSE définis au niveau module
