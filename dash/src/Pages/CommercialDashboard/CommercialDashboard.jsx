@@ -3110,6 +3110,24 @@ export default function CommercialDashboard() {
     setShowTransfert(true);
   };
 
+  /* LA RÉAFFECTATION PASSE PAR NOTRE ÉCRAN, pas par le sélecteur minimal du composant partagé.
+     L'assistante présentiel a déjà le sien - recherche de classes compatibles, création à la
+     volée - et lui en imposer un autre pour le même geste serait un recul.
+     `demandeEnCours` retient le dossier : c'est lui qu'on refermera une fois le transfert fait. */
+  const [demandeEnCours, setDemandeEnCours] = useState(null);
+  const [refreshReaffecter, setRefreshReaffecter] = useState(0);
+
+  const ouvrirTransfertDepuisDemande = (d) => {
+    setDemandeEnCours(d);
+    ouvrirTransfert({
+      ga_id: d.ga_id,
+      // Le niveau rendu par le test d'abord : c'est lui qui désigne la classe d'arrivée.
+      niveau: d.niveau_obtenu || d.niveau_actuel,
+      groupe_id: d.groupe_id,
+      nom_apprenant: [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" "),
+    });
+  };
+
   // Point d'entrée unique pour le bouton "Changer de groupe" depuis la fiche apprenant
   // (apprenantModal) - quel que soit le mode d'inscription de l'apprenant (classe, dossier
   // BET direct…), on doit pouvoir le transférer. commClasseInfo.ga_id peut ne pas encore être
@@ -3163,6 +3181,27 @@ export default function CommercialDashboard() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Erreur transfert");
       toast.success(d.message || "Transfert effectué ✓");
+
+      /* Le dossier ne se referme qu'ICI, le déplacement ayant réussi. L'inverse le ferait
+         disparaître de la file même quand le transfert échoue, l'apprenant restant dans la
+         classe qu'il devait quitter. Non bloquant : le transfert, lui, est fait. */
+      if (demandeEnCours) {
+        try {
+          const rd = await fetch(`${API_URL}/api/demandes-transfert/${demandeEnCours.id}`, {
+            method: "PATCH", headers: authHeaders(),
+            body: JSON.stringify({ statut: "traitee", groupe_cible_id: classeId }),
+          });
+          if (!rd.ok) {
+            const dd = await rd.json().catch(()=>({}));
+            toast.error(dd.error || "Transfert fait, mais le dossier n'a pas pu être refermé.");
+          }
+        } catch {
+          toast.error("Transfert fait, mais le dossier n'a pas pu être refermé.");
+        }
+        setDemandeEnCours(null);
+        setRefreshReaffecter(n => n + 1);
+      }
+
       setShowTransfert(false);
       // Rafraîchir la classe assignée affichée dans la fiche apprenant
       if (apprenantModal) openApprenantDetail(apprenantModal, selectedClasse);
@@ -6355,7 +6394,8 @@ export default function CommercialDashboard() {
             {activeTab === "plannings" && <PlanningSeances {...planning} />}
 
             {activeTab === "reaffecter" && (
-              <FileDemandesTransfert accent={BET_COLOR} authHdrs={authHeaders} mode="onboarding" />
+              <FileDemandesTransfert accent={BET_COLOR} authHdrs={authHeaders} mode="onboarding"
+                onReaffecter={ouvrirTransfertDepuisDemande} refreshKey={refreshReaffecter} />
             )}
 
             {activeTab === "classes" && (() => {
