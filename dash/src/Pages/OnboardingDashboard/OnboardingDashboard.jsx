@@ -39,6 +39,7 @@ import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 import { estClassePrivee } from "../../utils/classePrivee";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
+import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -664,6 +665,8 @@ export default function OnboardingDashboard() {
   const [selectedApprenantGroupe, setSelectedApprenantGroupe]       = useState(null);
   const [apprenantTab, setApprenantTab]                 = useState("profil");
   const [apprenantTest, setApprenantTest]               = useState(null);
+  // Tous ses tests, du plus ancien au plus récent - l'évolution, pas seulement le dernier.
+  const [apprenantTests, setApprenantTests] = useState([]);
   const [apprenantTestLoading, setApprenantTestLoading] = useState(false);
   const [apprenantPresences, setApprenantPresences]     = useState([]);
   const [apprenantPresLoading, setApprenantPresLoading] = useState(false);
@@ -993,13 +996,17 @@ export default function OnboardingDashboard() {
           const d = await r.json();
           if (d.result) {
             setApprenantTest(d.result);
+            // L'historique complet : un apprenant repasse le test quand un coach demande son
+            // transfert, et « B1 → C1 » explique le changement de classe que « C1 » seul tait.
+            setApprenantTests(d.historique || []);
           } else if (a.email_parent) {
             // Fallback : tenter avec l'email du parent (enfant sans email propre)
             const r2 = await fetch(`${API_URL}/api/level-test/result?email=${encodeURIComponent(a.email_parent)}`);
-            if (r2.ok) { const d2 = await r2.json(); setApprenantTest(d2.result || null); }
-            else setApprenantTest(null);
+            if (r2.ok) { const d2 = await r2.json(); setApprenantTest(d2.result || null); setApprenantTests(d2.historique || []); }
+            else { setApprenantTest(null); setApprenantTests([]); }
           } else {
             setApprenantTest(null);
+            setApprenantTests([]);
           }
         }
       } catch {} finally { setApprenantTestLoading(false); }
@@ -5811,6 +5818,10 @@ export default function OnboardingDashboard() {
                               const c = CEFR_COLOR[apprenantTest.level] || "#6b7280";
                               return (
                                 <div style={{ display:"grid",gap:16 }}>
+                                  {/* L'ÉVOLUTION AVANT LE SCORE. Le dernier test ne dit pas d'où
+                                      vient l'apprenant ; c'est la suite qui explique un transfert. */}
+                                  <EvolutionNiveauTests tests={apprenantTests} />
+
                                   {/* Score principal */}
                                   <div style={{ background:C_GRAD,borderRadius:14,padding:"24px 28px",color:"#fff",display:"flex",gap:24,alignItems:"center",flexWrap:"wrap" }}>
                                     <div style={{ textAlign:"center",flexShrink:0 }}>
@@ -9651,6 +9662,9 @@ export default function OnboardingDashboard() {
                 ${section("🎓 Formation assignée", [
                   infoRow("Offre", selectedApprenant.offre),
                   infoRow("Niveau test", `${selectedApprenant.niveau || "-"}${NIVEAUX[selectedApprenant.niveau] ? " - " + NIVEAUX[selectedApprenant.niveau] : ""}`),
+                  /* L'évolution dans le PDF aussi : ce document part au conseiller
+                     pédagogique et au coach, qui doivent savoir d'où vient ce niveau. */
+                  infoRow("Évolution du niveau", texteEvolutionNiveau(apprenantTests)),
                   infoRow("Coach", selectedApprenant.coach),
                   infoRow("Conversion", formatDate(selectedApprenant.dateConversion)),
                 ])}

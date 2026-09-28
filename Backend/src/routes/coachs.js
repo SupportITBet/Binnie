@@ -1883,11 +1883,23 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
            s'est passé et fausse le taux de rétention du coach. */
         const d = n?.depart;
         if (d?.motif) {
+          /* LE CHANGEMENT DE NIVEAU DANS LE DÉTAIL. « Transféré vers Anglais B2 » laisse croire
+             à un simple changement d'horaire ; « C1 → B2 » dit que le niveau ne convenait pas,
+             ce qui est presque toujours la vraie raison du départ. On ne l'affiche que s'il a
+             réellement changé - « C1 → C1 » serait du bruit. */
+          const bougé = d.niveau_avant && d.niveau_apres
+            && String(d.niveau_avant).toUpperCase() !== String(d.niveau_apres).toUpperCase();
+          const morceaux = [
+            d.vers ? `Transféré vers « ${d.vers} »` : null,
+            bougé ? `niveau ${String(d.niveau_avant).toUpperCase()} → ${String(d.niveau_apres).toUpperCase()}` : null,
+          ].filter(Boolean);
           return {
             motif:  d.motif,
-            detail: d.vers ? `Transféré vers « ${d.vers} »` : null,
+            detail: morceaux.length ? morceaux.join(" · ") : null,
             par:    d.par || null,
             transfert: d.type === "transfert",
+            niveau_avant: d.niveau_avant || null,
+            niveau_apres: d.niveau_apres || null,
           };
         }
       } catch { /* `note` peut contenir du texte libre : ce n'est pas une erreur */ }
@@ -2013,6 +2025,9 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
           // reprise effaçait jusqu'ici.
           motif: m.motif || derniere?.motif || null,
           detail_motif: m.detail,
+          // Exposés à part du détail : l'export Excel en fait sa propre colonne.
+          niveau_avant: m.niveau_avant || null,
+          niveau_apres: m.niveau_apres || null,
           recommandations: r.suivi_notes || null,
         };
       });

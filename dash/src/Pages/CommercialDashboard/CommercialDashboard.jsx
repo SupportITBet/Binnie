@@ -49,6 +49,7 @@ import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
+import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("admin_token")}` });
@@ -3355,6 +3356,23 @@ export default function CommercialDashboard() {
   // qu'aux anciennes lignes soumises avant l'ajout de la colonne assignation_id.
   const findTestForProspect = (a) =>
     (a.id && tests.find(t => t.assignation_id === a.id)) || trouverParEmailEtNom(tests, a, (t) => t.email);
+
+  /* TOUS ses tests, du plus ancien au plus récent. `findTestForProspect` n'en rend qu'UN - le
+     premier trouvé - alors qu'un apprenant en repasse un chaque fois qu'un coach demande son
+     transfert. La fiche affichait donc un niveau sans dire d'où il venait.
+     Les objets de cet écran portent `niveau`/`date` ; le composant d'affichage parle
+     `level`/`submitted_at` comme la table : on normalise ici plutôt que dans le composant, qui
+     sert aussi à l'onboarding où les champs sont déjà aux bons noms. */
+  const tousLesTestsDe = (a) => {
+    const miens = tests.filter(t =>
+      (a.id && t.assignation_id === a.id) ||
+      (!t.assignation_id && a.prospect_email && t.email
+        && t.email.toLowerCase() === a.prospect_email.toLowerCase()));
+    return miens
+      .map(t => ({ id: t.id, level: t.niveau || t.level, submitted_at: t.date || t.submitted_at }))
+      .filter(t => t.level)
+      .sort((x, y) => String(x.submitted_at || "").localeCompare(String(y.submitted_at || "")));
+  };
 
   const openApprenantDetail = (a, classeInfo = null, gaIdConnu = null) => {
     /* LA PRISE EN CHARGE, SIGNALÉE SANS UN CLIC. Ouvrir le dossier, c'est s'en occuper :
@@ -10022,6 +10040,10 @@ export default function CommercialDashboard() {
                   infoRow("Email", a.prospect_email),
                   infoRow("Téléphone", a.prospect_telephone),
                   infoRow("Niveau", niveauEffectif),
+                  /* L'ÉVOLUTION DANS LE PDF AUSSI. Le document sert à transmettre le dossier -
+                     au conseiller pédagogique, à un coach : « B1 → C1 » y explique un
+                     changement de classe que le seul niveau courant laisse inexpliqué. */
+                  infoRow("Évolution du niveau", texteEvolutionNiveau(tousLesTestsDe(a))),
                   infoRow("Mode", modeLabel),
                   infoRow("Coaching", coachLabel),
                   infoRow("Assistante", a.assistante_nom),
@@ -10718,6 +10740,10 @@ export default function CommercialDashboard() {
                         </button>
                       )
                     )}
+                    {/* L'ÉVOLUTION, quand il y a plus d'un test : « B1 → C1 » explique le
+                        changement de classe que le seul niveau courant passe sous silence. */}
+                    <EvolutionNiveauTests tests={tousLesTestsDe(a)} compact />
+
                     {testProspect && (
                       <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", background:"#f0fdf4", borderRadius:10, border:"1px solid #bbf7d0" }}>
                         <span style={{ fontSize:12, fontWeight:700, color:"#15803d" }}>📝 Test de niveau</span>

@@ -484,7 +484,14 @@ router.get("/result", async (req, res) => {
         .limit(1)
         .maybeSingle();
       if (error) return res.status(500).json({ error: error.message });
-      return res.json({ result: data || null });
+      /* L'HISTORIQUE, PAS SEULEMENT LE DERNIER. Un apprenant repasse le test quand un coach
+         demande son transfert : « B1 » seul ne dit rien, « B1 → C1 » dit qu'il a progressé et
+         justifie le changement de classe. Les écrans n'avaient aucun moyen de le montrer. */
+      const { data: histEnfant } = await supabase
+        .from("level_test_results").select(SELECT)
+        .eq("assignation_id", assignation_id)
+        .order("submitted_at", { ascending: true });
+      return res.json({ result: data || null, historique: histEnfant || [] });
     }
 
     if (!email) return res.status(400).json({ error: "Email requis" });
@@ -505,6 +512,7 @@ router.get("/result", async (req, res) => {
     if (candErr) return res.status(500).json({ error: candErr.message });
 
     let result = null;
+    let historique = [];
     if (candidats && candidats.length) {
       const assignIds = [...new Set(candidats.map(c => c.assignation_id).filter(Boolean))];
       let enfantIds = new Set();
@@ -517,9 +525,17 @@ router.get("/result", async (req, res) => {
       }
       const match = candidats.find(c => !c.assignation_id || !enfantIds.has(c.assignation_id)) || null;
       if (match) { const { assignation_id: _omit, ...rest } = match; result = rest; }
+
+      /* Le même filtre que pour `result` : les tests des enfants ne sont pas ceux du parent,
+         et les mélanger dans son historique lui inventerait une progression qui n'est pas la
+         sienne. Ordonné du plus ancien au plus récent - un parcours se lit dans ce sens. */
+      historique = candidats
+        .filter(c => !c.assignation_id || !enfantIds.has(c.assignation_id))
+        .map(({ assignation_id: _o, ...reste }) => reste)
+        .sort((a, b) => String(a.submitted_at || "").localeCompare(String(b.submitted_at || "")));
     }
 
-    res.json({ result });
+    res.json({ result, historique });
   } catch (err) {
     res.status(500).json({ error: "Erreur interne" });
   }

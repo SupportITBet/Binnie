@@ -1779,6 +1779,15 @@ router.post("/transfert", authenticateAdmin, requirePermission("classes", "updat
       type:   "transfert",
       motif:  motif || "Changement de classe",
       vers:   nouveauGroupe?.nom || null,
+      /* LE NIVEAU, PAS SEULEMENT LA CLASSE. « Transféré vers Anglais B2 » ne dit pas si
+         l'apprenant a progressé, régressé, ou simplement changé d'horaire. Or c'est le plus
+         souvent le niveau qui motive le départ, et le coach a besoin de le lire dans son
+         classeur pour comprendre ce qui s'est passé dans sa classe.
+         `niveau_apres` vaut celui de la classe d'arrivée, à défaut celui de l'apprenant : au
+         moment où l'on écrit, le test peut avoir rendu un niveau que l'inscription ne porte
+         pas encore. */
+      niveau_avant: ga.niveau || null,
+      niveau_apres: nouveauGroupe?.niveau || ga.niveau || null,
       date:   new Date().toISOString(),
       par:    req.profil?.id || null,
     };
