@@ -40,6 +40,8 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import NomAvecSurnom from "../../Components/NomAvecSurnom";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
+import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
+
 const API_URL        = process.env.REACT_APP_API_URL        || "http://localhost:5001";
 const FRONTEND_URL   = process.env.REACT_APP_FRONTEND_URL   || "http://localhost:3000";
 const ELEARNING_URL  = process.env.REACT_APP_ELEARNING_URL  || "http://localhost:3002";
@@ -21340,6 +21342,10 @@ export default function SuperAdminDashboard() {
           const SA_TABS = [
             { k:"profil",    l:"👤 Profil" },
             { k:"seances",   l:`📆 Séances${saSeancesPrivees.length > 0 ? ` (${saSeancesPrivees.length})` : ""}` },
+            // Le niveau et son historique : la fiche n'affichait que `niveau_prospect`, un
+            // seul niveau écrasé au test suivant. Un transfert en ajoute un, et c'est la
+            // suite des deux qui explique le changement de classe qu'on lit ailleurs.
+            { k:"niveau",    l:"🎓 Tests de niveau" },
             { k:"paiements", l:"💳 Paiements" },
             { k:"acces",     l:"🔑 Accès" },
           ];
@@ -21669,6 +21675,18 @@ export default function SuperAdminDashboard() {
                   })()}
 
                   {/* ── ACCÈS ── */}
+                  {/* ── TESTS DE NIVEAU ── tous les passages, l'ancien comme le nouveau */}
+                  {saApprenantTab==="niveau" && (
+                    <HistoriqueTestsNiveau
+                      apiUrl={API_URL}
+                      authHeaders={authHeaders}
+                      assignationId={sa.id || null}
+                      email={emailSA !== "-" ? emailSA : null}
+                      mode="complet"
+                      titre="🎓 Tests de niveau"
+                    />
+                  )}
+
                   {saApprenantTab==="acces" && (
                     <div>
                       {saAccesLoad ? (

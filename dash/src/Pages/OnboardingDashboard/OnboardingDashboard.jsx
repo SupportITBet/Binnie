@@ -40,6 +40,7 @@ import { estClassePrivee } from "../../utils/classePrivee";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
+import HistoriqueTestsNiveau, { useHistoriqueTests, lignesTestsPourPDF } from "../../Components/HistoriqueTestsNiveau";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -988,28 +989,28 @@ export default function OnboardingDashboard() {
     setOnbApprenantAcces(null);
     const token = localStorage.getItem("admin_token");
     if (a.email_apprenant) {
-      // Fetch test de niveau - avec fallback email parent si enfant
+      /* L'HISTORIQUE COMPLET, par `/historique` et non plus par `/result`.
+         `/result` rendait le dernier test et une liste réduite (ni l'origine du test, ni le
+         rattachement au dossier) : un niveau évalué en présentiel par l'agent placement test
+         y apparaissait comme « passé en ligne », et le test d'un transfert, enregistré sans
+         dossier résolu, n'y figurait pas du tout. `/historique` part de l'inscription, ce que
+         cet écran connaît toujours, et applique la même règle que partout ailleurs. */
       setApprenantTestLoading(true);
       try {
-        const r = await fetch(`${API_URL}/api/level-test/result?email=${encodeURIComponent(a.email_apprenant)}`);
-        if (r.ok) {
-          const d = await r.json();
-          if (d.result) {
-            setApprenantTest(d.result);
-            // L'historique complet : un apprenant repasse le test quand un coach demande son
-            // transfert, et « B1 → C1 » explique le changement de classe que « C1 » seul tait.
-            setApprenantTests(d.historique || []);
-          } else if (a.email_parent) {
-            // Fallback : tenter avec l'email du parent (enfant sans email propre)
-            const r2 = await fetch(`${API_URL}/api/level-test/result?email=${encodeURIComponent(a.email_parent)}`);
-            if (r2.ok) { const d2 = await r2.json(); setApprenantTest(d2.result || null); setApprenantTests(d2.historique || []); }
-            else { setApprenantTest(null); setApprenantTests([]); }
-          } else {
-            setApprenantTest(null);
-            setApprenantTests([]);
-          }
+        const p = new URLSearchParams({ ga_id: a.id, email: a.email_apprenant });
+        const r = await fetch(`${API_URL}/api/level-test/historique?${p}`, { headers: { Authorization:`Bearer ${token}` } });
+        let hist = r.ok ? ((await r.json()).historique || []) : [];
+        // Repli sur l'e-mail du parent : un enfant sans adresse propre n'a de test que sous
+        // celle de son parent, qui a rempli le formulaire à sa place.
+        if (!hist.length && a.email_parent) {
+          const r2 = await fetch(`${API_URL}/api/level-test/historique?email=${encodeURIComponent(a.email_parent)}`, { headers: { Authorization:`Bearer ${token}` } });
+          if (r2.ok) hist = (await r2.json()).historique || [];
         }
-      } catch {} finally { setApprenantTestLoading(false); }
+        setApprenantTests(hist);
+        setApprenantTest(hist[0] || null);   // trié du plus récent au plus ancien
+      } catch {
+        setApprenantTests([]); setApprenantTest(null);
+      } finally { setApprenantTestLoading(false); }
       // Fetch statut accès
       setOnbAccesLoad(true);
       fetch(`${API_URL}/api/apprenants/profil-acces?email=${encodeURIComponent(a.email_apprenant)}`, { headers:{ Authorization:`Bearer ${token}` } })
@@ -5758,6 +5759,21 @@ export default function OnboardingDashboard() {
                         {/* ── TEST DE NIVEAU ── */}
                         {apprenantTab==="test" && (
                           <div>
+                            {/* TOUS SES PASSAGES, avant le détail du dernier. Cet onglet n'en
+                                montrait qu'un : depuis qu'un transfert fait repasser le test,
+                                l'ancien niveau disparaissait de l'écran au moment précis où il
+                                devenait utile - c'est lui qui explique le changement de classe. */}
+                            <div style={{ marginBottom:18 }}>
+                              <HistoriqueTestsNiveau
+                                apiUrl={API_URL}
+                                authHeaders={authHeaders}
+                                assignationId={apprenantAssignation?.id || null}
+                                gaId={selectedApprenantGroupe?.id || null}
+                                email={selectedApprenantGroupe?.email_apprenant || apprenantAssignation?.prospect_email || null}
+                                mode="compact"
+                                titre="🎓 Historique des tests"
+                              />
+                            </div>
                             {/* Bloc identité enfant */}
                             {(() => {
                               const ass = apprenantAssignation;
@@ -5820,7 +5836,9 @@ export default function OnboardingDashboard() {
                                 <div style={{ display:"grid",gap:16 }}>
                                   {/* L'ÉVOLUTION AVANT LE SCORE. Le dernier test ne dit pas d'où
                                       vient l'apprenant ; c'est la suite qui explique un transfert. */}
-                                  <EvolutionNiveauTests tests={apprenantTests} />
+                                  {/* `apprenantTests` arrive du plus récent au plus ancien ;
+                                      une frise de progression se lit dans l'autre sens. */}
+                                  <EvolutionNiveauTests tests={[...apprenantTests].reverse()} />
 
                                   {/* Score principal */}
                                   <div style={{ background:C_GRAD,borderRadius:14,padding:"24px 28px",color:"#fff",display:"flex",gap:24,alignItems:"center",flexWrap:"wrap" }}>
@@ -9664,10 +9682,18 @@ export default function OnboardingDashboard() {
                   infoRow("Niveau test", `${selectedApprenant.niveau || "-"}${NIVEAUX[selectedApprenant.niveau] ? " - " + NIVEAUX[selectedApprenant.niveau] : ""}`),
                   /* L'évolution dans le PDF aussi : ce document part au conseiller
                      pédagogique et au coach, qui doivent savoir d'où vient ce niveau. */
-                  infoRow("Évolution du niveau", texteEvolutionNiveau(apprenantTests)),
+                  infoRow("Évolution du niveau", texteEvolutionNiveau([...apprenantTests].reverse())),
                   infoRow("Coach", selectedApprenant.coach),
                   infoRow("Conversion", formatDate(selectedApprenant.dateConversion)),
                 ])}
+
+                ${/* CHAQUE PASSAGE, daté et situé. La ligne « Évolution » ci-dessus résume ;
+                      ce tableau dit quand, avec quel score et par quelle voie - un niveau
+                      évalué en présentiel ne se lit pas comme un test passé en ligne. */""}
+                ${apprenantTests.length ? `<div class="section-title">📝 Tests de niveau</div>
+                  <table><thead><tr>${["Date","Niveau","Score","Origine"].map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>
+                    ${lignesTestsPourPDF(apprenantTests).map(l=>`<tr>${l.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}
+                  </tbody></table>` : ""}
 
                 <div class="section-title">📬 Envois Kick-off</div>
                 <table><thead><tr><th>Étape</th></tr></thead><tbody>

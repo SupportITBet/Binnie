@@ -45,6 +45,7 @@ import { LIBELLES_CRITERES, libelleLecon, libelleObservation, libelleInternet } 
 import { CATEGORIES_COACH, CATEGORIE_SANS_NOTE, categorieCoach } from "../../utils/categorieCoach";
 import { NOTE_COULEUR as NOTE_COULEUR_CAT, NOTE_FOND as NOTE_FOND_CAT } from "../../utils/categorieCoach";
 import { estClassePrivee } from "../../utils/classePrivee";
+import HistoriqueTestsNiveau, { useHistoriqueTests, lignesTestsPourPDF } from "../../Components/HistoriqueTestsNiveau";
 /* ═══════════════════════════════════════════════════════
    CHARTE COULEURS - Pedagogical Advisor (violet)
 ═══════════════════════════════════════════════════════ */
@@ -914,6 +915,14 @@ export default function PedagogicalAdvisorDashboard() {
   /* ── Mes apprenants ── */
   const [apprenantModal,   setApprenantModal]   = useState(null);
   const [apprenantTab,     setApprenantTab]     = useState("infos");
+  /* SES TESTS DE NIVEAU, chargés au niveau du composant et non dans le modal : l'export PDF
+     en a besoin lui aussi, et un hook ne peut pas vivre dans la fonction de rendu du modal.
+     La fiche n'affichait que `niveau_prospect` - un seul niveau, écrasé au test suivant. */
+  const { historique: paTestsNiveau, chargement: paTestsNiveauLoading } = useHistoriqueTests({
+    apiUrl: API_URL, authHeaders,
+    assignationId: apprenantModal?.id || null,
+    email: apprenantModal?.prospect_email || null,
+  });
   const [accesCreesModal,  setAccesCreesModal]  = useState(null);  // credentials après conversion
   const [showMdpCrees,     setShowMdpCrees]     = useState(false); // toggle visibilité mdp
   const [showMdpAcces,     setShowMdpAcces]     = useState(false); // toggle dans onglet Accès
@@ -8864,6 +8873,19 @@ export default function PedagogicalAdvisorDashboard() {
                   {paApprenantTab === "infos" && (
                     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
 
+                      {/* ─ Ses tests de niveau ─ « Niveau » ci-dessous n'en montre qu'un,
+                          celui du moment ; l'encart dit d'où il vient. Muet s'il n'y a
+                          aucun test, pour ne pas alourdir une fiche déjà dense. */}
+                      <HistoriqueTestsNiveau
+                        apiUrl={API_URL}
+                        authHeaders={authHeaders}
+                        assignationId={asg?.id || null}
+                        gaId={ap.id || null}
+                        email={ap.email_apprenant || ap.email || null}
+                        mode="compact"
+                        titre="🎓 Tests de niveau"
+                      />
+
                       {/* ─ Identité (toujours visible depuis groupes_apprenants) ─ */}
                       <div style={{ background:"#f8fafc", borderRadius:10, border:"1px solid #e2e8f0", padding:"14px 16px" }}>
                         <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:".05em", marginBottom:10 }}>👤 Identité</div>
@@ -9226,6 +9248,9 @@ export default function PedagogicalAdvisorDashboard() {
         const MODAL_TABS = [
           { id:"infos",       label:"📋 Informations" },
           { id:"suivi",       label:"📊 Suivi assiduité" },
+          // Le niveau conditionne tout le travail pédagogique : il mérite son onglet, pas une
+          // ligne dans « Informations » qui n'en montrait qu'un seul, le dernier.
+          { id:"niveau",      label:`🎓 Tests de niveau${paTestsNiveau.length ? ` (${paTestsNiveau.length})` : ""}` },
           { id:"seances_coach", label:`📆 Séances${paSeancesPrivees.length>0?" ("+paSeancesPrivees.length+")":""}` },
           { id:"paiement",    label:"💳 Paiement" },
           { id:"progression", label:"📈 Progression" },
@@ -9350,6 +9375,12 @@ export default function PedagogicalAdvisorDashboard() {
                        <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.65;color:#0F172A;white-space:pre-wrap">${objectif}</div>`
                     : `<div class="section-title">🎯 Objectif du client</div>
                        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;font-size:12.5px;color:#92400E">Non renseigné — à demander à l'assistante commerciale.</div>`}
+
+                ${/* TOUS SES PASSAGES. Ce document sert à cadrer le travail pédagogique :
+                      « A2 → B1 » dit que l'apprenant a progressé et justifie le changement de
+                      classe, là où le niveau seul le laisse tomber du ciel. */""}
+                ${tableau("📝 Tests de niveau", ["Date","Niveau","Score","Origine"],
+                  lignesTestsPourPDF(paTestsNiveau))}
 
                 <div class="section-title">📅 Assiduité</div>
                 <div class="kpi-row">
@@ -9589,6 +9620,18 @@ export default function PedagogicalAdvisorDashboard() {
                       )}
                     </div>
                   </div>
+                )}
+
+                {/* ─── TESTS DE NIVEAU ─── tous les passages, l'ancien comme le nouveau */}
+                {apprenantTab === "niveau" && (
+                  <HistoriqueTestsNiveau
+                    apiUrl={API_URL}
+                    authHeaders={authHeaders}
+                    historique={paTestsNiveau}
+                    chargement={paTestsNiveauLoading}
+                    mode="complet"
+                    titre="🎓 Tests de niveau"
+                  />
                 )}
 
                 {/* ─── SUIVI ASSIDUITÉ ─── */}

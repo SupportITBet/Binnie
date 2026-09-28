@@ -37,6 +37,7 @@ import PlanningClasse, { SESSION_CLOSE, RAISON_CLOSE } from "../../Components/Pl
 import { estClassePrivee } from "../../utils/classePrivee";
 import { FiltrePeriode, BarrePagination, paginer, dansLaPeriode } from "../../Components/FiltrePeriode";
 import { urlDocument } from "../../utils/urlDocument";
+import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
 import { CRITERES_OBSERVATION, CRITERES_LECTURE, LIBELLES_CRITERES,
          TYPES_OBSERVATION, TYPES_LECON, ETATS_INTERNET,
          libelleLecon, libelleObservation, libelleInternet } from "../../utils/criteresObservation";
@@ -358,6 +359,10 @@ export default function SuperviseurDashboard() {
   const [classeApprenants, setClasseApprenants] = useState([]);
   const [classeAppLoading, setClasseAppLoading] = useState(false);
   const [classeModalTab, setClasseModalTab] = useState("apprenants");
+  /* L'apprenant dont on déplie les tests de niveau. Le superviseur n'a pas de fiche
+     apprenant : la liste de classe est un tableau plat. Une ligne dépliable y ajoute
+     l'historique sans inventer un écran de plus à maintenir. */
+  const [supTestsOuvert, setSupTestsOuvert] = useState(null);
   const [classeSessions, setClasseSessions] = useState([]);
   const [classeSessionsLoading, setClasseSessionsLoading] = useState(false);
   const [deputyKpi,    setDeputyKpi]    = useState({ rapports_soumis:0, rapports_en_attente:0, rapports_commentes:0, missions_actives:0, missions_total:0, derniere_observation:null });
@@ -3162,25 +3167,60 @@ export default function SuperviseurDashboard() {
                     <table style={{ width:"100%", borderCollapse:"collapse" }}>
                       <thead>
                         <tr style={{ background:"#f8fafc" }}>
-                          {["#","Prénom","Nom","Email","Téléphone","Présences","Absences"].map(h => (
+                          {["#","Prénom","Nom","Email","Niveau","Présences","Absences","Tests"].map(h => (
                             <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", borderBottom:"1px solid #e5e7eb" }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {classeApprenants.map((a, i) => (
-                          <tr key={a.id||i} style={{ borderBottom:"1px solid #f1f5f9", background:i%2===0?"#fff":"#fafafa" }}>
+                        {classeApprenants.map((a, i) => {
+                          const ouvert = supTestsOuvert === (a.id || i);
+                          return (
+                          <React.Fragment key={a.id||i}>
+                          <tr style={{ borderBottom:"1px solid #f1f5f9", background:i%2===0?"#fff":"#fafafa" }}>
                             <td style={{ padding:"8px 12px", fontSize:12, color:"#94a3b8", fontWeight:600 }}>{i+1}</td>
                             <td style={{ padding:"8px 12px", fontSize:13 }}>{a.prenom_apprenant||a.prenom||"-"}</td>
                             <td style={{ padding:"8px 12px", fontSize:13, fontWeight:600 }}>{a.nom_apprenant||a.nom||"-"}</td>
                             <td style={{ padding:"8px 12px", fontSize:12, color:"#64748b" }}>{a.email_apprenant||a.email||"-"}</td>
-                            <td style={{ padding:"8px 12px", fontSize:12, color:"#64748b" }}>{a.telephone||"-"}</td>
+                            {/* LE NIVEAU, ET CELUI D'AVANT. Le téléphone qu'affichait cette
+                                colonne ne sert à rien à un superviseur - il n'appelle pas les
+                                apprenants ; le niveau, lui, est ce qui dit si la personne est
+                                dans la bonne classe, ce qu'il est précisément chargé de voir. */}
+                            <td style={{ padding:"8px 12px", fontSize:12 }}>
+                              <span style={{ fontWeight:700, color:"#334155" }}>{a.niveau||"-"}</span>
+                              {a.niveau_precedent && a.niveau_precedent !== a.niveau && (
+                                <span style={{ marginLeft:6, fontSize:10, color:"#94a3b8" }}>avant : {a.niveau_precedent}</span>
+                              )}
+                            </td>
                             <td style={{ padding:"8px 12px", fontSize:13, color:"#16a34a", fontWeight:600 }}>{a.nb_presences??a.presences??'-'}</td>
                             <td style={{ padding:"8px 12px", fontSize:13, fontWeight:600, color:(a.nb_absences||a.absences||0)>3?"#dc2626":"#374151" }}>
                               {a.nb_absences??a.absences??'-'}{(a.nb_absences||a.absences||0)>3&&<span style={{ marginLeft:4, fontSize:10 }}>⚠️</span>}
                             </td>
+                            <td style={{ padding:"8px 12px" }}>
+                              <button
+                                onClick={() => setSupTestsOuvert(ouvert ? null : (a.id || i))}
+                                style={{ padding:"4px 10px", borderRadius:6, border:"1px solid #e2e8f0",
+                                  background: ouvert ? "#e0f2fe" : "#fff", color:"#0369a1",
+                                  fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}
+                              >🎓 {ouvert ? "Masquer" : "Tests"}</button>
+                            </td>
                           </tr>
-                        ))}
+                          {ouvert && (
+                            <tr style={{ background:"#f8fafc", borderBottom:"1px solid #e2e8f0" }}>
+                              <td colSpan={8} style={{ padding:"14px 18px" }}>
+                                <HistoriqueTestsNiveau
+                                  apiUrl={API_URL}
+                                  authHeaders={authHdrs}
+                                  gaId={a.id || null}
+                                  email={a.email_apprenant || a.email || null}
+                                  mode="complet"
+                                  titre={null}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
+                        );})}
                       </tbody>
                     </table>
                   </div>

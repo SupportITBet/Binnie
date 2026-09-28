@@ -350,22 +350,60 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
          On ne l'écrit QUE si l'agent a saisi le niveau à la main : quand il vient d'un test
          passé en ligne (`level_test_id` fourni), l'enregistrement existe déjà et le dupliquer
          inventerait un second passage. */
-      if (!req.body.level_test_id && demande.email_apprenant) {
+      if (demande.email_apprenant) {
         try {
-          await supabase.from("level_test_results").insert({
-            fullname:     [demande.prenom_apprenant, demande.nom_apprenant].filter(Boolean).join(" ") || null,
-            email:        demande.email_apprenant,
-            level:        niveau,
-            source:       "oral",            // évalué par l'agent, pas passé en ligne
-            format_test:  "oral",
-            correction_statut: "manuelle",
-            notes_oral:   `Évaluation lors d'une demande de transfert — ${MOTIFS_TRANSFERT[demande.motif] || demande.motif}`,
-            submitted_at: new Date().toISOString(),
-          });
+          /* RATTACHER LE TEST À SON DOSSIER. Sans `assignation_id` ni `commercial_id`, le test
+             existe sans propriétaire : le dashboard de la commerciale filtre sa liste sur
+             `commercial_id`, la ligne partait donc dans « tests sans conseillère assignée » et
+             la fiche de l'apprenant restait sur son ancien niveau. Le rapprochement par
+             e-mail seul ne suffit pas non plus - un parent et son enfant la partagent.
+             Vaut pour les DEUX voies : le test passé en ligne via le lien du transfert arrive
+             lui aussi sans dossier, le lien ne transportant que l'e-mail et l'id de demande. */
+          let assignation = null;
+          const { data: gaRow } = await supabase
+            .from("groupes_apprenants").select("note").eq("id", demande.ga_id).maybeSingle();
+          let assignationId = null;
+          try { assignationId = JSON.parse(gaRow?.note || "{}").assignation_id || null; } catch { /* note libre */ }
+          if (assignationId) {
+            ({ data: assignation } = await supabase.from("assignations_parcours")
+              .select("id, commercial_id").eq("id", assignationId).maybeSingle());
+          }
+          if (!assignation) {
+            ({ data: assignation } = await supabase.from("assignations_parcours")
+              .select("id, commercial_id").ilike("prospect_email", demande.email_apprenant)
+              .order("created_at", { ascending: false }).limit(1).maybeSingle());
+          }
+
+          if (req.body.level_test_id) {
+            /* Le test existe déjà (passé en ligne) : le dupliquer inventerait un second
+               passage. On se contente de lui poser le dossier qui lui manque. */
+            if (assignation?.id) {
+              await supabase.from("level_test_results")
+                .update({ assignation_id: assignation.id, commercial_id: assignation.commercial_id || null })
+                .eq("id", req.body.level_test_id).is("assignation_id", null);
+            }
+          } else {
+            /* UN NIVEAU ÉVALUÉ EN PRÉSENTIEL EST UN TEST, et doit s'enregistrer comme tel.
+               Sans cela il ne vivait que sur ce dossier : la fiche de l'apprenant, son espace,
+               les exports et l'historique continuaient d'afficher son ancien niveau comme s'il
+               n'avait jamais repassé de test - « B1 » seul, là où la réalité est « B1 → C1 ». */
+            await supabase.from("level_test_results").insert({
+              fullname:     [demande.prenom_apprenant, demande.nom_apprenant].filter(Boolean).join(" ") || null,
+              email:        demande.email_apprenant,
+              assignation_id: assignation?.id || null,
+              commercial_id:  assignation?.commercial_id || null,
+              level:        niveau,
+              source:       "oral",            // évalué par l'agent, pas passé en ligne
+              format_test:  "oral",
+              correction_statut: "manuelle",
+              notes_oral:   `Évaluation lors d'une demande de transfert — ${MOTIFS_TRANSFERT[demande.motif] || demande.motif}`,
+              submitted_at: new Date().toISOString(),
+            });
+          }
         } catch (e) {
           // Non bloquant : le niveau est porté par le dossier, qui suffit à débloquer la
           // réaffectation. L'historique sera simplement incomplet, pas le circuit.
-          console.warn("[demandes-transfert PATCH] test non enregistré:", e.message);
+          console.warn("[demandes-transfert PATCH] test non rattaché:", e.message);
         }
       }
     }

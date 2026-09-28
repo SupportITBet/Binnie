@@ -904,6 +904,13 @@ export default function CommercialDashboard() {
   const [tests, setTests]                   = useState(INIT_TESTS);
   const [testsLoading, setTestsLoading]     = useState(false);
   const [testsNonAssignes, setTestsNonAssignes] = useState([]);
+  /* TOUS les tests, sans le filtre `commercial_id`. `tests` ne garde que les tests du pipeline
+     de prospection - ceux que la conseillère a fait passer elle-même. Or le test qui rouvre le
+     dossier d'un apprenant déjà inscrit est passé par l'AGENT PLACEMENT TEST lors d'un
+     transfert : il arrive sans `commercial_id`, tombait donc dans `testsNonAssignes`, et la
+     fiche de l'apprenant restait bloquée sur son ancien test. L'historique de niveau d'un
+     apprenant ne dépend pas de qui lui a fait passer le test. */
+  const [tousTests, setTousTests]           = useState([]);
   const [testPage, setTestPage]             = useState(1);
   const TESTS_PER_PAGE = 10;
   const [clientMessages, setClientMessages] = useState([]);
@@ -2746,6 +2753,7 @@ export default function CommercialDashboard() {
         // Non assignés (peut-être à revendiquer)
         const nonAssignes = all.filter(t => !t.commercial_id);
         setTests(miens);
+        setTousTests(all);
         setTestsNonAssignes(nonAssignes);
       }
     } catch (e) {
@@ -3404,7 +3412,7 @@ export default function CommercialDashboard() {
   /* Les tests BRUTS de cet apprenant, du plus récent au plus ancien. `tousLesTestsDe` les
      normalise pour l'affichage de l'évolution ; le PDF, lui, a besoin du score et de l'origine. */
   const tousLesTestsBrutsDe = (a) => {
-    const miens = tests.filter(t =>
+    const miens = tousTests.filter(t =>
       (a.id && t.assignation_id === a.id) ||
       (!t.assignation_id && a.prospect_email && t.email
         && t.email.toLowerCase() === a.prospect_email.toLowerCase()));
@@ -3424,7 +3432,7 @@ export default function CommercialDashboard() {
       `${b.prenom || ""} ${b.nom || ""}`.trim().toLowerCase();
     const memeEmail = (a, b) =>
       !!a.email && !!b.email && a.email.toLowerCase() === b.email.toLowerCase();
-    const miens = tests.filter(x =>
+    const miens = tousTests.filter(x =>
       (t.assignation_id && x.assignation_id === t.assignation_id) ||
       (memeEmail(x, t) && memeNom(x, t)));
     const avecLui = miens.some(x => x.id === t.id) ? miens : [...miens, t];
@@ -3433,7 +3441,9 @@ export default function CommercialDashboard() {
   };
 
   const findTestForProspect = (a) => {
-    const parDossier = a.id ? tests.filter(t => t.assignation_id === a.id) : [];
+    // Recherche par dossier dans TOUS les tests : celui d'un transfert porte le bon
+    // `assignation_id` mais pas de `commercial_id`, il est donc absent de `tests`.
+    const parDossier = a.id ? tousTests.filter(t => t.assignation_id === a.id) : [];
     if (parDossier.length) return plusRecent(parDossier);
     // Le repli par e-mail/nom ne rend qu'un élément : on récupère tous ses homologues pour
     // en extraire le plus récent, plutôt que de garder celui que le repli a croisé d'abord.
@@ -3450,11 +3460,9 @@ export default function CommercialDashboard() {
      `level`/`submitted_at` comme la table : on normalise ici plutôt que dans le composant, qui
      sert aussi à l'onboarding où les champs sont déjà aux bons noms. */
   const tousLesTestsDe = (a) => {
-    const miens = tests.filter(t =>
-      (a.id && t.assignation_id === a.id) ||
-      (!t.assignation_id && a.prospect_email && t.email
-        && t.email.toLowerCase() === a.prospect_email.toLowerCase()));
-    return miens
+    // Même source que le reste : `tousLesTestsBrutsDe` cherche dans TOUS les tests, pas
+    // seulement ceux du pipeline de la conseillère - un test de transfert n'y figure pas.
+    return tousLesTestsBrutsDe(a)
       .map(t => ({ id: t.id, level: t.niveau || t.level, submitted_at: t.date || t.submitted_at }))
       .filter(t => t.level)
       .sort((x, y) => String(x.submitted_at || "").localeCompare(String(y.submitted_at || "")));
@@ -10079,6 +10087,9 @@ export default function CommercialDashboard() {
           { id:"acces",       label:"🔑 Accès" },
           ...(a.profil_type === "enfant" ? [{ id:"parent", label:"👨‍👩‍👧 Parent" }] : []),
           { id:"presences",   label:"✅ Présences" },
+          // Les tests ont leur onglet : ils étaient noyés dans « Informations », qui n'en
+          // montrait qu'un seul. Le compteur évite d'ouvrir l'onglet pour découvrir qu'il est vide.
+          { id:"niveau",      label:`🎓 Tests de niveau${tousLesTestsBrutsDe(a).length ? ` (${tousLesTestsBrutsDe(a).length})` : ""}` },
           { id:"paiement",    label:"💳 Paiement" },
           { id:"docs",        label:"📎 Documents" },
           { id:"notes",       label:"📝 Notes" },
@@ -11481,6 +11492,74 @@ export default function CommercialDashboard() {
                           })}
                         </div>
                       )}
+                    </div>
+                  );
+                })()}
+
+                {/* TESTS DE NIVEAU — tous les passages, du plus récent au plus ancien.
+                    Un apprenant en repasse un à chaque demande de transfert : l'onglet
+                    « Informations » n'en montrant qu'un, l'ancien niveau et le nouveau
+                    n'étaient jamais lisibles côte à côte. */}
+                {apprenantTab === "niveau" && (() => {
+                  const passages = tousLesTestsBrutsDe(a);
+                  const CEFR_C = { A1:"#94a3b8", A2:"#f59e0b", B1:"#1e3a8a", B2:"#7c3aed", C1:"#059669", C2:"#dc2626" };
+                  if (!passages.length) {
+                    return (
+                      <div style={{ padding:"40px 20px", textAlign:"center", color:"#94a3b8" }}>
+                        <div style={{ fontSize:34, marginBottom:8 }}>🎓</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#64748b" }}>Aucun test de niveau enregistré</div>
+                        <div style={{ fontSize:12, marginTop:6, maxWidth:420, margin:"6px auto 0" }}>
+                          Le test se fait depuis l'onglet « Tests de niveau ». Lors d'un transfert,
+                          c'est l'agent placement test qui le fait passer, et le résultat remonte ici.
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                      <EvolutionNiveauTests tests={tousLesTestsDe(a)} />
+
+                      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                        {passages.map((t, i) => {
+                          const c = CEFR_C[String(t.niveau || "").toUpperCase()] || "#475569";
+                          const actuel = i === 0;   // trié du plus récent au plus ancien
+                          return (
+                            <div key={t.id || i} style={{
+                              display:"flex", alignItems:"center", gap:14, padding:"13px 16px", borderRadius:10,
+                              background:"#fff", border: actuel ? `2px solid ${c}` : "1px solid #e5e7eb",
+                            }}>
+                              <div style={{ minWidth:60, textAlign:"center" }}>
+                                <div style={{ fontSize:20, fontWeight:900, color:c, lineHeight:1.1 }}>{t.niveau || "-"}</div>
+                                {t.score != null && <div style={{ fontSize:11, color:"#94a3b8" }}>{t.score}%</div>}
+                              </div>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:3 }}>
+                                  <span style={{ fontSize:13, fontWeight:700, color:"#1f2937" }}>
+                                    {formatDate(t.date || t.submitted_at)}
+                                  </span>
+                                  {actuel && <span style={{ fontSize:9, fontWeight:800, color:"#15803d", background:"#dcfce7", padding:"2px 7px", borderRadius:99 }}>NIVEAU ACTUEL</span>}
+                                  <span style={{ fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", padding:"2px 8px", borderRadius:99 }}>
+                                    {t.source === "oral" ? "Évalué en présentiel" : "Passé en ligne"}
+                                  </span>
+                                  {t.correction_statut === "en_attente" && (
+                                    <span style={{ fontSize:10, fontWeight:800, color:"#b45309", background:"#fef3c7", padding:"2px 8px", borderRadius:99 }}>À corriger</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize:11, color:"#94a3b8" }}>
+                                  {t.points_earned != null && t.points_total ? `${t.points_earned}/${t.points_total} pts · ` : ""}
+                                  {t.correct_answers != null && t.total_questions ? `${t.correct_answers}/${t.total_questions} bonnes réponses` : ""}
+                                  {t.notes ? (t.correct_answers != null ? " · " : "") + t.notes : ""}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => { setSelectedTest(t); setShowTestDetailModal(true); }}
+                                style={{ padding:"6px 13px", borderRadius:7, border:"1px solid #bae6fd", background:"#e0f2fe",
+                                  color:"#0369a1", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}
+                              >🔍 Détail</button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}

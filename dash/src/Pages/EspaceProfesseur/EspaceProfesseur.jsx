@@ -40,6 +40,7 @@ import BadgeCategorieCoach from "../../Components/BadgeCategorieCoach";
 import { BoutonDemandeTransfert } from "../../Components/DemandeTransfert";
 import { NOTE_COULEUR, NOTE_FOND, BAREME_TEXTE } from "../../utils/categorieCoach";
 import { suivreFenetreLive } from "../../utils/inactivite";
+import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
 
 /* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
    Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
@@ -52,6 +53,12 @@ const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
 ═══════════════════════════════════════════════════════ */
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
+// Le jeton d'un coach est stocké sous `coach_token`, pas `admin_token` - lu à l'appel et non
+// au chargement du module, sinon une reconnexion en cours de session garderait l'ancien.
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("coach_token") || localStorage.getItem("admin_token")}`,
+});
 const BET        = (() => { try { return JSON.parse(localStorage.getItem("coach_profil")||localStorage.getItem("admin_profil")||"{}").couleur||"#0891b2"; } catch { return "#0891b2"; } })();
 const CENTRES_LABELS = {
   angre:      "BET Angré",
@@ -2874,7 +2881,11 @@ export default function EspaceProfesseur() {
       couleurEntete: '6366F1',
       colonnes: [
         { label: 'Nom', width: 22, bold: true }, { label: 'Email', width: 26 },
-        { label: 'Niveau', width: 10, align: 'center' }, { label: 'Cours', width: 30 },
+        { label: 'Niveau', width: 10, align: 'center' },
+        // L'ANCIEN NIVEAU AUSSI. Un transfert change le niveau : ce rapport, lu hors de
+        // l'application, doit dire d'où part l'apprenant, pas seulement où il en est.
+        { label: 'Niveau précédent', width: 16, align: 'center' },
+        { label: 'Cours', width: 30 },
         { label: 'Progression %', width: 14, align: 'center' }, { label: 'Assiduité %', width: 14, align: 'center' },
         { label: 'Dernière note /20', width: 16, align: 'center' }, { label: 'Score test %', width: 14, align: 'center' },
         { label: 'Absences', width: 12, align: 'center' }, { label: 'Retards', width: 12, align: 'center' },
@@ -2882,7 +2893,7 @@ export default function EspaceProfesseur() {
       ],
       lignes: etudiants.map(e => {
         const coursList = e.coursIds.map(cId=>cours.find(x=>x.id===cId)?.titre||"").join(" | ");
-        return [e.nom, e.email, e.niveau, coursList, e.progression, e.assiduite, e.dernNote, e.testScore, e.absent, e.retard, e.commentaire||""];
+        return [e.nom, e.email, e.niveau, e.niveau_precedent || "-", coursList, e.progression, e.assiduite, e.dernNote, e.testScore, e.absent, e.retard, e.commentaire||""];
       }),
     });
     toast.success("Export Excel téléchargé ✓");
@@ -11311,6 +11322,20 @@ const messagesFiltres = useMemo(() => {
 
                 {ficheFicheTab==="test" && (
                   <div>
+                    {/* TOUS SES PASSAGES, avant le détail du dernier. Le coach est celui qui
+                        DEMANDE le transfert : il doit voir le résultat du test qu'il a
+                        déclenché à côté du niveau d'où part son apprenant. Lecture seule -
+                        corriger un test n'est pas son métier. */}
+                    <div style={{ marginBottom:16 }}>
+                      <HistoriqueTestsNiveau
+                        apiUrl={API_URL}
+                        authHeaders={authHeaders}
+                        gaId={a.id || null}
+                        email={a.email_apprenant || null}
+                        mode="compact"
+                        titre="🎓 Historique des tests"
+                      />
+                    </div>
                     {ficheTestLoading && <p style={{ textAlign:"center",color:"#9ca3af",padding:40 }}>Chargement…</p>}
                     {!ficheTestLoading && !ficheTest && (
                       <div style={{ textAlign:"center",padding:"50px 20px",background:"#f8fafc",borderRadius:14,border:"1px solid #e5e7eb" }}>

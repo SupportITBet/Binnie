@@ -3,6 +3,7 @@ import supabase from "../config/supabase.js";
 import { bornerAFenetre } from "../services/lectureSequentielle.js";
 import { emailAutorise } from "../services/accesApprenant.js";
 import { authenticateUser } from "../middlewares/auth.js";
+import { historiqueTestsDe } from "./levelTest.js";
 
 const router = express.Router();
 
@@ -169,6 +170,34 @@ async function nomsDesClasses(parcours) {
 }
 
 // GET /api/mon-espace/seances?email=xxx
+/* ── SES TESTS DE NIVEAU ────────────────────────────────────────────────────────
+   L'apprenant voit sa PROGRESSION, pas sa correction. Le niveau, la date et l'origine
+   du test : « A2 → B1 » lui montre le chemin parcouru et explique le changement de
+   classe qu'il vient de vivre. Le score chiffré reste hors de cette route - un « 42 % »
+   sans accompagnement décourage plus qu'il n'informe, et le détail question par question
+   appartient à ceux qui corrigent.
+   Bornée à son propre dossier par `emailAutorise` : connaître l'e-mail d'un autre ne
+   donne pas accès à son historique. */
+router.get("/tests-niveau", authenticateUser, async (req, res) => {
+  const email = await emailAutorise(req.user, req.query.email);
+  if (!email) return res.status(403).json({ error: "Accès refusé à ces données" });
+  try {
+    const { assignation_id } = await getIds(email);
+    const tous = await historiqueTestsDe({ assignation_id, email });
+    res.json({
+      historique: tous.map(t => ({
+        id: t.id,
+        level: t.level,
+        submitted_at: t.submitted_at,
+        source: t.source,
+      })),
+    });
+  } catch (e) {
+    console.error("[mon-espace/tests-niveau]", e.message);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+});
+
 router.get("/seances", authenticateUser, async (req, res) => {
   /* AUTHENTIFIÉE. Cette route répondait sans jeton, l'e-mail passant en clair dans l'URL :
      le connaître suffisait à lire les données de son porteur. Le paramètre reste - le

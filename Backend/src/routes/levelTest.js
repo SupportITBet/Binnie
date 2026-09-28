@@ -457,6 +457,92 @@ router.patch("/:id/corriger", authenticateAdmin, async (req, res) => {
 
 // Récupérer le dernier résultat de test par email - ou par assignation_id pour un profil
 // enfant, dont l'email est celui du parent (partagé), jamais fiable pour cette recherche.
+/* ════════════════════════════════════════════════════════════════════════════════
+   L'HISTORIQUE DES TESTS D'UN APPRENANT — le point de vérité unique
+   ════════════════════════════════════════════════════════════════════════════════
+   POURQUOI UN ENDPOINT DÉDIÉ. Tous les écrans (coach, superviseur, PA, onboarding,
+   admin, espace apprenant) n'affichaient qu'un champ texte : `niveau_client`,
+   `niveau_prospect` ou `groupes_apprenants.niveau`. Un seul niveau, écrasé au passage
+   suivant. Depuis qu'un transfert fait repasser le test, « B1 » seul ment par omission :
+   la réalité est « A2 → B1 », et c'est ce qui explique le changement de classe qu'on lit
+   juste à côté.
+
+   `/all` ne convenait pas : il rend TOUS les tests de la plateforme, filtrés par rôle -
+   inutilisable pour afficher l'historique d'une seule personne sur l'écran d'un coach.
+
+   LE RAPPROCHEMENT, une seule fois ici. Par dossier quand la colonne existe (fiable à
+   100 %), sinon par e-mail - mais alors en excluant les dossiers « enfant », qui partagent
+   l'adresse du parent : les mélanger inventerait à l'un la progression de l'autre.
+   ════════════════════════════════════════════════════════════════════════════════ */
+
+// Le détail des réponses et les audios ne sortent pas d'ici : ils servent à CORRIGER un
+// test, ce que font la commerciale, l'onboarding et l'agent placement test depuis leurs
+// propres écrans. Ailleurs, le niveau, le score, la date et l'origine suffisent à
+// comprendre d'où vient le classement de l'apprenant.
+const SELECT_HISTORIQUE =
+  "id, level, score, points_earned, points_total, correct_answers, total_questions, "
+  + "submitted_at, source, format_test, correction_statut, notes_oral, by_cefr, by_category, "
+  + "commercial_id, email, fullname, assignation_id";
+
+export async function historiqueTestsDe({ assignation_id, email }) {
+  const trie = (liste) => (liste || []).slice().sort(
+    (a, b) => String(b.submitted_at || "").localeCompare(String(a.submitted_at || ""))
+  );
+
+  // 1. Par dossier : le lien direct, qui ne peut pas confondre deux personnes.
+  if (assignation_id) {
+    const { data } = await supabase.from("level_test_results")
+      .select(SELECT_HISTORIQUE).eq("assignation_id", assignation_id);
+    if (data?.length) return trie(data);
+
+    // Un dossier enfant ne se rabat JAMAIS sur l'e-mail : c'est celui du parent.
+    const { data: dossier } = await supabase.from("assignations_parcours")
+      .select("profil_type, prospect_email").eq("id", assignation_id).maybeSingle();
+    if (dossier?.profil_type === "enfant") return [];
+    if (!email) email = dossier?.prospect_email || null;
+  }
+
+  if (!email) return [];
+
+  // 2. Repli par e-mail, pour les tests passés avant l'ajout de la colonne `assignation_id`
+  //    et pour ceux qu'un agent enregistre sans dossier résolu.
+  const { data: candidats } = await supabase.from("level_test_results")
+    .select(SELECT_HISTORIQUE).ilike("email", email).limit(30);
+  if (!candidats?.length) return [];
+
+  const ids = [...new Set(candidats.map(c => c.assignation_id).filter(Boolean))];
+  let enfants = new Set();
+  if (ids.length) {
+    const { data: rows } = await supabase.from("assignations_parcours")
+      .select("id, profil_type").in("id", ids);
+    enfants = new Set((rows || []).filter(r => r.profil_type === "enfant").map(r => r.id));
+  }
+  return trie(candidats.filter(c => !c.assignation_id || !enfants.has(c.assignation_id)));
+}
+
+router.get("/historique", authenticateAdmin, async (req, res) => {
+  try {
+    let { assignation_id, email, ga_id } = req.query;
+
+    /* Le coach et le superviseur ne connaissent pas le dossier commercial : ils partent de
+       l'inscription en classe. Le dossier y est posé dans `note`, et l'e-mail sert de repli. */
+    if (!assignation_id && ga_id) {
+      const { data: ga } = await supabase.from("groupes_apprenants")
+        .select("note, email_apprenant").eq("id", ga_id).maybeSingle();
+      try { assignation_id = JSON.parse(ga?.note || "{}").assignation_id || null; } catch { /* note libre */ }
+      if (!email) email = ga?.email_apprenant || null;
+    }
+
+    if (!assignation_id && !email) {
+      return res.status(400).json({ error: "Indiquez le dossier, l'e-mail ou l'inscription de l'apprenant." });
+    }
+    res.json({ historique: await historiqueTestsDe({ assignation_id, email }) });
+  } catch (err) {
+    console.error("[level-test/historique]", err.message);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+});
+
 router.get("/result", async (req, res) => {
   try {
     const { email, assignation_id } = req.query;

@@ -21,6 +21,7 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import AppreciationSeance, { BandeauAppreciation, useSeancesANoter } from "../../Components/AppreciationSeance";
 import { suivreFenetreLive } from "../../utils/inactivite";
 import { estClassePrivee } from "../../utils/classePrivee";
+import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
 
 /* OUVERTURE DE LA SALLE VIRTUELLE. Cet écran-ci ne connaissait AUCUNE règle d'heure :
    l'apprenant pouvait rejoindre une session - ou copier son lien - le jour même dès le
@@ -1115,6 +1116,13 @@ export default function EspaceApprenant() {
 
   // ── Présences apprenant ──────────────────────────────────
   const [appPresences,        setAppPresences]        = useState(null); // null = pas encore chargé
+  /* SES TESTS DE NIVEAU. L'écran n'affichait qu'un niveau, celui du moment : un apprenant
+     transféré perdait de vue celui d'où il partait, alors que c'est la comparaison des deux
+     qui donne un sens à son changement de classe. Route dédiée `mon-espace/tests-niveau`,
+     bornée à son propre dossier - et sans le score : « A2 → B1 » l'encourage, un « 42 % »
+     sans accompagnement le décourage. */
+  const [mesTestsNiveau, setMesTestsNiveau] = useState([]);
+  const [mesTestsNiveauLoading, setMesTestsNiveauLoading] = useState(false);
   const [appPresencesLoading, setAppPresencesLoading] = useState(false);
 
   // ── Sessions live ────────────────────────────────────
@@ -1799,6 +1807,13 @@ export default function EspaceApprenant() {
       .then(d => setCoursElearning(d.contenus || []))
       .catch(() => {})
       .finally(() => setCoursElearningLoading(false));
+
+    setMesTestsNiveauLoading(true);
+    fetch(`${API_URL}/api/mon-espace/tests-niveau?email=${emailParam}`, { headers })
+      .then(r => r.ok ? r.json() : { historique: [] })
+      .then(d => setMesTestsNiveau(d.historique || []))
+      .catch(() => setMesTestsNiveau([]))
+      .finally(() => setMesTestsNiveauLoading(false));
 
     // Presences : endpoint mon-espace (gère coaching privé ET groupe)
     setAppPresencesLoading(true);
@@ -2926,6 +2941,19 @@ export default function EspaceApprenant() {
                       <h3 style={{ fontSize:14, fontWeight:700, color:"#0f172a", marginBottom:12, display:"flex", alignItems:"center", gap:6 }}><span>📊</span> Parcours pédagogique</h3>
                       <div style={{ fontSize:13, marginBottom:8 }}><strong>Niveau d'anglais :</strong> {profil.niveau} - {NIVEAU_META[profil.niveau]?.label}</div>
                       <div style={{ fontSize:13, marginBottom:8 }}><strong>Résultat test de niveau :</strong> {profil.testNiveauResultat}</div>
+                      {/* SA PROGRESSION, test après test. Ne s'affiche qu'à partir d'un
+                          passage réellement enregistré : sinon la ligne ci-dessus suffit. */}
+                      {mesTestsNiveau.length > 0 && (
+                        <div style={{ margin:"12px 0 4px" }}>
+                          <HistoriqueTestsNiveau
+                            historique={mesTestsNiveau}
+                            chargement={mesTestsNiveauLoading}
+                            mode={mesTestsNiveau.length > 1 ? "complet" : "compact"}
+                            avecScore={false}
+                            titre="🎓 Mes tests de niveau"
+                          />
+                        </div>
+                      )}
                       <div style={{ fontSize:13, marginBottom:8 }}><strong>Coach assigné :</strong> {profil.coach.nom ? `${profil.coach.nom}${profil.coach.email ? ` (${profil.coach.email})` : ""}` : "⏳ En attente d'assignation"}</div>
                       <div style={{ fontSize:13, marginBottom:8 }}><strong>Type de cours :</strong> {TYPE_COURS_LABELS[profil.typeCours] || "-"}</div>
                       <div style={{ fontSize:13, marginBottom:8 }}><strong>Classe :</strong> {profil.classe}</div>
