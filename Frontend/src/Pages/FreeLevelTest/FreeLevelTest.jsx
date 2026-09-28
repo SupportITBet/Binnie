@@ -600,9 +600,15 @@ export default function FreeLevelTest({ questions: propQ }) {
   // résultat se rattache uniquement à CE dossier, jamais par email (indispensable quand parent
   // et enfant partagent le même email/téléphone).
   const [assignationIdFromUrl, setAssignationIdFromUrl] = useState(null);
-  // Lien d'invitation commercial complet (email + dossier précis) : autorise à sauter le
-  // mur de connexion pour les prospects inscrits manuellement par le staff, sans compte.
-  const hasInviteContext = !!(emailFromUrl && assignationIdFromUrl);
+  /* Demande de transfert (demandes_transfert) transmise dans le lien : un apprenant DÉJÀ en
+     classe qu'un coach demande de transférer, et que l'agent placement test doit faire tester.
+     Il n'a pas d'`assignation_id` - cette notion appartient au parcours d'un prospect - et le
+     mur de connexion le bloquait donc net. Pire : s'il ouvrait le lien depuis un poste où un
+     autre compte était connecté, il se retrouvait à passer le test sous cette identité-là. */
+  const [demandeIdFromUrl, setDemandeIdFromUrl] = useState(null);
+  // Lien d'invitation émis par le staff (email + dossier précis, de parcours OU de transfert) :
+  // autorise à sauter le mur de connexion, le destinataire étant déjà identifié par le lien.
+  const hasInviteContext = !!(emailFromUrl && (assignationIdFromUrl || demandeIdFromUrl));
   const [formErrors,   setFormErrors] = useState({});
   // Étape "Votre projet" - wizard style ParcoursModal
   const [pStep,         setPStep]         = useState(0);   // sub-step du wizard projet
@@ -775,6 +781,9 @@ export default function FreeLevelTest({ questions: propQ }) {
     if (ref)   setSessionCommercialId(ref);
     if (email) setEmailFromUrl(true);
     if (assignationId) setAssignationIdFromUrl(assignationId);
+    // Demande de transfert : même rôle que `assignation_id`, pour un apprenant déjà en classe.
+    const demande = params.get("demande");
+    if (demande) setDemandeIdFromUrl(demande);
   }, []);
 
   /* ── Invité via lien commercial (email + assignation_id dans l'URL) : la personne

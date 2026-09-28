@@ -174,12 +174,19 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
      EN PRÉSENTIEL : l'agent teste l'apprenant devant lui et saisit le niveau directement.
      Les deux chemins existent parce que les deux situations existent - n'en offrir qu'un
      obligerait l'agent à contourner l'outil dans la moitié des cas. */
+  /* LE LIEN PORTE LA DEMANDE, ET C'EST CE QUI ÉVITE LE MUR DE CONNEXION.
+     La page publique du test n'ouvre son formulaire sans compte que si le lien identifie
+     déjà son destinataire - jusqu'ici par `assignation_id`, une notion de prospect qu'un
+     apprenant déjà en classe n'a pas. Sans `demande`, il tombait sur « Connectez-vous », et
+     s'il ouvrait le lien depuis un poste où un autre compte était connecté, il risquait de
+     passer le test sous cette identité-là. L'e-mail du lien verrouille aussi le champ. */
   const lienTest = (d) => {
     const p = new URLSearchParams();
     if (d.email_apprenant) p.set("email", d.email_apprenant);
     const nom = [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ");
     if (nom) p.set("nom", nom);
-    return `${FRONTEND_URL}/test-niveau${p.toString() ? `?${p}` : ""}`;
+    p.set("demande", d.id);
+    return `${FRONTEND_URL}/test-niveau?${p}`;
   };
 
   const copierLien = (d) => {

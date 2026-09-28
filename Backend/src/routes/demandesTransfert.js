@@ -265,6 +265,33 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
       maj.traite_le       = new Date().toISOString();
       maj.traite_par      = req.profil.id;
       action = "traitee";
+
+      /* LE NIVEAU DU TEST DEVIENT CELUI DE L'APPRENANT, et l'ancien est conservé à côté.
+         Sans cela, le test aurait servi à choisir la classe puis aurait été oublié : la fiche
+         de l'apprenant aurait continué d'afficher le niveau qui justement ne lui convenait
+         pas. Non bloquant - la réaffectation est l'acte principal, et un échec ici ne doit pas
+         l'annuler ; le niveau reste alors lisible sur le dossier. */
+      if (demande.niveau_obtenu && demande.ga_id) {
+        try {
+          const { data: gaAvant } = await supabase
+            .from("groupes_apprenants").select("niveau").eq("id", demande.ga_id).maybeSingle();
+          const ancien = (gaAvant?.niveau || "").toUpperCase();
+          if (ancien !== demande.niveau_obtenu.toUpperCase()) {
+            const { error: errNiveau } = await supabase.from("groupes_apprenants").update({
+              niveau:           demande.niveau_obtenu,
+              niveau_precedent: gaAvant?.niveau || null,
+              niveau_change_le: new Date().toISOString(),
+            }).eq("id", demande.ga_id);
+            // La migration peut ne pas être jouée : on écrit au moins le niveau.
+            if (errNiveau && /niveau_precedent|niveau_change_le/.test(errNiveau.message || "")) {
+              await supabase.from("groupes_apprenants")
+                .update({ niveau: demande.niveau_obtenu }).eq("id", demande.ga_id);
+            }
+          }
+        } catch (e) {
+          console.warn("[demandes-transfert PATCH] report du niveau:", e.message);
+        }
+      }
     }
 
     /* ── Refus ────────────────────────────────────────────────────────────────── */

@@ -1246,12 +1246,38 @@ router.patch("/apprenants/:id/niveau", authenticateAdmin, async (req, res) => {
     const { data: avant } = await supabase.from("groupes_apprenants").select("niveau, apprenant_id").eq("id", req.params.id).maybeSingle();
     if (!avant) return res.status(404).json({ error: "Apprenant introuvable" });
 
-    const { data, error } = await supabase
+    /* L'ANCIEN NIVEAU EST CONSERVÉ, PAS ÉCRASÉ. Un niveau seul ne dit rien : « B1 » est une
+       étiquette, « A2 → B1 » est une progression, et « B1 → A2 » dit qu'on s'était trompé de
+       classe. C'est cette paire que le coach, l'agent placement test et l'onboarding lisent
+       au moment d'un transfert. Jusqu'ici l'ancien disparaissait à l'écriture - il n'était lu
+       qu'une ligne plus bas, pour les points de progression, puis perdu.
+
+       On ne réécrit pas `niveau_precedent` quand le niveau ne change pas réellement : sinon
+       un enregistrement sans modification effacerait la trace du vrai changement précédent. */
+    const changementReel = (avant.niveau || "").toUpperCase() !== nvl;
+    const patch = { niveau: nvl };
+    if (changementReel) {
+      patch.niveau_precedent = avant.niveau || null;
+      patch.niveau_change_le = new Date().toISOString();
+    }
+
+    let { data, error } = await supabase
       .from("groupes_apprenants")
-      .update({ niveau: nvl })
+      .update(patch)
       .eq("id", req.params.id)
       .select()
       .single();
+
+    /* Repli si la migration n'a pas encore été jouée : on enregistre au moins le niveau,
+       plutôt que de refuser le changement sur une base non migrée. */
+    if (error && /niveau_precedent|niveau_change_le/.test(error.message || "")) {
+      ({ data, error } = await supabase
+        .from("groupes_apprenants")
+        .update({ niveau: nvl })
+        .eq("id", req.params.id)
+        .select()
+        .single());
+    }
     if (error) throw error;
 
     const rangAvant = ORDRE_CECR_GROUPES.indexOf((avant.niveau || "").toUpperCase());

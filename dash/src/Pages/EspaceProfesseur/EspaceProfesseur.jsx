@@ -11097,6 +11097,15 @@ const messagesFiltres = useMemo(() => {
                   <div style={{ fontSize:18,fontWeight:900,color:"#fff" }}>{nomComplet}</div>
                   <div style={{ display:"flex",gap:6,marginTop:5,flexWrap:"wrap" }}>
                     {a.niveau && <span style={{ padding:"2px 10px",borderRadius:99,fontSize:11,fontWeight:800,color:"#fff",background:nColor }}>{a.niveau} - {NIVEAUX_LBL[a.niveau]||a.niveau}</span>}
+                    {/* L'ANCIEN NIVEAU A COTE DU NOUVEAU. Un niveau seul est une etiquette ;
+                        « A2 → B1 » est une progression, « B1 → A2 » dit qu'on s'etait trompe
+                        de classe. Rien ne s'affiche tant qu'aucun changement n'a eu lieu. */}
+                    {a.niveau_precedent && a.niveau_precedent !== a.niveau && (
+                      <span title={`Niveau ${a.niveau_precedent} avant ce changement`}
+                        style={{ padding:"2px 9px",borderRadius:99,fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.75)",background:"rgba(255,255,255,0.18)" }}>
+                        avant : {a.niveau_precedent}
+                      </span>
+                    )}
                     {noteObj?.programme && <span style={{ padding:"2px 10px",borderRadius:99,fontSize:11,fontWeight:600,background:"rgba(255,255,255,0.18)",color:"#fff" }}>{noteObj.programme}</span>}
                     {a.acces_bloque
                       ? <span style={{ padding:"2px 10px",borderRadius:99,fontSize:11,fontWeight:700,background:"rgba(0,0,0,0.3)",color:"#fca5a5" }}>🔒 Accès bloqué</span>
