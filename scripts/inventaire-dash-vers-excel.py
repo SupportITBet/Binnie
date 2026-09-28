@@ -644,6 +644,216 @@ for i, (b, t, s, p) in enumerate(BRIQUES, start=1):
 ws5.auto_filter.ref = f"A4:G{r-1}"
 ws5.freeze_panes = "A5"
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  FEUILLE 0 — OFFRE / COTATION
+# ══════════════════════════════════════════════════════════════════════════════
+#  Même gabarit que l'offre « P1 SITE WEB » : Prestation · Détail · Qté · Prix
+#  unitaire · Total, regroupées en lots avec sous-totaux.
+#
+#  LES PRIX NE SONT PAS RENSEIGNÉS, ET C'EST VOULU. Un prix ne se lit pas dans le
+#  code ; l'écrire ici lui donnerait l'autorité du relevé alors qu'il serait une
+#  invention. La colonne « Prix unitaire » est donc vide, sur fond ocre, et TOUT
+#  le reste est calculé : les totaux de ligne, les sous-totaux de lot et le total
+#  général sont de vraies formules. Le devis se chiffre en tapant une colonne.
+#
+#  LES QUANTITÉS, ELLES, SONT RELEVÉES : le nombre d'onglets de chaque espace est
+#  celui de la feuille « Onglets par profil », repris automatiquement ci-dessous.
+
+def nb(profil):
+    return len([o for o in O.get(profil, []) if o[0] != "—"])
+
+# (prestation, détail, qté, unité)  —  None = ligne de lot
+LOTS = [
+ ("LOT A — SOCLE TECHNIQUE ET BRIQUES TRANSVERSES", None, None, None),
+ ("Authentification & routage par rôle", "Connexion du personnel, double facteur, sas d'accès, redirection vers l'espace du rôle, expiration de session sur inactivité", 19, "profils"),
+ ("Gestion des droits", "Matrice des permissions par rôle et par domaine ; commande ce que chaque profil voit et modifie", 1, "forfait"),
+ ("Centre de notifications", "Notifications temps réel, badges par onglet, marquage lu/non lu, bandeau d'alerte", 1, "forfait"),
+ ("Messagerie interne & chats de classe", "Messagerie entre membres du personnel et fils de discussion par classe, compteurs de non-lus", 1, "forfait"),
+ ("Composants partagés", "Planning de classe, historique des tests, filtres et pagination, demandes de transfert, appréciations, fiche profil…", 46, "composants"),
+ ("Utilitaires transverses", "Gabarit PDF à la charte, exports Excel mis en forme, lecture sécurisée des documents, barèmes d'évaluation", 32, "utilitaires"),
+ ("Exports PDF & Excel", "Fiche apprenant en PDF (7 espaces), exports Excel de listes et de rapports", 1, "forfait"),
+ ("SOUS-TOTAL LOT A", None, None, "soustotal"),
+
+ ("LOT B — ESPACES DE PILOTAGE", None, None, None),
+ ("Espace Super Admin", "Configuration de la plateforme, boutique, médias, campagnes, catalogue, droits, audit, chiffre d'affaires", nb("Super Admin"), "onglets"),
+ ("Espace Administrateur", "Administration métier, référentiels, suivi transversal des apprenants et des coachs", nb("Administrateur"), "onglets"),
+ ("Espace Manager", "Cockpit KPI, performance des équipes commerciale et pédagogique, reporting global", nb("Manager"), "onglets"),
+ ("SOUS-TOTAL LOT B", None, None, "soustotal"),
+
+ ("LOT C — CHAÎNE COMMERCIALE", None, None, None),
+ ("Espace Assistante commerciale", "Prospection, tests reçus, inscriptions, fiche apprenant, échéanciers et relances, pipeline et facturation B2B", nb("Assistante commerciale"), "onglets"),
+ ("Espace Assistante onboarding", "Intégration des nouveaux apprenants, création des accès, kick-off, classes en ligne, suivi de démarrage, bilans", nb("Assistante onboarding"), "onglets"),
+ ("Espace Gestionnaire", "Traitement administratif des inscriptions, dossiers, encaissements, requêtes, exports", nb("Gestionnaire"), "onglets"),
+ ("Espace Data Collector", "Collecte, import de fichiers, contrôle qualité des données, historique des corrections", nb("Data Collector"), "onglets"),
+ ("SOUS-TOTAL LOT C", None, None, "soustotal"),
+
+ ("LOT D — CHAÎNE PÉDAGOGIQUE", None, None, None),
+ ("Espace Superviseur global", "Observation de cours sur barème, cahiers des coachs, classement par catégorie, anomalies, gestion des deputies", nb("Superviseur global"), "onglets"),
+ ("Espace Deputy Superviseur", "Variante réduite du précédent : missions, observations, rapports — même écran, navigation restreinte", nb("Deputy Superviseur"), "onglets"),
+ ("Espace Conseiller pédagogique", "Classes privées, affectation des coachs, remplacements, validation des honoraires, évaluations", nb("Conseiller pédagogique"), "onglets"),
+ ("Espace Agent placement test", "File de correction, administration du test en ligne et en présentiel, demandes de transfert", nb("Agent placement test"), "onglets"),
+ ("Espace Coach", "Classes, présences, évaluations, contenus, séance live, disponibilités, honoraires, demandes", nb("Coach"), "onglets"),
+ ("SOUS-TOTAL LOT D", None, None, "soustotal"),
+
+ ("LOT E — FINANCE ET RESSOURCES HUMAINES", None, None, None),
+ ("Espace Comptable", "Facturation, trésorerie, fournisseurs, comptabilité générale, TVA, immobilisations, budgets, analytique, exports", nb("Comptable"), "onglets"),
+ ("Espace RH & Paie", "Grille tarifaire des honoraires, dossiers et contrats des coachs, bulletins de paie", nb("RH & Paie"), "onglets"),
+ ("SOUS-TOTAL LOT E", None, None, "soustotal"),
+
+ ("LOT F — RELATION CLIENT", None, None, None),
+ ("Espace Customer Care", "Réception, qualification et traitement des plaintes", nb("Customer Care"), "onglets"),
+ ("Espace Assistante SAV", "Demandes de service après-vente (Remboursements et Suivi satisfaction en option, voir plus bas)", 5, "onglets"),
+ ("SOUS-TOTAL LOT F", None, None, "soustotal"),
+
+ ("LOT G — ESPACES UTILISATEURS", None, None, None),
+ ("Espace Apprenant", "Cours, planning, présences, devoirs, résultats, séance live, gamification, mini-jeux, paiement en ligne, boutique", nb("Apprenant"), "onglets"),
+ ("Espace Parent", "Suivi de l'enfant : séances, présences, devoirs, résultats, évaluation du coach, paiement", nb("Parent"), "onglets"),
+ ("SOUS-TOTAL LOT G", None, None, "soustotal"),
+
+ ("LOT H — MODULES TRANSVERSES", None, None, None),
+ ("Modules hors tableau de bord", "Cours, bulletins, examens, salles, classes, sessions, statistiques, outils, test de niveau, traçabilité", len(MODULES), "modules"),
+ ("SOUS-TOTAL LOT H", None, None, "soustotal"),
+
+ ("LOT I — CIRCUITS INTER-MÉTIERS", None, None, None),
+ ("Circuits traversant plusieurs espaces", "Demande de transfert, test de niveau, observation et catégorie de contrat, échéancier et relances, honoraires, kick-off", 6, "circuits"),
+ ("SOUS-TOTAL LOT I", None, None, "soustotal"),
+
+ ("OPTIONS ET ÉVOLUTIONS", None, None, None),
+ ("Migration en ligne ↔ présentiel", "NON RÉALISÉ. Changement de canal avec ajustement de la mensualité au mois suivant — 5 ruptures identifiées, 3 décisions en attente", 1, "forfait"),
+ ("SAV — Remboursements", "ÉBAUCHE. Écran présent, backend à concevoir et à connecter", 1, "forfait"),
+ ("SAV — Suivi satisfaction", "ÉBAUCHE. Écran présent, backend à concevoir et à connecter", 1, "forfait"),
+ ("Reprise des données existantes", "Import des dossiers, apprenants, classes et paiements depuis les fichiers actuels", 1, "forfait"),
+ ("Formation des équipes", "Sessions par métier : commerciale, onboarding, pédagogie, finance, coachs", 1, "forfait"),
+ ("Documentation utilisateur", "Guide par profil, en français", 1, "livrable"),
+ ("Maintenance corrective", "Correction des anomalies après livraison, sans surcoût", 3, "mois"),
+ ("Support prioritaire", "Réponse sous délai convenu, corrections et ajustements", 6, "mois"),
+ ("SOUS-TOTAL OPTIONS", None, None, "soustotal"),
+]
+
+ws0 = wb.create_sheet("Offre — Cotation", 0)
+ws0.sheet_view.showGridLines = False
+LARGEURS = [46, 88, 13, 17, 17]
+for j, L in enumerate(LARGEURS, start=1):
+    ws0.column_dimensions[get_column_letter(j)].width = L
+
+# Bandeau de titre
+ws0.merge_cells("A2:E2")
+c = ws0["A2"]; c.value = "OFFRE — TABLEAUX DE BORD BET (application « dash »)"
+c.font = Font(name=SANS, size=14, bold=True, color="FFFFFF")
+c.fill = PatternFill("solid", fgColor="1F3864")
+c.alignment = Alignment(vertical="center", horizontal="left", indent=1)
+ws0.row_dimensions[2].height = 30
+ws0.merge_cells("A3:E3")
+c = ws0["A3"]; c.value = ("Quantités relevées dans le code source le 28/09/2026 — voir les feuilles d'inventaire. "
+                          "Prix unitaires à renseigner : tous les totaux sont calculés.")
+c.font = Font(name=SANS, size=9, bold=True, color="3F3000")
+c.fill = PatternFill("solid", fgColor="BF9000")
+c.alignment = Alignment(vertical="center", indent=1)
+ws0.row_dimensions[3].height = 18
+
+ENT = ["Prestation", "Détail / Description", "Qté", "Prix unitaire (FCFA)", "Total (FCFA)"]
+r = 5
+for j, t in enumerate(ENT, start=1):
+    c = ws0.cell(row=r, column=j, value=t)
+    c.font = Font(name=SANS, size=9.5, bold=True, color=INK)
+    c.fill = PatternFill("solid", fgColor="D9D9D9")
+    c.border = BORD
+    c.alignment = Alignment(horizontal="center" if j >= 3 else "left", vertical="center")
+ws0.row_dimensions[r].height = 20
+
+r += 1
+lignes_soustotaux = []
+debut_lot = None
+for prestation, detail, qte, unite in LOTS:
+    if detail is None and unite is None:
+        # bandeau de lot
+        ws0.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+        c = ws0.cell(row=r, column=1, value=f"— {prestation} —")
+        c.font = Font(name=SANS, size=9.5, bold=True, italic=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="1F3864")
+        c.alignment = Alignment(vertical="center", indent=1)
+        ws0.row_dimensions[r].height = 18
+        debut_lot = r + 1
+        r += 1
+        continue
+
+    if unite == "soustotal":
+        fin_lot = r - 1
+        ws0.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        c = ws0.cell(row=r, column=1, value=prestation)
+        c.font = Font(name=SANS, size=10, bold=True, color=INK)
+        c.alignment = Alignment(horizontal="right", vertical="center")
+        c.fill = PatternFill("solid", fgColor="EDEDED")
+        c.border = BORD
+        c = ws0.cell(row=r, column=5, value=f"=SUM(E{debut_lot}:E{fin_lot})")
+        c.font = Font(name=SANS, size=10, bold=True, color=NAVY)
+        c.fill = PatternFill("solid", fgColor="EDEDED")
+        c.border = BORD
+        c.number_format = "# ##0"
+        c.alignment = Alignment(horizontal="right")
+        lignes_soustotaux.append(r)
+        r += 2
+        continue
+
+    est_option = detail.startswith(("NON RÉALISÉ", "ÉBAUCHE"))
+    for j, v in enumerate([prestation, detail, f"{qte} {unite}", None, None], start=1):
+        c = ws0.cell(row=r, column=j, value=v)
+        c.border = BORD
+        c.alignment = Alignment(vertical="center", wrap_text=(j == 2),
+                                horizontal="center" if j == 3 else ("right" if j >= 4 else "left"))
+        if j == 1:
+            c.font = Font(name=SANS, size=9.5, bold=True, color=ROUGE if est_option else INK)
+        elif j == 2:
+            c.font = Font(name=SANS, size=9, italic=True, color=MUTED)
+        else:
+            c.font = Font(name=SANS, size=9.5, color=INK)
+    # prix unitaire : à saisir
+    pu = ws0.cell(row=r, column=4)
+    pu.fill = PatternFill("solid", fgColor=FOND_SAISIE)
+    pu.number_format = "# ##0"
+    # total = qté × prix unitaire, calculé
+    tot = ws0.cell(row=r, column=5, value=f"=IF(D{r}=\"\",\"\",{qte}*D{r})")
+    tot.font = Font(name=SANS, size=9.5, bold=True, color=INK)
+    tot.number_format = "# ##0"
+    ws0.row_dimensions[r].height = 26
+    r += 1
+
+# TOTAL GÉNÉRAL
+r += 1
+ws0.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+c = ws0.cell(row=r, column=1, value="TOTAL GÉNÉRAL (FCFA)")
+c.font = Font(name=SANS, size=12, bold=True, color="FFFFFF")
+c.fill = PatternFill("solid", fgColor="1F3864")
+c.alignment = Alignment(horizontal="right", vertical="center")
+c = ws0.cell(row=r, column=5, value="=" + "+".join(f"E{x}" for x in lignes_soustotaux))
+c.font = Font(name=SANS, size=12, bold=True, color="FFFFFF")
+c.fill = PatternFill("solid", fgColor="1F3864")
+c.number_format = "# ##0"
+c.alignment = Alignment(horizontal="right", vertical="center")
+ws0.row_dimensions[r].height = 26
+
+r += 2
+for txt in [
+  "Les quantités en « onglets » comptent les écrans de navigation principale de chaque espace, relevés un par un : "
+  "le détail est dans la feuille « Onglets par profil ».",
+  "Deux espaces ne sont pas des développements neufs : le Deputy Superviseur est une variante de navigation du "
+  "Superviseur global sur le même écran, et le profil Marketing ouvre le tableau de bord Super Admin — il ne figure "
+  "donc pas dans cette offre.",
+  "Les trois premières lignes des options sont du reste à faire : la migration en ligne ↔ présentiel n'existe pas, "
+  "et les deux écrans SAV attendent leur backend. Le code le dit lui-même.",
+  "Aucun prix n'a été porté dans ce document : il ne se lit pas dans le code. Renseignez la colonne « Prix unitaire », "
+  "les totaux, sous-totaux et total général se calculent seuls.",
+]:
+    ws0.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+    c = ws0.cell(row=r, column=1, value="•  " + txt)
+    c.font = Font(name=SANS, size=9, color=MUTED)
+    c.alignment = Alignment(wrap_text=True, vertical="top")
+    ws0.row_dimensions[r].height = 26
+    r += 1
+
+ws0.freeze_panes = "A6"
+
 wb.properties.title = "Inventaire des tableaux de bord BET"
 wb.properties.subject = "Profils, espaces, onglets et fonctionnalités — relevé du 28 septembre 2026"
 wb.properties.creator = "Binnie's English Training"
