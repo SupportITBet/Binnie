@@ -1890,15 +1890,23 @@ router.post("/transfert", authenticateAdmin, requirePermission("classes", "updat
       meta: metaNotif,
     });
 
-    // 11. Rôles transverses : conseillers pédagogiques et super admins.
-    await notifyRole(["pedagogical_advisor", "admin_pa_advisor", ...ROLES_SUPERVISION_GLOBALE], {
-      type: "transfert",
-      titre: `🔄 Changement de classe - ${nomComplet}`,
-      message: `${nomComplet} a été transféré ${resume}. Motif : ${motifTxt}.`,
-      meta: metaNotif,
-    }, acteurId);   // ne pas se notifier soi-même
+    /* 11. LES RÔLES QUI SUIVENT L'APPRENANT, prévenus d'un seul appel.
+       Un changement de classe déplace quelqu'un d'un coach à un autre, d'un niveau à un autre,
+       souvent d'un horaire à un autre : il concerne tous ceux qui l'encadrent ou l'observent.
+       Les DEPUTIES en font partie - ils observent les cours et prépareraient une visite dans
+       une classe que l'apprenant a quittée. L'ÉQUIPE ONBOARDING aussi : jusqu'ici seule
+       l'onboarding rattachée au dossier était prévenue (étape 8), et un transfert opéré par
+       une assistante présentiel ne remontait donc à personne chez eux.
 
-    await notifyRole(["super_admin"], {
+       UN SEUL APPEL au lieu de deux : le message était identique, et quelqu'un cumulant deux
+       rôles - superviseur et super admin, par exemple - recevait deux fois la même chose. */
+    await notifyRole([
+      "pedagogical_advisor", "admin_pa_advisor",
+      ...ROLES_SUPERVISION_GLOBALE,                              // superviseur, admin_superviseur
+      "deputy_superviseur", "admin_deputy_superviseur",
+      "onboarding", "admin_onboarding",
+      "admin", "super_admin",
+    ], {
       type: "transfert",
       titre: `🔄 Changement de classe - ${nomComplet}`,
       message: `${nomComplet} a été transféré ${resume}. Motif : ${motifTxt}.`,
