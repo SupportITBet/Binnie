@@ -37,6 +37,7 @@ import { uploadFichier, libelleLimite } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 import { estClassePrivee } from "../../utils/classePrivee";
+import FileDemandesTransfert from "../../Components/DemandeTransfert";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
 /* ═══════════════════════════════════════════════════════
@@ -3619,6 +3620,9 @@ export default function OnboardingDashboard() {
     { key:"suivi",          label:"Suivi démarrage",          icon:"✅", badge:mesApprenants.filter(a=>!Object.values(a.suivi_checklist||{}).every(Boolean)).length || null },
     // { key:"bilans",         label:"Bilans & Renouvellements", icon:"📋", badge:bilansDus }, // désactivé temporairement
     { key:"groupes",        label:"Groupes",                  icon:"👥", badge:groupesSansCoach || null },
+    // Les demandes de transfert emises par les coachs. L'onboarding est le seul a
+    // pouvoir reaffecter ; le dossier reste ferme tant que le test de niveau n'est pas revenu.
+    { key:"reaffecter",     label:"Dossiers à réaffecter",    icon:"🔄" },
     { key:"plannings",      label:"Plannings",                icon:"📅", badge: planning.planningsAAlerter || null },
     { key:"coachs",         label:"Coachs",                   icon:"👨‍🏫" },
     { key:"contenus",       label:"Contenus",                 icon:"📚" },
@@ -7201,6 +7205,10 @@ export default function OnboardingDashboard() {
             )}
 
             {/* ══ BILANS & RENOUVELLEMENTS ══ (désactivé temporairement)
+            {activeTab==="reaffecter" && (
+              <FileDemandesTransfert accent={C} authHdrs={authHeaders} mode="onboarding" />
+            )}
+
             {activeTab==="bilans" && (
               <div>
                 <div style={{ marginBottom:18 }}>

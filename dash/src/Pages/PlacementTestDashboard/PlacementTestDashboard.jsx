@@ -23,6 +23,7 @@ import MonProfilModal, { BoutonMonProfil } from "../../Components/MonProfilModal
 
 import { uploadFichier } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
+import FileDemandesTransfert from "../../Components/DemandeTransfert";
 /* ═══════════════════════════════════════════════════════
    CHARTE COULEURS - Agent Placement Test
 ═══════════════════════════════════════════════════════ */
@@ -242,6 +243,9 @@ export default function PlacementTestDashboard() {
     { key:"taches",         label:"Mes tâches",     icon:"✅", badge: stats.aCorriger || null },
     { key:"overview",       label:"Vue d'ensemble",  icon:"🏠" },
     { key:"file",           label:"À corriger",      icon:"📥", badge:stats.aCorriger },
+    // Les demandes de transfert des coachs : c'est l'agent placement test qui fait avancer
+    // le dossier, en rendant le niveau qui determinera la nouvelle classe.
+    { key:"transferts",     label:"Demandes de transfert", icon:"🔄" },
     { key:"rapports",       label:"Rapports",        icon:"📊" },
     { key:"test_niveau",    label:"Test de niveau",  icon:"🧪" },
     { key:"resultats_candidats", label:"Résultats candidats", icon:"📋" },
@@ -527,6 +531,10 @@ export default function PlacementTestDashboard() {
 
             {/* ══════════════ TRAITÉS ══════════════ */}
             {/* ══════════════ RAPPORTS ══════════════ */}
+            {activeTab === "transferts" && (
+              <FileDemandesTransfert accent="#0891b2" authHdrs={authHdrs} mode="placement" />
+            )}
+
             {activeTab === "rapports" && (
               <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
                 {tests === null ? (

@@ -37,6 +37,7 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import MonProfilModal, { BoutonMonProfil, nomAffiche } from "../../Components/MonProfilModal";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import BadgeCategorieCoach from "../../Components/BadgeCategorieCoach";
+import { BoutonDemandeTransfert } from "../../Components/DemandeTransfert";
 import { NOTE_COULEUR, NOTE_FOND, BAREME_TEXTE } from "../../utils/categorieCoach";
 import { suivreFenetreLive } from "../../utils/inactivite";
 
@@ -11102,6 +11103,18 @@ const messagesFiltres = useMemo(() => {
                       : <span style={{ padding:"2px 10px",borderRadius:99,fontSize:11,fontWeight:700,background:"rgba(34,197,94,0.3)",color:"#fff" }}>● Actif</span>}
                   </div>
                 </div>
+                {/* DEMANDER LE TRANSFERT. Dans l'en-tete, donc visible depuis tous les onglets
+                    de la fiche : le coach constate le probleme en lisant les presences ou les
+                    notes, pas depuis un onglet dedie. Il n'execute pas le changement - il ouvre
+                    un dossier que le placement test puis l'onboarding font avancer. */}
+                {a.id && (
+                  <BoutonDemandeTransfert
+                    gaId={a.id}
+                    nomApprenant={nomComplet}
+                    accent={BET}
+                    authHdrs={() => ({ "Content-Type":"application/json", Authorization:`Bearer ${localStorage.getItem("coach_token")||localStorage.getItem("admin_token")}` })}
+                  />
+                )}
                 <button onClick={()=>setApprenantDetail(null)} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>✕</button>
               </div>
 

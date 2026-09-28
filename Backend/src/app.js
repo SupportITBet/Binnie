@@ -75,6 +75,7 @@ import campagnesRouter       from "./routes/campagnes.js";
 import campagnesPubRouter    from "./routes/campagnesPubliques.js";
 import campagnesWaRouter     from "./routes/campagnesWhatsapp.js";
 import conversationsRouter   from "./routes/conversations.js";
+import demandesTransfertRouter from "./routes/demandesTransfert.js";
 import kpiRouter             from "./routes/kpi.js";
 import marketingKpisRouter   from "./routes/marketingKpis.js";
 import remplacementsRouter    from "./routes/remplacements.js";
@@ -239,6 +240,7 @@ app.use("/api/appreciations",     appreciationsRouter);
 app.use("/api/campagnes",         campagnesRouter);
 app.use("/api/campagnes-whatsapp", campagnesWaRouter);
 app.use("/api/conversations", conversationsRouter);
+app.use("/api/demandes-transfert", demandesTransfertRouter);
 app.use("/api/kpi", kpiRouter);
 app.use("/api/marketing",         marketingKpisRouter);
 // PUBLIC - aucune authentification : c'est l'adresse qu'ouvre le QR code.
