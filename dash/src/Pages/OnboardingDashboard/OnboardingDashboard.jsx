@@ -6223,162 +6223,9 @@ export default function OnboardingDashboard() {
                   demande du coach, passe par le test de niveau, et s'exécute depuis l'onglet
                   « Dossiers à réaffecter ». Le code est conservé le temps que le nouveau
                   circuit soit éprouvé en production ; il sera supprimé ensuite. */}
-              {showTransfert && selectedApprenantGroupe && (
-                <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",zIndex:1200,display:"flex",alignItems:"center",justifyContent:"center",padding:12 }}
-                  onClick={()=>setShowTransfert(false)}>
-                  <div style={{ background:"#fff",borderRadius:18,width:"90vw",height:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.35)",overflow:"hidden" }}
-                    onClick={e=>e.stopPropagation()}>
-
-                    {/* Header */}
-                    <div style={{ background:C_GRAD,borderRadius:"18px 18px 0 0",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
-                      <div>
-                        <div style={{ color:"#c4b5fd",fontSize:11,fontWeight:700,marginBottom:3 }}>CHANGEMENT DE PROGRAMME</div>
-                        <div style={{ color:"#fff",fontSize:16,fontWeight:800 }}>🔄 {selectedApprenantGroupe.prenom_apprenant} {selectedApprenantGroupe.nom_apprenant}</div>
-                        <div style={{ color:"#c4b5fd",fontSize:12,marginTop:2 }}>Groupe actuel : {selectedGroupe?.nom||"-"} · Niveau {selectedApprenantGroupe.niveau||"-"}</div>
-                      </div>
-                      <button onClick={()=>setShowTransfert(false)} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:20,width:36,height:36,borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>✕</button>
-                    </div>
-
-                    {/* Corps scrollable */}
-                    <div style={{ flex:1,overflowY:"auto",padding:"24px" }}>
-
-                      {/* Motif */}
-                      <div style={{ marginBottom:20 }}>
-                        <label style={{ display:"block",fontSize:12,fontWeight:700,color:"#374151",marginBottom:6 }}>Motif / contexte (optionnel)</label>
-                        <textarea
-                          value={transfertForm.motif}
-                          onChange={e=>setTransfertForm(f=>({...f,motif:e.target.value}))}
-                          rows={2}
-                          placeholder="Ex: Changement d'horaires de travail, déménagement, …"
-                          style={{ width:"100%",padding:"9px 12px",border:"1.5px solid #e5e7eb",borderRadius:8,fontSize:13,resize:"vertical",boxSizing:"border-box" }}
-                        />
-                      </div>
-
-                      {/* Sélection du groupe cible */}
-                      <div>
-                        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:10 }}>
-                          <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                            <label style={{ fontSize:12,fontWeight:700,color:"#374151" }}>Groupes compatibles - Niveau</label>
-                            <select value={transfertNiveauCible} onChange={e=>{ setTransfertNiveauCible(e.target.value); searchGroupesCibles(e.target.value); }}
-                              style={{ padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e7eb",fontSize:12,fontWeight:700,color:C,background:"#fff" }}>
-                              {/* "Tous niveaux" en tête : c'est la valeur par défaut, et le cas
-                                  courant - restreindre à un niveau est le choix particulier. */}
-                              <option value="tous">Tous niveaux</option>
-                              {["A1","A2","B1","B2","C1","C2"].map(n=><option key={n} value={n}>{n}</option>)}
-                            </select>
-                            <span style={{ fontSize:11,color:"#9ca3af" }}>Niveau actuel de l'apprenant : {selectedApprenantGroupe.niveau||"-"}</span>
-                          </div>
-                          <div style={{ display:"flex",gap:8 }}>
-                            <button onClick={()=>{
-                              setGroupeForm({ nom:"", niveau: transfertNiveauCible!=="tous" ? transfertNiveauCible : (selectedApprenantGroupe.niveau||""), filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
-                              setGroupeCoachSearch("");
-                              fetchCoachsDispos(coaches.map(c=>c.id));
-                              setShowCreateGroupe(true);
-                            }}
-                              style={{ padding:"5px 12px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:700,fontSize:11 }}>
-                              + Nouvelle classe
-                            </button>
-                            <button onClick={()=>searchGroupesCibles(transfertNiveauCible)}
-                              style={{ padding:"5px 12px",background:"#ede9fe",color:"#7c3aed",border:"none",borderRadius:6,cursor:"pointer",fontWeight:700,fontSize:11 }}>
-                              🔄 Actualiser
-                            </button>
-                          </div>
-                        </div>
-
-                        {groupesCiblesLoading && <p style={{ textAlign:"center",color:"#9ca3af",padding:20 }}>Recherche des groupes…</p>}
-                        {!groupesCiblesLoading && groupesCibles.length===0 && (
-                          <div style={{ textAlign:"center",padding:24,background:"#f8fafc",borderRadius:10,border:"1px solid #e5e7eb",color:"#9ca3af",fontSize:13 }}>
-                            Aucun groupe actif {transfertNiveauCible!=="tous" ? `de niveau ${transfertNiveauCible}` : ""} trouvé.
-                          </div>
-                        )}
-                        {!groupesCiblesLoading && groupesCibles.length>0 && (
-                          <div style={{ display:"grid",gap:10 }}>
-                            {groupesCibles.map(g=>{
-                              const sel = transfertForm.nouveau_groupe_id===g.id;
-                              const TYPE_ICO = { prive:"🔒",en_ligne:"💻",domicile:"🏠",centre:"🏢" };
-                              const typeLabel = g.type_cours==="en_ligne"?"En ligne":g.type_cours==="domicile"?"Domicile":g.type_cours==="prive"?"Privé":"Centre";
-                              return (
-                                <div key={g.id} onClick={()=>setTransfertForm(f=>({...f,nouveau_groupe_id:g.id}))}
-                                  style={{ padding:"14px 16px",borderRadius:12,border:`2px solid ${sel?"#7c3aed":"#e5e7eb"}`,
-                                    background:sel?"#faf5ff":"#fff",cursor:"pointer",transition:"all .15s" }}>
-                                  {/* En-tête : nom, badges, effectif */}
-                                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10 }}>
-                                    <div style={{ display:"flex",gap:10,alignItems:"center",minWidth:0 }}>
-                                      <div style={{ width:38,height:38,borderRadius:"50%",background:sel?"#7c3aed":"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0 }}>
-                                        {sel?"✅":"👥"}
-                                      </div>
-                                      <div style={{ minWidth:0 }}>
-                                        <div style={{ fontWeight:800,fontSize:14,color:sel?"#7c3aed":"#0f172a" }}>{g.nom}</div>
-                                        <div style={{ display:"flex",gap:6,marginTop:3,flexWrap:"wrap" }}>
-                                          {g.niveau && <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:99,background:"#1e3a8a",color:"#fff" }}>{g.niveau}</span>}
-                                          <span style={{ fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#7c3aed" }}>{TYPE_ICO[g.type_cours]||"🏢"} {typeLabel}</span>
-                                          {g.filiere && <span style={{ fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#f1f5f9",color:"#374151" }}>{g.filiere}</span>}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <span style={{ padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,whiteSpace:"nowrap",
-                                      background:g.statut==="actif"?"#dcfce7":"#f1f5f9",
-                                      color:g.statut==="actif"?"#166534":"#6b7280" }}>
-                                      {g.nb_apprenants||0}/{g.capacite_max||20} appr.
-                                    </span>
-                                  </div>
-                                  {/* Détails : coach, centre, dates */}
-                                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10 }}>
-                                    <div>
-                                      <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:2 }}>Coach</div>
-                                      <div style={{ fontSize:12,fontWeight:600,color:"#0f172a" }}>{g.coach_nom||g.nom_coach||"Non assigné"}</div>
-                                      {g.coach_telephone && <div style={{ fontSize:10,color:"#0891b2" }}>📞 {g.coach_telephone}</div>}
-                                    </div>
-                                    {g.centre_nom && (
-                                      <div>
-                                        <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:2 }}>Centre</div>
-                                        <div style={{ fontSize:12,fontWeight:600,color:"#0f172a" }}>📍 {g.centre_nom}{g.centre_ville?` · ${g.centre_ville}`:""}</div>
-                                      </div>
-                                    )}
-                                    {(g.date_debut||g.date_fin) && (
-                                      <div>
-                                        <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:2 }}>Période</div>
-                                        <div style={{ fontSize:12,fontWeight:600,color:"#0f172a" }}>
-                                          {g.date_debut?new Date(g.date_debut).toLocaleDateString("fr-FR"):"-"}{g.date_fin?` → ${new Date(g.date_fin).toLocaleDateString("fr-FR")}`:""}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {/* Horaires */}
-                                  {g.horaire?.length>0 && (
-                                    <div style={{ marginTop:10 }}>
-                                      <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:5 }}>Horaires</div>
-                                      <div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>
-                                        {g.horaire.map((h,i)=>(
-                                          <span key={i} style={{ padding:"2px 9px",borderRadius:99,background:"#eff6ff",color:"#1e3a8a",fontSize:10.5,fontWeight:700,border:"1px solid #bfdbfe" }}>🕐 {fmtHoraire(h)}</span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div style={{ padding:"16px 24px",borderTop:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10 }}>
-                      <button onClick={()=>setShowTransfert(false)}
-                        style={{ padding:"10px 20px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:13 }}>
-                        Annuler
-                      </button>
-                      <button onClick={executerTransfert} disabled={!transfertForm.nouveau_groupe_id||transfertSaving||!peut("classes","update")} title={permBtnTitle("Confirmer le transfert",peut("classes","update"))}
-                        style={{ padding:"10px 24px",background:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?C_GRAD:"#e5e7eb",
-                          color:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?"#fff":"#9ca3af",border:"none",borderRadius:9,cursor:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?"pointer":"default",
-                          fontWeight:700,fontSize:13,opacity:transfertSaving?0.7:1 }}>
-                        {transfertSaving ? "⏳ Transfert en cours…" : peut("classes","update") ? "✅ Confirmer le transfert" : "🔒 Confirmer le transfert"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Le modal de transfert a été déplacé hors des onglets (voir plus bas, avec les
+                  autres modaux) : enfermé ici, il n'existait que tant que l'onglet Groupes
+                  était affiché, et le bouton de « Dossiers à réaffecter » n'ouvrait rien. */}
 
               {/* ── EDIT GROUPE MODAL ── */}
               {showEditGroupe && (
@@ -9529,6 +9376,168 @@ export default function OnboardingDashboard() {
           </div>
         </div>
       </div>
+
+      {/* ══ MODAL TRANSFERT DE GROUPE ══
+          HORS DES ONGLETS, et c'est essentiel : il vivait dans le bloc de l'onglet Groupes,
+          donc React ne le montait que lorsque cet onglet était affiché. Depuis « Dossiers à
+          réaffecter », l'état s'ouvrait bien mais rien n'apparaissait - le bouton semblait mort.
+          Un modal appelé depuis plusieurs écrans appartient au rendu, pas à l'un d'eux. */}
+              {showTransfert && selectedApprenantGroupe && (
+                <div style={{ position:"fixed",inset:0,background:"rgba(15,23,42,0.75)",zIndex:1200,display:"flex",alignItems:"center",justifyContent:"center",padding:12 }}
+                  onClick={()=>setShowTransfert(false)}>
+                  <div style={{ background:"#fff",borderRadius:18,width:"90vw",height:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.35)",overflow:"hidden" }}
+                    onClick={e=>e.stopPropagation()}>
+
+                    {/* Header */}
+                    <div style={{ background:C_GRAD,borderRadius:"18px 18px 0 0",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
+                      <div>
+                        <div style={{ color:"#c4b5fd",fontSize:11,fontWeight:700,marginBottom:3 }}>CHANGEMENT DE PROGRAMME</div>
+                        <div style={{ color:"#fff",fontSize:16,fontWeight:800 }}>🔄 {selectedApprenantGroupe.prenom_apprenant} {selectedApprenantGroupe.nom_apprenant}</div>
+                        <div style={{ color:"#c4b5fd",fontSize:12,marginTop:2 }}>Groupe actuel : {selectedGroupe?.nom||"-"} · Niveau {selectedApprenantGroupe.niveau||"-"}</div>
+                      </div>
+                      <button onClick={()=>setShowTransfert(false)} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:20,width:36,height:36,borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>✕</button>
+                    </div>
+
+                    {/* Corps scrollable */}
+                    <div style={{ flex:1,overflowY:"auto",padding:"24px" }}>
+
+                      {/* Motif */}
+                      <div style={{ marginBottom:20 }}>
+                        <label style={{ display:"block",fontSize:12,fontWeight:700,color:"#374151",marginBottom:6 }}>Motif / contexte (optionnel)</label>
+                        <textarea
+                          value={transfertForm.motif}
+                          onChange={e=>setTransfertForm(f=>({...f,motif:e.target.value}))}
+                          rows={2}
+                          placeholder="Ex: Changement d'horaires de travail, déménagement, …"
+                          style={{ width:"100%",padding:"9px 12px",border:"1.5px solid #e5e7eb",borderRadius:8,fontSize:13,resize:"vertical",boxSizing:"border-box" }}
+                        />
+                      </div>
+
+                      {/* Sélection du groupe cible */}
+                      <div>
+                        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:10 }}>
+                          <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                            <label style={{ fontSize:12,fontWeight:700,color:"#374151" }}>Groupes compatibles - Niveau</label>
+                            <select value={transfertNiveauCible} onChange={e=>{ setTransfertNiveauCible(e.target.value); searchGroupesCibles(e.target.value); }}
+                              style={{ padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e7eb",fontSize:12,fontWeight:700,color:C,background:"#fff" }}>
+                              {/* "Tous niveaux" en tête : c'est la valeur par défaut, et le cas
+                                  courant - restreindre à un niveau est le choix particulier. */}
+                              <option value="tous">Tous niveaux</option>
+                              {["A1","A2","B1","B2","C1","C2"].map(n=><option key={n} value={n}>{n}</option>)}
+                            </select>
+                            <span style={{ fontSize:11,color:"#9ca3af" }}>Niveau actuel de l'apprenant : {selectedApprenantGroupe.niveau||"-"}</span>
+                          </div>
+                          <div style={{ display:"flex",gap:8 }}>
+                            <button onClick={()=>{
+                              setGroupeForm({ nom:"", niveau: transfertNiveauCible!=="tous" ? transfertNiveauCible : (selectedApprenantGroupe.niveau||""), filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+                              setGroupeCoachSearch("");
+                              fetchCoachsDispos(coaches.map(c=>c.id));
+                              setShowCreateGroupe(true);
+                            }}
+                              style={{ padding:"5px 12px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:700,fontSize:11 }}>
+                              + Nouvelle classe
+                            </button>
+                            <button onClick={()=>searchGroupesCibles(transfertNiveauCible)}
+                              style={{ padding:"5px 12px",background:"#ede9fe",color:"#7c3aed",border:"none",borderRadius:6,cursor:"pointer",fontWeight:700,fontSize:11 }}>
+                              🔄 Actualiser
+                            </button>
+                          </div>
+                        </div>
+
+                        {groupesCiblesLoading && <p style={{ textAlign:"center",color:"#9ca3af",padding:20 }}>Recherche des groupes…</p>}
+                        {!groupesCiblesLoading && groupesCibles.length===0 && (
+                          <div style={{ textAlign:"center",padding:24,background:"#f8fafc",borderRadius:10,border:"1px solid #e5e7eb",color:"#9ca3af",fontSize:13 }}>
+                            Aucun groupe actif {transfertNiveauCible!=="tous" ? `de niveau ${transfertNiveauCible}` : ""} trouvé.
+                          </div>
+                        )}
+                        {!groupesCiblesLoading && groupesCibles.length>0 && (
+                          <div style={{ display:"grid",gap:10 }}>
+                            {groupesCibles.map(g=>{
+                              const sel = transfertForm.nouveau_groupe_id===g.id;
+                              const TYPE_ICO = { prive:"🔒",en_ligne:"💻",domicile:"🏠",centre:"🏢" };
+                              const typeLabel = g.type_cours==="en_ligne"?"En ligne":g.type_cours==="domicile"?"Domicile":g.type_cours==="prive"?"Privé":"Centre";
+                              return (
+                                <div key={g.id} onClick={()=>setTransfertForm(f=>({...f,nouveau_groupe_id:g.id}))}
+                                  style={{ padding:"14px 16px",borderRadius:12,border:`2px solid ${sel?"#7c3aed":"#e5e7eb"}`,
+                                    background:sel?"#faf5ff":"#fff",cursor:"pointer",transition:"all .15s" }}>
+                                  {/* En-tête : nom, badges, effectif */}
+                                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10 }}>
+                                    <div style={{ display:"flex",gap:10,alignItems:"center",minWidth:0 }}>
+                                      <div style={{ width:38,height:38,borderRadius:"50%",background:sel?"#7c3aed":"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0 }}>
+                                        {sel?"✅":"👥"}
+                                      </div>
+                                      <div style={{ minWidth:0 }}>
+                                        <div style={{ fontWeight:800,fontSize:14,color:sel?"#7c3aed":"#0f172a" }}>{g.nom}</div>
+                                        <div style={{ display:"flex",gap:6,marginTop:3,flexWrap:"wrap" }}>
+                                          {g.niveau && <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:99,background:"#1e3a8a",color:"#fff" }}>{g.niveau}</span>}
+                                          <span style={{ fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#7c3aed" }}>{TYPE_ICO[g.type_cours]||"🏢"} {typeLabel}</span>
+                                          {g.filiere && <span style={{ fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#f1f5f9",color:"#374151" }}>{g.filiere}</span>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <span style={{ padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,whiteSpace:"nowrap",
+                                      background:g.statut==="actif"?"#dcfce7":"#f1f5f9",
+                                      color:g.statut==="actif"?"#166534":"#6b7280" }}>
+                                      {g.nb_apprenants||0}/{g.capacite_max||20} appr.
+                                    </span>
+                                  </div>
+                                  {/* Détails : coach, centre, dates */}
+                                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10 }}>
+                                    <div>
+                                      <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:2 }}>Coach</div>
+                                      <div style={{ fontSize:12,fontWeight:600,color:"#0f172a" }}>{g.coach_nom||g.nom_coach||"Non assigné"}</div>
+                                      {g.coach_telephone && <div style={{ fontSize:10,color:"#0891b2" }}>📞 {g.coach_telephone}</div>}
+                                    </div>
+                                    {g.centre_nom && (
+                                      <div>
+                                        <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:2 }}>Centre</div>
+                                        <div style={{ fontSize:12,fontWeight:600,color:"#0f172a" }}>📍 {g.centre_nom}{g.centre_ville?` · ${g.centre_ville}`:""}</div>
+                                      </div>
+                                    )}
+                                    {(g.date_debut||g.date_fin) && (
+                                      <div>
+                                        <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:2 }}>Période</div>
+                                        <div style={{ fontSize:12,fontWeight:600,color:"#0f172a" }}>
+                                          {g.date_debut?new Date(g.date_debut).toLocaleDateString("fr-FR"):"-"}{g.date_fin?` → ${new Date(g.date_fin).toLocaleDateString("fr-FR")}`:""}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {/* Horaires */}
+                                  {g.horaire?.length>0 && (
+                                    <div style={{ marginTop:10 }}>
+                                      <div style={{ fontSize:9,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:5 }}>Horaires</div>
+                                      <div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>
+                                        {g.horaire.map((h,i)=>(
+                                          <span key={i} style={{ padding:"2px 9px",borderRadius:99,background:"#eff6ff",color:"#1e3a8a",fontSize:10.5,fontWeight:700,border:"1px solid #bfdbfe" }}>🕐 {fmtHoraire(h)}</span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ padding:"16px 24px",borderTop:"1px solid #e5e7eb",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10 }}>
+                      <button onClick={()=>setShowTransfert(false)}
+                        style={{ padding:"10px 20px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:13 }}>
+                        Annuler
+                      </button>
+                      <button onClick={executerTransfert} disabled={!transfertForm.nouveau_groupe_id||transfertSaving||!peut("classes","update")} title={permBtnTitle("Confirmer le transfert",peut("classes","update"))}
+                        style={{ padding:"10px 24px",background:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?C_GRAD:"#e5e7eb",
+                          color:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?"#fff":"#9ca3af",border:"none",borderRadius:9,cursor:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?"pointer":"default",
+                          fontWeight:700,fontSize:13,opacity:transfertSaving?0.7:1 }}>
+                        {transfertSaving ? "⏳ Transfert en cours…" : peut("classes","update") ? "✅ Confirmer le transfert" : "🔒 Confirmer le transfert"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
       {/* ══ MODAL ANNULER DOSSIER (Onboarding) ══ */}
       {cancelModalOB.open && cancelModalOB.target && (
