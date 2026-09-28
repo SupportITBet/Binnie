@@ -3393,8 +3393,55 @@ export default function CommercialDashboard() {
   // profils enfant (email partagé avec le parent) et restait fragile pour tous les autres
   // (espace en trop, nom modifié par le prospect…). Le repli par email+nom ne sert plus
   // qu'aux anciennes lignes soumises avant l'ajout de la colonne assignation_id.
-  const findTestForProspect = (a) =>
-    (a.id && tests.find(t => t.assignation_id === a.id)) || trouverParEmailEtNom(tests, a, (t) => t.email);
+  /* LE PLUS RÉCENT, pas le premier venu. `.find()` rendait le premier test rencontré dans la
+     liste : depuis qu'un apprenant peut en repasser un lors d'un transfert, c'était souvent
+     l'ANCIEN qui s'affichait - « A2 » sur quelqu'un passé B1 la veille. Le niveau montré doit
+     être celui qui vaut aujourd'hui. */
+  const plusRecent = (liste) => (liste || []).slice().sort(
+    (a, b) => String(b.date || b.submitted_at || "").localeCompare(String(a.date || a.submitted_at || ""))
+  )[0] || null;
+
+  /* Les tests BRUTS de cet apprenant, du plus récent au plus ancien. `tousLesTestsDe` les
+     normalise pour l'affichage de l'évolution ; le PDF, lui, a besoin du score et de l'origine. */
+  const tousLesTestsBrutsDe = (a) => {
+    const miens = tests.filter(t =>
+      (a.id && t.assignation_id === a.id) ||
+      (!t.assignation_id && a.prospect_email && t.email
+        && t.email.toLowerCase() === a.prospect_email.toLowerCase()));
+    return miens.slice().sort((x, y) =>
+      String(y.date || y.submitted_at || "").localeCompare(String(x.date || x.submitted_at || "")));
+  };
+
+  /* LES PASSAGES DU MÊME APPRENANT, à partir d'un test et non d'un dossier. Le modal de détail
+     ne connaît que le test ouvert : sans ceci, impossible d'y proposer les autres passages.
+     Le rapprochement se fait par dossier quand la colonne existe, sinon par e-mail ET nom -
+     un parent et son enfant partagent la même adresse, les mélanger afficherait le test de
+     l'un sous le nom de l'autre. */
+  const passagesDuMemeApprenant = (t) => {
+    if (!t) return [];
+    const memeNom = (a, b) =>
+      `${a.prenom || ""} ${a.nom || ""}`.trim().toLowerCase() ===
+      `${b.prenom || ""} ${b.nom || ""}`.trim().toLowerCase();
+    const memeEmail = (a, b) =>
+      !!a.email && !!b.email && a.email.toLowerCase() === b.email.toLowerCase();
+    const miens = tests.filter(x =>
+      (t.assignation_id && x.assignation_id === t.assignation_id) ||
+      (memeEmail(x, t) && memeNom(x, t)));
+    const avecLui = miens.some(x => x.id === t.id) ? miens : [...miens, t];
+    return avecLui.slice().sort((x, y) =>
+      String(y.date || y.submitted_at || "").localeCompare(String(x.date || x.submitted_at || "")));
+  };
+
+  const findTestForProspect = (a) => {
+    const parDossier = a.id ? tests.filter(t => t.assignation_id === a.id) : [];
+    if (parDossier.length) return plusRecent(parDossier);
+    // Le repli par e-mail/nom ne rend qu'un élément : on récupère tous ses homologues pour
+    // en extraire le plus récent, plutôt que de garder celui que le repli a croisé d'abord.
+    const parEmail = trouverParEmailEtNom(tests, a, (t) => t.email);
+    if (!parEmail) return null;
+    const memeEmail = tests.filter(t => t.email && parEmail.email && t.email.toLowerCase() === parEmail.email.toLowerCase());
+    return plusRecent(memeEmail) || parEmail;
+  };
 
   /* TOUS ses tests, du plus ancien au plus récent. `findTestForProspect` n'en rend qu'UN - le
      premier trouvé - alors qu'un apprenant en repasse un chaque fois qu'un coach demande son
@@ -10131,6 +10178,18 @@ export default function CommercialDashboard() {
                   <div class="kpi-card"><div class="kpi-val">${commAppPres.filter(p=>p.statut==="present").length}</div><div class="kpi-lbl">Présences</div></div>
                   <div class="kpi-card"><div class="kpi-val">${commAppPres.filter(p=>p.statut==="absent").length}</div><div class="kpi-lbl">Absences</div></div>
                 </div>` : ""}
+                ${/* TOUS SES TESTS, pas seulement le dernier. Ce document part au conseiller
+                      pédagogique et au coach : ils doivent voir d'où vient le niveau, et « A2 →
+                      B1 » explique un changement de classe qu'un niveau isolé laisse sans
+                      justification. Le plus récent d'abord, comme partout ailleurs. */""}
+                ${subTable("📝 Tests de niveau", ["Date","Niveau","Score","Origine"],
+                  tousLesTestsBrutsDe(a).map(t => [
+                    (t.date || t.submitted_at) ? fmtDatePDF(t.date || t.submitted_at) : "-",
+                    (t.niveau || t.level || "-"),
+                    t.score != null ? `${t.score}%` : "-",
+                    t.source === "oral" ? "Évalué en présentiel" : "Passé en ligne",
+                  ]))}
+
                 ${subTable("📅 Détail des séances", ["Date","Statut"], commAppPres.map(p => [p.date_seance ? fmtDatePDF(p.date_seance) : "-", p.statut || "-"]))}
 
                 ${subTable("📈 Progression / jalons", ["Date","Jalon","Détail"], milestones.map(m => [m.date ? fmtDatePDF(m.date) : "-", m.type || "-", `${m.valeur || ""}${m.commentaire ? " - "+m.commentaire : ""}`]))}
@@ -14606,9 +14665,54 @@ export default function CommercialDashboard() {
         const secs = (t.time_taken_seconds||0) % 60;
         const CAT_ICONS = { Grammaire:"📖", Vocabulaire:"💬", Compréhension:"🧠", Listening:"🎧", Speaking:"🎤", Writing:"✍️", Reading:"📚" };
         const CEFR_COLORS = { A1:"#94a3b8", A2:"#f59e0b", B1:"#1e3a8a", B2:"#7c3aed", C1:"#059669", C2:"#dc2626" };
+        // Les autres passages du même apprenant : un transfert en ajoute un, et on doit
+        // pouvoir relire l'ancien sans refermer le modal pour aller le rechercher dans la liste.
+        const passages = passagesDuMemeApprenant(t);
 
         return (
           <Modal title={`🔍 Test de niveau - ${t.prenom} ${t.nom}`} onClose={() => { setShowTestDetailModal(false); setSelectedTest(null); }} size="xxl">
+
+            {/* ── Les passages successifs ──────────────────────────────────────────────
+                Ne s'affiche qu'à partir de deux : un seul passage n'est pas un historique,
+                et une barre de sélection à un seul bouton ferait chercher un choix inexistant. */}
+            {passages.length > 1 && (
+              <div style={{ marginBottom:16, padding:"12px 14px", borderRadius:10, background:"#f8fafc", border:"1px solid #e2e8f0" }}>
+                <div style={{ fontSize:11, fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:".05em", marginBottom:9 }}>
+                  📝 {passages.length} tests passés - cliquez pour voir le détail de chacun
+                </div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  {passages.map((p, i) => {
+                    const actuel = p.id === t.id;
+                    // Le plus récent est en tête du tri : c'est le niveau qui vaut aujourd'hui.
+                    const dernier = i === 0;
+                    const c = CEFR_COLORS[(p.niveau || "").toUpperCase()] || "#475569";
+                    return (
+                      <button
+                        key={p.id || i}
+                        onClick={() => setSelectedTest(p)}
+                        style={{
+                          display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2,
+                          padding:"8px 13px", borderRadius:9, cursor:"pointer", textAlign:"left",
+                          background: actuel ? "#fff" : "transparent",
+                          border: actuel ? `2px solid ${c}` : "1px solid #e2e8f0",
+                          boxShadow: actuel ? "0 1px 4px rgba(0,0,0,.07)" : "none",
+                        }}
+                      >
+                        <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <span style={{ fontSize:13, fontWeight:800, color:c }}>{p.niveau || "-"}</span>
+                          {p.score != null && <span style={{ fontSize:11, color:"#64748b" }}>{p.score}%</span>}
+                          {dernier && <span style={{ fontSize:9, fontWeight:700, color:"#16a34a", background:"#dcfce7", padding:"1px 6px", borderRadius:99 }}>ACTUEL</span>}
+                        </span>
+                        <span style={{ fontSize:10, color:"#94a3b8" }}>
+                          {formatDate(p.date || p.submitted_at)}
+                          {p.source === "oral" ? " · présentiel" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* ── Candidat + Score global ── */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:16 }}>
