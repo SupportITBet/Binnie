@@ -1,0 +1,569 @@
+<title>Migration en ligne → présentiel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,900;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    /* Palette reprise de la charte des documents BET (utils/genererPDF.js) :
+       le navy de l'en-tête, le cyan du bandeau de titre. */
+    --encre:      #0F172A;
+    --encre-doux: #3A4A55;
+    --sourd:      #5A6B71;
+    --bet:        #0891B2;
+    --bet-fonce:  #0A5C72;
+    --rupture:    #AE2128;
+    --rupture-fond: #FBEDEC;
+    --tenu:       #15703F;
+    --tenu-fond:  #EAF4EE;
+    --fond:       #F5F8F9;
+    --carte:      #FFFFFF;
+    --trait:      #DCE6EA;
+    --trait-fort: #B9C9D0;
+    --code-fond:  #EDF3F5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --encre:      #E8EFF2;
+      --encre-doux: #BCCBD2;
+      --sourd:      #8FA3AB;
+      --bet:        #3FB6D4;
+      --bet-fonce:  #7FD2E6;
+      --rupture:    #F08A8F;
+      --rupture-fond: #33191B;
+      --tenu:       #62C88C;
+      --tenu-fond:  #14281C;
+      --fond:       #0C1418;
+      --carte:      #131F25;
+      --trait:      #24343B;
+      --trait-fort: #3A5059;
+      --code-fond:  #1B2A31;
+    }
+  }
+  :root[data-theme="dark"] {
+    --encre:      #E8EFF2;
+    --encre-doux: #BCCBD2;
+    --sourd:      #8FA3AB;
+    --bet:        #3FB6D4;
+    --bet-fonce:  #7FD2E6;
+    --rupture:    #F08A8F;
+    --rupture-fond: #33191B;
+    --tenu:       #62C88C;
+    --tenu-fond:  #14281C;
+    --fond:       #0C1418;
+    --carte:      #131F25;
+    --trait:      #24343B;
+    --trait-fort: #3A5059;
+    --code-fond:  #1B2A31;
+  }
+
+  body {
+    background: var(--fond);
+    color: var(--encre);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .page { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  code, .champ {
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-size: .88em;
+    background: var(--code-fond);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--bet-fonce);
+    word-break: break-word;
+  }
+
+  /* ── En-tête ─────────────────────────────────────────────────────────── */
+  .chapeau {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--bet);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 900;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin-bottom: 14px;
+  }
+  .these {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: clamp(17px, 2.4vw, 21px);
+    font-style: italic;
+    color: var(--encre-doux);
+    max-width: 62ch;
+    text-wrap: balance;
+  }
+  .meta {
+    margin-top: 22px; padding-top: 16px;
+    border-top: 2px solid var(--trait-fort);
+    display: flex; flex-wrap: wrap; gap: 8px 28px;
+    font-size: 12.5px; color: var(--sourd);
+  }
+
+  /* ── Sections ────────────────────────────────────────────────────────── */
+  section { margin-top: 52px; }
+  h2 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600; font-size: clamp(21px, 3vw, 27px);
+    letter-spacing: -.01em; margin-bottom: 6px; text-wrap: balance;
+  }
+  .sous { color: var(--sourd); font-size: 14px; margin-bottom: 22px; max-width: 70ch; }
+  p { max-width: 72ch; margin-bottom: 14px; }
+  h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; }
+
+  /* ── Citation de la demande ──────────────────────────────────────────── */
+  .demande {
+    background: var(--carte);
+    border-left: 4px solid var(--bet);
+    border-radius: 0 10px 10px 0;
+    padding: 20px 24px;
+  }
+  .demande ol { margin: 0 0 0 18px; }
+  .demande li { margin-bottom: 7px; max-width: 70ch; }
+  .demande .nb {
+    margin-top: 14px; padding-top: 13px;
+    border-top: 1px dashed var(--trait-fort);
+    font-size: 14px; color: var(--encre-doux);
+  }
+
+  /* ── Figures ─────────────────────────────────────────────────────────── */
+  figure {
+    margin: 26px 0;
+    background: var(--carte);
+    border: 1px solid var(--trait);
+    border-radius: 12px;
+    padding: 22px 20px 16px;
+    overflow-x: auto;
+  }
+  figure svg { display: block; width: 100%; height: auto; min-width: 560px; color: var(--encre-doux); }
+  figcaption {
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--trait);
+    font-size: 13px; color: var(--sourd); max-width: 78ch;
+  }
+  figcaption strong { color: var(--encre); font-weight: 600; }
+  .svg-titre { font-weight: 700; font-size: 12.5px; fill: var(--encre); }
+  .svg-lbl   { font-size: 11.5px; fill: var(--encre); }
+  .svg-mono  { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; fill: var(--sourd); }
+  .svg-arc   { font-size: 10.5px; fill: var(--sourd); }
+
+  /* ── Ruptures ────────────────────────────────────────────────────────── */
+  .ruptures { display: flex; flex-direction: column; gap: 14px; }
+  .rupture {
+    background: var(--carte);
+    border: 1px solid var(--trait);
+    border-left: 4px solid var(--rupture);
+    border-radius: 0 11px 11px 0;
+    padding: 18px 22px;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 4px 16px;
+    align-items: start;
+  }
+  .num {
+    font-family: "Fraunces", serif; font-weight: 900; font-size: 24px;
+    color: var(--rupture); line-height: 1; grid-row: span 2;
+  }
+  .rupture h3 { margin: 0 0 8px; }
+  .rupture dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; font-size: 14px; }
+  .rupture dt {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--sourd);
+    padding-top: 4px; white-space: nowrap;
+  }
+  .rupture dd { margin: 0; max-width: 66ch; }
+  .preuve { font-size: 12.5px; color: var(--sourd); }
+
+  /* ── Ce qui tient ────────────────────────────────────────────────────── */
+  .tient {
+    background: var(--tenu-fond);
+    border: 1px solid color-mix(in srgb, var(--tenu) 28%, transparent);
+    border-radius: 12px; padding: 20px 24px;
+  }
+  .tient h3 { color: var(--tenu); }
+  .tient ul { margin: 8px 0 0 18px; }
+  .tient li { margin-bottom: 7px; max-width: 68ch; }
+
+  /* ── Décisions ───────────────────────────────────────────────────────── */
+  .decisions { display: flex; flex-direction: column; gap: 16px; }
+  .decision {
+    background: var(--carte);
+    border: 1px solid var(--trait);
+    border-top: 3px solid var(--bet);
+    border-radius: 3px 3px 12px 12px;
+    padding: 20px 24px;
+  }
+  .decision .q { font-family: "Fraunces", serif; font-weight: 600; font-size: 18px; margin-bottom: 10px; text-wrap: balance; }
+  .options { display: grid; gap: 10px; margin-top: 12px; }
+  @media (min-width: 720px) { .options { grid-template-columns: 1fr 1fr; } }
+  .option {
+    border: 1px solid var(--trait); border-radius: 9px;
+    padding: 13px 16px; font-size: 13.5px;
+  }
+  .option b { display: block; margin-bottom: 4px; font-size: 14px; }
+  .avis {
+    margin-top: 14px; font-size: 13.5px; color: var(--encre-doux);
+    padding-left: 13px; border-left: 2px solid var(--bet);
+  }
+  .avis b { color: var(--bet-fonce); }
+
+  .pied {
+    margin-top: 60px; padding-top: 18px;
+    border-top: 1px solid var(--trait);
+    font-size: 12.5px; color: var(--sourd);
+  }
+</style>
+
+<div class="page">
+
+  <div class="chapeau">Analyse technique · plateforme BET</div>
+  <h1>Migration en ligne → présentiel</h1>
+  <p class="these">La demande tient en quatre lignes. Cinq des six briques qu’elle suppose n’existent pas — et la seule qui existe fonctionne par accident heureux.</p>
+  <div class="meta">
+    <span>28 septembre 2026</span>
+    <span>Vérifié contre le code, pas contre la documentation</span>
+    <span>Aucune ligne écrite à ce stade</span>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Ce que demande BET</h2>
+    <div class="demande">
+      <ol>
+        <li>Un apprenant en ligne migre vers le présentiel pour des raisons valables.</li>
+        <li>Un <strong>changement de groupe</strong> est effectué.</li>
+        <li>Si les montants changent, le nouveau montant s’applique <strong>à partir du mois suivant</strong>.</li>
+        <li>Pour cela, sa mensualité est modifiée dans <em>Mes apprenants / Configurer paiement</em>.</li>
+      </ol>
+      <div class="nb">
+        <strong>NB de la demande :</strong> « C’est le même processus pour un apprenant qui décide de migrer d’un groupe en ligne vers un groupe en présentiel. »
+        <br><br>
+        Ce NB <strong>répète mot pour mot le cas principal</strong>. Ce n’est pas une précision, c’est un copier-coller. Il voulait probablement dire <strong>présentiel → en ligne</strong> — un cas différent, où le tarif <em>baisse</em> (donc un trop-perçu à traiter) et où l’apprenant <em>perd</em> son centre. C’est la première question, en fin de page.
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Le transfert déplace la classe. Rien d’autre ne suit.</h2>
+    <p class="sous">« Un changement de groupe est effectué » suppose qu’un seul geste emporte tout le reste. Voici ce que ce geste écrit réellement aujourd’hui.</p>
+
+    <figure>
+      <svg viewBox="0 0 880 372" role="img" aria-label="La route POST api groupes transfert écrit la nouvelle inscription en classe, mais n’écrit ni le canal du dossier, ni le centre, ni la mensualité, et ne prévient pas l’assistante du centre d’arrivée.">
+        <defs>
+          <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="fl-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--tenu)"/>
+          </marker>
+          <marker id="fl-ko" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--rupture)"/>
+          </marker>
+        </defs>
+
+        <!-- Demande -->
+        <rect x="6" y="150" width="132" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text class="svg-lbl" x="72" y="172" text-anchor="middle">Le client demande</text>
+        <text class="svg-lbl" x="72" y="188" text-anchor="middle">la migration</text>
+
+        <!-- rupture 1 : pas de porte -->
+        <line x1="138" y1="177" x2="226" y2="177" stroke="var(--rupture)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fl-ko)"/>
+        <circle cx="182" cy="177" r="11" fill="var(--rupture-fond)" stroke="var(--rupture)" stroke-width="1.5"/>
+        <text x="182" y="181.5" text-anchor="middle" font-size="12" font-weight="700" fill="var(--rupture)">1</text>
+        <text class="svg-arc" x="182" y="204" text-anchor="middle" fill="var(--rupture)">aucune porte</text>
+
+        <!-- Hub -->
+        <rect x="228" y="140" width="176" height="74" rx="9" fill="none" stroke="currentColor" stroke-width="2.5"/>
+        <text class="svg-titre" x="316" y="166" text-anchor="middle">Changement de groupe</text>
+        <text class="svg-mono" x="316" y="184" text-anchor="middle">POST /api/groupes/</text>
+        <text class="svg-mono" x="316" y="198" text-anchor="middle">transfert</text>
+
+        <!-- 5 sorties -->
+        <!-- 1. classe : OK -->
+        <path d="M404,160 C450,160 450,42 496,42" fill="none" stroke="var(--tenu)" stroke-width="2" marker-end="url(#fl-ok)"/>
+        <text class="svg-arc" x="452" y="34" text-anchor="middle" fill="var(--tenu)">écrit</text>
+        <rect x="498" y="18" width="376" height="48" rx="8" fill="var(--tenu-fond)" stroke="var(--tenu)" stroke-width="1.5"/>
+        <text class="svg-lbl" x="514" y="38">La nouvelle inscription en classe</text>
+        <text class="svg-mono" x="514" y="54">groupes_apprenants · niveau, statut, date_ajout</text>
+
+        <!-- 2. canal -->
+        <path d="M404,170 C450,170 450,106 496,106" fill="none" stroke="var(--rupture)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fl-ko)"/>
+        <text class="svg-arc" x="452" y="98" text-anchor="middle" fill="var(--rupture)">jamais écrit</text>
+        <rect x="498" y="84" width="376" height="46" rx="8" fill="none" stroke="var(--rupture)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text class="svg-lbl" x="514" y="103">Le canal du dossier <tspan font-weight="700" fill="var(--rupture)">reste « en ligne »</tspan></text>
+        <text class="svg-mono" x="514" y="119">assignations_parcours.type_cours</text>
+        <circle cx="884" cy="107" r="0" fill="none"/>
+
+        <!-- 3. centre -->
+        <path d="M404,180 C450,180 450,170 496,170" fill="none" stroke="var(--rupture)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fl-ko)"/>
+        <rect x="498" y="148" width="376" height="46" rx="8" fill="none" stroke="var(--rupture)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text class="svg-lbl" x="514" y="167">Le centre d’accueil <tspan font-weight="700" fill="var(--rupture)">reste vide</tspan></text>
+        <text class="svg-mono" x="514" y="183">assignations_parcours.centre_id</text>
+
+        <!-- 4. argent -->
+        <path d="M404,190 C450,190 450,234 496,234" fill="none" stroke="var(--rupture)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fl-ko)"/>
+        <rect x="498" y="212" width="376" height="46" rx="8" fill="none" stroke="var(--rupture)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text class="svg-lbl" x="514" y="231">La mensualité <tspan font-weight="700" fill="var(--rupture)">ne bouge pas</tspan></text>
+        <text class="svg-mono" x="514" y="247">assignations_parcours.plan_paiement</text>
+
+        <!-- 5. assistante -->
+        <path d="M404,200 C450,200 450,298 496,298" fill="none" stroke="var(--rupture)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#fl-ko)"/>
+        <text class="svg-arc" x="452" y="292" text-anchor="middle" fill="var(--rupture)">hors périmètre</text>
+        <rect x="498" y="276" width="376" height="46" rx="8" fill="none" stroke="var(--rupture)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text class="svg-lbl" x="514" y="295">L’assistante du centre d’arrivée</text>
+        <text class="svg-mono" x="514" y="311">n’est prévenue par aucune notification</text>
+
+        <!-- legende -->
+        <line x1="6" y1="346" x2="34" y2="346" stroke="var(--tenu)" stroke-width="2"/>
+        <text class="svg-arc" x="40" y="350">ce que la route écrit</text>
+        <line x1="180" y1="346" x2="208" y2="346" stroke="var(--rupture)" stroke-width="1.6" stroke-dasharray="5 4"/>
+        <text class="svg-arc" x="214" y="350">ce que la demande suppose écrit, et qui ne l’est pas</text>
+      </svg>
+      <figcaption>
+        <strong>Une seule des cinq conséquences est portée par le code.</strong> La route recopie l’inscription dans la classe d’arrivée et referme l’ancienne — c’est tout. Le dossier commercial, le centre, l’argent et l’assistante qui héritera de l’apprenant restent en dehors. Vérifié dans <code>Backend/src/routes/groupes.js:1716-1930</code>.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Les cinq ruptures</h2>
+    <p class="sous">Chacune est indépendante des autres : en corriger quatre laisse la migration cassée.</p>
+
+    <div class="ruptures">
+
+      <div class="rupture">
+        <div class="num">1</div>
+        <div>
+          <h3>La migration n’a pas de porte d’entrée</h3>
+          <dl>
+            <dt>La demande suppose</dt>
+            <dd>Qu’on ouvre la fiche et qu’on change le groupe.</dd>
+            <dt>Le code fait</dt>
+            <dd>Chez l’onboarding, le modal de transfert ne s’ouvre <strong>que depuis un « Dossier à réaffecter »</strong> — donc après une demande du coach <em>et</em> un test de niveau passé. Le bouton libre a été retiré à votre demande. Côté commerciale, la route refuse tout transfert dès qu’un des deux côtés est en ligne.</dd>
+            <dt>Conséquence</dt>
+            <dd>Pour migrer un apprenant, il faudrait aujourd’hui lui faire <strong>repasser un test de niveau</strong> — alors que changer de canal n’est pas un problème de niveau. Personne ne le fera : ça se réglera par téléphone, hors de la plateforme.</dd>
+            <dt>Preuve</dt>
+            <dd class="preuve"><code>OnboardingDashboard.jsx:3653</code> · <code>groupes.js:1752</code></dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="rupture">
+        <div class="num">2</div>
+        <div>
+          <h3>L’écran nommé dans la demande ne peut pas faire ça</h3>
+          <dl>
+            <dt>La demande suppose</dt>
+            <dd>« Sa mensualité est modifiée dans <em>Mes apprenants / Configurer paiement</em>. »</dd>
+            <dt>Le code fait</dt>
+            <dd>Ce bloc est conditionné à <code>!hasPlanMensuel</code> : il n’apparaît <strong>que si aucun plan n’existe encore</strong>. Un apprenant qui paie déjà au mois n’a aucun moyen de voir sa mensualité changée.</dd>
+            <dt>Et si on retirait le verrou</dt>
+            <dd>Ce serait pire. Le bouton <strong>remplace <code>mois_paiements</code> en bloc</strong> : il réécrirait les mois <em>déjà payés</em> au nouveau tarif et effacerait l’historique des versements. L’exact contraire de « à partir du mois suivant ».</dd>
+            <dt>Preuve</dt>
+            <dd class="preuve"><code>CommercialDashboard.jsx:12003</code> (le verrou) · <code>:12052</code> (le remplacement en bloc)</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="rupture">
+        <div class="num">3</div>
+        <div>
+          <h3>Le dossier continuera de dire « en ligne »</h3>
+          <dl>
+            <dt>Le code fait</dt>
+            <dd>La route de transfert n’écrit jamais <code>assignations_parcours.type_cours</code>. Or c’est ce champ — et non la classe — que lisent les fiches de la commerciale, du PA, de l’admin et du superadmin.</dd>
+            <dt>Conséquence</dt>
+            <dd>L’apprenant sera affiché « <strong>En ligne</strong> » partout, indéfiniment, alors qu’il est assis dans un centre. C’est la famille de bugs qu’on a déjà croisée quatre fois cette semaine : un champ écrit d’un côté, lu de l’autre, et jamais synchronisé.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="rupture">
+        <div class="num">4</div>
+        <div>
+          <h3>Le centre ne sera pas posé — et le mal est déjà fait</h3>
+          <dl>
+            <dt>Constat en base</dt>
+            <dd>Sur <strong>10 dossiers présentiel existants, 3 n’ont aucun <code>centre_id</code></strong>. Le problème préexiste à cette demande.</dd>
+            <dt>Conséquence</dt>
+            <dd>Un apprenant migré rejoindrait ce lot : présentiel sans centre, donc absent des écrans filtrés par centre, et sans lieu sur sa fiche. Un présentiel sans centre est une contradiction — il faudrait que le centre d’arrivée soit <strong>obligatoire</strong> au moment de la migration.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="rupture">
+        <div class="num">5</div>
+        <div>
+          <h3>Aucune grille tarifaire par canal n’existe</h3>
+          <dl>
+            <dt>La demande suppose</dt>
+            <dd>Qu’il existe un « montant présentiel » de l’offre, différent du montant en ligne.</dd>
+            <dt>Le code fait</dt>
+            <dd>Le catalogue d’offres porte <strong>un seul prix</strong>, sans notion de canal — <code>utils/catalogueOffres.js</code> ne contient aucune occurrence de <code>en_ligne</code> ni <code>presentiel</code>. La seule grille par lieu qui existe (<code>domicile</code> / <code>cabinet</code>) ne sert qu’au coaching privé.</dd>
+            <dt>Conséquence</dt>
+            <dd>Le nouveau montant sera <strong>tapé à la main</strong>, sans contrôle et sans trace de pourquoi il a changé. C’est précisément ce qu’un contrôle de gestion demandera dans six mois — et personne ne saura répondre.</dd>
+          </dl>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>L’argent : « le mois suivant » marche déjà — à moitié</h2>
+    <p class="sous">C’est la partie la moins évidente de la demande, et la plus facile à croire réglée. Le comportement dépend de la forme du plan, et les deux formes coexistent en base.</p>
+
+    <figure>
+      <svg viewBox="0 0 880 300" role="img" aria-label="Sur un plan ouvert, les mois à venir n’existent pas encore et sont créés par le cron au montant courant : changer la mensualité suffit. Sur un plan borné, tous les mois existent déjà à l’ancien montant : changer la mensualité ne change rien.">
+        <defs>
+          <marker id="f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- ligne de migration -->
+        <line x1="350" y1="18" x2="350" y2="266" stroke="var(--bet)" stroke-width="2" stroke-dasharray="6 4"/>
+        <text class="svg-arc" x="356" y="30" fill="var(--bet)" font-weight="700">migration ici</text>
+
+        <!-- ═ CAS A : plan ouvert ═ -->
+        <text class="svg-titre" x="6" y="62">Plan ouvert — sans date de fin</text>
+        <text class="svg-mono" x="6" y="78">les mois à venir n’existent pas encore</text>
+
+        <g>
+          <rect x="130" y="92" width="66" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text class="svg-lbl" x="163" y="107" text-anchor="middle">janv.</text>
+          <text class="svg-mono" x="163" y="120" text-anchor="middle">80 000</text>
+          <rect x="202" y="92" width="66" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text class="svg-lbl" x="235" y="107" text-anchor="middle">févr.</text>
+          <text class="svg-mono" x="235" y="120" text-anchor="middle">80 000</text>
+          <rect x="274" y="92" width="66" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text class="svg-lbl" x="307" y="107" text-anchor="middle">mars</text>
+          <text class="svg-mono" x="307" y="120" text-anchor="middle">80 000</text>
+
+          <!-- mois a venir : cadre vide -->
+          <rect x="362" y="92" width="286" height="34" rx="5" fill="none" stroke="var(--tenu)" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text class="svg-lbl" x="505" y="107" text-anchor="middle" fill="var(--tenu)">avril, mai, juin… n’existent pas encore</text>
+          <text class="svg-mono" x="505" y="120" text-anchor="middle" fill="var(--tenu)">créés un par un par le cron quotidien</text>
+
+          <path d="M654,109 L716,109" stroke="var(--tenu)" stroke-width="2" marker-end="url(#f2)" color="var(--tenu)"/>
+          <rect x="720" y="88" width="154" height="42" rx="7" fill="var(--tenu-fond)" stroke="var(--tenu)" stroke-width="1.5"/>
+          <text class="svg-lbl" x="797" y="105" text-anchor="middle" font-weight="700" fill="var(--tenu)">Rien à coder</text>
+          <text class="svg-mono" x="797" y="120" text-anchor="middle" fill="var(--tenu)">changer mensualite suffit</text>
+        </g>
+
+        <!-- ═ CAS B : plan borne ═ -->
+        <text class="svg-titre" x="6" y="182">Plan borné — avec date de fin</text>
+        <text class="svg-mono" x="6" y="198">les 12 mois sont déjà écrits à l’ancien montant</text>
+
+        <g>
+          <rect x="130" y="212" width="66" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text class="svg-lbl" x="163" y="227" text-anchor="middle">janv.</text>
+          <text class="svg-mono" x="163" y="240" text-anchor="middle">80 000</text>
+          <rect x="202" y="212" width="66" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text class="svg-lbl" x="235" y="227" text-anchor="middle">févr.</text>
+          <text class="svg-mono" x="235" y="240" text-anchor="middle">80 000</text>
+          <rect x="274" y="212" width="66" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text class="svg-lbl" x="307" y="227" text-anchor="middle">mars</text>
+          <text class="svg-mono" x="307" y="240" text-anchor="middle">80 000</text>
+
+          <rect x="362" y="212" width="66" height="34" rx="5" fill="var(--rupture-fond)" stroke="var(--rupture)" stroke-width="1.5"/>
+          <text class="svg-lbl" x="395" y="227" text-anchor="middle">avril</text>
+          <text class="svg-mono" x="395" y="240" text-anchor="middle" fill="var(--rupture)">80 000</text>
+          <rect x="434" y="212" width="66" height="34" rx="5" fill="var(--rupture-fond)" stroke="var(--rupture)" stroke-width="1.5"/>
+          <text class="svg-lbl" x="467" y="227" text-anchor="middle">mai</text>
+          <text class="svg-mono" x="467" y="240" text-anchor="middle" fill="var(--rupture)">80 000</text>
+          <rect x="506" y="212" width="66" height="34" rx="5" fill="var(--rupture-fond)" stroke="var(--rupture)" stroke-width="1.5"/>
+          <text class="svg-lbl" x="539" y="227" text-anchor="middle">juin</text>
+          <text class="svg-mono" x="539" y="240" text-anchor="middle" fill="var(--rupture)">80 000</text>
+          <text class="svg-mono" x="580" y="233">…</text>
+
+          <path d="M654,229 L716,229" stroke="var(--rupture)" stroke-width="2" marker-end="url(#f2)" color="var(--rupture)"/>
+          <rect x="720" y="208" width="154" height="42" rx="7" fill="var(--rupture-fond)" stroke="var(--rupture)" stroke-width="1.5"/>
+          <text class="svg-lbl" x="797" y="225" text-anchor="middle" font-weight="700" fill="var(--rupture)">Sans effet</text>
+          <text class="svg-mono" x="797" y="240" text-anchor="middle" fill="var(--rupture)">il faut réécrire chaque mois</text>
+        </g>
+
+        <line x1="6" y1="286" x2="874" y2="286" stroke="var(--trait)" stroke-width="1"/>
+      </svg>
+      <figcaption>
+        <strong>Le cron crée chaque mois à venir au montant courant de <code>plan.mensualite</code></strong> (<code>jobsPaiements.js:155</code>). Sur un plan ouvert, changer ce seul champ produit donc exactement la règle demandée — les mois passés gardent leur prix, les suivants prennent le nouveau. Sur un plan borné, tous les mois ont été pré-générés à l’ancien montant (<code>CommercialDashboard.jsx:162-185</code>) : il faut réécrire le <code>montant</code> des mois futurs <em>non payés</em>, un par un. La demande ne voit qu’un seul de ces deux chemins.
+      </figcaption>
+    </figure>
+
+    <div class="tient">
+      <h3>Ce qui tient déjà, et qu’il ne faut pas casser</h3>
+      <ul>
+        <li>La <strong>continuité pédagogique</strong> : séances, présences et fichiers suivent l’apprenant d’une classe à l’autre, et il ne voit pas les cours tenus avant son arrivée. Réglé la semaine dernière.</li>
+        <li>Le <strong>choix de la classe cible</strong> ne filtre pas par canal : les classes présentiel apparaissent bien dans la liste. Rien à faire de ce côté.</li>
+        <li>Le <strong>vocabulaire des canaux</strong> est propre côté dossiers : 77 <code>en_ligne</code>, 10 <code>presentiel</code>, aucun vide. Attention en revanche : les classes ont une <strong>troisième valeur, <code>prive</code></strong> (10 classes) — « migrer vers le présentiel » peut vouloir dire « vers une classe privée », et ce n’est pas la même chose.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Trois décisions qui ne m’appartiennent pas</h2>
+    <p class="sous">Je peux tout construire sans réponse sur les deux premières, mais je construirais alors la moitié de ce qu’il faut. La troisième change ce que paie le client.</p>
+
+    <div class="decisions">
+
+      <div class="decision">
+        <div class="q">1 · Le sens inverse — présentiel → en ligne — fait-il partie du périmètre ?</div>
+        <p>C’est la lecture probable du NB. Ce n’est pas symétrique : le tarif <em>baisse</em>, donc il faut décider du sort du <strong>trop-perçu</strong> quand le mois est déjà réglé, et l’apprenant <strong>perd son centre</strong> (faut-il vider <code>centre_id</code>, ou le garder comme centre d’origine ?).</p>
+        <div class="options">
+          <div class="option"><b>Un seul sens</b>Je ne traite que en ligne → présentiel. Plus rapide, mais le jour où le cas inverse arrive, il se réglera hors plateforme.</div>
+          <div class="option"><b>Les deux sens</b>Une seule action symétrique, avec la question du trop-perçu tranchée d’avance — avoir sur le mois suivant, ou remboursement.</div>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="q">2 · Qui déclenche la migration ?</div>
+        <p>Ce n’est pas une demande du coach et ce n’est pas un problème de niveau : le circuit « Dossiers à réaffecter » ne convient pas. Mais la classe d’arrivée est du présentiel, donc du ressort de l’assistante du centre — alors que la classe de départ est en ligne, donc de l’onboarding.</p>
+        <div class="options">
+          <div class="option"><b>La commerciale</b>C’est elle qui reçoit la demande du client et qui tient l’argent. Il faut alors lever le verrou qui lui interdit de toucher aux classes en ligne — au moins pour cette action précise.</div>
+          <div class="option"><b>L’onboarding</b>La classe de départ est la sienne, la règle actuelle est respectée. Mais elle ne gère pas les paiements, il faut donc que la commerciale reprenne la main juste après.</div>
+        </div>
+        <div class="avis"><b>Mon avis :</b> la commerciale, avec notification à l’onboarding et à l’assistante du centre. Un geste, une personne responsable. Deux intervenants sur une même migration, c’est la garantie qu’un apprenant reste à moitié migré.</div>
+      </div>
+
+      <div class="decision">
+        <div class="q">3 · Le mois en cours se paie à quel tarif ?</div>
+        <p>Votre règle dit : le changement s’applique au mois suivant. Donc quelqu’un qui migre le 3 avril paie <strong>tout avril au tarif en ligne</strong>, alors qu’il passera le mois en présentiel.</p>
+
+        <figure style="margin:14px 0 0; padding:16px 14px 10px;">
+          <svg viewBox="0 0 860 132" role="img" aria-label="Un apprenant migrant le 3 avril paie, selon la règle actuelle, la totalité du mois d’avril au tarif en ligne, l’échéance tombant le 5 avril.">
+            <rect x="60" y="34" width="360" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text class="svg-lbl" x="240" y="54" text-anchor="middle">Avril — facturé 80 000 (tarif en ligne)</text>
+            <rect x="430" y="34" width="360" height="30" rx="5" fill="none" stroke="var(--bet)" stroke-width="1.6"/>
+            <text class="svg-lbl" x="610" y="54" text-anchor="middle" fill="var(--bet)">Mai — facturé au tarif présentiel</text>
+
+            <line x1="86" y1="20" x2="86" y2="76" stroke="var(--bet)" stroke-width="2"/>
+            <text class="svg-mono" x="86" y="15" text-anchor="middle" fill="var(--bet)">3 avr. · migration</text>
+            <line x1="118" y1="26" x2="118" y2="76" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <text class="svg-mono" x="126" y="90">5 avr. · échéance prélevée</text>
+
+            <path d="M118,100 L410,100" stroke="var(--rupture)" stroke-width="1.5" stroke-dasharray="5 4"/>
+            <text class="svg-mono" x="264" y="118" text-anchor="middle" fill="var(--rupture)">27 jours suivis en présentiel, payés au tarif en ligne</text>
+          </svg>
+          <figcaption style="font-size:12.5px">La règle est simple à expliquer au client et facile à tenir. Elle a un coût visible, montré ici : je veux que ce soit un choix, pas un effet de bord découvert par une réclamation.</figcaption>
+        </figure>
+
+        <div class="avis"><b>Mon avis :</b> gardez votre règle. Un prorata au jour est juste sur le papier, mais il rend chaque facture discutable et double la charge de l’assistante. Si l’écart de tarif est important, l’issue propre est de faire prendre effet la migration <em>au 1<sup>er</sup> du mois suivant</em> plutôt que de découper le mois en cours.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="pied">
+    Analyse produite à partir du code de la branche <code>master</code> au 28 septembre 2026 et d’un relevé direct de la base. Les décisions ci-dessus conditionnent le plan de réalisation : aucune ligne n’a été écrite à ce stade.
+  </div>
+
+</div>
