@@ -83,6 +83,19 @@ alter table demandes_transfert
 comment on column demandes_transfert.profil_type is
   'particulier | etudiant | professionnel | enfant — repris du dossier de l''apprenant pour verrouiller le formulaire de test. NULL = inconnu, le choix reste ouvert.';
 
+-- ── Ajout après coup : le canal de la classe ────────────────────────────────────
+-- QUI TRAITE QUOI. Les classes EN LIGNE relèvent de l'équipe onboarding ; le PRÉSENTIEL
+-- relève de l'assistante du centre, qui y est son propre onboarding. Sans cette colonne, la
+-- file était commune : l'onboarding voyait - et pouvait réaffecter - des dossiers présentiel
+-- qui ne lui reviennent pas, et inversement. Deux métiers se marchaient dessus sur les mêmes
+-- apprenants. Copié à la création depuis la classe d'origine : celle-ci peut être clôturée ou
+-- changer de type d'ici le traitement, et le dossier doit rester dans la file où il est né.
+alter table demandes_transfert
+  add column if not exists type_cours text;
+
+comment on column demandes_transfert.type_cours is
+  'en_ligne | presentiel | domicile — canal de la classe d''origine, qui décide de l''équipe qui traite le dossier.';
+
 -- La file de travail se lit par statut et par date : c'est l'accès de tous les écrans.
 create index if not exists idx_demandes_transfert_statut  on demandes_transfert (statut, created_at desc);
 create index if not exists idx_demandes_transfert_ga      on demandes_transfert (ga_id);

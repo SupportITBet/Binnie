@@ -10727,18 +10727,17 @@ export default function CommercialDashboard() {
                         commerciale « les deux » garde ainsi le bouton sur ses dossiers
                         présentiels et le perd sur ceux qui partent chez l'Onboarding.
                         Coaching privé exclu, comme avant. */}
+                    {/* LE CHANGEMENT DE GROUPE NE PART PLUS D'ICI. Déclenché depuis la fiche, il
+                        permettait de déplacer un apprenant sans demande du coach ni test de
+                        niveau - donc sans savoir vers quelle classe l'envoyer. Il passe par
+                        l'onglet « Dossiers à réaffecter », où le niveau rendu par le test
+                        désigne la classe d'arrivée. */}
                     {a.type_coaching !== "prive" && (
-                      a.type_cours === "en_ligne" ? (
-                        <div style={{ padding:"9px 12px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:9, fontSize:11.5, color:"#64748b", textAlign:"center" }}>
-                          L'affectation et le changement de groupe sont gérés par l'Onboarding.
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => ouvrirTransfertDepuisFiche(a)}
-                          style={{ width:"100%", padding:"9px 0", background:"#fff", color:"#15803d", border:"1.5px solid #86efac", borderRadius:9, cursor:"pointer", fontWeight:700, fontSize:12.5 }}>
-                          🔄 Changer de groupe
-                        </button>
-                      )
+                      <div style={{ padding:"9px 12px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:9, fontSize:11.5, color:"#64748b", textAlign:"center", lineHeight:1.6 }}>
+                        {a.type_cours === "en_ligne"
+                          ? "L'affectation et le changement de groupe sont gérés par l'Onboarding."
+                          : "Le changement de groupe se fait depuis l'onglet « Dossiers à réaffecter », après la demande du coach et le test de niveau."}
+                      </div>
                     )}
                     {/* L'ÉVOLUTION, quand il y a plus d'un test : « B1 → C1 » explique le
                         changement de classe que le seul niveau courant passe sous silence. */}
@@ -13219,18 +13218,14 @@ export default function CommercialDashboard() {
                     {/* Même règle que dans la fiche apprenant : une classe en ligne est du
                         ressort de l'Onboarding. Ici le canal se lit sur la CLASSE, seule
                         information fiable quand le dossier BET n'est pas lié. */}
+                    {/* Même règle que dans la fiche apprenant : le changement passe par
+                        « Dossiers à réaffecter », jamais directement depuis une liste. */}
                     {selectedClasse?.capacite_max !== 1 && (
-                      selectedClasse?.type_cours === "en_ligne" ? (
-                        <div style={{ padding:"9px 12px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:9, fontSize:11.5, color:"#64748b", textAlign:"center" }}>
-                          L'affectation et le changement de groupe sont gérés par l'Onboarding.
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => ouvrirTransfert({ ga_id: ga.id, niveau: ga.niveau, groupe_id: ga.groupe_id, nom_apprenant: [ga.prenom_apprenant, ga.nom_apprenant].filter(Boolean).join(" ") })}
-                          style={{ width:"100%", padding:"9px 0", background:"#fff", color:"#15803d", border:"1.5px solid #86efac", borderRadius:9, cursor:"pointer", fontWeight:700, fontSize:12.5 }}>
-                          🔄 Changer de groupe
-                        </button>
-                      )
+                      <div style={{ padding:"9px 12px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:9, fontSize:11.5, color:"#64748b", textAlign:"center", lineHeight:1.6 }}>
+                        {selectedClasse?.type_cours === "en_ligne"
+                          ? "L'affectation et le changement de groupe sont gérés par l'Onboarding."
+                          : "Le changement de groupe se fait depuis l'onglet « Dossiers à réaffecter », après la demande du coach et le test de niveau."}
+                      </div>
                     )}
                   </div>
                 )}

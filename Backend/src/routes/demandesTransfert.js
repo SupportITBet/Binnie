@@ -62,12 +62,17 @@ const estCommerciale = (r) => r === "commercial" || r === "admin_commercial";
  * Elle garde l'onglet en LECTURE : elle suit ses apprenants et doit savoir qu'un transfert est
  * demandé pour l'un d'eux. Voir n'est pas décider.
  */
-async function commercialePeutReaffecter(profil) {
-  if (!profil?.email) return false;
+async function canalDeLAssistante(profil) {
+  if (!profil?.email) return null;
   const { data } = await supabase
     .from("assistantes").select("type_cours").ilike("email", profil.email).maybeSingle();
+  return data?.type_cours || null;   // presentiel | en_ligne | les_deux | null
+}
+
+async function commercialePeutReaffecter(profil) {
+  const canal = await canalDeLAssistante(profil);
   // `type_cours` absent : on refuse. Un droit d'écriture ne s'accorde pas par défaut.
-  return data?.type_cours === "presentiel" || data?.type_cours === "les_deux";
+  return canal === "presentiel" || canal === "les_deux";
 }
 const estPlacement  = (r) => ROLES_PLACEMENT.includes(r);
 const estCoach      = (r) => ROLES_COACH.includes(r);
@@ -98,7 +103,7 @@ router.post("/", authenticateAdmin, async (req, res) => {
     }
 
     const { data: groupe } = await supabase
-      .from("groupes").select("id, nom, niveau, coach_id").eq("id", ga.groupe_id).maybeSingle();
+      .from("groupes").select("id, nom, niveau, coach_id, type_cours").eq("id", ga.groupe_id).maybeSingle();
 
     /* UN COACH NE DEMANDE QUE POUR SES PROPRES APPRENANTS. L'onboarding et le placement
        peuvent en émettre une aussi - ils voient des cas que le coach ne voit pas - mais
@@ -128,6 +133,9 @@ router.post("/", authenticateAdmin, async (req, res) => {
       groupe_id:        ga.groupe_id || null,
       groupe_nom:       groupe?.nom || null,
       niveau_actuel:    ga.niveau || groupe?.niveau || null,
+      // Le canal décide de l'équipe qui traitera : en ligne → onboarding, présentiel →
+      // assistante du centre. Copié ici car la classe peut changer d'ici le traitement.
+      type_cours:       groupe?.type_cours || null,
       coach_id:         groupe?.coach_id || null,
       coach_nom:        null,   // renseigné juste après
       type_demande:     type_demande === "changement_coaching" ? "changement_coaching" : "changement_groupe",
@@ -174,8 +182,8 @@ router.post("/", authenticateAdmin, async (req, res) => {
     // `profil_type` a été ajouté après coup : sur une base où l'ALTER n'a pas encore été
     // joué, on crée la demande sans lui plutôt que de la refuser. Le formulaire de test
     // restera simplement modifiable, ce qui est l'ancien comportement.
-    if (error && /profil_type/.test(error.message || "")) {
-      const { profil_type: _absent, ...sansProfil } = ligne;
+    if (error && /profil_type|type_cours/.test(error.message || "")) {
+      const { profil_type: _absent, type_cours: _absent2, ...sansProfil } = ligne;
       ({ data: demande, error } = await supabase
         .from("demandes_transfert").insert(sansProfil).select().single());
     }
@@ -245,11 +253,42 @@ router.get("/", authenticateAdmin, async (req, res) => {
     let q = supabase.from("demandes_transfert").select("*").order("created_at", { ascending: false });
 
     if (req.query.statut && STATUTS.includes(req.query.statut)) q = q.eq("statut", req.query.statut);
+
+    /* CHACUN SA FILE. Les classes EN LIGNE relèvent de l'équipe onboarding, le PRÉSENTIEL de
+       l'assistante du centre qui y est son propre onboarding. Sans ce partage, les deux
+       voyaient les mêmes dossiers et pouvaient traiter celui de l'autre - deux équipes se
+       marchant dessus sur les mêmes apprenants, sans le savoir.
+       Le placement test, lui, teste TOUT LE MONDE : sa file reste entière.
+       `type_cours` nul = demande créée avant cette colonne : montrée aux deux plutôt que
+       cachée à tous, un dossier invisible étant pire qu'un dossier vu par le mauvais métier. */
+    if (estCommerciale(req.role)) {
+      /* Le canal de l'assistante, pas une règle unique : celle du présentiel traite ses
+         dossiers, celle du en ligne suit les siens sans pouvoir agir. Lui montrer la file de
+         l'autre lui donnerait du travail qui n'est pas le sien - et lui cacherait le sien. */
+      const canal = await canalDeLAssistante(req.profil);
+      if (canal === "presentiel")     q = q.or("type_cours.neq.en_ligne,type_cours.is.null");
+      else if (canal === "en_ligne")  q = q.or("type_cours.eq.en_ligne,type_cours.is.null");
+      // `les_deux` ou canal inconnu : on ne filtre pas, elle suit les deux périmètres.
+    } else if (req.role === "onboarding" || req.role === "admin_onboarding") {
+      q = q.or("type_cours.eq.en_ligne,type_cours.is.null");
+    }
     // Un coach ne voit QUE les demandes de ses propres classes : celles des collègues ne le
     // regardent pas, et son écran n'a pas à lui montrer des dossiers sur lesquels il ne peut rien.
     if (estCoach(req.role)) q = q.eq("coach_id", req.profil.id);
 
-    const { data, error } = await q;
+    let { data, error } = await q;
+
+    /* La colonne `type_cours` est livrée à part : sur une base non migrée, la filtrer ferait
+       échouer la requête et viderait l'onglet ENTIER - pas seulement le cloisonnement. On
+       rejoue alors sans le partage par canal : chacun revoit tous les dossiers, comme avant.
+       Une file trop large se corrige d'un coup d'œil ; une file vide passe pour une panne. */
+    if (error && /type_cours/.test(error.message || "")) {
+      let sansCanal = supabase.from("demandes_transfert").select("*").order("created_at", { ascending: false });
+      if (req.query.statut && STATUTS.includes(req.query.statut)) sansCanal = sansCanal.eq("statut", req.query.statut);
+      if (estCoach(req.role)) sansCanal = sansCanal.eq("coach_id", req.profil.id);
+      ({ data, error } = await sansCanal);
+    }
+
     if (error) {
       if (tableAbsente(error)) return res.json({ demandes: [], non_installe: true });
       throw error;
