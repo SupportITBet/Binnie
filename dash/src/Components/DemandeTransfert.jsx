@@ -162,7 +162,16 @@ export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309",
 /* ══════════════════════════════════════════════════════════════
    LA FILE DE TRAVAIL — onboarding et placement test
 ══════════════════════════════════════════════════════════════ */
-export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mode = "onboarding" }) {
+/**
+ * @param {Function} [onReaffecter]  le tableau de bord hôte prend la main sur la réaffectation.
+ *   L'onboarding a déjà son écran de transfert - filtre de niveau, recherche de classes
+ *   compatibles, création de groupe à la volée, choix des jours. Lui imposer le sélecteur
+ *   minimal de ce composant aurait été un recul : deux écrans pour le même geste, et le moins
+ *   capable des deux au moment où le choix compte. Il reçoit donc la demande et ouvre le sien.
+ *   Sans cette fonction, le composant retombe sur son propre modal - c'est le cas de la
+ *   commerciale, qui n'a pas cet écran.
+ */
+export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mode = "onboarding", onReaffecter, refreshKey = 0 }) {
   const [demandes, setDemandes] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [nonInstalle, setNonInstalle] = useState(false);
@@ -193,7 +202,10 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
     } finally { setChargement(false); }
   }, [authHdrs]);
 
-  useEffect(() => { charger(); }, [charger]);
+  // `refreshKey` : l'hôte a fait le transfert dans SON écran, il incrémente ce compteur
+  // pour que la file se relise. Sans cela le dossier traité resterait affiché jusqu'au
+  // rafraîchissement automatique, et on croirait le transfert manqué.
+  useEffect(() => { charger(); }, [charger, refreshKey]);
 
   const patch = async (demande, corps, succes) => {
     setOccupe(true);
@@ -441,7 +453,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                         title={attendTest
                           ? "Le test de niveau n'a pas encore été passé par l'agent placement test. C'est son résultat qui détermine la nouvelle classe."
                           : `Réaffecter ${nom} — niveau obtenu : ${d.niveau_obtenu}`}
-                        onClick={() => ouvrirReaffectation(d)}
+                        onClick={() => onReaffecter ? onReaffecter(d) : ouvrirReaffectation(d)}
                         style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit",
                           background: attendTest ? "#e2e8f0" : accent, color: attendTest ? "#94a3b8" : "#fff",
                           cursor: attendTest ? "not-allowed" : "pointer" }}>

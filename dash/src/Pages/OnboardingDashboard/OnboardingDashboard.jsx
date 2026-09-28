@@ -1100,6 +1100,30 @@ export default function OnboardingDashboard() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Erreur");
       toast.success(d.message || "Transfert effectué ✓");
+
+      /* LE DOSSIER NE SE REFERME QU'ICI, après que le déplacement a réussi. L'inverse - clore
+         puis transférer - faisait disparaître le dossier de la file même quand le transfert
+         échouait, et l'apprenant restait dans la classe qu'il devait quitter.
+         Non bloquant : le transfert, lui, est fait ; échouer à refermer le dossier ne doit pas
+         faire croire le contraire. Il resterait simplement à traiter. */
+      if (demandeEnCours) {
+        try {
+          const rd = await fetch(`${API_URL}/api/demandes-transfert/${demandeEnCours.id}`, {
+            method: "PATCH",
+            headers: { Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
+            body: JSON.stringify({ statut: "traitee", groupe_cible_id: transfertForm.nouveau_groupe_id }),
+          });
+          if (!rd.ok) {
+            const dd = await rd.json().catch(()=>({}));
+            toast.error(dd.error || "Transfert fait, mais le dossier n'a pas pu être refermé.");
+          }
+        } catch {
+          toast.error("Transfert fait, mais le dossier n'a pas pu être refermé.");
+        }
+        setDemandeEnCours(null);
+        setRefreshReaffecter(n => n + 1);
+      }
+
       setShowTransfert(false);
       setSelectedApprenantGroupe(null);
       const gr = await fetch(`${API_URL}/api/groupes`, { headers:{ Authorization:`Bearer ${token}` } });
@@ -3594,6 +3618,33 @@ export default function OnboardingDashboard() {
   const { notifications: toutesNotifs, nbNonLues: notifNonLues, marquerLue: marquerNotifLue } = useNotifications(profil?.id);
   // Combien de dossiers de transfert attendent MON action - le badge de l'onglet.
   const dossiersAReaffecter = useCompteDemandesTransfert(authHeaders, "onboarding");
+  /* La demande qu'on est en train de réaffecter, et un compteur pour relire la file après
+     coup. Le transfert s'exécute dans NOTRE modal - plus riche que celui du composant
+     partagé - et c'est ensuite seulement que le dossier se referme. */
+  const [demandeEnCours, setDemandeEnCours] = useState(null);
+  const [refreshReaffecter, setRefreshReaffecter] = useState(0);
+
+  /* Ouvrir NOTRE écran de transfert depuis un dossier à réaffecter, pré-réglé sur le niveau
+     rendu par le test : c'est lui qui désigne la classe d'arrivée, et l'ouvrir sur « tous »
+     obligerait à refaire à la main le tri que le test vient de trancher. */
+  const ouvrirTransfertDepuisDemande = (d) => {
+    setDemandeEnCours(d);
+    setSelectedApprenantGroupe({
+      id: d.ga_id,
+      nom_apprenant: d.nom_apprenant,
+      prenom_apprenant: d.prenom_apprenant,
+      email_apprenant: d.email_apprenant,
+      niveau: d.niveau_obtenu || d.niveau_actuel,
+      groupe_id: d.groupe_id,
+      groupes: { nom: d.groupe_nom },
+    });
+    setTransfertForm({ nouveau_groupe_id:"", motif: d.detail || "", initiateur:"coach", jours:[] });
+    setGroupesCibles([]);
+    const niv = d.niveau_obtenu || "tous";
+    setTransfertNiveauCible(niv);
+    searchGroupesCibles(niv);
+    setShowTransfert(true);
+  };
   const [banderoleFermee, setBanderoleFermee] = useState(false);
   const notifsBanderole = toutesNotifs.filter(n => !n.lu).slice(0, 3);
   const { unreadTotal: msgNonLus } = useFirebaseChat();
@@ -7207,7 +7258,8 @@ export default function OnboardingDashboard() {
                 il se retrouvait à l'intérieur du commentaire JSX qui les désactive, et l'onglet
                 s'affichait entièrement vide - pas même son message « aucun dossier ». */}
             {activeTab==="reaffecter" && (
-              <FileDemandesTransfert accent={C} authHdrs={authHeaders} mode="onboarding" />
+              <FileDemandesTransfert accent={C} authHdrs={authHeaders} mode="onboarding"
+                onReaffecter={ouvrirTransfertDepuisDemande} refreshKey={refreshReaffecter} />
             )}
 
             {/* ══ BILANS & RENOUVELLEMENTS ══ (désactivé temporairement)
