@@ -410,9 +410,15 @@ router.post("/", authenticateAdmin, requireCreateur, async (req, res) => {
        même le groupe, sans apprenants, plutôt que de refuser toute création sur une base
        non migrée. Le reste du code lit `conv.avec_apprenants` comme `undefined`, donc
        faux - le comportement retombe exactement sur l'ancien. */
+    /* Le repli crée le groupe SANS les colonnes manquantes. On retient laquelle a été
+       sacrifiée : déposer une photo qui disparaît en silence est pire que pas de photo du
+       tout - l'utilisateur croit l'avoir enregistrée. Le PATCH le signalait déjà
+       (`photo_non_enregistree`), la création non. */
+    let photoNonEnregistree = false;
     if (error && tableAbsente(error) && (ouvertApprenants || photoCreation)) {
       const { avec_apprenants: _ignore, photo_url: _ignore2, ...sansColonne } = aInserer;
       ({ data: conv, error } = await supabase.from("conversations_groupes").insert(sansColonne).select().single());
+      if (!error && photoCreation) photoNonEnregistree = true;
     }
     if (error) {
       if (tableAbsente(error)) {
@@ -439,6 +445,10 @@ router.post("/", authenticateAdmin, requireCreateur, async (req, res) => {
     res.status(201).json({
       conversation: { ...conv, nb_membres: lignes.length, je_suis_admin: true, doc_firestore: docFirestore(conv.id) },
       refuses,
+      ...(photoNonEnregistree ? {
+        photo_non_enregistree: "Le groupe est créé, mais la photo n'a pas pu être enregistrée : "
+          + "la colonne n'existe pas encore sur cette base (Backend/sql/photo_groupes_chat.sql).",
+      } : {}),
     });
   } catch (err) {
     console.error("[conversations POST]", err.message || err);

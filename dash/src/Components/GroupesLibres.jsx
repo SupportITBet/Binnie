@@ -376,6 +376,28 @@ function ModalCreation({ hdr, accent, accentClair, onFermer, onCree }) {
      tard exposerait ce que le personnel s'est déjà dit dans ce fil. */
   const [avecApprenants, setAvecApprenants] = useState(false);
   const [ongletSel, setOngletSel] = useState("personnel");
+  /* La photo, dès la création. Le serveur l'acceptait depuis toujours ; seul le champ
+     manquait, obligeant à créer le groupe puis à rouvrir son panneau pour l'ajouter. */
+  const [photo, setPhoto] = useState(null);
+  const [envoiPhoto, setEnvoiPhoto] = useState(false);
+  const champPhotoCreation = useRef(null);
+
+  const choisirPhoto = async (fichier) => {
+    if (!fichier) return;
+    setEnvoiPhoto(true);
+    try {
+      // `uploadFichier` rend un OBJET ({ url, public_id, size… }), pas une chaîne - même
+      // piège que dans le panneau du groupe, où l'envoyer tel quel faisait refuser l'URL.
+      const envoi = await uploadFichier(fichier, "avatar");
+      if (!envoi?.url) throw new Error("Image non déposée");
+      setPhoto(envoi.url);
+    } catch (e) {
+      toast.error(e.message || "Image impossible à déposer");
+    } finally {
+      setEnvoiPhoto(false);
+      if (champPhotoCreation.current) champPhotoCreation.current.value = "";  // re-choisir le même fichier
+    }
+  };
 
   const basculer = (p) =>
     setSelection(s => s.some(x => x.id === p.id) ? s.filter(x => x.id !== p.id) : [...s, p]);
@@ -385,11 +407,14 @@ function ModalCreation({ hdr, accent, accentClair, onFermer, onCree }) {
     try {
       const r = await fetch(`${API_URL}/api/conversations`, {
         method: "POST", headers: hdr(),
-        body: JSON.stringify({ nom, description, membres: selection.map(p => p.id), avec_apprenants: avecApprenants }),
+        body: JSON.stringify({ nom, description, membres: selection.map(p => p.id), avec_apprenants: avecApprenants, photo_url: photo }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Création impossible");
       toast.success(`Groupe « ${nom.trim()} » créé ✓`);
+      // Le groupe existe, mais la photo a été perdue faute de colonne : le dire, sinon
+      // l'utilisateur croit l'avoir enregistrée et ne comprend pas les initiales.
+      if (d.photo_non_enregistree) toast.error(d.photo_non_enregistree, { duration: 8000 });
       if (d.refuses > 0) toast.info(`${d.refuses} personne(s) écartée(s) : compte inactif ou non autorisé.`);
       onCree();
     } catch (e) { toast.error(e.message); }
@@ -418,8 +443,36 @@ function ModalCreation({ hdr, accent, accentClair, onFermer, onCree }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 22, alignItems: "start" }}>
         <div>
         <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>Nom du groupe</label>
-        <input value={nom} onChange={e => setNom(e.target.value)} maxLength={80}
-          placeholder="Ex. Coachs Angré - rentrée 2026" style={{ ...champ, width: "100%", marginBottom: 12 }} />
+        {/* La photo à côté du nom, pas en dessous : c'est le couple qui identifie le fil
+            dans la liste, et les voir ensemble donne l'aperçu de ce qu'on est en train de
+            créer. L'aperçu retombe sur l'initiale du nom saisi - exactement ce que la liste
+            affichera si aucune image n'est déposée. */}
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button type="button" onClick={() => champPhotoCreation.current?.click()} disabled={envoiPhoto}
+              title={photo ? "Changer la photo du groupe" : "Ajouter une photo de groupe"}
+              style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", padding: 0,
+                border: `1.5px dashed ${photo ? "transparent" : "#cbd5e1"}`, background: photo ? "transparent" : accentClair,
+                cursor: envoiPhoto ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {envoiPhoto ? (
+                <span style={{ fontSize: 11, color: accent }}>…</span>
+              ) : photo ? (
+                <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <span style={{ fontSize: 15, color: accent, fontWeight: 800 }}>{nom.trim()[0]?.toUpperCase() || "📷"}</span>
+              )}
+            </button>
+            {photo && !envoiPhoto && (
+              <button type="button" onClick={() => setPhoto(null)} title="Retirer la photo"
+                style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%",
+                  border: "none", background: "#b91c1c", color: "#fff", fontSize: 10, lineHeight: 1, cursor: "pointer" }}>✕</button>
+            )}
+            <input ref={champPhotoCreation} type="file" accept="image/*" hidden
+              onChange={e => choisirPhoto(e.target.files?.[0])} />
+          </div>
+          <input value={nom} onChange={e => setNom(e.target.value)} maxLength={80}
+            placeholder="Ex. Coachs Angré - rentrée 2026" style={{ ...champ, flex: 1 }} />
+        </div>
 
         <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
           Objet <span style={{ fontWeight: 400, color: "#94a3b8" }}>(facultatif)</span>
