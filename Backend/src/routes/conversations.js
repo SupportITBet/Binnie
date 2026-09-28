@@ -132,6 +132,32 @@ async function prevenirAjoutes(userIds, { conversation, auteur }) {
 }
 
 /**
+ * Prévenir ceux qui SORTENT du groupe - retirés un à un, ou tous d'un coup à sa suppression.
+ *
+ * L'ajout était annoncé, le départ non : on perdait l'accès à un fil de travail et à tout son
+ * historique sans que rien ne le dise. La personne cherchait une conversation disparue en
+ * croyant à une panne, et une consigne laissée dans ce groupe ne lui parvenait plus sans
+ * qu'elle puisse le savoir.
+ *
+ * ON NE RENVOIE PAS `conversation_id` DANS `meta` POUR OUVRIR LE FIL : il n'est plus
+ * accessible. Le message doit se suffire à lui-même.
+ */
+async function prevenirSortis(userIds, { nomGroupe, auteur, supprime = false }) {
+  const ids = (userIds || []).filter(Boolean);
+  if (!ids.length) return;
+  const par = `${auteur?.prenom || ""} ${auteur?.nom || ""}`.trim() || "Un responsable";
+  await notifyUsers(ids, {
+    type:  supprime ? "conversation_suppression" : "conversation_retrait",
+    titre: supprime ? `🗑 Groupe « ${nomGroupe} » supprimé`
+                    : `👋 Retiré du groupe « ${nomGroupe} »`,
+    message: supprime
+      ? `${par} a supprimé le groupe de discussion « ${nomGroupe} ». La conversation et ses messages ne sont plus accessibles.`
+      : `${par} vous a retiré du groupe de discussion « ${nomGroupe} ». Vous n'avez plus accès à cette conversation ni à son historique.`,
+    meta: { groupe_nom: nomGroupe, par: auteur?.id || null },
+  });
+}
+
+/**
  * Charge une conversation et le rôle qu'y tient l'appelant.
  * Renvoie `null` si elle n'existe pas - un non-membre reçoit 404 et non 403 : dire
  * « ce groupe existe mais pas pour vous » est déjà une fuite d'information.
@@ -563,6 +589,13 @@ router.delete("/:id/membres/:userId", authenticateAdmin, async (req, res) => {
     const { error } = await supabase.from("conversation_membres")
       .delete().eq("conversation_id", ctx.conv.id).eq("user_id", req.params.userId);
     if (error) throw error;
+
+    // Après le retrait, jamais avant : prévenir quelqu'un d'une sortie qui échouerait
+    // ensuite serait pire que ne rien dire. Non attendu - la réponse ne doit pas porter
+    // la latence d'une notification, et un échec d'envoi n'annule pas le retrait.
+    prevenirSortis([req.params.userId], { nomGroupe: ctx.conv.nom, auteur: req.profil })
+      .catch(e => console.warn("[conversations membres DELETE] notification:", e.message));
+
     res.json({ ok: true });
   } catch (err) {
     console.error("[conversations membres DELETE]", err.message || err);
@@ -704,6 +737,14 @@ router.delete("/:id", authenticateAdmin, async (req, res) => {
     const { error: errConv } = await supabase
       .from("conversations_groupes").delete().eq("id", ctx.conv.id);
     if (errConv) throw errConv;
+
+    /* Prévenir ceux qui perdent le groupe - sauf celui qui vient de le supprimer, qui n'a
+       rien à apprendre de son propre geste. La liste vient de `ctx.membres`, capturée AVANT
+       la suppression : après, il n'y a plus personne à qui écrire. */
+    prevenirSortis(
+      ctx.membres.map(m => m.user_id).filter(id => id && id !== req.profil.id),
+      { nomGroupe: ctx.conv.nom, auteur: req.profil, supprime: true },
+    ).catch(e => console.warn("[conversations DELETE] notification:", e.message));
 
     logAudit({
       acteur_id:   req.profil.id,
