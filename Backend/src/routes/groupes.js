@@ -16,7 +16,10 @@ import { staffDesClasses, resolveAssistanteUserId } from "../services/staffDesCl
 const router = express.Router();
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_KEY,
+  // Un serveur ne detient pas de session : sans ces options, le client garde en memoire
+  // celle du dernier connecte et lance un rafraichissement de fond. Voir config/supabase.js.
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
 );
 
 // groupes.js est un module dash-only (voir en-tête de fichier / audit plateforme de cette

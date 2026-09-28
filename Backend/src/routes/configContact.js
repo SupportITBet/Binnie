@@ -3,7 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { authenticateAdmin, requirePermission } from "../middlewares/requireAdmin.js";
 
 const router  = express.Router();
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY,
+  // Un serveur ne detient pas de session : sans ces options, le client garde en memoire
+  // celle du dernier connecte et lance un rafraichissement de fond. Voir config/supabase.js.
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+);
 
 // GET public - lu par WhatsAppButton, Footer, Contact
 router.get("/", async (req, res) => {

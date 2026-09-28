@@ -6,7 +6,13 @@ import { authenticateAdmin, requireSuperAdmin } from "../middlewares/requireAdmi
 import { accessGateLimiter } from "../middlewares/rateLimiters.js";
 
 const router = express.Router();
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY,
+  // Un serveur ne detient pas de session : sans ces options, le client garde en memoire
+  // celle du dernier connecte et lance un rafraichissement de fond. Voir config/supabase.js.
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+);
 // Même pattern que SSO_TICKET_SECRET (adminRoutes.js) - réutilise le service key, pas de nouvel env var.
 const GATE_TOKEN_SECRET = process.env.SUPABASE_SERVICE_KEY;
 

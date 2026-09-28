@@ -43,6 +43,11 @@ export default function GardeInactivite() {
       if (deconnexionFaite.current) return;
       deconnexionFaite.current = true;
       effacerSession();
+      /* LE LAISSEZ-PASSER DU PORTAIL AUSSI. `effacerSession` ne touche que le localStorage ;
+         `bet_gate_token` vit dans le sessionStorage et reste valable deux heures. Une session
+         fermée pour inactivité laissait donc derrière elle un laissez-passer actif - soit
+         exactement ce que cette déconnexion cherche à empêcher sur un poste partagé. */
+      try { sessionStorage.removeItem("bet_gate_token"); } catch { /* mode privé */ }
       // `signOut` révoque aussi le refresh_token côté Supabase : sans lui, le jeton
       // resterait renouvelable par quiconque récupérerait le stockage du navigateur.
       try { await supabase.auth.signOut(); } catch { /* le local est déjà vidé */ }

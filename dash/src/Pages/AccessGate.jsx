@@ -23,6 +23,8 @@ const AccessGate = () => {
   const [lockUntil, setLockUntil] = useState(() => Number(localStorage.getItem(LS_LOCK_UNTIL) || 0));
   const [now, setNow] = useState(Date.now());
   const inputRef = useRef(null);
+  // Lu une fois : l'URL ne change pas pendant la vie de cet écran.
+  const motif = new URLSearchParams(window.location.search).get("raison");
 
   const locked = lockUntil > now;
 
@@ -109,6 +111,18 @@ const AccessGate = () => {
         </div>
 
         <p style={styles.title}>Zone privée</p>
+
+        {/* POURQUOI VOUS ÊTES ICI. La déconnexion automatique renvoie sur `/access?raison=
+            inactivite`, et cette page ignorait le paramètre : on se retrouvait devant un
+            écran de code sans la moindre explication, ce qui ressemble davantage à une panne
+            qu'à une mesure de sécurité. */}
+        {motif === "inactivite" && (
+          <div style={{ background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 10,
+            padding: "10px 14px", marginBottom: 14, fontSize: 12.5, color: "#92400e", lineHeight: 1.6, textAlign: "center" }}>
+            ⏳ <strong>Session fermée après une période d'inactivité.</strong><br />
+            Saisissez le code d'accès, puis reconnectez-vous.
+          </div>
+        )}
 
         {locked ? (
           <>
