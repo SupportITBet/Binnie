@@ -320,7 +320,7 @@ router.get("/fichiers", authenticateUser, async (req, res) => {
   const email = await emailAutorise(req.user, req.query.email);
   if (!email) return res.status(403).json({ error: "Accès refusé à ces données" });
   try {
-    const { assignation_id, ga } = await getIds(email);
+    const { assignation_id, parcours } = await getIds(email);
     let fichiers = [];
 
     if (assignation_id) {
@@ -332,18 +332,32 @@ router.get("/fichiers", authenticateUser, async (req, res) => {
       if (data?.length) fichiers = data;
     }
 
-    // Fallback : fichiers du groupe
-    if (fichiers.length === 0 && ga?.groupe_id) {
-      const { data } = await supabase
-        .from("groupes_fichiers")
-        .select("*")
-        .eq("groupe_id", ga.groupe_id)
-        .order("created_at", { ascending: false });
-      /* BORNÉ A SA FENÊTRE DE PRÉSENCE, comme les contenus e-learning. Un apprenant qui
-         a arrêté recevait encore les ressources déposées par son coach après son départ :
-         ses cours se fermaient, ses ressources non. */
-      const visibles = bornerAFenetre(data || [], ga, f => f.created_at);
-      if (visibles.length) fichiers = visibles.map(f => ({ ...f, nom: f.nom || f.titre, url: f.url }));
+    /* Fallback : les fichiers des classes, SUR TOUT LE PARCOURS.
+       Ils étaient lus sur la seule classe du moment : un apprenant transféré perdait d'un coup
+       tous les supports partagés par son coach précédent - des documents qu'il avait pourtant
+       reçus et travaillés. Un support déposé pendant qu'il était là lui appartient.
+
+       BORNÉ A SA FENÊTRE DANS CHAQUE CLASSE, et c'est ce qui rend l'ouverture sûre : sans ce
+       bornage, il verrait aussi ce que son ancien coach a déposé APRÈS son départ - ses cours
+       se ferment, ses ressources doivent se fermer avec. */
+    if (fichiers.length === 0 && parcours?.length) {
+      const visibles = await lireSurLeParcours(
+        parcours, "groupes_fichiers", "*", f => f.created_at,
+      );
+      if (visibles.length) {
+        const classes = await nomsDesClasses(parcours);
+        fichiers = visibles
+          .map(f => ({
+            ...f,
+            nom: f.nom || f.titre,
+            url: f.url,
+            // D'où vient ce document : sans cela, deux supports homonymes de deux classes
+            // différentes seraient indiscernables une fois la liste fusionnée.
+            classe_nom: classes[f._classe.groupe_id]?.nom || null,
+            classe_passee: f._classe.statut === "transfere",
+          }))
+          .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+      }
     }
 
     res.json({ fichiers });
