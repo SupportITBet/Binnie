@@ -182,6 +182,7 @@ rsync -a --delete \
       --exclude='.deploiement-bet' \
       --exclude='0-RACINE-*' \
       --exclude='api-bet/' \
+      --exclude='app-bet/' \
       build/ "$CIBLE/"
 date '+%F %H:%M:%S' > "$CIBLE/.deploiement-bet"
 git -C "$RACINE" log -1 --format='%h %s' >> "$CIBLE/.deploiement-bet"
