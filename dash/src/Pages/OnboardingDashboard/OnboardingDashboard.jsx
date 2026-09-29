@@ -9695,13 +9695,13 @@ export default function OnboardingDashboard() {
         />
       )}
 
-      /* LE MODAL « DOSSIER APPRENANT » A ÉTÉ RETIRÉ ICI.
+      {/* LE MODAL « DOSSIER APPRENANT » A ÉTÉ RETIRÉ ICI.
          Il n'était plus atteignable : `setShowAppModal(true)` n'existait nulle part, donc
          ni le modal ni son export PDF ne s'ouvraient jamais. Son seul contenu utile - la
          fiche en PDF - vit désormais sur la fiche réellement utilisée
          (`selectedApprenantGroupe`, bouton « 📄 Export PDF » de son en-tête), bâtie sur
          utils/fichePdfApprenant.js. Garder une copie morte du document, c'était garantir
-         qu'une correction de charte soit un jour appliquée à celle qu'on ne voit pas. */
+         qu'une correction de charte soit un jour appliquée à celle qu'on ne voit pas. */}
 
       {/* ══ MODAL DOSSIER - 2 étapes : Dossier (lecture seule) → Groupe ══ */}
       {showDossierModal && dossierTarget && (
