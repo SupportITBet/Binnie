@@ -574,21 +574,13 @@ const BlogDetail = () => {
                   dangerouslySetInnerHTML={{ __html: current.content }}
                 />
 
-                {/* Vidéo de l'article */}
-                {current.video_url && (() => {
-                  const embed = buildBlogEmbedUrl(current.video_url);
-                  return (
-                    <div style={{ marginTop:32, marginBottom:8, borderRadius:14, overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,.12)" }}>
-                      {embed ? (
-                        <iframe src={embed} width="100%" height="420" frameBorder="0" allowFullScreen
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          style={{ display:"block" }} title="Vidéo de l'article" />
-                      ) : (
-                        <video src={current.video_url} controls style={{ width:"100%", maxHeight:420, display:"block", background:"#000" }} />
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* LA VIDÉO NE S'AFFICHE PLUS ICI.
+                    Elle apparaissait deux fois sur la page : en bandeau tout en haut, et
+                    une seconde fois au milieu de l'article. Le lecteur du bas n'apportait
+                    rien - le bandeau porte déjà la même vidéo, avec sa barre « Pause /
+                    Rejouer / Son » juste en dessous, donc de quoi l'écouter, la mettre en
+                    pause et la reprendre. Voir deux fois le même contenu à quelques lignes
+                    d'intervalle donne surtout l'impression d'une page mal montée. */}
 
                 {/* Galerie images du contenu */}
                 {current.images?.length > 0 && (

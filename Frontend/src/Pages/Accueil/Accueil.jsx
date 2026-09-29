@@ -73,6 +73,35 @@ if (!document.querySelector("#bet-kf")) {
     @media (max-width:400px){
       .bet-sticky-ctas-secondary { display:none!important; }
     }
+
+    /* ── CARROUSEL D'ACCUEIL SUR PETIT ÉCRAN ──────────────────────────────────
+       Le bandeau a une hauteur fixe (70vh, minimum 480px). Sur un écran étroit il
+       devient donc haut ET étroit, alors que les visuels sont rarement dans ce
+       format : « cover » agrandit l'image jusqu'à remplir la hauteur et rogne tout ce
+       qui dépasse sur les côtés. Un visuel promotionnel y perdait la moitié de son
+       texte — « ...s de cours », « ...er 2027 offert ».
+
+       ON NE PARIE PAS SUR UN FORMAT. Les visuels sont déposés depuis le back-office
+       et changent à chaque campagne : portrait, carré ou panoramique. « contain »
+       affiche l'image ENTIÈRE quel que soit son format, au prix de fines bandes
+       quand elle ne remplit pas exactement le cadre. Un cadre carré est le meilleur
+       compromis pour un format inconnu : il réduit la bande la plus large, qu'on
+       reçoive une affiche verticale ou une bannière horizontale.
+
+       Les bandes prennent le bleu BET plutôt que le noir du navigateur, pour qu'elles
+       se lisent comme une bordure et non comme une image qui n'a pas chargé. */
+    @media (max-width:768px){
+      .bet-hero {
+        height:auto!important; min-height:280px!important; max-height:78vh!important;
+        aspect-ratio:1/1;
+      }
+      .bet-hero-slide {
+        background-size:contain!important; background-repeat:no-repeat!important;
+        background-color:#0a1128!important;
+      }
+      /* Même rognage sur les slides vidéo, même correctif. */
+      .bet-hero-video { object-fit:contain!important; background:#0a1128!important; }
+    }
   `;
   document.head.appendChild(s);
 }
@@ -743,20 +772,21 @@ const HeroSection = () => {
 
   return (
   <>
-    <section ref={heroRef} style={HS.hero}>
+    <section ref={heroRef} className="bet-hero" style={HS.hero}>
       {/* Slides : images toujours dans le DOM (crossfade), vidéos seulement quand actives */}
       {slides.map((slide, i) => {
         if (slide.type === "video") {
           /* Vidéo inactive → div vide noire, pas de lecture en arrière-plan */
-          if (i !== slideIdx) return <div key={slide.id} style={{ ...HS.bg, background:"#000", opacity:0 }} />;
+          if (i !== slideIdx) return <div key={slide.id} className="bet-hero-slide" style={{ ...HS.bg, background:"#000", opacity:0 }} />;
           return (
-            <div key={slide.id} style={{ ...HS.bg, opacity:1, background:"#000" }}>
+            <div key={slide.id} className="bet-hero-slide" style={{ ...HS.bg, opacity:1, background:"#000" }}>
               {detectVideoType(slide.url) === "native"
                 ? <video
                     ref={el => { videoRefs.current[slide.id] = el; }}
                     src={slide.url}
                     autoPlay muted={muted} playsInline
                     onEnded={nextSlide}
+                    className="bet-hero-video"
                     style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", border:"none" }}
                   />
                 : <iframe
@@ -770,7 +800,7 @@ const HeroSection = () => {
             </div>
           );
         }
-        return <div key={slide.id} style={{ ...HS.bg, backgroundImage:`url(${slide.url})`, opacity: i === slideIdx ? 1 : 0 }} />;
+        return <div key={slide.id} className="bet-hero-slide" style={{ ...HS.bg, backgroundImage:`url(${slide.url})`, opacity: i === slideIdx ? 1 : 0 }} />;
       })}
 
 
