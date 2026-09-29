@@ -29,3 +29,13 @@ dist/
 
 # Fichiers systeme macOS
 .DS_Store
+
+# Documentation interne — inventaires, offres, analyses, maquettes.
+# Retirée du dépôt à la demande de BET : ce sont des documents de travail et des
+# livrables commerciaux (chiffrages, relevés) qui n'ont pas à circuler avec le code.
+# Ils restent sur les postes de l'équipe ; le code qui les cite en commentaire renvoie
+# donc à un emplacement local, pas à un fichier du dépôt.
+Backend/docs/
+
+# Note de travail déposée par erreur dans un dossier de code source.
+Le rôle de l'Assistante Onboarding est e
