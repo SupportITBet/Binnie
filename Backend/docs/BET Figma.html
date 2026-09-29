@@ -63,6 +63,22 @@ input{font-family:var(--f);outline:none;border:none}
 .btn-ghost-w{background:rgba(255,255,255,.2);color:#fff;border-radius:var(--r10);font-size:15px;font-weight:600;padding:10px 20px;backdrop-filter:blur(4px)}
 
 /* CARDS */
+/* GRILLE D'INDICATEURS — ces cinq classes etaient utilisees par l'accueil sans jamais
+   avoir ete ecrites : les quatre tuiles s'empilaient en vrac, sans cadre ni alignement. */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 12px}
+.stat-card{background:#fff;border-radius:var(--r12);padding:12px 6px;box-shadow:var(--scard);text-align:center}
+.stat-icon{font-size:19px;line-height:1;margin-bottom:5px}
+.stat-value{font-size:16px;font-weight:800;color:var(--n9);line-height:1.15}
+.stat-label{font-size:9.5px;color:var(--n6);margin-top:2px;font-weight:600;line-height:1.2}
+
+/* ACCES A TOUS LES ESPACES — la barre du bas ne tient que cinq onglets ; les autres
+   ecrans n'auraient aucun point d'entree sans cette grille. */
+.esp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 16px 14px}
+.esp{background:#fff;border-radius:var(--r12);padding:12px 4px;box-shadow:var(--scard);text-align:center;cursor:pointer;transition:transform .1s;position:relative}
+.esp:active{transform:scale(.95)}
+.esp-ico{font-size:22px;line-height:1;margin-bottom:6px}
+.esp-lbl{font-size:10px;font-weight:600;color:var(--n6);line-height:1.25}
+.esp-bdg{position:absolute;top:6px;right:8px;background:var(--p);color:#fff;border-radius:9px;font-size:9px;font-weight:700;min-width:15px;height:15px;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .card{background:#fff;border-radius:var(--r12);padding:14px;box-shadow:var(--scard);margin:0 16px 12px}
 .card-tap{cursor:pointer;transition:transform .1s,box-shadow .1s}
 .card-tap:active{transform:scale(.98);box-shadow:none}
@@ -568,6 +584,29 @@ function home() {
         <div class="stat-value" style="color:#d97706">1</div>
         <div class="stat-label">Certifications</div>
       </div>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Tous mes espaces</div></div>
+    <div class="esp-grid">
+      ${[
+        {i:'📅', l:'Planning',     s:'planning'},
+        {i:'✅', l:'Présences',    s:'presences'},
+        {i:'🎥', l:'Session live', s:'sessionLive', b:'•'},
+        {i:'📁', l:'Ressources',   s:'resources'},
+        {i:'🎯', l:'Objectifs',    s:'objectifs'},
+        {i:'⭐', l:'Points',       s:'gamification'},
+        {i:'🎮', l:'Mini-jeux',    s:'minijeux'},
+        {i:'📖', l:'Dictionnaire', s:'dictionnaire'},
+        {i:'🛍️', l:'Boutique',     s:'shop'},
+        {i:'💳', l:'Paiement',     s:'shopPayment', b:'1'},
+        {i:'☎️', l:'Support',      s:'support'},
+        {i:'✍️', l:'Témoignage',   s:'temoignage'},
+      ].map(e=>`
+        <div class="esp" onclick="go('${e.s}')">
+          ${e.b?`<div class="esp-bdg">${e.b}</div>`:''}
+          <div class="esp-ico">${e.i}</div>
+          <div class="esp-lbl">${e.l}</div>
+        </div>`).join('')}
     </div>
 
     <div class="sec-hd">
