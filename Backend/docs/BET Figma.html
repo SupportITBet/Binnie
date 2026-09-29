@@ -1,0 +1,2325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BET Languages — Prototype Apprenant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--p:#dc2626;--pd:#b91c1c;--pl:#fef2f2;--s:#1e3a8a;--sm:#2563eb;--n9:#111827;--n6:#4b5563;--n3:#d1d5db;--n1:#f3f4f6;--n0:#f8fafc;--w:#ffffff;--ok:#059669;--warn:#d97706;--purp:#7c3aed;--grad:linear-gradient(135deg,#1e3a8a 0%,#dc2626 100%);--f:'Plus Jakarta Sans',-apple-system,sans-serif;--r8:8px;--r10:10px;--r12:12px;--r16:16px;--scard:0 2px 8px rgba(0,0,0,.06);--smodal:0 8px 32px rgba(0,0,0,.16);--sbtn:0 4px 12px rgba(220,38,38,.3)}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--f);background:#0d0d1a;min-height:100vh;display:flex;align-items:center;justify-content:center;gap:24px;padding:20px}
+h1,h2,h3,p,span,div,button,input,label{font-family:var(--f)}
+button{cursor:pointer;border:none;background:none;font-family:var(--f)}
+input{font-family:var(--f);outline:none;border:none}
+
+/* SIDEBAR NAV */
+.sidebar{display:flex;flex-direction:column;gap:6px;padding:8px;background:rgba(255,255,255,.05);border-radius:16px;max-height:844px;overflow-y:auto;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.nav-btn{background:transparent;color:rgba(255,255,255,.6);font-size:11px;padding:8px 12px;border-radius:10px;cursor:pointer;text-align:left;white-space:nowrap;transition:all .15s;border:none;font-family:var(--f);font-weight:500}
+.nav-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+.nav-btn.current{background:var(--p);color:#fff}
+.nav-section{color:rgba(255,255,255,.3);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:8px 12px 4px;pointer-events:none}
+
+/* DEVICE */
+.device{width:390px;height:844px;background:var(--n0);border-radius:50px;overflow:hidden;position:relative;box-shadow:0 0 0 2px rgba(255,255,255,.08),0 40px 100px rgba(0,0,0,.6);flex-shrink:0}
+#app{width:100%;height:100%;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;background:var(--n0);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;display:none}
+.screen.active{display:flex}
+
+/* TRANSITIONS */
+@keyframes fadeSlide{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes splashPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.anim-slide{animation:fadeSlide .25s ease}
+.anim-up{animation:slideUp .3s ease}
+.anim-fade{animation:fadeIn .2s ease}
+
+/* HEADER */
+.hdr-grad{background:var(--grad);padding:54px 20px 20px;color:#fff;flex-shrink:0}
+.hdr-plain{background:#fff;padding:54px 20px 14px;border-bottom:1px solid var(--n3);display:flex;align-items:center;gap:12px;flex-shrink:0}
+.hdr-exam{background:var(--p);padding:54px 20px 14px;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;transition:background .3s}
+
+/* BOTTOM TABS */
+.btabs{position:absolute;bottom:0;left:0;right:0;height:82px;background:#fff;border-top:1px solid var(--n3);display:flex;align-items:flex-start;padding-top:10px;z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;position:relative}
+.tab-ico{font-size:22px;line-height:1}
+.tab-lbl{font-size:10px;font-weight:600;color:var(--n6)}
+.tab.on .tab-lbl{color:var(--p)}
+.tbadge{position:absolute;top:0;right:calc(50% - 24px);background:var(--p);color:#fff;border-radius:10px;font-size:9px;font-weight:700;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+
+/* SCROLL WRAPPER */
+.scrl{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:90px}
+.scrl::-webkit-scrollbar{width:0}
+
+/* BUTTONS */
+.btn-p{width:100%;height:48px;background:var(--p);color:#fff;border-radius:var(--r10);font-size:16px;font-weight:700;box-shadow:var(--sbtn);transition:background .15s,transform .1s;border:none}
+.btn-p:active{background:var(--pd);transform:scale(.98)}
+.btn-s{width:100%;height:48px;background:transparent;color:var(--p);border:2px solid var(--p);border-radius:var(--r10);font-size:16px;font-weight:700;transition:all .15s}
+.btn-sm{height:36px;padding:0 16px;border-radius:8px;font-size:13px;font-weight:700;background:var(--p);color:#fff;border:none;white-space:nowrap}
+.btn-sm-o{height:36px;padding:0 16px;border-radius:8px;font-size:13px;font-weight:700;background:transparent;color:var(--s);border:2px solid var(--s);white-space:nowrap}
+.btn-ghost-w{background:rgba(255,255,255,.2);color:#fff;border-radius:var(--r10);font-size:15px;font-weight:600;padding:10px 20px;backdrop-filter:blur(4px)}
+
+/* CARDS */
+.card{background:#fff;border-radius:var(--r12);padding:14px;box-shadow:var(--scard);margin:0 16px 12px}
+.card-tap{cursor:pointer;transition:transform .1s,box-shadow .1s}
+.card-tap:active{transform:scale(.98);box-shadow:none}
+
+/* BADGES */
+.bdg{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.bdg-blue{background:#dbeafe;color:#1e40af}
+.bdg-red{background:#fee2e2;color:#b91c1c}
+.bdg-green{background:#d1fae5;color:#065f46}
+.bdg-orange{background:#ffedd5;color:#9a3412}
+.bdg-purple{background:#ede9fe;color:#5b21b6}
+.bdg-gray{background:var(--n1);color:var(--n6)}
+.bdg-teal{background:#ccfbf1;color:#0f766e}
+
+/* PROGRESS */
+.pbar{height:6px;background:var(--n1);border-radius:4px;overflow:hidden}
+.pfill{height:100%;border-radius:4px;transition:width .4s ease}
+
+/* AVATARS */
+.av{border-radius:50%;background:var(--grad);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.av32{width:32px;height:32px;font-size:12px}
+.av48{width:48px;height:48px;font-size:16px}
+.av80{width:80px;height:80px;font-size:24px}
+
+/* CHIPS */
+.chips{display:flex;gap:8px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;border:1.5px solid var(--n3);background:#fff;color:var(--n6);transition:all .15s}
+.chip.on{background:var(--p);color:#fff;border-color:var(--p)}
+
+/* INPUTS */
+.inp-wrap{position:relative}
+.inp{width:100%;height:48px;border:1.5px solid var(--n3);border-radius:var(--r10);padding:0 14px 0 44px;font-size:15px;font-family:var(--f);color:var(--n9);background:#fff;transition:border-color .15s}
+.inp:focus{border-color:var(--p)}
+.inp-ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--n6);font-size:18px;pointer-events:none}
+.inp-right{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--n6);font-size:18px;cursor:pointer}
+
+/* SECTION HEADS */
+.sec-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 8px}
+.sec-ttl{font-size:16px;font-weight:700;color:var(--n9)}
+.sec-lnk{font-size:13px;font-weight:700;color:var(--p);cursor:pointer}
+
+/* OVERLAY */
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:flex-end}
+.overlay.on{display:flex}
+.bsheet{background:#fff;border-radius:20px 20px 0 0;width:100%;padding:0 0 40px;animation:slideUp .3s ease;max-height:90%;overflow-y:auto}
+.bsheet-inner{background:#fff;border-radius:20px 20px 0 0;width:100%;padding:0 0 40px;animation:slideUp .3s ease;overflow-y:auto}
+.handle{width:40px;height:4px;background:var(--n3);border-radius:2px;margin:12px auto 16px}
+
+/* MISC */
+.divider{height:1px;background:var(--n1);margin:8px 16px}
+.thick-div{height:8px;background:var(--n0);margin:4px 0}
+.back-w{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none}
+.back-d{width:36px;height:36px;border-radius:50%;color:var(--n9);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;background:none}
+.star-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(255,215,0,.2);color:#fbbf24;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700}
+.info-row{display:flex;align-items:center;gap:10px;padding:12px 16px}
+.info-row-ico{font-size:18px;flex-shrink:0}
+.info-lbl{font-size:13px;color:var(--n6);flex:1}
+.info-val{font-size:14px;font-weight:600;color:var(--n9);text-align:right}
+.chat-bubble{background:var(--n1);border-radius:4px 16px 16px 16px;padding:12px 16px;max-width:80%;margin:0 0 10px 16px}
+.chat-meta{font-size:11px;color:var(--n6);margin:0 0 6px 16px}
+.exam-opt{width:100%;text-align:left;padding:14px 16px;border-radius:var(--r10);border:1.5px solid var(--n3);background:#fff;font-size:15px;color:var(--n9);margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s;font-family:var(--f);font-weight:500}
+.exam-opt.sel{border-color:var(--p);background:var(--pl);color:var(--p);font-weight:600}
+.exam-opt.cor{border-color:var(--ok);background:#d1fae5;color:#065f46}
+.exam-opt.wrg{border-color:var(--p);background:#fee2e2;color:#b91c1c}
+.opt-dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--n3);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.opt-dot.sel{border-color:var(--p);background:var(--p)}
+.opt-dot.sel::after{content:'';width:8px;height:8px;background:#fff;border-radius:50%}
+.pay-opt{display:flex;align-items:center;gap:12px;padding:14px;border-radius:var(--r12);border:2px solid var(--n3);cursor:pointer;margin:0 20px 10px;transition:border-color .15s}
+.pay-opt.sel{border-color:var(--p)}
+.pay-ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
+/* Circular SVG ring */
+.ring-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.ring-text{position:absolute;text-align:center;line-height:1.2}
+/* Scrollable horizontal cards */
+.hscrl{display:flex;gap:12px;padding:4px 16px 8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.hscrl::-webkit-scrollbar{display:none}
+/* Session card */
+.sess-card{background:#fff;border-radius:var(--r12);padding:14px;box-shadow:var(--scard);min-width:200px;cursor:pointer;flex-shrink:0;transition:transform .1s}
+.sess-card:active{transform:scale(.97)}
+/* Warning overlay for exam */
+#warn-overlay{position:absolute;inset:0;background:rgba(185,28,28,.95);z-index:300;display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+#warn-overlay.on{display:flex;animation:fadeIn .2s ease}
+/* Timer color */
+.timer-urgent{color:#fca5a5 !important}
+/* Profile sections */
+.psec{background:#fff;margin:0 0 8px;padding:4px 0}
+.prow{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--n0)}
+.prow:last-child{border-bottom:none}
+/* Resource card */
+.res-card{background:#fff;border-radius:var(--r12);padding:14px;box-shadow:var(--scard);margin:0 16px 10px;display:flex;align-items:flex-start;gap:12px;cursor:pointer;transition:transform .1s}
+.res-card:active{transform:scale(.98)}
+.res-ico{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+/* Alert */
+.alert{border-radius:var(--r12);padding:14px;margin:0 16px 12px;border:1.5px solid}
+.alert-w{background:#fffbeb;border-color:#fcd34d}
+.alert-b{background:#eff6ff;border-color:#bfdbfe}
+/* Step indicator for exam */
+.step-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);display:inline-block;margin:0 3px;transition:background .2s}
+.step-dot.done{background:rgba(255,255,255,.8)}
+.step-dot.active{background:#fff;width:24px;border-radius:4px}
+/* Shop grid */
+.shop-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
+.shop-card{background:#fff;border-radius:var(--r12);padding:14px;box-shadow:var(--scard);display:flex;flex-direction:column;gap:8px}
+.shop-ico{width:100%;height:80px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:4px}
+/* Objective bar */
+.obj-item{margin:0 16px 12px}
+.obj-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.obj-name{font-size:14px;font-weight:600;color:var(--n9)}
+.obj-pct{font-size:14px;font-weight:700}
+.obj-sub{font-size:12px;color:var(--n6);margin-bottom:6px}
+/* Module item */
+.mod-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--n0)}
+.mod-item:last-child{border-bottom:none}
+/* Notification dot */
+.notif-dot{width:10px;height:10px;border-radius:50%;background:var(--p);flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <div class="nav-section">Authentification</div>
+  <button class="nav-btn" onclick="go('splash')">💫 Splash Screen</button>
+  <button class="nav-btn" onclick="go('login')">🔐 Login</button>
+  <div class="nav-section">Accueil</div>
+  <button class="nav-btn" onclick="go('home')">🏠 Dashboard</button>
+  <button class="nav-btn" onclick="go('planning')">📅 Planning semaine</button>
+  <div class="nav-section">Cours</div>
+  <button class="nav-btn" onclick="go('courses')">📚 Liste des cours</button>
+  <button class="nav-btn" onclick="go('courseDetail',{selectedCourse:0,expandedModule:-1})">📖 Détail cours</button>
+  <button class="nav-btn" onclick="go('courseLesson',{currentLesson:{ci:0,mi:0,li:0}})">▶️ Leçon vidéo</button>
+  <button class="nav-btn" onclick="go('courseLesson',{currentLesson:{ci:0,mi:0,li:1}})">📄 Leçon lecture</button>
+  <button class="nav-btn" onclick="go('courseLesson',{currentLesson:{ci:0,mi:0,li:2}})">🎧 Leçon audio</button>
+  <div class="nav-section">Examens ⭐</div>
+  <button class="nav-btn" onclick="go('exams')">📝 Liste examens</button>
+  <button class="nav-btn" onclick="go('examModal')">📋 Modal info</button>
+  <button class="nav-btn" onclick="go('examActive')">⏱️ Examen en cours</button>
+  <button class="nav-btn" onclick="go('examResults')">🏆 Résultats</button>
+  <button class="nav-btn" onclick="go('examQDetail')">💡 Détail question</button>
+  <div class="nav-section">Ressources</div>
+  <button class="nav-btn" onclick="go('resources')">📁 Liste ressources</button>
+  <button class="nav-btn" onclick="go('resourceView')">👁️ Visionneuse PDF</button>
+  <div class="nav-section">Profil & Messages</div>
+  <button class="nav-btn" onclick="go('profile')">👤 Profil</button>
+  <button class="nav-btn" onclick="go('messages')">💬 Messages</button>
+  <button class="nav-btn" onclick="go('msgDetail')">📨 Détail message</button>
+  <button class="nav-btn" onclick="go('requestModal')">📤 Envoyer demande</button>
+  <button class="nav-btn" onclick="go('shop')">🛍️ Boutique</button>
+  <button class="nav-btn" onclick="go('shopPayment')">💳 Paiement</button>
+  <div class="nav-section">Ajouts 29/09</div>
+  <button class="nav-btn" onclick="go('notifications')">🔔 Notifications</button>
+  <button class="nav-btn" onclick="go('presences')">✅ Mes présences</button>
+  <button class="nav-btn" onclick="go('sessionLive')">🎥 Session live</button>
+  <button class="nav-btn" onclick="go('support')">☎️ Contacts &amp; support</button>
+  <button class="nav-btn" onclick="go('objectifs')">🎯 Objectifs &amp; certifications</button>
+  <button class="nav-btn" onclick="go('onboarding')">🚀 Onboarding</button>
+  <button class="nav-btn" onclick="go('gamification')">⭐ Gamification</button>
+  <button class="nav-btn" onclick="go('minijeux')">🎮 Mini-jeux</button>
+  <button class="nav-btn" onclick="go('dictionnaire')">📖 Dictionnaire</button>
+  <button class="nav-btn" onclick="go('temoignage')">✍️ Mon témoignage</button>
+</div>
+
+<div class="device">
+<div id="app"></div>
+</div>
+
+<script>
+/* ============================================================
+   STATE
+============================================================ */
+const S = {
+  screen: 'splash',
+  tab: 'home',
+  examQ: 0,
+  answers: {},
+  examWarning: false,
+  selectedPay: 'orange',
+  filterExam: 'all',
+  filterRes: 'all',
+  timerSec: 1122,
+  timerInterval: null,
+  showExamWarning: false,
+  shopItem: null,
+  msgChip: 'all',
+  // Course module state
+  expandedModule: -1,
+  modQuizActive: false,
+  modQuizQ: 0,
+  modQuizAnswers: {},
+  modQuizDone: false,
+  completedLessons: {},   // key: "courseIdx_modIdx_lessonIdx"
+  completedModules: {},   // key: "courseIdx_modIdx" => score
+  currentLesson: null,    // {courseIdx, modIdx, lessonIdx}
+};
+
+const COURSES = [
+  {id:1, emoji:'💼', title:'Anglais Pro B2', prof:'Prof. Martin', pct:82, color:'#2563eb', bg:'#dbeafe', badge:'B2', status:'En cours', hours:'20h / 24h', next:'12/12', modules:['Réunions d\'affaires','Négociation','Présentations','Correspondance','Rapport écrit'], done:[0,1,2]},
+  {id:2, emoji:'🗣️', title:'Oral & Prononciation', prof:'Prof. Dupont', pct:65, color:'#059669', bg:'#d1fae5', badge:'B1', status:'En cours', hours:'12h / 20h', next:'14/12', modules:['Sons anglais','Intonation','Liaisons','Discours formel','Présentation'], done:[0,1,2]},
+  {id:3, emoji:'✍️', title:'Business Writing', prof:'Prof. James', pct:40, color:'#7c3aed', bg:'#ede9fe', badge:'B2+', status:'En cours', hours:'8h / 20h', next:'11/12', modules:['Emails pro','Rapports','Propositions','Contrats','Synthèses'], done:[0,1]},
+  {id:4, emoji:'🌍', title:'Anglais Général C1', prof:'Prof. Martin', pct:95, color:'#d97706', bg:'#ffedd5', badge:'C1', status:'Terminé', hours:'24h / 24h', next:'—', modules:['Grammaire avancée','Littérature','Actualités','Débat','Argumentation'], done:[0,1,2,3,4]},
+];
+
+const EXAMS = [
+  {id:1, type:'eval', typeLabel:'Évaluation', color:'purple', title:'Évaluation Module 3', course:'Anglais Pro B2', prof:'Prof. Martin', duration:'20 min', qs:10, minScore:60, deadline:'20/12/2025', status:'available'},
+  {id:2, type:'off', typeLabel:'Examen officiel', color:'blue', title:'TOEIC Blanc — Simulation', course:'Anglais Pro B2', prof:'Prof. Martin', duration:'30 min', qs:10, minScore:70, deadline:'25/12/2025', status:'available'},
+  {id:3, type:'off', typeLabel:'Examen officiel', color:'blue', title:'TOEIC B1 — Session Dec.', course:'Oral & Prononciation', prof:'Prof. Dupont', duration:'45 min', qs:20, minScore:70, deadline:'30/12/2025', status:'done', score:80, attempts:2, doneDate:'05/12/2025'},
+  {id:4, type:'eval', typeLabel:'Évaluation', color:'purple', title:'Quiz Writing Module 2', course:'Business Writing', prof:'Prof. James', duration:'15 min', qs:8, minScore:60, deadline:'—', status:'done', score:75, attempts:1, doneDate:'01/12/2025'},
+];
+
+const QUESTIONS = [
+  {q:'Which phrase best opens a professional presentation?', opts:['Let me start quickly', 'Good morning everyone, today I\'ll be presenting…', 'Hi so I want to talk about stuff', 'Hey folks, let\'s dive in!'], correct:1, explain:'Une présentation professionnelle s\'ouvre toujours par une salutation formelle et une annonce claire du sujet. "Good morning everyone…" établit le ton approprié.'},
+  {q:'Select the most appropriate email opening for a business context:', opts:['Yo! What\'s up?', 'Hope this finds you well. I\'m writing to…', 'I need something from you.', 'As per my last email (again)…'], correct:1, explain:'"I hope this email finds you well" est une formule d\'ouverture professionnelle standard qui montre du respect pour le destinataire.'},
+  {q:'Which sentence uses the Present Perfect correctly?', opts:['I have went to the meeting yesterday.', 'She has finished the report this morning.', 'We have meet the client last week.', 'They has sent the proposal.'], correct:1, explain:'Le Present Perfect avec "this morning" est correct si le moment est encore dans la journée. "Have finished" (have + past participle) est la forme correcte.'},
+  {q:'What does "to table an idea" mean in American English?', opts:['To propose an idea for discussion', 'To postpone discussing an idea', 'To write the idea on a table', 'To reject an idea permanently'], correct:1, explain:'En anglais américain, "to table" signifie reporter/mettre en attente. Attention : en anglais britannique, cela signifie soumettre pour discussion.'},
+  {q:'Which is the correct passive voice form?', opts:['The contract was sign yesterday.', 'The contract was signed yesterday.', 'The contract is signed yesterday.', 'The contract were signed yesterday.'], correct:1, explain:'La voix passive se forme avec "to be" (conjugué) + past participle. "Was signed" est la forme correcte pour le passé.'},
+  {q:'Choose the best response to "Could you send me the report by Friday?"', opts:['"Maybe, if I feel like it."', '"Sure, I\'ll have it ready for you by Friday."', '"What report again?"', '"I don\'t know, we\'ll see."'], correct:1, explain:'Dans un contexte professionnel, confirmer clairement et positivement une demande montre du professionnalisme et de la fiabilité.'},
+  {q:'Which phrase is most formal for making a request?', opts:['"Give me that."', '"I was wondering if you could possibly…"', '"Hey, can you do this?"', '"Do it."'], correct:1, explain:'L\'utilisation du conditionnel passé "I was wondering if you could" représente le plus haut niveau de politesse dans les demandes formelles en anglais.'},
+  {q:'Complete: "The meeting has been _____ to next Tuesday."', opts:['postponing', 'postponed', 'postpone', 'to postpone'], correct:1, explain:'"Has been" + past participle forme le Present Perfect Passif. "Postponed" est le past participle de "postpone".'},
+  {q:'What is the difference between "further" and "farther"?', opts:['They are interchangeable', 'Farther = physical distance; Further = metaphorical/additional', 'Further = physical distance; Farther = metaphorical', 'Both mean only physical distance'], correct:1, explain:'"Farther" s\'utilise pour les distances physiques mesurables. "Further" s\'utilise au sens figuré ou pour signifier "de plus, supplémentaire".'},
+  {q:'Which sentence correctly uses a conditional structure?', opts:['If she will study, she passes.', 'If she studies, she will pass.', 'If she studied, she will pass.', 'If she will study, she will pass.'], correct:1, explain:'Le conditionnel de type 1 (real conditional) utilise le présent simple dans la clause "if" et le futur simple dans la clause principale.'},
+];
+
+// Module content per course (index matches COURSES index, then module index)
+const MODULE_CONTENT = {
+  0: [ // Anglais Pro B2
+    { dur:'2h30', lessons:[
+      {type:'video',ico:'🎬',title:'Introduction aux réunions formelles',dur:'12 min',desc:'Vocabulaire et structures clés pour ouvrir, animer et clôturer une réunion professionnelle en anglais.'},
+      {type:'reading',ico:'📄',title:'Fiche — Expressions de réunion',dur:'8 min',desc:'50 expressions indispensables : proposer, débattre, approuver, reporter, clôturer.'},
+      {type:'audio',ico:'🎧',title:'Dialogue : Conduire une réunion',dur:'5 min',desc:'Dialogue authentique entre un manager et son équipe internationale. Répétez et notez les tournures.'},
+    ], quiz:{ title:'Quiz — Réunions d\'affaires', questions:[
+      {q:'How do you formally open a meeting?', opts:['Let\'s just start!','I\'d like to call this meeting to order.','OK guys go!','Alright, begin.'], correct:1},
+      {q:'Which phrase gives the floor to someone?', opts:['Shut up, listen.','I\'d like to hand over to…','Now you talk.','Speak.'], correct:1},
+      {q:'How do you politely disagree in a meeting?', opts:['That\'s wrong.','I see your point, however…','No, you\'re mistaken.','I disagree totally.'], correct:1},
+      {q:'What does "AOB" stand for on an agenda?', opts:['Agenda of Business','Any Other Business','Areas of Budgeting','All Officers Brief'], correct:1},
+    ]}},
+    { dur:'3h', lessons:[
+      {type:'video',ico:'🎬',title:'Stratégies de négociation en anglais',dur:'18 min',desc:'Les 4 étapes d\'une négociation réussie : préparation, proposition, compromis, accord.'},
+      {type:'reading',ico:'📄',title:'Phrases clés de négociation',dur:'10 min',desc:'Guide de 50 formules pour négocier avec assertivité et diplomatie face à des interlocuteurs anglophones.'},
+      {type:'exercise',ico:'✏️',title:'Simulation : négociation commerciale',dur:'15 min',desc:'Scénarios réels d\'appels d\'offres et de contrats. Mettez en pratique les formules apprises.'},
+    ], quiz:{ title:'Quiz — Négociation', questions:[
+      {q:'How do you make a counter-offer politely?', opts:['No, that\'s too low.','We\'d be willing to meet you at…','That price doesn\'t work.','Give us more.'], correct:1},
+      {q:'Which phrase shows openness to compromise?', opts:['Take it or leave it.','Perhaps we could find a middle ground…','Non-negotiable.','Final answer is no.'], correct:1},
+      {q:'What is BATNA in negotiation?', opts:['Best Alternative To a Negotiated Agreement','Business Agreement Terms and Norms','Budget Allocation for Trade','Basic Agreement Norms Act'], correct:0},
+    ]}},
+    { dur:'2h45', lessons:[
+      {type:'video',ico:'🎬',title:'Structure d\'une présentation percutante',dur:'15 min',desc:'Méthode PREP (Point, Reason, Example, Point) pour structurer des présentations B2 impactantes.'},
+      {type:'audio',ico:'🎧',title:'TED Talk Analysis — Écoute active',dur:'20 min',desc:'Analysez les techniques des meilleurs orateurs mondiaux : intonation, rythme, pauses, impact.'},
+      {type:'reading',ico:'📄',title:'Transitions et connecteurs logiques',dur:'8 min',desc:'Guide complet des mots de liaison pour fluidifier et donner de la cohésion à vos présentations.'},
+    ], quiz:{ title:'Quiz — Présentations', questions:[
+      {q:'Which phrase best signals a transition?', opts:['Anyway…','Moving on to our next point…','So yeah, next…','OK next thing.'], correct:1},
+      {q:'How do you handle an unknown question?', opts:['I don\'t know.','Great question — I\'ll look into that and get back to you.','Ask someone else.','Skip it.'], correct:1},
+      {q:'How do you best summarize a presentation?', opts:['That\'s it, done.','To recap, today we covered… In conclusion…','I talked about stuff.','Thanks, bye.'], correct:1},
+    ]}},
+    { dur:'2h', lessons:[
+      {type:'reading',ico:'📄',title:'Formules d\'ouverture et de clôture email',dur:'10 min',desc:'Les formules incontournables pour débuter et terminer vos emails selon le contexte et le destinataire.'},
+      {type:'video',ico:'🎬',title:'Email formel vs. informel — Comparaison',dur:'12 min',desc:'Analysez 6 emails annotés et identifiez les différences de registre et de ton.'},
+      {type:'exercise',ico:'✏️',title:'Rédaction guidée : 3 types d\'emails',dur:'20 min',desc:'Rédigez une demande, une réclamation et une invitation. Correction automatique avec explication.'},
+    ], quiz:{ title:'Quiz — Correspondance', questions:[
+      {q:'Which is the correct formal email opening?', opts:['Hey John,','Dear Mr. Johnson,','Yo,','Hi dude,'], correct:1},
+      {q:'How do you end a formal email?', opts:['Later!','Yours sincerely,','Cya,','TTYL,'], correct:1},
+      {q:'Most appropriate subject line for requesting a meeting?', opts:['Meeting???','Request for Meeting — [Date] — [Topic]','Hey can we meet','URGENT!!!'], correct:1},
+    ]}},
+    { dur:'3h30', lessons:[
+      {type:'reading',ico:'📄',title:'Structure d\'un rapport professionnel',dur:'15 min',desc:'Executive Summary, Introduction, Findings, Recommendations — maîtrisez chaque section avec des exemples.'},
+      {type:'video',ico:'🎬',title:'Rapport de performance — Exemple annoté',dur:'20 min',desc:'Décryptez un rapport d\'entreprise réel avec des commentaires pédagogiques sur chaque partie.'},
+      {type:'exercise',ico:'✏️',title:'Mini-rapport : Analyse de données',dur:'25 min',desc:'Rédigez un rapport de 300 mots à partir de données fournies. Grille de correction incluse.'},
+    ], quiz:{ title:'Quiz — Rapport écrit', questions:[
+      {q:'What goes in the "Executive Summary"?', opts:['Detailed analysis','Brief overview of findings & recommendations','Raw data only','The conclusion only'], correct:1},
+      {q:'Which tense for "Findings" in a report?', opts:['Future simple','Present / Past simple','Present continuous','Future perfect'], correct:1},
+      {q:'Purpose of "Recommendations" section?', opts:['List all problems','Propose actionable next steps based on findings','Summarize raw data','Introduce the topic'], correct:1},
+    ]}},
+  ],
+  1: [ // Oral & Prononciation — abbreviated
+    { dur:'2h', lessons:[{type:'audio',ico:'🎧',title:'Les sons difficiles de l\'anglais',dur:'15 min',desc:'Focus sur /θ/ /ð/ /ɪ/ /iː/ — les sons qui trahissent les francophones.'},{type:'video',ico:'🎬',title:'Exercices articulatoires',dur:'10 min',desc:'Échauffements et exercices pour muscler votre appareil phonatoire.'},{type:'exercise',ico:'✏️',title:'Répétition guidée — Minimal Pairs',dur:'10 min',desc:'ship/sheep, bit/beat, cat/cut — pratiquez les paires minimales essentielles.'}], quiz:{ title:'Quiz — Sons anglais', questions:[{q:'Which word contains the /θ/ sound?', opts:['dis','this','these','though'], correct:3},{q:'What distinguishes /ɪ/ and /iː/?', opts:['Spelling','Length and tension of the vowel','The consonant after','Nothing'], correct:1},{q:'Practice word for the /ð/ sound?', opts:['thin','then','three','threat'], correct:1}]}},
+    { dur:'2h30', lessons:[{type:'video',ico:'🎬',title:'L\'intonation anglaise expliquée',dur:'12 min',desc:'Rising vs. falling intonation selon l\'intention communicative.'},{type:'audio',ico:'🎧',title:'Écoute critique : journaliste BBC',dur:'15 min',desc:'Repérez les schémas intonatifs d\'un journaliste natif en contexte formel.'},{type:'exercise',ico:'✏️',title:'Lecture à voix haute guidée',dur:'20 min',desc:'Textes annotés avec courbes d\'intonation. Enregistrez et comparez.'}], quiz:{ title:'Quiz — Intonation', questions:[{q:'Rising intonation is used for?', opts:['Statements','Yes/No questions','Commands','Exclamations'], correct:1},{q:'What does falling intonation usually signal?', opts:['A question','Completeness / certainty','Doubt','Surprise'], correct:1},{q:'In "Are you COMING?" the stress is on?', opts:['Are','you','COMING','No stress'], correct:2}]}},
+    { dur:'2h', lessons:[{type:'reading',ico:'📄',title:'Les liaisons en anglais courant',dur:'10 min',desc:'Comment les mots se lient naturellement dans le discours : linking, assimilation, elision.'},{type:'audio',ico:'🎧',title:'Dictée de liaisons — Niveau B1',dur:'12 min',desc:'Identifiez les liaisons dans des extraits de discours naturel.'},{type:'exercise',ico:'✏️',title:'Imitation de locuteurs natifs',dur:'15 min',desc:'Répétez après des natifs en reproduisant exactement les liaisons entendues.'}], quiz:{ title:'Quiz — Liaisons', questions:[{q:'In "turn off", the /n/ and /ɒ/ typically:', opts:['Are both pronounced separately','Link to sound like "tur-noff"','Drop the /n/','Are both silent'], correct:1},{q:'What is "elision" in English?', opts:['Adding a sound','Dropping a sound in connected speech','Changing a vowel','Stressing a syllable'], correct:1},{q:'"I want to" in fast speech becomes?', opts:['I want to','I wanna','I wants','I wanting'], correct:1}]}},
+  ],
+  2: [ // Business Writing — abbreviated
+    { dur:'2h30', lessons:[{type:'reading',ico:'📄',title:'Anatomie de l\'email professionnel',dur:'12 min',desc:'Subject, salutation, body, closing, signature — chaque élément décrypté avec exemples.'},{type:'video',ico:'🎬',title:'10 erreurs d\'email à éviter',dur:'14 min',desc:'Les fautes les plus fréquentes des francophones en rédaction email professionnelle.'},{type:'exercise',ico:'✏️',title:'Correction d\'emails fautifs',dur:'20 min',desc:'Identifiez et corrigez les erreurs dans 5 emails types. Correction commentée incluse.'}], quiz:{ title:'Quiz — Emails pro', questions:[{q:'Which subject line is most professional?', opts:['help!!!','Re: Budget Review Q4 — Action Required','hey','stuff'], correct:1},{q:'"Please find attached…" is used to?', opts:['Greet the recipient','Draw attention to an attached file','Ask a question','Close the email'], correct:1},{q:'CC stands for?', opts:['Carbon Copy','Complete Contact','Certified Communication','Creative Copy'], correct:0}]}},
+    { dur:'3h', lessons:[{type:'reading',ico:'📄',title:'Structure IMRAD pour les rapports',dur:'15 min',desc:'Introduction, Methods, Results And Discussion — la norme internationale en rapports formels.'},{type:'video',ico:'🎬',title:'Rapport de gestion annoté',dur:'18 min',desc:'Analyse pas à pas d\'un vrai rapport de gestion d\'entreprise internationale.'},{type:'exercise',ico:'✏️',title:'Rédiger un Executive Summary',dur:'20 min',desc:'Résumez un dossier de 3 pages en un Executive Summary de 150 mots. Modèle fourni.'}], quiz:{ title:'Quiz — Rapports', questions:[{q:'An executive summary should be?', opts:['As long as the report','Concise — 1 page max','Never used','Only for internal reports'], correct:1},{q:'Passive voice in reports is used to?', opts:['Sound casual','Emphasize objectivity and process','Confuse readers','Save words'], correct:1},{q:'What does "appendix" contain in a report?', opts:['The main conclusions','Supporting data/documents referenced in the report','The executive summary','The introduction'], correct:1}]}},
+  ],
+};
+
+const RESOURCES = [
+  {id:1, type:'pdf', ico:'📄', title:'Guide Grammaire B2', course:'Anglais Pro B2', size:'2.4 MB', date:'10 nov. 2025', fav:true, dl:3},
+  {id:2, type:'video', ico:'🎬', title:'Présentation formelle — Modèle vidéo', course:'Anglais Pro B2', size:'145 MB', date:'05 nov. 2025', fav:false, dl:1},
+  {id:3, type:'audio', ico:'🎧', title:'Exercices de prononciation B1', course:'Oral & Prononciation', size:'18 MB', date:'12 nov. 2025', fav:true, dl:5},
+  {id:4, type:'pdf', ico:'📄', title:'Business Email Templates', course:'Business Writing', size:'1.1 MB', date:'08 nov. 2025', fav:false, dl:7},
+  {id:5, type:'exercise', ico:'✏️', title:'Exercices Conditionnels', course:'Anglais Pro B2', size:'0.5 MB', date:'15 nov. 2025', fav:false, dl:2},
+  {id:6, type:'quiz', ico:'❓', title:'Quiz Vocabulaire Pro', course:'Anglais Pro B2', size:'—', date:'18 nov. 2025', fav:true, dl:4},
+];
+
+const MESSAGES = [
+  {id:1, from:'Prof. Martin', initials:'PM', role:'Professeur', time:'09 déc. 2025', preview:'Bonjour Aya, n\'oubliez pas notre session de demain à 14h. Merci de confirmer votre présence.', unread:true, full:'Bonjour Aya,\n\nJe vous rappelle que nous avons une session de cours demain mercredi 10 décembre à 14h00. Le cours portera sur la négociation en anglais professionnel.\n\nMerci de confirmer votre présence en répondant à ce message.\n\nCordialement,\nProf. Martin'},
+  {id:2, from:'BET Admin', initials:'BA', role:'Administration', time:'08 déc. 2025', preview:'Votre planning de décembre est disponible. Retrouvez vos 12 séances programmées…', unread:true, full:'Bonjour Aya,\n\nVotre planning pour le mois de décembre 2025 est désormais disponible dans l\'application. Vous avez 12 séances programmées ce mois-ci.\n\nN\'hésitez pas à nous contacter en cas de question.\n\nL\'équipe BET Languages'},
+  {id:3, from:'Gestionnaire RH', initials:'GH', role:'Gestionnaire', time:'06 déc. 2025', preview:'Votre contrat de formation a été renouvelé. Documents disponibles dans votre espace…', unread:true, full:'Bonjour Aya,\n\nNous avons le plaisir de vous informer que votre contrat de formation a été renouvelé pour le trimestre T1 2026.\n\nVous pouvez télécharger vos documents contractuels depuis la section Profil > Certifications.\n\nCordialement,\nL\'équipe RH BET'},
+  {id:4, from:'Prof. Dupont', initials:'PD', role:'Professeur', time:'04 déc. 2025', preview:'Résultats de l\'évaluation module 2 : très bonne performance ! Score 88%…', unread:false, full:'Bonjour Aya,\n\nFélicitations ! Vous avez obtenu 88% à l\'évaluation du module 2 sur la prononciation. C\'est un excellent résultat qui montre vos progrès significatifs.\n\nContinuez ainsi !\n\nProf. Dupont'},
+];
+
+/* ============================================================
+   NAVIGATION
+============================================================ */
+function go(scr, extra={}) {
+  clearTimer();
+  Object.assign(S, extra);
+  S.screen = scr;
+  render();
+  // Update sidebar
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    b.classList.toggle('current', b.getAttribute('onclick') === `go('${scr}')`);
+  });
+  if(scr === 'examActive') startTimer();
+}
+
+function goTab(tab) {
+  S.tab = tab;
+  go(tab);
+}
+
+function clearTimer() {
+  if(S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; }
+}
+
+function startTimer() {
+  S.timerSec = 1122;
+  S.timerInterval = setInterval(() => {
+    S.timerSec = Math.max(0, S.timerSec - 1);
+    const el = document.getElementById('timer-display');
+    if(el) {
+      const m = Math.floor(S.timerSec/60), s = S.timerSec%60;
+      el.textContent = `⏱ ${m}:${s.toString().padStart(2,'0')}`;
+      if(S.timerSec < 60) el.classList.add('timer-urgent');
+    }
+    if(S.timerSec === 0) { clearTimer(); go('examResults'); }
+  }, 1000);
+}
+
+/* ============================================================
+   RENDER
+============================================================ */
+function render() {
+  const app = document.getElementById('app');
+  const screens = {
+    splash, login, home, planning, courses, courseDetail, courseLesson,
+    exams, examModal, examActive, examResults, examQDetail,
+    resources, resourceView, profile, messages, msgDetail,
+    requestModal, shop, shopPayment,
+    // Ajoutes le 29/09/2026 - la maquette d'avril couvrait la moitie du perimetre
+    notifications, presences, sessionLive, support, objectifs,
+    onboarding, gamification, minijeux, dictionnaire, temoignage
+  };
+  const fn = screens[S.screen] || screens.home;
+  app.innerHTML = `<div class="screen active anim-slide">${fn()}</div>`;
+  // Re-attach exam warning overlay if needed
+  if(S.screen === 'examActive' && S.showExamWarning) {
+    showWarn();
+  }
+}
+
+/* ============================================================
+   HELPER COMPONENTS
+============================================================ */
+function bottomTabs(active) {
+  const tabs = [
+    {id:'home', ico:'🏠', lbl:'Accueil', badge:0},
+    {id:'courses', ico:'📚', lbl:'Cours', badge:0},
+    {id:'exams', ico:'📝', lbl:'Examens', badge:2},
+    {id:'notifications', ico:'🔔', lbl:'Alertes', badge:3},
+    {id:'profile', ico:'👤', lbl:'Profil', badge:3},
+  ];
+  return `<div class="btabs">${tabs.map(t=>`
+    <div class="tab ${t.id===active?'on':''}" onclick="goTab('${t.id}')">
+      ${t.badge?`<div class="tbadge">${t.badge}</div>`:''}
+      <div class="tab-ico">${t.ico}</div>
+      <div class="tab-lbl">${t.lbl}</div>
+    </div>`).join('')}</div>`;
+}
+
+function ring(pct, size, color, label, sub='') {
+  const r = (size-12)/2, cx = size/2, cy = size/2;
+  const circ = 2*Math.PI*r, fill = circ*(pct/100), empty = circ-fill;
+  return `<div class="ring-wrap" style="width:${size}px;height:${size}px">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="transform:rotate(-90deg)">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f3f4f6" stroke-width="8"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+        stroke-dasharray="${fill} ${empty}" stroke-linecap="round"/>
+    </svg>
+    <div class="ring-text">
+      <div style="font-size:${size>70?18:13}px;font-weight:800;color:#111827">${pct}%</div>
+      ${label?`<div style="font-size:10px;color:#6b7280">${label}</div>`:''}
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: SPLASH
+============================================================ */
+function splash() {
+  setTimeout(() => go('login'), 2800);
+  return `
+  <div style="background:var(--grad);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px">
+    <div style="width:100px;height:100px;background:rgba(255,255,255,.15);border-radius:28px;border:2px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;animation:splashPulse 2s ease-in-out infinite">
+      <span style="font-size:36px;font-weight:900;color:#fff;letter-spacing:-1px">BET</span>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:.5px">BET Languages</div>
+      <div style="font-size:15px;color:rgba(255,255,255,.75);margin-top:6px;font-style:italic">Votre formation. Votre avenir.</div>
+    </div>
+    <div style="position:absolute;bottom:80px;display:flex;gap:8px">
+      <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.6);animation:fadeIn .5s .2s both"></div>
+      <div style="width:24px;height:8px;border-radius:4px;background:#fff;animation:fadeIn .5s .4s both"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.6);animation:fadeIn .5s .6s both"></div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: LOGIN
+============================================================ */
+function login() {
+  return `
+  <div style="background:var(--grad);padding:60px 20px 36px;text-align:center;flex-shrink:0">
+    <div style="width:64px;height:64px;background:rgba(255,255,255,.2);border-radius:18px;border:2px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+      <span style="font-size:22px;font-weight:900;color:#fff">BET</span>
+    </div>
+    <div style="font-size:22px;font-weight:800;color:#fff">Espace Apprenant</div>
+    <div style="font-size:14px;color:rgba(255,255,255,.75);margin-top:4px">Connectez-vous à votre compte</div>
+  </div>
+  <div style="flex:1;background:#fff;border-radius:28px 28px 0 0;margin-top:-20px;padding:28px 20px 40px">
+    <div style="font-size:18px;font-weight:700;color:var(--n9);margin-bottom:24px">Connexion</div>
+    <div class="inp-wrap" style="margin-bottom:14px">
+      <span class="inp-ico">✉️</span>
+      <input class="inp" type="email" placeholder="Votre adresse email" value="aya.kouame@betlanguages.ci">
+    </div>
+    <div class="inp-wrap" style="margin-bottom:8px">
+      <span class="inp-ico">🔒</span>
+      <input class="inp" type="password" placeholder="Mot de passe" value="••••••••">
+      <span class="inp-right">👁️</span>
+    </div>
+    <div style="text-align:right;margin-bottom:24px">
+      <span style="font-size:13px;font-weight:600;color:var(--p);cursor:pointer">Mot de passe oublié ?</span>
+    </div>
+    <button class="btn-p" onclick="go('home')">Se connecter</button>
+    <div style="display:flex;align-items:center;gap:12px;margin:20px 0">
+      <div style="flex:1;height:1px;background:var(--n3)"></div>
+      <span style="font-size:13px;color:var(--n6)">ou</span>
+      <div style="flex:1;height:1px;background:var(--n3)"></div>
+    </div>
+    <button class="btn-s">Contacter l'administration</button>
+    <div style="text-align:center;margin-top:32px">
+      <div style="font-size:11px;color:var(--n6)">BET Languages — v2.4.1</div>
+      <div style="font-size:11px;color:var(--n3);margin-top:2px">© 2025 BET Languages Côte d'Ivoire</div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: HOME (DASHBOARD)
+============================================================ */
+function home() {
+  return `
+  <div class="hdr-grad">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="av av48">KA</div>
+        <div>
+          <div style="font-size:13px;color:rgba(255,255,255,.75)">Bonjour 👋</div>
+          <div style="font-size:18px;font-weight:800;color:#fff">Kouamé Aya</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <span class="bdg bdg-blue" style="background:rgba(255,255,255,.2);color:#fff;font-size:12px">B2</span>
+        <div class="star-badge" style="margin-top:4px">⭐ Élève du mois</div>
+      </div>
+    </div>
+    <div style="background:rgba(255,255,255,.15);border-radius:12px;padding:12px 14px;backdrop-filter:blur(8px)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:13px;color:rgba(255,255,255,.85);font-weight:600">Progression globale</span>
+        <span style="font-size:14px;font-weight:800;color:#fff">78% · 2 340 XP</span>
+      </div>
+      <div class="pbar"><div class="pfill" style="width:78%;background:rgba(255,255,255,.9)"></div></div>
+    </div>
+  </div>
+  <div class="scrl">
+    <div class="stats-grid" style="margin-top:14px">
+      <div class="stat-card">
+        <div class="stat-icon">📈</div>
+        <div class="stat-value" style="color:var(--p)">78%</div>
+        <div class="stat-label">Progression</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value" style="color:var(--ok)">94%</div>
+        <div class="stat-label">Assiduité</div>
+      </div>
+      <div class="stat-card" onclick="go('planning')" style="cursor:pointer">
+        <div class="stat-icon">📅</div>
+        <div class="stat-value" style="font-size:16px;font-weight:700">20 jan.</div>
+        <div class="stat-label">Prochain examen</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" style="color:#d97706">1</div>
+        <div class="stat-label">Certifications</div>
+      </div>
+    </div>
+
+    <div class="sec-hd">
+      <div class="sec-ttl">📅 Prochaines séances</div>
+      <div class="sec-lnk" onclick="go('planning')">Voir planning</div>
+    </div>
+    <div class="hscrl">
+      ${[
+        {title:'Anglais Pro B2', date:'Mer 10 déc.', time:'14:00–16:00', mode:'Présentiel', prof:'Prof. Martin', color:'#dbeafe'},
+        {title:'Oral & Prononciation', date:'Jeu 11 déc.', time:'10:00–12:00', mode:'Online', prof:'Prof. Dupont', color:'#d1fae5'},
+        {title:'Business Writing', date:'Ven 12 déc.', time:'09:00–11:00', mode:'Online', prof:'Prof. James', color:'#ede9fe'},
+      ].map(s=>`
+      <div class="sess-card" onclick="go('planning')" style="background:${s.color}">
+        <div style="font-size:13px;font-weight:700;color:var(--n9);margin-bottom:4px">${s.title}</div>
+        <div style="font-size:12px;color:var(--n6);margin-bottom:8px">🕐 ${s.date} · ${s.time}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="bdg ${s.mode==='Online'?'bdg-green':'bdg-blue'}" style="font-size:10px">${s.mode}</span>
+          <span style="font-size:11px;color:var(--n6)">${s.prof}</span>
+        </div>
+      </div>`).join('')}
+    </div>
+
+    <div class="alert alert-w" onclick="go('profile')">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <span style="font-size:20px">⚠️</span>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700;color:#92400e">Paiement en attente</div>
+          <div style="font-size:13px;color:#78350f;margin:2px 0">Renouvellement T4 — 250 000 FCFA</div>
+          <div style="font-size:12px;color:#a16207">Échéance : 20/12/2025</div>
+        </div>
+        <span style="font-size:13px;font-weight:700;color:var(--warn)">Voir →</span>
+      </div>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">🎯 Mes objectifs</div></div>
+    ${[
+      {name:'TOEIC 750+', sub:'Objectif langue · Échéance : mars 2026', pct:68, color:'var(--p)'},
+      {name:'Module 3 complété', sub:'Cours Anglais Pro · Échéance : 20 déc.', pct:80, color:'var(--s)'},
+      {name:'10 séances en janvier', sub:'Assiduité · En cours', pct:30, color:'var(--ok)'},
+    ].map(o=>`
+    <div class="obj-item">
+      <div class="obj-top">
+        <div class="obj-name">${o.name}</div>
+        <div class="obj-pct" style="color:${o.color}">${o.pct}%</div>
+      </div>
+      <div class="obj-sub">${o.sub}</div>
+      <div class="pbar"><div class="pfill" style="width:${o.pct}%;background:${o.color}"></div></div>
+    </div>`).join('')}
+
+    <div style="height:16px"></div>
+  </div>
+  ${bottomTabs('home')}`;
+}
+
+/* ============================================================
+   SCREEN: PLANNING
+============================================================ */
+function planning() {
+  const sessions = [
+    {date:'Lundi 9 déc.', items:[{time:'14:00',dur:'2h',title:'Anglais Pro B2',prof:'Prof. Martin',mode:'Présentiel',room:'Salle A2',status:'confirmed',color:'#2563eb'}]},
+    {date:'Mercredi 11 déc.', items:[{time:'10:00',dur:'2h',title:'Oral & Prononciation',prof:'Prof. Dupont',mode:'Online',room:'Zoom #4821',status:'confirmed',color:'#059669'},{time:'14:00',dur:'1h30',title:'Business Writing',prof:'Prof. James',mode:'Online',room:'Teams',status:'pending',color:'#7c3aed'}]},
+    {date:'Vendredi 13 déc.', items:[{time:'09:00',dur:'2h',title:'Anglais Pro B2',prof:'Prof. Martin',mode:'Présentiel',room:'Salle A2',status:'confirmed',color:'#2563eb'}]},
+    {date:'Samedi 14 déc.', items:[{time:'10:00',dur:'2h',title:'Oral & Prononciation',prof:'Prof. Dupont',mode:'Présentiel',room:'Salle B1',status:'pending',color:'#059669'}]},
+  ];
+  return `
+  <div class="hdr-plain" style="justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="back-d" onclick="go('home')">←</button>
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--n9)">Planning</div>
+        <div style="font-size:12px;color:var(--n6)">Semaine du 9 déc. 2025</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button style="width:32px;height:32px;border-radius:50%;background:var(--n1);border:none;font-size:16px;cursor:pointer">‹</button>
+      <button style="width:32px;height:32px;border-radius:50%;background:var(--n1);border:none;font-size:16px;cursor:pointer">›</button>
+    </div>
+  </div>
+  <!-- Week strip -->
+  <div style="background:#fff;border-bottom:1px solid var(--n3);padding:10px 16px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+    ${['L\n9','M\n10','M\n11','J\n12','V\n13','S\n14','D\n15'].map((d,i)=>{
+      const [day,num]=d.split('\n');
+      const active=i===0||i===2||i===4||i===5;
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:40px;padding:6px 4px;border-radius:10px;background:${i===0?'var(--p)':'transparent'}">
+        <span style="font-size:11px;font-weight:600;color:${i===0?'rgba(255,255,255,.8)':'var(--n6)'}">${day}</span>
+        <span style="font-size:15px;font-weight:800;color:${i===0?'#fff':active?'var(--n9)':'var(--n3)'}">${num}</span>
+        ${active&&i!==0?`<div style="width:5px;height:5px;border-radius:50%;background:var(--p)"></div>`:''}
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="scrl">
+    ${sessions.map(s=>`
+    <div style="margin-top:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--n6);padding:0 16px 8px;text-transform:uppercase;letter-spacing:.05em">${s.date}</div>
+      ${s.items.map(it=>`
+      <div class="card" style="padding:0;overflow:hidden;display:flex">
+        <div style="width:4px;background:${it.color};flex-shrink:0"></div>
+        <div style="flex:1;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+            <div style="font-size:15px;font-weight:700;color:var(--n9)">${it.title}</div>
+            <span class="bdg ${it.status==='confirmed'?'bdg-green':'bdg-orange'}" style="font-size:10px">${it.status==='confirmed'?'✅ Confirmé':'⏳ À confirmer'}</span>
+          </div>
+          <div style="font-size:13px;color:var(--n6);margin-bottom:4px">⏰ ${it.time} · ${it.dur} · ${it.prof}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="bdg ${it.mode==='Online'?'bdg-green':'bdg-blue'}" style="font-size:10px">${it.mode}</span>
+            <span style="font-size:12px;color:var(--n6)">📍 ${it.room}</span>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>`).join('')}
+    <div style="height:20px"></div>
+  </div>
+  ${bottomTabs('home')}`;
+}
+
+/* ============================================================
+   SCREEN: COURSES
+============================================================ */
+function courses() {
+  return `
+  <div class="hdr-plain">
+    <div style="flex:1">
+      <div style="font-size:18px;font-weight:800;color:var(--n9)">Mes Cours</div>
+      <div style="font-size:13px;color:var(--n6)">${COURSES.length} cours · Session T4 2025</div>
+    </div>
+    <div style="background:var(--n1);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:700;color:var(--n6)">Filtre ▼</div>
+  </div>
+  <div class="scrl">
+    <div style="height:10px"></div>
+    ${COURSES.map((c,i)=>`
+    <div class="card card-tap" onclick="go('courseDetail',{selectedCourse:${i}})">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:46px;height:46px;border-radius:12px;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${c.emoji}</div>
+        <div style="flex:1">
+          <div style="font-size:15px;font-weight:700;color:var(--n9)">${c.title}</div>
+          <div style="font-size:13px;color:var(--n6)">${c.prof}</div>
+        </div>
+        <div style="font-size:20px;color:var(--n3)">›</div>
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--n6)">Progression</span>
+          <span style="font-size:13px;font-weight:700;color:${c.color}">${c.pct}%</span>
+        </div>
+        <div class="pbar"><div class="pfill" style="width:${c.pct}%;background:${c.color}"></div></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;gap:6px">
+          <span class="bdg" style="background:${c.bg};color:${c.color};font-size:10px">● ${c.status}</span>
+          <span class="bdg bdg-purple" style="font-size:10px">${c.badge}</span>
+        </div>
+        <span style="font-size:12px;color:var(--n6)">${c.hours} · Next : ${c.next}</span>
+      </div>
+    </div>`).join('')}
+    <div style="height:16px"></div>
+  </div>
+  ${bottomTabs('courses')}`;
+}
+
+/* ============================================================
+   COURSE MODULE HELPERS
+============================================================ */
+function toggleModule(idx) {
+  if(S.expandedModule === idx) {
+    S.expandedModule = -1;
+  } else {
+    S.expandedModule = idx;
+    S.modQuizActive = false;
+    S.modQuizQ = 0;
+    S.modQuizAnswers = {};
+    S.modQuizDone = false;
+  }
+  render();
+}
+
+function startModQuiz() {
+  S.modQuizActive = true;
+  S.modQuizQ = 0;
+  S.modQuizAnswers = {};
+  S.modQuizDone = false;
+  render();
+}
+
+function selectModAnswer(qi, ai) {
+  S.modQuizAnswers[qi] = ai;
+  render();
+}
+
+function nextModQ(total) {
+  if(S.modQuizQ < total - 1) {
+    S.modQuizQ++;
+    render();
+  }
+}
+
+function submitModQuiz(ci, mi, total) {
+  S.modQuizDone = true;
+  const mc = MODULE_CONTENT[ci] && MODULE_CONTENT[ci][mi];
+  if(mc) {
+    let correct = 0;
+    mc.quiz.questions.forEach((q,i) => { if(S.modQuizAnswers[i] === q.correct) correct++; });
+    const score = Math.round((correct/total)*100);
+    if(score >= 60) S.completedModules[ci+'_'+mi] = score;
+  }
+  render();
+}
+
+function markLessonDone(ci, mi, li) {
+  S.completedLessons[ci+'_'+mi+'_'+li] = true;
+  render();
+}
+
+/* ============================================================
+   SCREEN: COURSE DETAIL
+============================================================ */
+function courseDetail() {
+  const ci = S.selectedCourse || 0;
+  const c = COURSES[ci];
+  const mods = MODULE_CONTENT[ci] || [];
+
+  const lessonTypeColors = {video:'#fee2e2', reading:'#dbeafe', audio:'#d1fae5', exercise:'#ede9fe'};
+  const lessonTypeLabels = {video:'Vidéo', reading:'Lecture', audio:'Audio', exercise:'Exercice'};
+  const lessonBadgeColors = {video:'bdg-red', reading:'bdg-blue', audio:'bdg-green', exercise:'bdg-purple'};
+
+  function renderModuleContent(m, mi) {
+    const quizDone = S.modQuizDone && S.expandedModule === mi;
+    const modKey = ci+'_'+mi;
+    const modCompleted = S.completedModules[modKey] !== undefined;
+
+    // Count completed lessons
+    const doneLessons = m.lessons.filter((_,li) => S.completedLessons[ci+'_'+mi+'_'+li]).length;
+    const allLessonsDone = doneLessons === m.lessons.length;
+
+    if(S.modQuizActive && S.expandedModule === mi) {
+      // === QUIZ IN PROGRESS ===
+      if(S.modQuizDone) {
+        const mc = MODULE_CONTENT[ci][mi];
+        let correct = 0;
+        mc.quiz.questions.forEach((q,i) => { if(S.modQuizAnswers[i] === q.correct) correct++; });
+        const score = Math.round((correct/mc.quiz.questions.length)*100);
+        const passed = score >= 60;
+        return `
+        <div style="padding:16px;border-top:1px solid var(--n0)">
+          <div style="text-align:center;padding:20px;background:${passed?'#f0fdf4':'#fff5f5'};border-radius:14px;margin-bottom:12px">
+            <div style="font-size:40px;margin-bottom:8px">${passed?'🎉':'😔'}</div>
+            <div style="font-size:32px;font-weight:900;color:${passed?'var(--ok)':'var(--p)'}">${correct} / ${mc.quiz.questions.length}</div>
+            <div style="font-size:14px;font-weight:700;color:${passed?'var(--ok)':'var(--p)'}">Score : ${score}% · ${passed?'Module validé !':'Score insuffisant (min. 60%)'}</div>
+            <div class="pbar" style="margin:10px 0 0">
+              <div class="pfill" style="width:${score}%;background:${passed?'var(--ok)':'var(--p)'}"></div>
+            </div>
+          </div>
+          ${mc.quiz.questions.map((q,i) => {
+            const ua = S.modQuizAnswers[i]; const ok = ua === q.correct;
+            return `<div style="margin-bottom:10px;padding:10px;border-radius:10px;background:${ok?'#f0fdf4':'#fff5f5'};border:1.5px solid ${ok?'#bbf7d0':'#fecaca'}">
+              <div style="font-size:12px;font-weight:700;color:${ok?'var(--ok)':'var(--p)'};margin-bottom:4px">${ok?'✅':'❌'} Q${i+1}</div>
+              <div style="font-size:12px;color:var(--n9);margin-bottom:4px">${q.q}</div>
+              ${!ok?`<div style="font-size:11px;color:var(--ok)">✓ Bonne réponse : ${q.opts[q.correct]}</div>`:''}
+            </div>`;
+          }).join('')}
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <button class="btn-s" style="flex:1;height:40px;font-size:13px" onclick="S.modQuizActive=false;S.modQuizDone=false;S.modQuizAnswers={};render()">Réessayer</button>
+            ${passed?`<button class="btn-p" style="flex:2;height:40px;font-size:13px" onclick="S.expandedModule=-1;render()">✓ Continuer</button>`:''}
+          </div>
+        </div>`;
+      }
+
+      // Active question
+      const mc = MODULE_CONTENT[ci][mi];
+      const q = mc.quiz.questions[S.modQuizQ];
+      const total = mc.quiz.questions.length;
+      const sel = S.modQuizAnswers[S.modQuizQ];
+      const isLast = S.modQuizQ === total - 1;
+      return `
+      <div style="padding:14px 16px;border-top:2px solid ${c.color}20;background:${c.bg}20">
+        <!-- Quiz header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:13px;font-weight:700;color:var(--n9)">❓ ${mc.quiz.title}</div>
+          <span class="bdg" style="background:${c.bg};color:${c.color}">Q${S.modQuizQ+1}/${total}</span>
+        </div>
+        <div class="pbar" style="margin-bottom:16px">
+          <div class="pfill" style="width:${((S.modQuizQ)/total)*100}%;background:${c.color}"></div>
+        </div>
+        <!-- Question -->
+        <div style="font-size:15px;font-weight:700;color:var(--n9);line-height:1.5;margin-bottom:16px;padding:14px;background:#fff;border-radius:12px;border-left:4px solid ${c.color}">${q.q}</div>
+        <!-- Options -->
+        ${q.opts.map((opt,ai) => `
+        <button onclick="selectModAnswer(${S.modQuizQ},${ai})" style="width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:2px solid ${sel===ai?c.color:'var(--n3)'};background:${sel===ai?c.bg:'#fff'};font-size:14px;color:${sel===ai?c.color:'var(--n9)'};margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:var(--f);font-weight:${sel===ai?'700':'500'};transition:all .15s">
+          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${sel===ai?c.color:'var(--n3)'};flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${sel===ai?c.color:'transparent'}">
+            ${sel===ai?`<div style="width:8px;height:8px;background:#fff;border-radius:50%"></div>`:''}
+          </div>
+          ${opt}
+        </button>`).join('')}
+        <!-- Nav buttons -->
+        <div style="display:flex;gap:10px;margin-top:4px">
+          ${S.modQuizQ > 0 ? `<button onclick="S.modQuizQ--;render()" style="flex:1;height:40px;border-radius:8px;border:2px solid var(--n3);background:#fff;font-size:13px;font-weight:700;color:var(--n6);cursor:pointer">← Retour</button>` : ''}
+          <button onclick="${isLast ? `submitModQuiz(${ci},${mi},${total})` : `nextModQ(${total})`}"
+            style="flex:2;height:40px;border-radius:8px;border:none;background:${sel!==undefined?c.color:'var(--n3)'};color:#fff;font-size:13px;font-weight:700;cursor:pointer;opacity:${sel!==undefined?1:.6}">
+            ${isLast?'Soumettre le quiz ✓':'Question suivante →'}
+          </button>
+        </div>
+        <button onclick="S.modQuizActive=false;render()" style="width:100%;padding:8px;text-align:center;font-size:12px;color:var(--n6);background:none;border:none;cursor:pointer;margin-top:6px">Retour aux leçons</button>
+      </div>`;
+    }
+
+    // === LESSONS LIST ===
+    return `
+    <div style="border-top:2px solid ${c.color}20;background:${c.bg}15">
+      <!-- Lessons list -->
+      ${m.lessons.map((l,li) => {
+        const isDone = S.completedLessons[ci+'_'+mi+'_'+li];
+        return `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.04);background:${isDone?c.bg+'40':'transparent'};cursor:pointer" onclick="go('courseLesson',{currentLesson:{ci:${ci},mi:${mi},li:${li}}})">
+          <div style="width:44px;height:44px;border-radius:10px;background:${lessonTypeColors[l.type]||'#f3f4f6'};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;position:relative">
+            ${l.ico}
+            ${isDone?`<div style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff">✓</div>`:''}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:700;color:var(--n9);margin-bottom:2px">${l.title}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="bdg ${lessonBadgeColors[l.type]}" style="font-size:10px">${lessonTypeLabels[l.type]}</span>
+              <span style="font-size:12px;color:var(--n6)">⏱ ${l.dur}</span>
+            </div>
+          </div>
+          <div style="font-size:18px;color:${isDone?'var(--ok)':'var(--n3)'}">${isDone?'✓':'›'}</div>
+        </div>`;
+      }).join('')}
+      <!-- Progress within module -->
+      <div style="padding:12px 16px;background:#fff;display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:12px;color:var(--n6);margin-bottom:4px">${doneLessons}/${m.lessons.length} leçons terminées</div>
+          <div class="pbar" style="height:5px"><div class="pfill" style="width:${(doneLessons/m.lessons.length)*100}%;background:${c.color}"></div></div>
+        </div>
+        ${modCompleted ? `<span class="bdg bdg-green" style="font-size:10px">Quiz ✓ ${S.completedModules[modKey]}%</span>` : ''}
+      </div>
+      <!-- Quiz CTA -->
+      <div style="padding:12px 16px;background:#fff;border-top:1px solid var(--n0)">
+        ${modCompleted ? `
+        <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">🏆</span>
+          <div><div style="font-size:14px;font-weight:700;color:var(--ok)">Module validé — ${S.completedModules[modKey]}%</div>
+          <button onclick="startModQuiz()" style="font-size:12px;color:var(--ok);background:none;border:none;cursor:pointer;font-weight:600;padding:0;font-family:var(--f)">Repasser le quiz →</button></div>
+        </div>` : `
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:var(--n9)">Quiz du module</div>
+            <div style="font-size:12px;color:var(--n6)">${m.quiz.questions.length} questions · Score min. 60%</div>
+          </div>
+          <button onclick="startModQuiz()" style="height:38px;padding:0 16px;border-radius:9px;background:${allLessonsDone?c.color:'var(--n3)'};color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--f)">
+            ${allLessonsDone?'Démarrer le quiz ▶':'Finir les leçons'}
+          </button>
+        </div>`}
+      </div>
+    </div>`;
+  }
+
+  return `
+  <div style="background:var(--grad);padding:54px 20px 24px;color:#fff;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <button class="back-w" onclick="go('courses')">←</button>
+      <div style="font-size:17px;font-weight:800">Détail du cours</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:26px">${c.emoji}</div>
+      <div>
+        <div style="font-size:20px;font-weight:800">${c.title}</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.75)">👨‍🏫 ${c.prof}</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding-bottom:90px">
+    <!-- Stats bar -->
+    <div style="display:flex;align-items:center;justify-content:space-around;padding:20px 16px;background:#fff;margin-bottom:8px">
+      ${ring(c.pct, 88, c.color, 'complété')}
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><div style="font-size:12px;color:var(--n6)">Statut</div><span class="bdg" style="background:${c.bg};color:${c.color}">${c.status}</span></div>
+        <div><div style="font-size:12px;color:var(--n6)">Niveau</div><span class="bdg bdg-purple">${c.badge}</span></div>
+        <div><div style="font-size:12px;color:var(--n6)">Durée totale</div><div style="font-size:14px;font-weight:700;color:var(--n9)">${c.hours}</div></div>
+      </div>
+    </div>
+
+    <!-- Description -->
+    <div style="background:#fff;margin-bottom:8px;padding:16px">
+      <div style="font-size:15px;font-weight:700;color:var(--n9);margin-bottom:8px">📝 Description</div>
+      <div style="font-size:14px;color:var(--n6);line-height:1.6">Ce cours vous prépare aux situations professionnelles en anglais. Chaque module combine vidéos, lectures, exercices et un quiz de validation pour assurer votre progression.</div>
+    </div>
+
+    <!-- Modules with expand -->
+    <div style="background:#fff;margin-bottom:8px">
+      <div style="padding:14px 16px 10px;font-size:15px;font-weight:700;color:var(--n9);border-bottom:1px solid var(--n0)">
+        📋 Modules du cours
+        <span style="font-size:12px;font-weight:500;color:var(--n6);margin-left:8px">— Tapez pour déplier</span>
+      </div>
+      ${c.modules.map((mName, mi) => {
+        const isDone = c.done.includes(mi);
+        const modKey = ci+'_'+mi;
+        const quizPassed = S.completedModules[modKey] !== undefined;
+        const isExpanded = S.expandedModule === mi;
+        const mData = mods[mi];
+        const doneLessons = mData ? mData.lessons.filter((_,li) => S.completedLessons[ci+'_'+mi+'_'+li]).length : 0;
+        return `
+        <div style="border-bottom:1px solid var(--n0)">
+          <!-- Module row (clickable) -->
+          <div onclick="toggleModule(${mi})" style="display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;background:${isExpanded?c.bg+'30':'#fff'};transition:background .15s">
+            <!-- Status icon -->
+            <div style="width:36px;height:36px;border-radius:50%;background:${isDone||quizPassed?'var(--ok)':isExpanded?c.color:'var(--n1)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s">
+              <span style="font-size:${isDone||quizPassed?'16':'14'}px;${isDone||quizPassed?'color:#fff':isExpanded?'color:#fff':'color:var(--n6)'}">${isDone||quizPassed?'✓':(mi+1)}</span>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:700;color:${isDone||quizPassed?'var(--n6)':'var(--n9)'}">${mName}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+                ${mData?`<span style="font-size:11px;color:var(--n6)">⏱ ${mData.dur}</span>`:``}
+                ${mData?`<span style="font-size:11px;color:var(--n6)">· ${doneLessons}/${mData.lessons.length} leçons</span>`:''}
+                ${quizPassed?`<span class="bdg bdg-green" style="font-size:9px;padding:1px 7px">Quiz ✓</span>`:''}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              ${!isExpanded && !isDone && !quizPassed && mData ? `<div class="pbar" style="width:48px;height:4px"><div class="pfill" style="width:${(doneLessons/mData.lessons.length)*100}%;background:${c.color}"></div></div>` : ''}
+              <span style="font-size:18px;color:${c.color};transition:transform .2s;display:inline-block;transform:${isExpanded?'rotate(90deg)':'rotate(0deg)'}">›</span>
+            </div>
+          </div>
+          <!-- Expanded content -->
+          ${isExpanded && mData ? renderModuleContent(mData, mi) : ''}
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Infos -->
+    <div style="background:#fff;margin-bottom:8px">
+      <div class="info-row"><span class="info-row-ico">👨‍🏫</span><span class="info-lbl">Formateur</span><span class="info-val">${c.prof}</span></div>
+      <div class="divider"></div>
+      <div class="info-row"><span class="info-row-ico">📅</span><span class="info-lbl">Prochaine séance</span><span class="info-val">${c.next !== '—' ? c.next + ' déc.' : '—'}</span></div>
+      <div class="divider"></div>
+      <div class="info-row"><span class="info-row-ico">⏱️</span><span class="info-lbl">Heures effectuées</span><span class="info-val">${c.hours}</span></div>
+    </div>
+
+    <div style="padding:16px">
+      <button class="btn-s" onclick="go('resources')">📁 Voir les ressources du cours</button>
+    </div>
+  </div>
+  ${bottomTabs('courses')}`;
+}
+
+/* ============================================================
+   SCREEN: COURSE LESSON VIEWER
+============================================================ */
+function courseLesson() {
+  const {ci, mi, li} = S.currentLesson || {ci:0, mi:0, li:0};
+  const c = COURSES[ci];
+  const mData = MODULE_CONTENT[ci] && MODULE_CONTENT[ci][mi];
+  if(!mData) return `<div style="padding:80px 20px;text-align:center"><button onclick="go('courseDetail')">← Retour</button></div>`;
+  const l = mData.lessons[li];
+  const isDone = S.completedLessons[ci+'_'+mi+'_'+li];
+  const totalLessons = mData.lessons.length;
+  const isLast = li === totalLessons - 1;
+
+  const lessonContent = {
+    video: `
+    <div style="background:#000;aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;flex-shrink:0">
+      <!-- Fake video thumbnail gradient -->
+      <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0f172a,#1e3a8a);opacity:.85"></div>
+      <div style="position:relative;z-index:1;text-align:center">
+        <div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.25);border:3px solid rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;cursor:pointer">
+          <span style="font-size:24px;margin-left:4px">▶</span>
+        </div>
+        <div style="font-size:14px;color:rgba(255,255,255,.8)">${l.dur}</div>
+      </div>
+      <!-- Controls bar -->
+      <div style="position:absolute;bottom:0;left:0;right:0;padding:10px 14px;background:linear-gradient(transparent,rgba(0,0,0,.8))">
+        <div style="height:3px;background:rgba(255,255,255,.3);border-radius:2px;margin-bottom:8px;position:relative">
+          <div style="width:30%;height:100%;background:#fff;border-radius:2px"></div>
+          <div style="position:absolute;left:30%;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;background:#fff;border-radius:50%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;color:#fff">
+          <div style="display:flex;gap:14px;font-size:18px">
+            <span style="cursor:pointer">⏮</span>
+            <span style="cursor:pointer">⏸</span>
+            <span style="cursor:pointer">⏭</span>
+          </div>
+          <div style="font-size:12px">02:14 / ${l.dur}</div>
+          <span style="font-size:18px;cursor:pointer">⛶</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px;background:#fff;border-bottom:1px solid var(--n0)">
+      <div style="font-size:13px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">📝 Transcription</div>
+      <div style="font-size:14px;color:var(--n9);line-height:1.7">${l.desc}</div>
+      <div style="margin-top:10px;padding:10px;background:var(--n0);border-radius:8px">
+        <div style="font-size:13px;color:var(--n9);font-style:italic;line-height:1.6">"Good morning, everyone. I'd like to call this meeting to order. Before we begin, let me outline our agenda for today's session. We have three items to cover…"</div>
+      </div>
+    </div>`,
+    reading: `
+    <div style="flex:1;background:#f5f3ef;padding:0">
+      <div style="background:#fff;margin:16px;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.08);min-height:400px">
+        <div style="font-size:11px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">${c.title} · Module ${mi+1}</div>
+        <div style="font-size:20px;font-weight:800;color:var(--n9);margin-bottom:4px;line-height:1.3">${l.title}</div>
+        <div style="height:3px;width:48px;background:${c.color};border-radius:2px;margin-bottom:16px"></div>
+        <div style="font-size:14px;color:var(--n9);line-height:1.8">${l.desc}</div>
+        <div style="margin-top:16px;border-top:1px solid var(--n0);padding-top:16px">
+          <div style="font-size:14px;font-weight:700;color:var(--n9);margin-bottom:10px">📌 Expressions clés</div>
+          ${['I\'d like to call this meeting to order.','Let me hand the floor over to…','I see your point, however…','Could we table this for now?','Let\'s circle back to this agenda item.'].map(e=>`
+          <div style="display:flex;gap:10px;margin-bottom:8px;padding:8px 10px;background:${c.bg};border-radius:8px;border-left:3px solid ${c.color}">
+            <span style="font-size:13px;font-style:italic;color:${c.color};font-weight:600">"${e}"</span>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`,
+    audio: `
+    <div style="background:#0f172a;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px">
+      <div style="text-align:center;margin-bottom:8px">
+        <div style="font-size:14px;font-weight:700;color:rgba(255,255,255,.6);margin-bottom:4px">Module ${mi+1} · ${c.title}</div>
+        <div style="font-size:18px;font-weight:800;color:#fff;line-height:1.4">${l.title}</div>
+      </div>
+      <div style="width:88px;height:88px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:36px;box-shadow:0 0 0 8px rgba(220,38,38,.15),0 0 0 16px rgba(220,38,38,.07)">🎧</div>
+      <div style="width:100%;background:rgba(255,255,255,.07);border-radius:12px;padding:14px">
+        <div style="display:flex;align-items:flex-end;justify-content:center;gap:3px;height:44px;margin-bottom:12px">
+          ${Array.from({length:28},(_,i)=>`<div style="width:7px;border-radius:3px;background:${i<10?c.color:'rgba(255,255,255,.25)'};height:${10+Math.abs(Math.sin(i*.8)*28)}px;transition:height .3s"></div>`).join('')}
+        </div>
+        <div class="pbar" style="background:rgba(255,255,255,.2);height:4px">
+          <div class="pfill" style="width:38%;background:${c.color}"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,.5);font-size:12px;margin-top:6px"><span>01:52</span><span>${l.dur}</span></div>
+      </div>
+      <div style="display:flex;gap:28px;color:#fff;font-size:26px;align-items:center">
+        <span style="cursor:pointer;font-size:20px;opacity:.7">⏮</span>
+        <div style="width:58px;height:58px;border-radius:50%;background:${c.color};display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:24px;margin-left:4px;box-shadow:0 4px 16px ${c.color}60">⏸</div>
+        <span style="cursor:pointer;font-size:20px;opacity:.7">⏭</span>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:12px 14px;width:100%">
+        <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.6);margin-bottom:6px">💬 Transcription</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.6;font-style:italic">"Good morning, I'd like to call this meeting to order. Today's agenda covers three main points: the Q4 review, budget proposals, and team updates..."</div>
+      </div>
+    </div>`,
+    exercise: `
+    <div style="flex:1;background:var(--n0);padding:16px">
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:700;color:var(--n9);margin-bottom:4px">✏️ ${l.title}</div>
+        <div style="font-size:13px;color:var(--n6);margin-bottom:12px">${l.desc}</div>
+        <div style="background:var(--n0);border-radius:8px;padding:12px;margin-bottom:12px;border-left:4px solid ${c.color}">
+          <div style="font-size:13px;font-weight:700;color:var(--n9);margin-bottom:4px">📋 Consigne</div>
+          <div style="font-size:13px;color:var(--n6);line-height:1.6">Rédigez un email professionnel de 80 à 100 mots pour demander un report de réunion. Utilisez les formules apprises dans ce module.</div>
+        </div>
+        <textarea style="width:100%;min-height:120px;border:1.5px solid var(--n3);border-radius:10px;padding:12px;font-size:14px;font-family:var(--f);color:var(--n9);resize:vertical;line-height:1.6" placeholder="Subject: Request to Reschedule Meeting&#10;&#10;Dear Mr. Johnson,&#10;&#10;I hope this message finds you well…"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+          <span style="font-size:12px;color:var(--n6)">0 / 100 mots</span>
+          <button class="btn-sm" style="background:${c.color}">Soumettre ✓</button>
+        </div>
+      </div>
+      <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:700;color:var(--s);margin-bottom:6px">💡 Modèle de réponse</div>
+        <div style="font-size:13px;color:var(--n9);line-height:1.7;font-style:italic">"Subject: Request to Reschedule Meeting — [Date]<br><br>Dear Mr. Johnson,<br>I hope this email finds you well. I am writing to request a rescheduling of our meeting on [date] due to a prior commitment. Would it be possible to meet on [alternative date]? I apologize for any inconvenience.<br>Yours sincerely,<br>Aya Kouamé"</div>
+      </div>
+    </div>`,
+  };
+
+  return `
+  <div style="background:${c.color};padding:54px 16px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <button class="back-w" onclick="go('courseDetail',{expandedModule:${mi}})">←</button>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:11px;color:rgba(255,255,255,.7);font-weight:600;margin-bottom:2px">${c.title} · Module ${mi+1}</div>
+      <div style="font-size:14px;font-weight:800;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${l.title}</div>
+    </div>
+    <!-- Lesson nav dots -->
+    <div style="display:flex;gap:5px;flex-shrink:0">
+      ${mData.lessons.map((_,i)=>`<div style="width:${i===li?20:7}px;height:7px;border-radius:4px;background:${i===li?'#fff':S.completedLessons[ci+'_'+mi+'_'+i]?'rgba(255,255,255,.7)':'rgba(255,255,255,.3)'}"></div>`).join('')}
+    </div>
+  </div>
+  <!-- Content area -->
+  <div style="flex:1;overflow-y:auto;background:${l.type==='audio'?'#0f172a':l.type==='reading'?'#f5f3ef':'var(--n0)'}">
+    ${lessonContent[l.type] || lessonContent.reading}
+  </div>
+  <!-- Bottom action bar -->
+  <div style="background:#fff;border-top:1px solid var(--n0);padding:12px 16px;display:flex;gap:10px;align-items:center;flex-shrink:0">
+    ${li > 0 ? `<button onclick="go('courseLesson',{currentLesson:{ci:${ci},mi:${mi},li:${li-1}}})" style="width:40px;height:40px;border-radius:50%;border:2px solid var(--n3);background:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">‹</button>` : ''}
+    <button onclick="markLessonDone(${ci},${mi},${li});${isLast?`go('courseDetail',{expandedModule:${mi}})`:`go('courseLesson',{currentLesson:{ci:${ci},mi:${mi},li:${li+1}}})`}"
+      style="flex:1;height:44px;border-radius:10px;border:none;background:${c.color};color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--f);box-shadow:0 4px 12px ${c.color}50">
+      ${isDone ? (isLast?'✓ Retour au module':'Leçon suivante →') : (isLast?'Terminer & Valider ✓':'Marquer & continuer →')}
+    </button>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: EXAMS
+============================================================ */
+function exams() {
+  const chips = [
+    {id:'all', label:'Tous ●'},
+    {id:'eval', label:'Évaluations 🟣'},
+    {id:'off', label:'Officiels 🔵'},
+    {id:'done', label:'Terminés ✅'},
+  ];
+  const filtered = S.filterExam === 'all' ? EXAMS : EXAMS.filter(e =>
+    S.filterExam === 'done' ? e.status === 'done' : e.type === S.filterExam
+  );
+  return `
+  <div class="hdr-plain">
+    <div style="flex:1">
+      <div style="font-size:18px;font-weight:800;color:var(--n9)">Examens & Évaluations</div>
+      <div style="font-size:13px;color:var(--n6)">${EXAMS.filter(e=>e.status==='available').length} disponibles</div>
+    </div>
+  </div>
+  <div class="chips">
+    ${chips.map(c=>`<div class="chip ${S.filterExam===c.id?'on':''}" onclick="S.filterExam='${c.id}';render()">${c.label}</div>`).join('')}
+  </div>
+  <div class="scrl">
+    ${filtered.map((e,i)=>e.status==='available'?`
+    <div class="card card-tap" onclick="go('examModal',{selectedExam:${EXAMS.indexOf(e)}})">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <span class="bdg ${e.color==='purple'?'bdg-purple':'bdg-blue'}">${e.typeLabel}</span>
+        <span class="bdg bdg-green">Disponible ✓</span>
+      </div>
+      <div style="font-size:16px;font-weight:700;color:var(--n9);margin-bottom:4px">${e.title}</div>
+      <div style="font-size:13px;color:var(--n6);margin-bottom:10px">${e.course} · ${e.prof}</div>
+      <div style="display:flex;gap:16px;margin-bottom:10px">
+        <span style="font-size:13px;color:var(--n6)">⏱ ${e.duration}</span>
+        <span style="font-size:13px;color:var(--n6)">❓ ${e.qs} questions</span>
+        <span style="font-size:13px;color:var(--n6)">🎯 min ${e.minScore}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--warn)">📅 Ferme le ${e.deadline}</span>
+        <button class="btn-sm" onclick="event.stopPropagation();go('examModal',{selectedExam:${EXAMS.indexOf(e)}})">Commencer →</button>
+      </div>
+    </div>`:e.status==='done'?`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <span class="bdg ${e.color==='purple'?'bdg-purple':'bdg-blue'}">${e.typeLabel}</span>
+        <span class="bdg bdg-gray">✅ Terminé</span>
+      </div>
+      <div style="font-size:16px;font-weight:700;color:var(--n9);margin-bottom:4px">${e.title}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:22px;font-weight:800;color:${e.score>=e.minScore?'var(--ok)':'var(--p)'}">${e.score}%</span>
+        <div>
+          <div class="pbar" style="width:120px"><div class="pfill" style="width:${e.score}%;background:${e.score>=e.minScore?'var(--ok)':'var(--p)'}"></div></div>
+          <div style="font-size:11px;color:var(--n6);margin-top:2px">🏆 Meilleur score · ${e.attempts} tentative(s)</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-size:12px;color:var(--n6)">Terminé le ${e.doneDate}</span>
+        <button class="btn-sm-o" onclick="go('examResults')">Voir résultats</button>
+      </div>
+    </div>`:'').join('')}
+    <div style="height:16px"></div>
+  </div>
+  ${bottomTabs('exams')}`;
+}
+
+/* ============================================================
+   SCREEN: EXAM MODAL (bottom sheet style full screen)
+============================================================ */
+function examModal() {
+  const e = EXAMS[S.selectedExam || 0];
+  return `
+  <div style="flex:1;background:rgba(0,0,0,.5);display:flex;flex-direction:column;justify-content:flex-end">
+    <div class="bsheet-inner">
+      <div class="handle"></div>
+      <div style="padding:0 20px 20px">
+        <div style="font-size:20px;font-weight:800;color:var(--n9);margin-bottom:4px">📋 ${e.title}</div>
+        <div style="font-size:14px;color:var(--n6);margin-bottom:20px">${e.course} · ${e.prof}</div>
+        
+        <div style="display:flex;gap:12px;margin-bottom:20px">
+          <div style="flex:1;background:var(--n0);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:var(--s)">⏱</div>
+            <div style="font-size:16px;font-weight:700;color:var(--n9)">${e.duration}</div>
+            <div style="font-size:11px;color:var(--n6)">Durée</div>
+          </div>
+          <div style="flex:1;background:var(--n0);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:22px">❓</div>
+            <div style="font-size:16px;font-weight:700;color:var(--n9)">${e.qs}</div>
+            <div style="font-size:11px;color:var(--n6)">Questions</div>
+          </div>
+          <div style="flex:1;background:var(--n0);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:22px">🎯</div>
+            <div style="font-size:16px;font-weight:700;color:var(--n9)">${e.minScore}%</div>
+            <div style="font-size:11px;color:var(--n6)">Score min.</div>
+          </div>
+        </div>
+
+        <div style="background:#fff5f5;border:1.5px solid #fecaca;border-radius:12px;padding:14px;margin-bottom:20px">
+          <div style="font-size:14px;font-weight:700;color:var(--p);margin-bottom:10px">🛡️ RÈGLES ANTI-TRICHE</div>
+          ${['Ne pas quitter l\'application pendant l\'examen','Pas de capture d\'écran','Pas de copier-coller','3 infractions → soumission automatique'].map(r=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:14px">⛔</span>
+            <span style="font-size:13px;color:var(--n9)">${r}</span>
+          </div>`).join('')}
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;background:rgba(220,38,38,.08);padding:8px;border-radius:8px">
+            <span style="font-size:14px">⚠️</span>
+            <span style="font-size:12px;color:var(--p);font-weight:600">La surveillance est active pendant tout l'examen</span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px">
+          <button class="btn-s" style="flex:1" onclick="go('exams')">Annuler</button>
+          <button class="btn-p" style="flex:2" onclick="S.examQ=0;S.answers={};go('examActive')">Je comprends — Commencer</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: EXAM ACTIVE
+============================================================ */
+function examActive() {
+  const q = QUESTIONS[S.examQ];
+  const totalQ = 10;
+  const m = Math.floor(S.timerSec/60), sec = S.timerSec%60;
+  const isUrgent = S.timerSec < 60;
+  return `
+  <div style="background:${isUrgent?'#b91c1c':'var(--p)'};padding:54px 20px 14px;flex-shrink:0;transition:background .3s">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:15px;font-weight:700;color:#fff">TOEIC Blanc</div>
+      <div id="timer-display" style="font-size:15px;font-weight:700;color:${isUrgent?'#fca5a5':'#fff'};background:rgba(0,0,0,.2);padding:6px 12px;border-radius:20px">⏱ ${m}:${sec.toString().padStart(2,'0')}</div>
+    </div>
+    <div style="background:rgba(0,0,0,.2);border-radius:8px;padding:6px 12px;display:inline-flex;align-items:center;gap:6px">
+      <span style="font-size:12px;color:#fca5a5">🔒</span>
+      <span style="font-size:12px;color:#fca5a5;font-weight:600">Surveillance active</span>
+    </div>
+  </div>
+  <div style="background:#fff;padding:14px 20px;border-bottom:1px solid var(--n1);flex-shrink:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:700;color:var(--n6)">Question ${S.examQ+1} / ${totalQ}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--p)">${Math.round(((S.examQ)/totalQ)*100)}% complété</span>
+    </div>
+    <div class="pbar" style="height:8px"><div class="pfill" style="width:${((S.examQ)/totalQ)*100}%;background:var(--p)"></div></div>
+    <div style="display:flex;justify-content:center;gap:4px;margin-top:10px">
+      ${Array.from({length:totalQ},(_,i)=>`<div class="step-dot ${i<S.examQ?'done':i===S.examQ?'active':''}"></div>`).join('')}
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:20px 20px 20px">
+    <div style="font-size:18px;font-weight:700;color:var(--n9);line-height:1.5;margin-bottom:20px">"${q.q}"</div>
+    ${q.opts.map((opt,i)=>`
+    <button class="exam-opt ${S.answers[S.examQ]===i?'sel':''}" onclick="S.answers[S.examQ]=${i};render()">
+      <div class="opt-dot ${S.answers[S.examQ]===i?'sel':''}"></div>
+      <span>${opt}</span>
+    </button>`).join('')}
+  </div>
+  <div style="background:#fff;padding:14px 20px;border-top:1px solid var(--n1);flex-shrink:0">
+    <div style="display:flex;gap:10px;margin-bottom:8px">
+      ${S.examQ > 0 ? `<button class="btn-s" style="flex:1;background:var(--n1);color:var(--n6)" onclick="S.examQ=Math.max(0,S.examQ-1);render()">← Précédent</button>` : ''}
+      <button class="btn-p" style="flex:2" onclick="${S.examQ<totalQ-1?`S.examQ=${S.examQ+1};render()`:`go('examResults')`}">
+        ${S.examQ<totalQ-1?'Question suivante →':'🏁 Soumettre l\'examen'}
+      </button>
+    </div>
+    <button style="width:100%;text-align:center;padding:6px;font-size:12px;color:rgba(220,38,38,.5);background:none;border:none;cursor:pointer" onclick="showWarn()">Simuler sortie d'app (test anti-triche)</button>
+  </div>
+  <div id="warn-overlay">
+    <div style="background:#fff;border-radius:20px;padding:28px;text-align:center;width:100%;max-width:340px">
+      <div style="font-size:48px;margin-bottom:12px">⚠️</div>
+      <div style="font-size:20px;font-weight:800;color:var(--p);margin-bottom:8px">AVERTISSEMENT 1/3</div>
+      <div style="font-size:15px;color:var(--n9);line-height:1.6;margin-bottom:8px">Vous avez quitté l'écran d'examen.</div>
+      <div style="font-size:14px;color:var(--n6);line-height:1.6;margin-bottom:20px">Encore <strong>2 infractions</strong> et votre examen sera soumis automatiquement.</div>
+      <div style="background:#fee2e2;border-radius:10px;padding:10px;margin-bottom:20px">
+        <div style="font-size:13px;color:var(--p);font-weight:600">Infractions : 1 / 3</div>
+        <div style="display:flex;gap:6px;justify-content:center;margin-top:6px">
+          <div style="width:24px;height:8px;border-radius:4px;background:var(--p)"></div>
+          <div style="width:24px;height:8px;border-radius:4px;background:var(--n3)"></div>
+          <div style="width:24px;height:8px;border-radius:4px;background:var(--n3)"></div>
+        </div>
+      </div>
+      <button class="btn-p" onclick="hideWarn()">Reprendre l'examen</button>
+    </div>
+  </div>`;
+}
+
+function showWarn() {
+  const el = document.getElementById('warn-overlay');
+  if(el) { el.classList.add('on'); el.style.display='flex'; }
+}
+function hideWarn() {
+  const el = document.getElementById('warn-overlay');
+  if(el) { el.classList.remove('on'); el.style.display='none'; }
+}
+
+/* ============================================================
+   SCREEN: EXAM RESULTS
+============================================================ */
+function examResults() {
+  const score = 8, total = 10, pct = 80, minScore = 70, passed = pct >= minScore;
+  return `
+  <div style="background:${passed?'var(--ok)':'var(--p)'};padding:54px 20px 24px;text-align:center;flex-shrink:0">
+    <div style="font-size:48px;margin-bottom:8px">${passed?'🎉':'😔'}</div>
+    <div style="font-size:14px;color:rgba(255,255,255,.8);font-weight:600;letter-spacing:.05em">RÉSULTAT</div>
+    <div style="font-size:52px;font-weight:900;color:#fff;line-height:1">${score}<span style="font-size:28px"> / ${total}</span></div>
+    <div style="font-size:18px;font-weight:700;color:rgba(255,255,255,.9);margin:4px 0 12px">${pct}%</div>
+    <div class="pbar" style="background:rgba(255,255,255,.3);height:8px;margin:0 20px 12px">
+      <div class="pfill" style="width:${pct}%;background:#fff"></div>
+    </div>
+    <div style="background:rgba(255,255,255,.2);border-radius:20px;padding:6px 16px;display:inline-block">
+      <span style="font-size:14px;font-weight:700;color:#fff">${passed?'✅ RÉUSSI':'❌ ÉCHOUÉ'} — Score min. requis : ${minScore}%</span>
+    </div>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;padding-bottom:20px">
+    <div style="background:#fff;padding:16px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-around;text-align:center">
+        <div><div style="font-size:22px;font-weight:800;color:var(--ok)">8</div><div style="font-size:12px;color:var(--n6)">Correctes</div></div>
+        <div><div style="font-size:22px;font-weight:800;color:var(--p)">2</div><div style="font-size:12px;color:var(--n6)">Incorrectes</div></div>
+        <div><div style="font-size:22px;font-weight:800;color:var(--warn)">18:42</div><div style="font-size:12px;color:var(--n6)">Temps utilisé</div></div>
+      </div>
+    </div>
+
+    <div style="padding:0 16px 8px;font-size:15px;font-weight:700;color:var(--n9);margin-top:12px">📋 Révision des réponses</div>
+    ${QUESTIONS.slice(0,10).map((q,i)=>{
+      const correct = i !== 2 && i !== 6; // Q3 et Q7 incorrectes
+      const answered = correct ? q.correct : (q.correct+1)%4;
+      return `
+      <div class="card" style="padding:12px 14px;cursor:pointer" onclick="go('examQDetail',{selectedQ:${i}})">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">${correct?'✅':'❌'}</span>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:var(--n9);margin-bottom:2px">Q${i+1} — ${correct?'1 pt':'0 pt'}</div>
+            <div style="font-size:12px;color:var(--n6);line-height:1.4">${q.q.slice(0,60)}…</div>
+          </div>
+          <span style="font-size:13px;color:var(--n3)">›</span>
+        </div>
+      </div>`;
+    }).join('')}
+
+    <div style="padding:16px">
+      <button class="btn-p" onclick="go('exams')">← Retour aux examens</button>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: EXAM QUESTION DETAIL
+============================================================ */
+function examQDetail() {
+  const qi = S.selectedQ || 2;
+  const q = QUESTIONS[qi];
+  const correct = qi !== 2 && qi !== 6;
+  const userAns = correct ? q.correct : (q.correct+1)%4;
+  return `
+  <div class="hdr-plain" style="background:var(--grad);color:#fff">
+    <button class="back-w" onclick="go('examResults')">←</button>
+    <div style="flex:1;margin-left:8px">
+      <div style="font-size:15px;font-weight:700;color:#fff">Question ${qi+1} / 10</div>
+    </div>
+    <span class="bdg" style="background:rgba(255,255,255,.2);color:#fff">${correct?'✅ Correct':'❌ Incorrect'}</span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:20px 20px 40px">
+    <div style="font-size:17px;font-weight:700;color:var(--n9);line-height:1.5;margin-bottom:20px">"${q.q}"</div>
+    ${q.opts.map((opt,i)=>`
+    <div class="exam-opt ${i===q.correct?'cor':i===userAns&&!correct?'wrg':''}">
+      <div class="opt-dot ${i===q.correct?'sel':''}"></div>
+      <span>${opt}</span>
+      ${i===q.correct?`<span style="margin-left:auto;font-size:16px">✅</span>`:i===userAns&&!correct?`<span style="margin-left:auto;font-size:16px">❌</span>`:''}
+    </div>`).join('')}
+
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px;margin-top:8px">
+      <div style="font-size:14px;font-weight:700;color:var(--s);margin-bottom:6px">💡 Explication</div>
+      <div style="font-size:14px;color:var(--n9);line-height:1.6">${q.explain}</div>
+    </div>
+
+    ${!correct?`
+    <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:12px;padding:14px;margin-top:12px">
+      <div style="font-size:13px;font-weight:600;color:#92400e">Ta réponse :</div>
+      <div style="font-size:14px;color:#92400e;margin-top:4px">❌ "${q.opts[userAns]}"</div>
+      <div style="font-size:13px;font-weight:600;color:#065f46;margin-top:8px">Bonne réponse :</div>
+      <div style="font-size:14px;color:#065f46;margin-top:4px">✅ "${q.opts[q.correct]}"</div>
+    </div>`:''}
+
+    <button class="btn-p" style="margin-top:20px" onclick="go('examResults')">← Retour aux résultats</button>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: RESOURCES
+============================================================ */
+function resources() {
+  const resTypes = [
+    {id:'all',lbl:'Tous'},
+    {id:'pdf',lbl:'📄 PDF'},
+    {id:'video',lbl:'🎬 Vidéo'},
+    {id:'audio',lbl:'🎧 Audio'},
+    {id:'exercise',lbl:'✏️ Exercice'},
+    {id:'quiz',lbl:'❓ Quiz'},
+  ];
+  const filtered = S.filterRes==='all'?RESOURCES:RESOURCES.filter(r=>r.type===S.filterRes);
+  const resColors = {pdf:'#dbeafe',video:'#fee2e2',audio:'#d1fae5',exercise:'#ede9fe',quiz:'#ffedd5'};
+  return `
+  <div class="hdr-plain">
+    <div style="flex:1">
+      <div style="font-size:18px;font-weight:800;color:var(--n9)">Ressources</div>
+      <div style="font-size:13px;color:var(--n6)">${RESOURCES.length} ressources disponibles</div>
+    </div>
+    <button style="background:var(--n1);border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;color:var(--n6);cursor:pointer">⭐ Favoris</button>
+  </div>
+  <div class="inp-wrap" style="padding:10px 16px">
+    <span class="inp-ico">🔍</span>
+    <input class="inp" type="search" placeholder="Rechercher une ressource…">
+  </div>
+  <div class="chips">
+    ${resTypes.map(t=>`<div class="chip ${S.filterRes===t.id?'on':''}" onclick="S.filterRes='${t.id}';render()">${t.lbl}</div>`).join('')}
+  </div>
+  <div class="scrl">
+    ${filtered.map(r=>`
+    <div class="res-card" onclick="go('resourceView',{selectedRes:'${r.id}'})">
+      <div class="res-ico" style="background:${resColors[r.type]||'#f3f4f6'}">${r.ico}</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700;color:var(--n9);margin-bottom:2px">${r.title}</div>
+        <div style="font-size:12px;color:var(--n6);margin-bottom:6px">${r.course} · ${r.size}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;color:var(--n6)">${r.date} · 📥 ${r.dl}x</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:18px;cursor:pointer" onclick="event.stopPropagation()">${r.fav?'⭐':'☆'}</span>
+            <button class="btn-sm" onclick="event.stopPropagation();go('resourceView',{selectedRes:'${r.id}'})">Ouvrir →</button>
+          </div>
+        </div>
+      </div>
+    </div>`).join('')}
+    <div style="height:16px"></div>
+  </div>
+  ${bottomTabs('resources')}`;
+}
+
+/* ============================================================
+   SCREEN: RESOURCE VIEW
+============================================================ */
+function resourceView() {
+  const r = RESOURCES.find(x=>x.id==S.selectedRes)||RESOURCES[0];
+  const isPDF = r.type==='pdf'||r.type==='exercise';
+  const isVideo = r.type==='video';
+  const isAudio = r.type==='audio';
+  return `
+  <div style="background:#1a1a2e;padding:54px 16px 14px;display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <button style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:20px;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center" onclick="go('resources')">←</button>
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${r.title}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.5)">${r.size}</div>
+    </div>
+    <button style="background:rgba(255,255,255,.1);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">⬇ Télécharger</button>
+  </div>
+  ${isVideo?`
+  <div style="background:#000;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative">
+    <div style="width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;cursor:pointer;border:3px solid rgba(255,255,255,.5)">
+      <span style="font-size:28px;margin-left:4px">▶</span>
+    </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);padding:12px 16px">
+      <div class="pbar" style="height:4px;background:rgba(255,255,255,.2);margin-bottom:8px">
+        <div class="pfill" style="width:32%;background:#fff"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;color:#fff;font-size:12px">
+        <span>04:21</span>
+        <div style="display:flex;gap:16px;font-size:18px">
+          <span>⏮</span><span>⏸</span><span>⏭</span>
+        </div>
+        <span>13:45</span>
+      </div>
+    </div>
+  </div>`:''}
+  ${isAudio?`
+  <div style="flex:1;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:20px">
+    <div style="font-size:48px">🎧</div>
+    <div style="font-size:16px;font-weight:700;color:#fff;text-align:center">${r.title}</div>
+    <div style="width:100%;height:60px;background:rgba(255,255,255,.05);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:0 16px">
+      <div style="display:flex;align-items:flex-end;gap:3px;height:40px">
+        ${Array.from({length:30},(_,i)=>`<div style="width:6px;border-radius:3px;background:${i<10?'var(--p)':'rgba(255,255,255,.3)'};height:${8+Math.random()*24}px"></div>`).join('')}
+      </div>
+    </div>
+    <div class="pbar" style="width:100%;background:rgba(255,255,255,.2)">
+      <div class="pfill" style="width:35%;background:var(--p)"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;width:100%;color:rgba(255,255,255,.6);font-size:13px"><span>02:14</span><span>06:30</span></div>
+    <div style="display:flex;gap:24px;color:#fff;font-size:28px">
+      <span style="cursor:pointer">⏮</span>
+      <div style="width:56px;height:56px;border-radius:50%;background:var(--p);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;margin-left:4px">⏸</div>
+      <span style="cursor:pointer">⏭</span>
+    </div>
+  </div>`:''}
+  ${isPDF?`
+  <div style="flex:1;background:#525659;overflow-y:auto">
+    <div style="background:#fff;margin:16px;border-radius:8px;min-height:500px;padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.3)">
+      <div style="font-size:22px;font-weight:800;color:var(--n9);margin-bottom:6px">${r.title}</div>
+      <div style="font-size:13px;color:var(--n6);margin-bottom:20px">BET Languages · ${r.course}</div>
+      <div style="height:2px;background:var(--p);margin-bottom:16px"></div>
+      <div style="font-size:13px;color:var(--n9);line-height:1.8">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px">📌 Chapitre 1 — Les temps verbaux</div>
+        <p>Le système verbal anglais repose sur l'aspect et la modalité plutôt que sur le temps pur. Comprendre cette distinction est fondamental pour maîtriser l'anglais B2.</p>
+        <br/>
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px">📌 Chapitre 2 — Conditionnels</div>
+        <p>Les structures conditionnelles expriment des situations hypothétiques. On distingue 4 types : Zero, Type 1 (réel), Type 2 (irréel présent), Type 3 (irréel passé).</p>
+        <br/>
+        <div style="background:var(--n1);border-radius:8px;padding:12px;border-left:4px solid var(--p)">
+          <div style="font-weight:700;margin-bottom:4px">💡 Exemple</div>
+          <div style="font-style:italic">"If I had studied harder, I would have passed the exam."</div>
+          <div style="color:var(--n6);font-size:12px;margin-top:4px">Type 3 — Hypothèse sur le passé</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;align-items:center;gap:16px;padding:12px;color:#fff">
+      <span style="cursor:pointer;font-size:18px">‹</span>
+      <span style="font-size:13px">Page 1 / 12</span>
+      <span style="cursor:pointer;font-size:18px">›</span>
+    </div>
+  </div>`:''}`;
+}
+
+/* ============================================================
+   SCREEN: PROFILE
+============================================================ */
+function profile() {
+  return `
+  <div class="hdr-grad" style="text-align:center">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button style="background:rgba(255,255,255,.2);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">✏️ Modifier</button>
+    </div>
+    <div class="av av80" style="margin:0 auto 12px">KA</div>
+    <div style="font-size:22px;font-weight:800;color:#fff">Kouamé Aya</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px">
+      <span class="bdg" style="background:rgba(255,255,255,.2);color:#fff">B2 — Intermédiaire supérieur</span>
+    </div>
+    <div class="star-badge" style="margin:8px auto 0;width:fit-content">⭐ Élève du mois — Décembre 2025</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding-bottom:90px">
+    <div class="psec">
+      <div style="padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.08em">Informations personnelles</div>
+      <div class="prow"><span style="font-size:18px">✉️</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Email</div><div style="font-size:14px;font-weight:600;color:var(--n9)">aya.kouame@betlanguages.ci</div></div></div>
+      <div class="prow"><span style="font-size:18px">📞</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Téléphone</div><div style="font-size:14px;font-weight:600;color:var(--n9)">+225 07 12 34 56 78</div></div></div>
+      <div class="prow"><span style="font-size:18px">🏢</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Entreprise</div><div style="font-size:14px;font-weight:600;color:var(--n9)">Orange Côte d'Ivoire</div></div></div>
+      <div class="prow"><span style="font-size:18px">💼</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Poste</div><div style="font-size:14px;font-weight:600;color:var(--n9)">Responsable Marketing</div></div></div>
+    </div>
+
+    <div class="psec">
+      <div style="padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.08em">Ma formation</div>
+      <div class="prow"><span style="font-size:18px">📚</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Classe</div><div style="font-size:14px;font-weight:600;color:var(--n9)">B2 Pro — Groupe Mercredi</div></div></div>
+      <div class="prow"><span style="font-size:18px">👨‍🏫</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Coach principal</div><div style="font-size:14px;font-weight:600;color:var(--n9)">Prof. Martin</div></div></div>
+      <div class="prow"><span style="font-size:18px">🎯</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Objectif</div><div style="font-size:14px;font-weight:600;color:var(--n9)">TOEIC 750+ · mars 2026</div></div></div>
+      <div class="prow"><span style="font-size:18px">⚡</span><div style="flex:1"><div style="font-size:13px;color:var(--n6)">Points XP</div></div><div style="font-size:16px;font-weight:800;color:var(--warn)">2 340 XP</div></div>
+    </div>
+
+    <div class="psec">
+      <div style="padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.08em">Mes tests de niveau</div>
+      <div style="padding:8px 16px">
+        <div class="card" style="margin:0">
+          <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:12px">
+            ${[['A2','12 mars 2025',false],['B1','04 juin 2025',false],['B2','28 sept. 2026',true]].map(([n,d,actuel],i)=>`
+              ${i?'<span style="color:var(--n3);font-size:15px">&rarr;</span>':''}
+              <div style="text-align:center">
+                <div style="font-size:${actuel?'15':'13'}px;font-weight:800;padding:4px 12px;border-radius:99px;
+                  background:${actuel?'var(--sm)':'var(--n1)'};color:${actuel?'#fff':'var(--n6)'}">${n}</div>
+                <div style="font-size:9.5px;color:var(--n6);margin-top:3px">${d}</div>
+              </div>`).join('')}
+          </div>
+          <div style="font-size:12px;color:var(--n6);text-align:center;line-height:1.5;border-top:1px solid var(--n1);padding-top:10px">
+            Votre niveau a changé le 28 septembre, à la suite du test demandé par votre coach.<br>
+            <span style="color:var(--ok);font-weight:700">Vous avez progressé de deux niveaux depuis votre arrivée.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div style="padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.08em">Certifications</div>
+      <div style="padding:8px 16px">
+        <div class="card" style="margin:0;display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#065f46,#059669);color:#fff">
+          <span style="font-size:28px">🏆</span>
+          <div><div style="font-size:14px;font-weight:700">TOEIC B1 — Score 650</div><div style="font-size:12px;color:rgba(255,255,255,.8)">Émis le 15/10/2025 · Valide 2 ans</div></div>
+          <span class="bdg" style="background:rgba(255,255,255,.2);color:#fff;margin-left:auto">VALIDE</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div style="padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.08em">Historique paiements</div>
+      ${[
+        {label:'Trimestre T4 2025 (en attente)',amount:'250 000 FCFA',date:'Éch. 20/12/2025',color:'var(--warn)'},
+        {label:'Trimestre T3 2025',amount:'250 000 FCFA',date:'15/09/2025',color:'var(--ok)'},
+        {label:'Inscription + matériel',amount:'75 000 FCFA',date:'01/01/2025',color:'var(--ok)'},
+      ].map(p=>`
+      <div class="prow">
+        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--n9)">${p.label}</div><div style="font-size:12px;color:var(--n6)">${p.date}</div></div>
+        <div style="font-size:14px;font-weight:700;color:${p.color}">${p.amount}</div>
+      </div>`).join('')}
+    </div>
+
+    <div class="psec">
+      <div style="padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.08em">Notes de mon coach</div>
+      ${[
+        {from:'Prof. Martin',date:'05/12/2025',note:'Excellente progression ce trimestre. Aya maîtrise maintenant les présentations formelles. Travailler sur la correspondance écrite.'},
+        {from:'Prof. Dupont',date:'01/12/2025',note:'Pronunciation clearly improving. Focus on /th/ sound and word stress patterns in the coming sessions.'},
+      ].map(n=>`
+      <div style="margin:8px 16px;background:var(--n0);border-radius:10px;padding:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:700;color:var(--s)">${n.from}</span>
+          <span style="font-size:12px;color:var(--n6)">${n.date}</span>
+        </div>
+        <div style="font-size:13px;color:var(--n9);line-height:1.5;font-style:italic">"${n.note}"</div>
+      </div>`).join('')}
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;padding:16px">
+      <button class="btn-p" onclick="go('messages')">💬 Messages</button>
+      <button class="btn-s" onclick="go('requestModal')">📤 Envoyer une demande</button>
+      <button class="btn-s" style="color:var(--warn);border-color:var(--warn)" onclick="go('shop')">🛍️ Boutique BET</button>
+      <button class="btn-ghost-w" style="color:var(--p);background:var(--pl)">Se déconnecter</button>
+    </div>
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ============================================================
+   SCREEN: MESSAGES
+============================================================ */
+function messages() {
+  const chips = [{id:'all',l:'Tous'},{id:'prof',l:'Professeurs'},{id:'admin',l:'Admin'},{id:'gest',l:'Gestionnaire'}];
+  const unread = MESSAGES.filter(m=>m.unread).length;
+  return `
+  <div class="hdr-plain">
+    <button class="back-d" onclick="go('profile')">←</button>
+    <div style="flex:1;margin-left:4px">
+      <div style="font-size:18px;font-weight:800;color:var(--n9)">Messages</div>
+    </div>
+    ${unread?`<span class="bdg bdg-red">${unread} non lus</span>`:''}
+  </div>
+  <div class="chips">
+    ${chips.map(c=>`<div class="chip ${S.msgChip===c.id?'on':''}" onclick="S.msgChip='${c.id}';render()">${c.l}</div>`).join('')}
+  </div>
+  <div class="scrl">
+    ${MESSAGES.map((m,i)=>`
+    <div onclick="go('msgDetail',{selectedMsg:${i}})" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:${m.unread?'#fff8f8':'#fff'};border-bottom:1px solid var(--n0);cursor:pointer">
+      <div style="position:relative">
+        <div class="av av48">${m.initials}</div>
+        ${m.unread?`<div style="position:absolute;top:0;right:0;width:12px;height:12px;border-radius:50%;background:var(--p);border:2px solid #fff8f8"></div>`:''}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <div style="font-size:15px;font-weight:${m.unread?'700':'600'};color:var(--n9)">${m.from}</div>
+          <div style="font-size:11px;color:var(--n6)">${m.time}</div>
+        </div>
+        <div style="font-size:12px;color:var(--n6);margin-bottom:2px;font-weight:600">${m.role}</div>
+        <div style="font-size:13px;color:${m.unread?'var(--n9)':'var(--n6)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:${m.unread?'500':'400'}">${m.preview}</div>
+      </div>
+    </div>`).join('')}
+    <div style="height:16px"></div>
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ============================================================
+   SCREEN: MESSAGE DETAIL
+============================================================ */
+function msgDetail() {
+  const m = MESSAGES[S.selectedMsg||0];
+  return `
+  <div class="hdr-plain" style="background:var(--grad);color:#fff">
+    <button class="back-w" onclick="go('messages')">←</button>
+    <div class="av av32" style="margin-left:4px">${m.initials}</div>
+    <div style="flex:1;margin-left:8px">
+      <div style="font-size:15px;font-weight:700;color:#fff">${m.from}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.75)">${m.role}</div>
+    </div>
+    <div style="font-size:22px;cursor:pointer">⋮</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px 0 16px">
+    <div style="text-align:center;font-size:12px;color:var(--n6);margin-bottom:16px;background:var(--n1);padding:4px 12px;border-radius:20px;display:inline-block;margin-left:50%">${m.time}</div>
+    <div class="chat-meta">${m.from} · ${m.role}</div>
+    <div class="chat-bubble">
+      <div style="font-size:14px;color:var(--n9);line-height:1.6;white-space:pre-line">${m.full}</div>
+    </div>
+    ${m.unread?`
+    <div style="text-align:right;padding:4px 16px">
+      <div style="background:var(--pl);border-radius:4px 16px 16px 16px;padding:12px 16px;max-width:80%;display:inline-block;text-align:left">
+        <div style="font-size:14px;color:var(--p);line-height:1.6">Bonjour, merci pour le rappel ! Je serai présente. 😊</div>
+      </div>
+    </div>
+    <div style="text-align:right;padding:4px 16px;font-size:11px;color:var(--n6)">Toi · Envoyé ✓</div>`:''}
+  </div>
+  <div style="background:#fff;border-top:1px solid var(--n3);padding:12px 16px;display:flex;gap:10px;flex-shrink:0">
+    <div class="inp-wrap" style="flex:1">
+      <input class="inp" style="padding-left:14px" type="text" placeholder="Écrire un message…">
+    </div>
+    <button class="btn-sm" style="flex-shrink:0">Envoyer ➤</button>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: REQUEST MODAL
+============================================================ */
+function requestModal() {
+  return `
+  <div class="hdr-plain" style="background:var(--grad);color:#fff">
+    <button class="back-w" onclick="go('profile')">←</button>
+    <div style="flex:1;margin-left:8px;font-size:17px;font-weight:800;color:#fff">Envoyer une demande</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:20px;padding-bottom:40px">
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--n6);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Destinataire</div>
+      <select style="width:100%;height:48px;border:1.5px solid var(--n3);border-radius:var(--r10);padding:0 14px;font-size:15px;font-family:var(--f);color:var(--n9);background:#fff;cursor:pointer;appearance:none">
+        <option>👨‍🏫 Prof. Martin — Professeur</option>
+        <option>👩‍💼 BET Administration</option>
+        <option>🧑‍💼 Gestionnaire RH</option>
+        <option>📊 Département Commercial</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--n6);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Objet</div>
+      <input class="inp" style="padding-left:14px" type="text" placeholder="Ex: Demande de report de séance…">
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--n6);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Message</div>
+      <textarea style="width:100%;height:120px;border:1.5px solid var(--n3);border-radius:var(--r10);padding:14px;font-size:15px;font-family:var(--f);color:var(--n9);resize:none;line-height:1.5" placeholder="Décrivez votre demande…"></textarea>
+    </div>
+    <div style="margin-bottom:24px">
+      <div style="font-size:13px;font-weight:700;color:var(--n6);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Niveau d'urgence</div>
+      <div style="display:flex;gap:10px">
+        <div class="chip on" style="flex:1;justify-content:center">🟢 Normale</div>
+        <div class="chip" style="flex:1;justify-content:center">🔴 Urgente</div>
+      </div>
+    </div>
+    <button class="btn-p" onclick="go('messages')">📤 Envoyer la demande</button>
+  </div>`;
+}
+
+/* ============================================================
+   SCREEN: SHOP
+============================================================ */
+function shop() {
+  const items = [
+    {id:1,ico:'🎧',name:'Pack TOEIC Premium',desc:'Préparation complète',price:'150 000 FCFA',tag:'Populaire',color:'#dbeafe'},
+    {id:2,ico:'📘',name:'Grammaire Avancée',desc:'Niveau B2-C1',price:'35 000 FCFA',tag:'',color:'#d1fae5'},
+    {id:3,ico:'🎬',name:'Cours Vidéo Pro',desc:'50 leçons vidéo',price:'85 000 FCFA',tag:'Nouveau',color:'#ede9fe'},
+    {id:4,ico:'📝',name:'Cahier d\'exercices B2',desc:'200 exercices',price:'20 000 FCFA',tag:'',color:'#ffedd5'},
+    {id:5,ico:'🏆',name:'Certification Express',desc:'Test + Certificat',price:'45 000 FCFA',tag:'Bestseller',color:'#fee2e2'},
+    {id:6,ico:'👩‍💻',name:'Tutorat Individuel',desc:'5h de coaching privé',price:'120 000 FCFA',tag:'',color:'#ccfbf1'},
+  ];
+  return `
+  <div class="hdr-plain" style="background:var(--grad);color:#fff;padding-bottom:20px">
+    <button class="back-w" onclick="go('profile')">←</button>
+    <div style="flex:1;margin-left:8px">
+      <div style="font-size:18px;font-weight:800;color:#fff">Boutique BET</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.75)">Ressources & formations premium</div>
+    </div>
+    <span style="font-size:22px;cursor:pointer">🛒</span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:14px 16px 90px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${items.map(it=>`
+      <div class="shop-card" style="position:relative">
+        ${it.tag?`<div style="position:absolute;top:-1px;right:10px;background:${it.tag==='Populaire'?'var(--p)':it.tag==='Nouveau'?'var(--ok)':'var(--warn)'};color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px">${it.tag}</div>`:''}
+        <div class="shop-ico" style="background:${it.color}">${it.ico}</div>
+        <div style="font-size:14px;font-weight:700;color:var(--n9)">${it.name}</div>
+        <div style="font-size:12px;color:var(--n6)">${it.desc}</div>
+        <div style="font-size:15px;font-weight:800;color:var(--p)">${it.price}</div>
+        <button class="btn-sm" style="width:100%;margin-top:2px" onclick="go('shopPayment',{shopItem:${it.id}})">Acheter</button>
+      </div>`).join('')}
+    </div>
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ============================================================
+   SCREEN: SHOP PAYMENT
+============================================================ */
+function shopPayment() {
+  const items = [null,
+    {ico:'🎧',name:'Pack TOEIC Premium',price:'150 000 FCFA'},
+    {ico:'📘',name:'Grammaire Avancée',price:'35 000 FCFA'},
+    {ico:'🎬',name:'Cours Vidéo Pro',price:'85 000 FCFA'},
+    {ico:'📝',name:'Cahier d\'exercices B2',price:'20 000 FCFA'},
+    {ico:'🏆',name:'Certification Express',price:'45 000 FCFA'},
+    {ico:'👩‍💻',name:'Tutorat Individuel',price:'120 000 FCFA'},
+  ];
+  const it = items[S.shopItem||1];
+  const methods = [
+    {id:'orange',ico:'🟠',name:'Orange Money',sub:'Paiement mobile CI'},
+    {id:'wave',ico:'🌊',name:'Wave',sub:'Paiement wave'},
+    {id:'card',ico:'💳',name:'Carte bancaire',sub:'Visa / Mastercard'},
+  ];
+  return `
+  <div class="hdr-plain" style="background:var(--grad);color:#fff">
+    <button class="back-w" onclick="go('shop')">←</button>
+    <div style="flex:1;margin-left:8px;font-size:17px;font-weight:800;color:#fff">Paiement</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0 0 40px">
+    <div class="card" style="display:flex;align-items:center;gap:12px;margin-top:16px">
+      <div style="width:52px;height:52px;border-radius:12px;background:var(--n1);display:flex;align-items:center;justify-content:center;font-size:26px">${it.ico}</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700;color:var(--n9)">${it.name}</div>
+        <div style="font-size:12px;color:var(--n6)">Accès à vie</div>
+      </div>
+      <div style="font-size:16px;font-weight:800;color:var(--p)">${it.price}</div>
+    </div>
+
+    <div style="padding:8px 16px 4px;font-size:13px;font-weight:700;color:var(--n6);text-transform:uppercase;letter-spacing:.05em">Mode de paiement</div>
+    ${methods.map(method=>`
+    <div class="pay-opt ${S.selectedPay===method.id?'sel':''}" onclick="S.selectedPay='${method.id}';render()">
+      <div class="pay-ico" style="background:${S.selectedPay===method.id?'var(--pl)':'var(--n1)'};font-size:22px">${method.ico}</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700;color:var(--n9)">${method.name}</div>
+        <div style="font-size:12px;color:var(--n6)">${method.sub}</div>
+      </div>
+      <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${S.selectedPay===method.id?'var(--p)':'var(--n3)'};display:flex;align-items:center;justify-content:center">
+        ${S.selectedPay===method.id?`<div style="width:10px;height:10px;border-radius:50%;background:var(--p)"></div>`:''}
+      </div>
+    </div>`).join('')}
+
+    ${S.selectedPay==='card'?`
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="inp-wrap"><span class="inp-ico">💳</span><input class="inp" type="text" placeholder="Numéro de carte"></div>
+      <div style="display:flex;gap:10px">
+        <div class="inp-wrap" style="flex:1"><input class="inp" style="padding-left:14px" type="text" placeholder="MM/AA"></div>
+        <div class="inp-wrap" style="flex:1"><input class="inp" style="padding-left:14px" type="text" placeholder="CVC"></div>
+      </div>
+    </div>`:`
+    <div style="padding:0 20px">
+      <div style="background:var(--n0);border-radius:10px;padding:12px;margin-top:8px">
+        <div style="font-size:13px;color:var(--n6)">Vous serez redirigé vers</div>
+        <div style="font-size:15px;font-weight:700;color:var(--n9)">${S.selectedPay==='orange'?'Orange Money CI':'Wave Sénégal/CI'}</div>
+        <div style="font-size:12px;color:var(--n6);margin-top:2px">Transaction sécurisée SSL 256-bit</div>
+      </div>
+    </div>`}
+
+    <div style="padding:16px 20px;border-top:1px solid var(--n1);margin-top:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:14px;color:var(--n6)">Sous-total</span>
+        <span style="font-size:14px;font-weight:600;color:var(--n9)">${it.price}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+        <span style="font-size:16px;font-weight:700;color:var(--n9)">Total</span>
+        <span style="font-size:18px;font-weight:800;color:var(--p)">${it.price}</span>
+      </div>
+      <button class="btn-p" onclick="alert('✅ Paiement simulé avec succès !\n\nVotre commande a été traitée.\nUn reçu a été envoyé à votre email.')">
+        🔒 Confirmer le paiement — ${it.price}
+      </button>
+      <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--n6)">🔐 Paiement sécurisé par CinetPay</div>
+    </div>
+  </div>`;
+}
+
+
+/* ============================================================
+   ÉCRANS AJOUTÉS LE 29/09/2026
+   La maquette d'avril couvrait 10 des 20 écrans de l'espace
+   apprenant. Les dix suivants complètent le périmètre réel.
+============================================================ */
+
+const NOTIFS = [
+  {id:1, ico:'📅', t:"Séance de demain", m:"Anglais B2 Pro · mercredi 10h00 avec Prof. Martin", q:"il y a 2 h", lu:false, type:'seance'},
+  {id:2, ico:'📝', t:"Nouveau devoir", m:"Business Writing — à rendre avant le 4 octobre", q:"il y a 5 h", lu:false, type:'devoir'},
+  {id:3, ico:'💳', t:"Échéance à venir", m:"Mensualité d'octobre : 80 000 F, due le 5", q:"hier", lu:false, type:'paiement'},
+  {id:4, ico:'🎓', t:"Votre niveau a évolué", m:"Test du 28 septembre : vous passez de B1 à B2", q:"hier", lu:true, type:'niveau'},
+  {id:5, ico:'💬', t:"Message de votre assistante", m:"Bonjour Aya, votre attestation est prête au centre.", q:"2 jours", lu:true, type:'message'},
+  {id:6, ico:'⚠️', t:"Absence enregistrée", m:"Séance du 22 septembre — 2 absences sur 4 autorisées", q:"6 jours", lu:true, type:'absence'},
+];
+
+const PRESENCES = [
+  {d:"25 sept.", c:"Anglais B2 Pro", s:"present"},
+  {d:"22 sept.", c:"Anglais B2 Pro", s:"absent", motif:"Non justifiée"},
+  {d:"18 sept.", c:"Anglais B2 Pro", s:"present"},
+  {d:"15 sept.", c:"Anglais B2 Pro", s:"retard", motif:"12 min"},
+  {d:"11 sept.", c:"Anglais B2 Pro", s:"present"},
+  {d:"8 sept.",  c:"Anglais B2 Pro", s:"absent", motif:"Justifiée — certificat médical"},
+  {d:"4 sept.",  c:"Anglais B2 Pro", s:"present"},
+  {d:"1 sept.",  c:"Anglais B2 Pro", s:"present"},
+];
+
+const JEUX = [
+  {ico:'🔤', t:"Le mot juste", d:"Trouvez le synonyme en 30 secondes", n:"A2 → C1", best:1240},
+  {ico:'🧩', t:"Phrase à trous", d:"Complétez avec le bon temps verbal", n:"B1 → B2", best:980},
+  {ico:'🎧', t:"Oreille fine", d:"Reconnaissez l'accent et le mot entendu", n:"B2 → C1", best:760},
+  {ico:'⚡', t:"Duel express", d:"Affrontez un autre apprenant en 60 secondes", n:"Tous niveaux", best:0},
+];
+
+const MOTS = [
+  {m:"achievement", p:"/əˈtʃiːvmənt/", t:"réussite, accomplissement", ex:"Her greatest achievement was passing the TOEIC."},
+  {m:"deadline", p:"/ˈdedlaɪn/", t:"date limite, échéance", ex:"The deadline for the report is Friday."},
+  {m:"stakeholder", p:"/ˈsteɪkhəʊldə/", t:"partie prenante", ex:"We must inform all stakeholders."},
+  {m:"leverage", p:"/ˈliːvərɪdʒ/", t:"tirer parti de, levier", ex:"We can leverage our network."},
+];
+
+/* ── 1. NOTIFICATIONS ─────────────────────────────────────── */
+function notifications() {
+  const nonLues = NOTIFS.filter(n=>!n.lu).length;
+  const couleur = {seance:'#dbeafe', devoir:'#ffedd5', paiement:'#fee2e2', niveau:'#d1fae5', message:'#ede9fe', absence:'#fef3c7'};
+  return `
+  <div class="hdr-plain">
+    <div style="flex:1">
+      <div style="font-size:18px;font-weight:800;color:var(--n9)">Notifications</div>
+      <div style="font-size:13px;color:var(--n6)">${nonLues} non lue${nonLues>1?'s':''}</div>
+    </div>
+    <button style="background:var(--n1);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--n6);cursor:pointer">Tout marquer lu</button>
+  </div>
+  <div class="scrl">
+    ${NOTIFS.map(n=>`
+    <div class="card card-tap" style="display:flex;gap:12px;align-items:flex-start;${n.lu?'':'border-left:3px solid var(--p)'}">
+      <div style="width:38px;height:38px;border-radius:10px;background:${couleur[n.type]||'#f3f4f6'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${n.ico}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-size:14px;font-weight:${n.lu?'600':'800'};color:var(--n9)">${n.t}</div>
+          ${n.lu?'':'<span style="width:7px;height:7px;border-radius:50%;background:var(--p);flex-shrink:0"></span>'}
+        </div>
+        <div style="font-size:13px;color:var(--n6);line-height:1.45;margin-top:2px">${n.m}</div>
+        <div style="font-size:11px;color:var(--n6);margin-top:6px">${n.q}</div>
+      </div>
+    </div>`).join('')}
+    <div style="text-align:center;padding:16px;font-size:12px;color:var(--n6)">Les notifications sont conservées 45 jours</div>
+  </div>
+  ${bottomTabs('notifications')}`;
+}
+
+/* ── 2. MES PRÉSENCES ─────────────────────────────────────── */
+function presences() {
+  const total = PRESENCES.length;
+  const pres  = PRESENCES.filter(p=>p.s==='present').length;
+  const abs   = PRESENCES.filter(p=>p.s==='absent').length;
+  const taux  = Math.round(pres/total*100);
+  const cfg = {
+    present:{lbl:'Présent', bg:'#d1fae5', c:'#065f46'},
+    absent:{lbl:'Absent',  bg:'#fee2e2', c:'#991b1b'},
+    retard:{lbl:'Retard',  bg:'#fef3c7', c:'#92400e'},
+  };
+  return `
+  <div class="hdr-plain">
+    <div style="flex:1">
+      <div style="font-size:18px;font-weight:800;color:var(--n9)">Mes présences</div>
+      <div style="font-size:13px;color:var(--n6)">${total} séances depuis septembre</div>
+    </div>
+  </div>
+  <div class="scrl">
+    <div class="card" style="display:flex;align-items:center;gap:16px">
+      ${ring(taux, 84, taux>=75?'#059669':'#d97706', 'Assiduité')}
+      <div style="flex:1">
+        <div style="display:flex;gap:18px;margin-bottom:8px">
+          <div><div style="font-size:20px;font-weight:800;color:#059669">${pres}</div><div style="font-size:11px;color:var(--n6)">présences</div></div>
+          <div><div style="font-size:20px;font-weight:800;color:#dc2626">${abs}</div><div style="font-size:11px;color:var(--n6)">absences</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--n6);line-height:1.45">Votre accès reste ouvert tant que vous avez moins de 4 absences non justifiées.</div>
+      </div>
+    </div>
+
+    <div class="card" style="background:#fef3c7;border-left:3px solid var(--warn)">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px">⚠️</span>
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:3px">1 absence non justifiée sur 4</div>
+          <div style="font-size:12px;color:#92400e;line-height:1.5">Au-delà de 4, l'accès à la plateforme est suspendu jusqu'à régularisation auprès de votre assistante. Une absence justifiée ne compte pas.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Détail des séances</div></div>
+    ${PRESENCES.map(p=>`
+    <div class="card" style="display:flex;align-items:center;gap:12px">
+      <div style="width:44px;text-align:center;flex-shrink:0">
+        <div style="font-size:13px;font-weight:800;color:var(--n9)">${p.d.split(' ')[0]}</div>
+        <div style="font-size:10px;color:var(--n6)">${p.d.split(' ')[1]}</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:700;color:var(--n9)">${p.c}</div>
+        ${p.motif?`<div style="font-size:12px;color:var(--n6);margin-top:2px">${p.motif}</div>`:''}
+      </div>
+      <span class="bdg" style="background:${cfg[p.s].bg};color:${cfg[p.s].c}">${cfg[p.s].lbl}</span>
+    </div>`).join('')}
+  </div>
+  ${bottomTabs('home')}`;
+}
+
+/* ── 3. SESSION LIVE ──────────────────────────────────────── */
+function sessionLive() {
+  return `
+  <div class="hdr-grad">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="width:9px;height:9px;border-radius:50%;background:#34d399;display:inline-block"></span>
+      <span style="font-size:12px;font-weight:700;color:#fff;letter-spacing:.06em">SÉANCE EN COURS</span>
+    </div>
+    <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:4px">Anglais B2 Pro</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.85)">Prof. Martin · commencée il y a 12 minutes</div>
+  </div>
+  <div class="scrl">
+    <div class="card" style="text-align:center;padding:26px 16px">
+      <div style="font-size:44px;margin-bottom:10px">🎥</div>
+      <div style="font-size:16px;font-weight:800;color:var(--n9);margin-bottom:4px">Votre coach vous attend</div>
+      <div style="font-size:13px;color:var(--n6);margin-bottom:18px;line-height:1.5">14 apprenants ont déjà rejoint la séance.<br>Vérifiez votre micro avant d'entrer.</div>
+      <button class="btn-p">Rejoindre la séance</button>
+      <div style="margin-top:10px;font-size:12px;color:var(--n6)">Votre présence sera enregistrée automatiquement</div>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Avant de rejoindre</div></div>
+    <div class="card">
+      ${[['🎤','Micro','Autorisé'],['🔊','Haut-parleur','Testé'],['📶','Connexion','Bonne (4G)']].map(([i,l,v])=>`
+      <div class="info-row"><span class="info-row-ico">${i}</span><span class="info-lbl">${l}</span><span class="info-val" style="color:#059669">${v}</span></div>`).join('')}
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Prochaines séances</div></div>
+    ${[['Vendredi 2 oct.','10h00 — 12h00','Anglais B2 Pro'],['Mercredi 7 oct.','10h00 — 12h00','Anglais B2 Pro']].map(([d,h,c])=>`
+    <div class="card" style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:20px">📅</span>
+      <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--n9)">${d}</div>
+      <div style="font-size:12px;color:var(--n6)">${h} · ${c}</div></div>
+    </div>`).join('')}
+  </div>
+  ${bottomTabs('home')}`;
+}
+
+/* ── 4. CONTACTS & SUPPORT ────────────────────────────────── */
+function support() {
+  return `
+  <div class="hdr-plain"><div style="flex:1">
+    <div style="font-size:18px;font-weight:800;color:var(--n9)">Contacts &amp; support</div>
+    <div style="font-size:13px;color:var(--n6)">Une question ? On vous répond</div>
+  </div></div>
+  <div class="scrl">
+    <div class="card" style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff">
+      <div class="av av48" style="background:rgba(255,255,255,.2);color:#fff">MK</div>
+      <div style="flex:1">
+        <div style="font-size:11px;color:rgba(255,255,255,.75);margin-bottom:2px">VOTRE ASSISTANTE</div>
+        <div style="font-size:15px;font-weight:800">Mariam Koné</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.8)">Répond en général sous 2 h</div>
+      </div>
+      <button class="btn-ghost-w" style="padding:8px 14px;font-size:13px" onclick="go('messages')">Écrire</button>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Votre centre</div></div>
+    <div class="card">
+      ${[['📍','BET Angré','Cocody, Abidjan'],['📞','+225 27 22 40 71 99','Lun — Sam, 8h à 18h'],['✉️','contact@binniesenglish.com','Réponse sous 24 h']].map(([i,t,s])=>`
+      <div class="prow"><span style="font-size:18px">${i}</span><div style="flex:1">
+        <div style="font-size:14px;font-weight:700;color:var(--n9)">${t}</div>
+        <div style="font-size:12px;color:var(--n6)">${s}</div></div></div>`).join('')}
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Besoin d'aide sur…</div></div>
+    ${[['💳','Un paiement ou une facture'],['📅','Un changement d\'horaire ou de classe'],['🎓','Mon niveau ou ma certification'],['🔧','Un problème technique']].map(([i,t])=>`
+    <div class="card card-tap" style="display:flex;align-items:center;gap:12px" onclick="go('requestModal')">
+      <span style="font-size:20px">${i}</span>
+      <div style="flex:1;font-size:14px;font-weight:600;color:var(--n9)">${t}</div>
+      <span style="color:var(--n6)">›</span>
+    </div>`).join('')}
+
+    <div style="padding:8px 16px 0"><button class="btn-s" onclick="go('requestModal')">Écrire à BET</button></div>
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ── 5. OBJECTIFS & CERTIFICATIONS ────────────────────────── */
+function objectifs() {
+  const objs = [
+    {t:"TOEIC 750+", s:"Examen prévu le 14 mars 2026", pct:68, c:'#dc2626'},
+    {t:"Atteindre le niveau C1", s:"Actuellement B2 — depuis le 28 septembre", pct:45, c:'#2563eb'},
+    {t:"Assiduité supérieure à 90 %", s:"75 % sur les 8 dernières séances", pct:75, c:'#d97706'},
+  ];
+  return `
+  <div class="hdr-plain"><div style="flex:1">
+    <div style="font-size:18px;font-weight:800;color:var(--n9)">Objectifs &amp; certifications</div>
+    <div style="font-size:13px;color:var(--n6)">3 objectifs suivis</div>
+  </div></div>
+  <div class="scrl">
+    ${objs.map(o=>`
+    <div class="card">
+      <div class="obj-top">
+        <div><div class="obj-name">${o.t}</div><div class="obj-sub">${o.s}</div></div>
+        <div class="obj-pct" style="color:${o.c}">${o.pct}%</div>
+      </div>
+      <div class="pbar"><div class="pfill" style="width:${o.pct}%;background:${o.c}"></div></div>
+    </div>`).join('')}
+
+    <div class="sec-hd"><div class="sec-ttl">Certifications obtenues</div></div>
+    <div class="card" style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#065f46,#059669);color:#fff">
+      <span style="font-size:28px">🏆</span>
+      <div style="flex:1"><div style="font-size:14px;font-weight:700">TOEIC B1 — Score 650</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.8)">Émis le 15/10/2025 · valide 2 ans</div></div>
+      <span class="bdg" style="background:rgba(255,255,255,.2);color:#fff">VALIDE</span>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Visées</div></div>
+    ${[['TOEIC','750 points','mars 2026'],['IELTS Academic','Band 7.0','non planifié']].map(([t,o,d])=>`
+    <div class="card" style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:22px">🎯</span>
+      <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--n9)">${t}</div>
+      <div style="font-size:12px;color:var(--n6)">Objectif ${o}</div></div>
+      <span class="bdg bdg-gray">${d}</span>
+    </div>`).join('')}
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ── 6. ONBOARDING ────────────────────────────────────────── */
+function onboarding() {
+  const etapes = [
+    {t:"Compte activé", s:"Votre accès a été créé par l'équipe BET", ok:true},
+    {t:"Profil complété", s:"Coordonnées et objectif renseignés", ok:true},
+    {t:"Test de niveau passé", s:"Résultat : B2 — le 28 septembre", ok:true},
+    {t:"Classe attribuée", s:"B2 Pro — Groupe Mercredi, avec Prof. Martin", ok:true},
+    {t:"Première séance", s:"Mercredi 2 octobre à 10h00", ok:false},
+    {t:"Premier paiement", s:"Mensualité d'octobre — due le 5", ok:false},
+  ];
+  const faits = etapes.filter(e=>e.ok).length;
+  return `
+  <div class="hdr-grad">
+    <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:6px">Bienvenue chez BET</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.5">Encore ${etapes.length-faits} étapes avant de démarrer votre formation.</div>
+    <div class="pbar" style="margin-top:14px;background:rgba(255,255,255,.25)">
+      <div class="pfill" style="width:${Math.round(faits/etapes.length*100)}%;background:#fff"></div>
+    </div>
+    <div style="font-size:12px;color:rgba(255,255,255,.8);margin-top:6px">${faits} sur ${etapes.length}</div>
+  </div>
+  <div class="scrl">
+    ${etapes.map((e,i)=>`
+    <div class="card" style="display:flex;gap:12px;align-items:flex-start;${e.ok?'':'border-left:3px solid var(--p)'}">
+      <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;
+        background:${e.ok?'#d1fae5':'var(--n1)'};color:${e.ok?'#065f46':'var(--n6)'}">${e.ok?'✓':i+1}</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:${e.ok?'600':'800'};color:var(--n9)">${e.t}</div>
+        <div style="font-size:12px;color:var(--n6);margin-top:2px;line-height:1.45">${e.s}</div>
+      </div>
+    </div>`).join('')}
+    <div style="padding:8px 16px"><button class="btn-p" onclick="go('home')">Aller à mon tableau de bord</button></div>
+  </div>`;
+}
+
+/* ── 7. GAMIFICATION ──────────────────────────────────────── */
+function gamification() {
+  const badges = [
+    {i:'🔥', t:"Série de 7 jours", ok:true}, {i:'📚', t:"10 leçons finies", ok:true},
+    {i:'🎯', t:"Premier examen réussi", ok:true}, {i:'⏰', t:"Jamais en retard", ok:false},
+    {i:'🏅', t:"Score parfait", ok:false}, {i:'🌟', t:"Élève du mois", ok:true},
+  ];
+  return `
+  <div class="hdr-grad" style="text-align:center">
+    <div style="font-size:12px;color:rgba(255,255,255,.75);letter-spacing:.08em;margin-bottom:6px">VOS POINTS</div>
+    <div style="font-size:40px;font-weight:800;color:#fff;line-height:1">2 340</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:4px">Niveau 7 — encore 160 XP pour le niveau 8</div>
+    <div class="pbar" style="margin-top:14px;background:rgba(255,255,255,.25)"><div class="pfill" style="width:72%;background:#fff"></div></div>
+  </div>
+  <div class="scrl">
+    <div class="card" style="display:flex;gap:10px;text-align:center">
+      ${[['🔥','7','jours d\'affilée'],['📚','23','leçons finies'],['🏆','4','badges obtenus']].map(([i,n,l])=>`
+      <div style="flex:1"><div style="font-size:22px">${i}</div>
+      <div style="font-size:19px;font-weight:800;color:var(--n9)">${n}</div>
+      <div style="font-size:11px;color:var(--n6)">${l}</div></div>`).join('')}
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Badges</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:0 16px 12px">
+      ${badges.map(b=>`
+      <div class="card" style="margin:0;text-align:center;padding:14px 8px;${b.ok?'':'opacity:.4'}">
+        <div style="font-size:26px;margin-bottom:6px">${b.i}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--n9);line-height:1.3">${b.t}</div>
+        ${b.ok?'':'<div style="font-size:10px;color:var(--n6);margin-top:4px">à débloquer</div>'}
+      </div>`).join('')}
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Classement de la classe</div></div>
+    ${[['1','Konan Yao','3 120'],['2','Kouamé Aya','2 340'],['3','Diallo Fatou','2 180']].map(([r,n,p])=>`
+    <div class="card" style="display:flex;align-items:center;gap:12px;${n==='Kouamé Aya'?'border:2px solid var(--p)':''}">
+      <div style="width:26px;text-align:center;font-size:15px;font-weight:800;color:var(--n6)">${r}</div>
+      <div class="av av32">${n.split(' ').map(x=>x[0]).join('')}</div>
+      <div style="flex:1;font-size:14px;font-weight:${n==='Kouamé Aya'?'800':'600'};color:var(--n9)">${n}</div>
+      <div style="font-size:14px;font-weight:800;color:var(--warn)">${p} XP</div>
+    </div>`).join('')}
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ── 8. MINI-JEUX ─────────────────────────────────────────── */
+function minijeux() {
+  return `
+  <div class="hdr-plain"><div style="flex:1">
+    <div style="font-size:18px;font-weight:800;color:var(--n9)">Mini-jeux</div>
+    <div style="font-size:13px;color:var(--n6)">Entraînez-vous en quelques minutes</div>
+  </div></div>
+  <div class="scrl">
+    <div class="card" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff">
+      <div style="font-size:12px;color:rgba(255,255,255,.8);margin-bottom:4px">DÉFI DU JOUR</div>
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">15 mots de vocabulaire professionnel</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.85);margin-bottom:14px">+50 XP si vous terminez avant minuit</div>
+      <button class="btn-ghost-w" style="width:100%">Commencer</button>
+    </div>
+    ${JEUX.map(j=>`
+    <div class="card card-tap" style="display:flex;align-items:center;gap:12px">
+      <div style="width:46px;height:46px;border-radius:12px;background:var(--n1);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${j.ico}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:700;color:var(--n9)">${j.t}</div>
+        <div style="font-size:12px;color:var(--n6);margin:2px 0 5px;line-height:1.4">${j.d}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="bdg bdg-blue">${j.n}</span>
+          ${j.best?`<span style="font-size:11px;color:var(--n6)">record : ${j.best} pts</span>`:'<span style="font-size:11px;color:var(--p);font-weight:700">nouveau</span>'}
+        </div>
+      </div>
+      <span style="color:var(--n6);font-size:18px">▶</span>
+    </div>`).join('')}
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ── 9. DICTIONNAIRE ──────────────────────────────────────── */
+function dictionnaire() {
+  return `
+  <div class="hdr-plain"><div style="flex:1">
+    <div style="font-size:18px;font-weight:800;color:var(--n9)">Dictionnaire</div>
+    <div style="font-size:13px;color:var(--n6)">Anglais — Français</div>
+  </div></div>
+  <div class="inp-wrap" style="padding:10px 16px">
+    <span class="inp-ico">🔍</span>
+    <input class="inp" type="search" placeholder="Chercher un mot…">
+  </div>
+  <div class="scrl">
+    <div class="sec-hd"><div class="sec-ttl">Mes mots enregistrés</div><span class="sec-lnk">${MOTS.length}</span></div>
+    ${MOTS.map(w=>`
+    <div class="card">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+        <div style="font-size:17px;font-weight:800;color:var(--n9)">${w.m}</div>
+        <div style="font-size:12px;color:var(--n6)">${w.p}</div>
+        <span style="margin-left:auto;font-size:17px;cursor:pointer">🔊</span>
+      </div>
+      <div style="font-size:14px;color:var(--s);font-weight:600;margin-bottom:6px">${w.t}</div>
+      <div style="font-size:12px;color:var(--n6);font-style:italic;line-height:1.5">« ${w.ex} »</div>
+    </div>`).join('')}
+    <div style="text-align:center;padding:14px;font-size:12px;color:var(--n6)">Les mots enregistrés restent consultables hors connexion</div>
+  </div>
+  ${bottomTabs('profile')}`;
+}
+
+/* ── 10. MON TÉMOIGNAGE ───────────────────────────────────── */
+function temoignage() {
+  return `
+  <div class="hdr-plain">
+    <button class="back-d" onclick="go('profile')">‹</button>
+    <div style="flex:1"><div style="font-size:17px;font-weight:800;color:var(--n9)">Mon témoignage</div></div>
+  </div>
+  <div class="scrl">
+    <div class="card" style="background:#eef1ff">
+      <div style="font-size:13px;color:var(--s);line-height:1.55">Votre témoignage peut être publié sur le site de BET, avec votre prénom et votre niveau. Vous pouvez le retirer à tout moment.</div>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Votre note</div></div>
+    <div class="card" style="text-align:center;padding:18px">
+      <div style="font-size:30px;letter-spacing:5px;color:#f59e0b;margin-bottom:6px">★★★★★</div>
+      <div style="font-size:12px;color:var(--n6)">Touchez pour noter</div>
+    </div>
+
+    <div class="sec-hd"><div class="sec-ttl">Votre expérience</div></div>
+    <div style="padding:0 16px 12px">
+      <textarea style="width:100%;min-height:130px;border:1.5px solid var(--n3);border-radius:12px;padding:12px;font-family:var(--f);font-size:14px;line-height:1.55;color:var(--n9);resize:vertical" placeholder="Qu'est-ce qui a changé pour vous depuis votre arrivée chez BET ?"></textarea>
+      <div style="font-size:11px;color:var(--n6);margin-top:6px">Entre 40 et 400 caractères</div>
+    </div>
+
+    <div class="card" style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:20px">📷</span>
+      <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--n9)">Ajouter une photo</div>
+      <div style="font-size:12px;color:var(--n6)">Facultatif</div></div>
+      <span style="color:var(--n6)">›</span>
+    </div>
+
+    <div style="padding:8px 16px"><button class="btn-p">Envoyer mon témoignage</button></div>
+    <div style="text-align:center;padding:4px 16px 16px;font-size:11px;color:var(--n6)">Relu par l'équipe BET avant publication</div>
+  </div>`;
+}
+
+/* ============================================================
+   BOOT
+============================================================ */
+go('splash');
+</script>
+</body>
+</html>

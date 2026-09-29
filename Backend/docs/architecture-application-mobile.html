@@ -1,0 +1,431 @@
+<title>Application mobile BET</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --encre:#0F172A; --encre-doux:#39495A; --sourd:#5B6C7A;
+    --bet:#0891B2; --bet-fonce:#0A5C72;
+    --acquis:#136B3C; --acquis-fond:#E9F4ED;
+    --neuf:#9A5A00;  --neuf-fond:#FDF2E0;
+    --manque:#A8202A; --manque-fond:#FBECEC;
+    --fond:#F4F7F9; --carte:#FFFFFF; --trait:#DAE4EA; --trait-fort:#B4C6D0; --code-fond:#ECF3F6;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --encre:#E9EFF3; --encre-doux:#BDCBD5; --sourd:#8DA0AD;
+    --bet:#41B8D6; --bet-fonce:#82D5E8;
+    --acquis:#5FC98A; --acquis-fond:#12281C;
+    --neuf:#E0A84B;  --neuf-fond:#2E2313;
+    --manque:#F08D92; --manque-fond:#321A1C;
+    --fond:#0B1317; --carte:#131F26; --trait:#243239; --trait-fort:#3A4E59; --code-fond:#1A2830; } }
+  :root[data-theme="dark"]{
+    --encre:#E9EFF3; --encre-doux:#BDCBD5; --sourd:#8DA0AD;
+    --bet:#41B8D6; --bet-fonce:#82D5E8;
+    --acquis:#5FC98A; --acquis-fond:#12281C;
+    --neuf:#E0A84B;  --neuf-fond:#2E2313;
+    --manque:#F08D92; --manque-fond:#321A1C;
+    --fond:#0B1317; --carte:#131F26; --trait:#243239; --trait-fort:#3A4E59; --code-fond:#1A2830; }
+
+  body{background:var(--fond);color:var(--encre);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.65}
+  .page{max-width:1000px;margin:0 auto;padding:40px 24px 80px}
+  code{font-family:"IBM Plex Mono",Menlo,monospace;font-size:.87em;background:var(--code-fond);padding:1px 5px;border-radius:4px;color:var(--bet-fonce);word-break:break-word}
+  .chapeau{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--bet);margin-bottom:14px}
+  h1{font-family:"Fraunces",Georgia,serif;font-weight:900;font-size:clamp(30px,5vw,46px);line-height:1.08;letter-spacing:-.015em;text-wrap:balance;margin-bottom:14px}
+  .these{font-family:"Fraunces",Georgia,serif;font-size:clamp(17px,2.4vw,21px);font-style:italic;color:var(--encre-doux);max-width:64ch;text-wrap:balance}
+  .meta{margin-top:22px;padding-top:16px;border-top:2px solid var(--trait-fort);display:flex;flex-wrap:wrap;gap:8px 28px;font-size:12.5px;color:var(--sourd)}
+  section{margin-top:54px}
+  h2{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:clamp(21px,3vw,27px);letter-spacing:-.01em;margin-bottom:6px;text-wrap:balance}
+  h3{font-size:15.5px;font-weight:700;margin:22px 0 6px}
+  .sous{color:var(--sourd);font-size:14px;margin-bottom:22px;max-width:72ch}
+  p{max-width:74ch;margin-bottom:14px}
+  ul{margin:0 0 14px 20px;max-width:72ch} li{margin-bottom:7px}
+  figure{margin:26px 0;background:var(--carte);border:1px solid var(--trait);border-radius:12px;padding:22px 20px 16px;overflow-x:auto}
+  figure svg{display:block;width:100%;height:auto;min-width:600px;color:var(--encre-doux)}
+  figcaption{margin-top:14px;padding-top:12px;border-top:1px solid var(--trait);font-size:13px;color:var(--sourd);max-width:80ch}
+  figcaption strong{color:var(--encre);font-weight:600}
+  .t-titre{font-weight:700;font-size:12.5px;fill:var(--encre)}
+  .t-lbl{font-size:11.5px;fill:var(--encre)}
+  .t-mono{font-family:"IBM Plex Mono",monospace;font-size:10px;fill:var(--sourd)}
+  .t-arc{font-size:10.5px;fill:var(--sourd)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--trait);vertical-align:top}
+  th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--sourd);font-weight:600}
+  tbody tr:last-child td{border-bottom:none}
+  .tbl-wrap{background:var(--carte);border:1px solid var(--trait);border-radius:12px;padding:4px 14px;overflow-x:auto}
+  .pastille{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .p-ok{background:var(--acquis-fond);color:var(--acquis)} .p-non{background:var(--manque-fond);color:var(--manque)}
+  .encart{border-radius:12px;padding:18px 22px;margin:18px 0;border:1px solid}
+  .e-acquis{background:var(--acquis-fond);border-color:color-mix(in srgb,var(--acquis) 30%,transparent)}
+  .e-manque{background:var(--manque-fond);border-color:color-mix(in srgb,var(--manque) 30%,transparent)}
+  .encart h3{margin-top:0} .e-acquis h3{color:var(--acquis)} .e-manque h3{color:var(--manque)}
+  .choix{display:grid;gap:12px;margin:16px 0}
+  @media (min-width:760px){.choix{grid-template-columns:repeat(3,1fr)}}
+  .opt{background:var(--carte);border:1px solid var(--trait);border-radius:10px;padding:15px 17px;font-size:13.5px}
+  .opt.retenu{border:2px solid var(--bet)}
+  .opt b{display:block;font-size:14.5px;margin-bottom:6px}
+  .verdict{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:99px;margin-bottom:8px}
+  .retenu .verdict{background:var(--bet);color:#fff}
+  .ecarte .verdict{background:var(--code-fond);color:var(--sourd)}
+  .decision{background:var(--carte);border:1px solid var(--trait);border-top:3px solid var(--bet);border-radius:3px 3px 12px 12px;padding:18px 22px;margin-bottom:14px}
+  .decision .q{font-family:"Fraunces",serif;font-weight:600;font-size:17.5px;margin-bottom:8px;text-wrap:balance}
+  .avis{margin-top:12px;font-size:13.5px;color:var(--encre-doux);padding-left:13px;border-left:2px solid var(--bet)}
+  .avis b{color:var(--bet-fonce)}
+  .pied{margin-top:60px;padding-top:18px;border-top:1px solid var(--trait);font-size:12.5px;color:var(--sourd)}
+</style>
+
+<div class="page">
+
+  <div class="chapeau">Proposition d'architecture · plateforme BET</div>
+  <h1>Application mobile BET</h1>
+  <p class="these">Le serveur, la base, le chat et les paiements existent déjà et tournent. L'application mobile n'est pas un nouveau système : c'est un quatrième client sur un socle qui en porte trois.</p>
+  <div class="meta">
+    <span>29 septembre 2026</span><span>iOS et Android</span>
+    <span>Relevé dans le code en production, et dans la maquette d'avril</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Ce qui est déjà là</h2>
+    <p class="sous">Avant de dessiner quoi que ce soit : le socle réellement en service, celui que j'ai déployé et vérifié cette semaine.</p>
+
+    <figure>
+      <svg viewBox="0 0 900 400" role="img" aria-label="Le site public, le tableau de bord et la plateforme e-learning s'appuient sur une API, Supabase, Firebase, Cloudinary et TouchPoint. L'application mobile devient un quatrième client du même socle.">
+        <defs>
+          <marker id="f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="f1n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--neuf)"/></marker>
+        </defs>
+        <text class="t-mono" x="6" y="14">LES CLIENTS</text>
+        <rect x="6" y="24" width="186" height="52" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.5"/>
+        <text class="t-lbl" x="99" y="45" text-anchor="middle">Site public</text>
+        <text class="t-mono" x="99" y="61" text-anchor="middle">binniesenglish.net</text>
+        <rect x="204" y="24" width="186" height="52" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.5"/>
+        <text class="t-lbl" x="297" y="45" text-anchor="middle">Tableau de bord · 17 espaces</text>
+        <text class="t-mono" x="297" y="61" text-anchor="middle">app.binniesenglish.net</text>
+        <rect x="402" y="24" width="186" height="52" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.5"/>
+        <text class="t-lbl" x="495" y="45" text-anchor="middle">E-learning</text>
+        <text class="t-mono" x="495" y="61" text-anchor="middle">plateforme de cours</text>
+        <rect x="640" y="18" width="254" height="64" rx="9" fill="var(--neuf-fond)" stroke="var(--neuf)" stroke-width="2.5"/>
+        <text class="t-titre" x="767" y="42" text-anchor="middle" fill="var(--neuf)">Application mobile</text>
+        <text class="t-mono" x="767" y="58" text-anchor="middle" fill="var(--neuf)">iOS · Android</text>
+        <text class="t-mono" x="767" y="73" text-anchor="middle" fill="var(--neuf)">à construire</text>
+
+        <path d="M99,76 L99,142" stroke="currentColor" stroke-width="1.5" marker-end="url(#f1)"/>
+        <path d="M297,76 L297,142" stroke="currentColor" stroke-width="1.5" marker-end="url(#f1)"/>
+        <path d="M495,76 L495,142" stroke="currentColor" stroke-width="1.5" marker-end="url(#f1)"/>
+        <path d="M767,82 L767,114 C767,134 700,130 620,144" fill="none" stroke="var(--neuf)" stroke-width="2.5" marker-end="url(#f1n)"/>
+        <text class="t-arc" x="706" y="110" fill="var(--neuf)">les mêmes routes</text>
+
+        <rect x="6" y="146" width="888" height="60" rx="9" fill="none" stroke="currentColor" stroke-width="2.5"/>
+        <text class="t-titre" x="450" y="170" text-anchor="middle">API BET — Node / Express, sur le VPS</text>
+        <text class="t-mono" x="450" y="187" text-anchor="middle">api.binniesenglish.net · 303 points d'entrée · règles métier, droits par rôle, notifications, tâches planifiées</text>
+        <text class="t-mono" x="450" y="200" text-anchor="middle" fill="var(--acquis)">déjà en service</text>
+
+        <text class="t-mono" x="6" y="238">LES SERVICES</text>
+        <rect x="6" y="248" width="210" height="56" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.3"/>
+        <text class="t-lbl" x="111" y="269" text-anchor="middle">Supabase</text>
+        <text class="t-mono" x="111" y="285" text-anchor="middle">comptes, sessions, base de données</text>
+        <rect x="232" y="248" width="210" height="56" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.3"/>
+        <text class="t-lbl" x="337" y="269" text-anchor="middle">Firebase</text>
+        <text class="t-mono" x="337" y="285" text-anchor="middle">chat temps réel · et le push à venir</text>
+        <rect x="458" y="248" width="210" height="56" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.3"/>
+        <text class="t-lbl" x="563" y="269" text-anchor="middle">Cloudinary</text>
+        <text class="t-mono" x="563" y="285" text-anchor="middle">documents, images, audio des tests</text>
+        <rect x="684" y="248" width="210" height="56" rx="8" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.3"/>
+        <text class="t-lbl" x="789" y="269" text-anchor="middle">TouchPoint · CinetPay</text>
+        <text class="t-mono" x="789" y="285" text-anchor="middle">mobile money et carte</text>
+        <path d="M111,206 L111,248" stroke="currentColor" stroke-width="1.3" marker-end="url(#f1)"/>
+        <path d="M337,206 L337,248" stroke="currentColor" stroke-width="1.3" marker-end="url(#f1)"/>
+        <path d="M563,206 L563,248" stroke="currentColor" stroke-width="1.3" marker-end="url(#f1)"/>
+        <path d="M789,206 L789,248" stroke="currentColor" stroke-width="1.3" marker-end="url(#f1)"/>
+
+        <line x1="6" y1="330" x2="894" y2="330" stroke="var(--trait)" stroke-width="1"/>
+        <rect x="6" y="344" width="14" height="14" rx="3" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.3"/>
+        <text class="t-arc" x="28" y="355">existe et tourne aujourd'hui</text>
+        <rect x="230" y="344" width="14" height="14" rx="3" fill="var(--neuf-fond)" stroke="var(--neuf)" stroke-width="2"/>
+        <text class="t-arc" x="252" y="355">à construire</text>
+        <text class="t-arc" x="6" y="382">Les trois clients actuels consomment déjà ces mêmes services. L'application mobile n'en ajoute aucun.</text>
+      </svg>
+      <figcaption>
+        <strong>L'application mobile ne demande pas un nouveau back-end.</strong> Elle appelle les mêmes routes, s'authentifie sur le même Supabase, lit le même Firebase pour le chat, passe par le même prestataire de paiement. Tout le travail de règles métier — droits par rôle, circuits de transfert, échéanciers, honoraires — reste au serveur et ne se duplique pas.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>La maquette d'avril couvre la moitié du besoin</h2>
+    <p class="sous">Le prototype <code>BET Figma.html</code> définit déjà 22 écrans d'apprenant. Mais il date du 20 avril, et l'espace apprenant a doublé depuis.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:42%">Écran de l'espace apprenant aujourd'hui</th><th style="width:20%">Maquette d'avril</th><th>Remarque</th></tr></thead>
+        <tbody>
+          <tr><td>Tableau de bord</td><td><span class="pastille p-ok">maquetté</span></td><td></td></tr>
+          <tr><td>Planning</td><td><span class="pastille p-ok">maquetté</span></td><td></td></tr>
+          <tr><td>Mes cours</td><td><span class="pastille p-ok">maquetté</span></td><td>3 formats de leçon : vidéo, lecture, audio</td></tr>
+          <tr><td>Devoirs &amp; Évaluations</td><td><span class="pastille p-ok">maquetté</span></td><td>épreuve chronométrée, résultats, détail par question</td></tr>
+          <tr><td>Résultats</td><td><span class="pastille p-ok">maquetté</span></td><td></td></tr>
+          <tr><td>Ressources</td><td><span class="pastille p-ok">maquetté</span></td><td>avec visionneuse PDF</td></tr>
+          <tr><td>Mon profil</td><td><span class="pastille p-ok">maquetté</span></td><td></td></tr>
+          <tr><td>Messages</td><td><span class="pastille p-ok">maquetté</span></td><td>liste, détail, envoi de demande</td></tr>
+          <tr><td>Boutique</td><td><span class="pastille p-ok">maquetté</span></td><td>voir l'alerte sur les commissions, plus bas</td></tr>
+          <tr><td>Paiement</td><td><span class="pastille p-ok">maquetté</span></td><td>idem</td></tr>
+          <tr><td>Mes présences</td><td><span class="pastille p-non">absent</span></td><td>l'assiduité conditionne le blocage d'accès</td></tr>
+          <tr><td>Session Live</td><td><span class="pastille p-non">absent</span></td><td>rejoindre la séance en ligne</td></tr>
+          <tr><td>Notifications</td><td><span class="pastille p-non">absent</span></td><td>c'est pourtant le cœur d'une application mobile</td></tr>
+          <tr><td>Objectifs &amp; Certifications</td><td><span class="pastille p-non">absent</span></td><td></td></tr>
+          <tr><td>Gamification · Mini-jeux · Dictionnaire</td><td><span class="pastille p-non">absent</span></td><td>trois écrans, ajoutés depuis avril</td></tr>
+          <tr><td>Onboarding · Témoignage · Contacts &amp; Support</td><td><span class="pastille p-non">absent</span></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>Dix écrans sur vingt.</strong> La maquette reste un excellent point de départ — la navigation, la charte et les parcours principaux y sont posés — mais elle ne décrit pas l'application à construire aujourd'hui. Il faut la reprendre avant de l'utiliser comme référence de développement, notamment sur deux manques qui ne sont pas des détails : <strong>les notifications</strong>, qui sont la raison d'être d'une application, et <strong>les présences</strong>, qui décident du blocage d'accès d'un apprenant.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Proposition 1 — qui reçoit l'application</h2>
+    <p class="sous">La plateforme sert 19 profils. Les mettre tous sur mobile serait absurde : on ne tient pas une comptabilité générale sur un téléphone.</p>
+
+    <figure>
+      <svg viewBox="0 0 900 292" role="img" aria-label="Trois profils de terrain — apprenant, parent, coach — reçoivent l'application mobile. Les quatorze profils de bureau restent sur le tableau de bord web.">
+        <rect x="6" y="12" width="430" height="266" rx="11" fill="var(--neuf-fond)" stroke="var(--neuf)" stroke-width="2"/>
+        <text class="t-titre" x="24" y="38" fill="var(--neuf)">SUR MOBILE — les profils de terrain</text>
+        <text class="t-mono" x="24" y="55" fill="var(--neuf)">ils utilisent la plateforme debout, hors du bureau</text>
+        <rect x="24" y="70" width="394" height="54" rx="7" fill="var(--carte)" stroke="var(--trait)" stroke-width="1.2"/>
+        <text class="t-lbl" x="38" y="91">Apprenant</text>
+        <text class="t-mono" x="38" y="107">cours, planning, présences, devoirs, résultats, séance live,</text>
+        <text class="t-mono" x="38" y="119">paiement, chat — 20 écrans, 10 déjà maquettés</text>
+        <rect x="24" y="132" width="394" height="46" rx="7" fill="var(--carte)" stroke="var(--trait)" stroke-width="1.2"/>
+        <text class="t-lbl" x="38" y="152">Parent</text>
+        <text class="t-mono" x="38" y="169">suivi de l'enfant : séances, présences, devoirs, paiement — 10 écrans</text>
+        <rect x="24" y="186" width="394" height="66" rx="7" fill="var(--carte)" stroke="var(--trait)" stroke-width="1.2"/>
+        <text class="t-lbl" x="38" y="206">Coach</text>
+        <text class="t-mono" x="38" y="222">feuille de présence, planning, évaluations, séance live,</text>
+        <text class="t-mono" x="38" y="234">demandes de transfert — 17 écrans</text>
+        <text class="t-mono" x="38" y="248" fill="var(--neuf)">c'est lui qui gagne le plus : il saisit en salle</text>
+
+        <rect x="464" y="12" width="430" height="266" rx="11" fill="none" stroke="var(--trait-fort)" stroke-width="1.5" stroke-dasharray="6 4"/>
+        <text class="t-titre" x="482" y="38">RESTE SUR LE WEB — les profils de bureau</text>
+        <text class="t-mono" x="482" y="55">écrans denses, tableaux, exports, saisie longue</text>
+        <text class="t-mono" x="482" y="82">Super Admin · Administrateur · Manager</text>
+        <text class="t-mono" x="482" y="100">Superviseur global · Deputy Superviseur</text>
+        <text class="t-mono" x="482" y="118">Conseiller pédagogique · Agent placement test</text>
+        <text class="t-mono" x="482" y="136">Assistante commerciale · Assistante onboarding</text>
+        <text class="t-mono" x="482" y="154">Gestionnaire · Comptable · RH &amp; Paie</text>
+        <text class="t-mono" x="482" y="172">Customer Care · Assistante SAV · Data Collector</text>
+        <rect x="482" y="192" width="394" height="60" rx="7" fill="var(--carte)" stroke="var(--trait)" stroke-width="1.2"/>
+        <text class="t-lbl" x="496" y="212">Le tableau de bord reste ouvert au navigateur du téléphone</text>
+        <text class="t-mono" x="496" y="229">Rien ne leur est retiré. Une comptabilité à seize onglets</text>
+        <text class="t-mono" x="496" y="241">ne se refait pas en application : elle se consulte, rarement.</text>
+      </svg>
+      <figcaption>
+        <strong>Le critère n'est pas le rôle, c'est le contexte d'usage.</strong> Un coach saisit ses présences debout dans une salle ; une comptable travaille assise devant deux écrans. Trois profils sur dix-neuf couvrent la quasi-totalité des usages mobiles réels — et représentent de loin le plus gros volume d'utilisateurs, puisqu'il y a beaucoup plus d'apprenants que de personnel.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Proposition 2 — la technologie</h2>
+    <div class="choix">
+      <div class="opt retenu"><span class="verdict">Recommandé</span><b>React Native + Expo</b>
+        Un seul code pour iOS et Android, en React et JavaScript — exactement ce que porte déjà votre équipe sur trois applications. Expo construit les binaires dans le nuage, sans parc de Mac, et permet de publier une correction sans repasser par les magasins.</div>
+      <div class="opt ecarte"><span class="verdict">Écarté</span><b>Flutter</b>
+        Techniquement excellent, rendu très fluide. Mais c'est un autre langage : aucune de vos règles métier JavaScript ne se réutilise, et personne chez vous ne le pratique. Le gain ne paie pas ce prix sur des écrans de listes et de formulaires.</div>
+      <div class="opt ecarte"><span class="verdict">Écarté</span><b>Deux applications natives</b>
+        Swift et Kotlin : le meilleur résultat possible, pour deux fois le travail, deux compétences à recruter, et deux corrections pour chaque anomalie. Injustifiable à ce stade.</div>
+    </div>
+
+    <p>Une quatrième voie mérite d'être nommée parce qu'elle est tentante : transformer le site en <strong>application web installable</strong>. C'est la moins chère, mais elle ne donne ni présence dans les magasins, ni notification poussée fiable sur iOS, ni stockage hors ligne correct. Pour un usage quotidien par des apprenants, c'est un faux départ.</p>
+
+    <div class="encart e-acquis">
+      <h3>Ce qui se réutilise — et ce qui ne se réutilise pas</h3>
+      <p>Soyons précis, c'est là que les devis se trompent le plus souvent.</p>
+      <ul>
+        <li><strong>Se réutilise :</strong> la couche d'appel à l'API, les règles de calcul en JavaScript (niveaux CECRL, catégories de coach, barèmes d'observation, périodes et échéances), la logique du chat Firebase, les formats de données. Plusieurs milliers de lignes déjà écrites et éprouvées.</li>
+        <li><strong>Ne se réutilise pas :</strong> <em>l'intégralité des écrans</em>. React Native n'a ni <code>div</code>, ni CSS, ni feuilles de style du web. Chaque écran est à redessiner — ce qui est de toute façon souhaitable : une fiche à huit onglets ne se transpose pas sur un téléphone.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Le seul vrai manque côté serveur</h2>
+    <p class="sous">J'ai cherché ce que l'API ne sait pas faire pour une application mobile. Il n'y a qu'une chose — mais elle est structurante.</p>
+
+    <figure>
+      <svg viewBox="0 0 900 320" role="img" aria-label="Aujourd'hui les notifications sont écrites en base et le navigateur les redemande toutes les soixante secondes. Sur mobile, application fermée, rien n'interroge : il faut que le serveur pousse la notification via Firebase vers l'appareil.">
+        <defs>
+          <marker id="f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="f2k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--manque)"/></marker>
+          <marker id="f2n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--neuf)"/></marker>
+        </defs>
+        <text class="t-titre" x="6" y="20">AUJOURD'HUI — le navigateur redemande</text>
+        <rect x="6" y="32" width="150" height="44" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text class="t-lbl" x="81" y="52" text-anchor="middle">Un évènement</text>
+        <text class="t-mono" x="81" y="67" text-anchor="middle">transfert, paiement…</text>
+        <path d="M156,54 L212,54" stroke="currentColor" stroke-width="1.5" marker-end="url(#f2)"/>
+        <rect x="214" y="32" width="170" height="44" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text class="t-lbl" x="299" y="52" text-anchor="middle">Une ligne en base</text>
+        <text class="t-mono" x="299" y="67" text-anchor="middle">table notifications</text>
+        <path d="M384,54 L442,54" stroke="currentColor" stroke-width="1.5" marker-end="url(#f2)"/>
+        <rect x="444" y="32" width="200" height="44" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text class="t-lbl" x="544" y="52" text-anchor="middle">Le navigateur interroge</text>
+        <text class="t-mono" x="544" y="67" text-anchor="middle">toutes les 60 secondes</text>
+        <path d="M644,54 L702,54" stroke="currentColor" stroke-width="1.5" marker-end="url(#f2)"/>
+        <rect x="704" y="32" width="190" height="44" rx="7" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.5"/>
+        <text class="t-lbl" x="799" y="58" text-anchor="middle" fill="var(--acquis)">La cloche s'allume</text>
+
+        <line x1="6" y1="100" x2="894" y2="100" stroke="var(--trait)" stroke-width="1"/>
+
+        <text class="t-titre" x="6" y="126" fill="var(--manque)">SUR MOBILE — personne n'interroge</text>
+        <path d="M384,158 L442,158" stroke="var(--manque)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#f2k)"/>
+        <rect x="444" y="136" width="200" height="44" rx="7" fill="var(--manque-fond)" stroke="var(--manque)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text class="t-lbl" x="544" y="156" text-anchor="middle" fill="var(--manque)">Application fermée</text>
+        <text class="t-mono" x="544" y="171" text-anchor="middle" fill="var(--manque)">aucun code ne tourne</text>
+        <path d="M644,158 L702,158" stroke="var(--manque)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#f2k)"/>
+        <rect x="704" y="136" width="190" height="44" rx="7" fill="none" stroke="var(--manque)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text class="t-lbl" x="799" y="162" text-anchor="middle" fill="var(--manque)">L'apprenant ne sait rien</text>
+
+        <line x1="6" y1="204" x2="894" y2="204" stroke="var(--trait)" stroke-width="1"/>
+
+        <text class="t-titre" x="6" y="230" fill="var(--neuf)">CE QU'IL FAUT AJOUTER — le serveur pousse</text>
+        <rect x="214" y="242" width="170" height="50" rx="7" fill="none" stroke="var(--neuf)" stroke-width="1.5"/>
+        <text class="t-lbl" x="299" y="262" text-anchor="middle">La même ligne en base</text>
+        <text class="t-mono" x="299" y="278" text-anchor="middle">rien ne change ici</text>
+        <path d="M384,267 L442,267" stroke="var(--neuf)" stroke-width="2" marker-end="url(#f2n)"/>
+        <rect x="444" y="242" width="200" height="50" rx="7" fill="var(--neuf-fond)" stroke="var(--neuf)" stroke-width="2"/>
+        <text class="t-lbl" x="544" y="262" text-anchor="middle" fill="var(--neuf)">Firebase Cloud Messaging</text>
+        <text class="t-mono" x="544" y="278" text-anchor="middle" fill="var(--neuf)">firebase-admin est déjà installé</text>
+        <path d="M644,267 L702,267" stroke="var(--neuf)" stroke-width="2" marker-end="url(#f2n)"/>
+        <rect x="704" y="242" width="190" height="50" rx="7" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.5"/>
+        <text class="t-lbl" x="799" y="262" text-anchor="middle" fill="var(--acquis)">Le téléphone sonne</text>
+        <text class="t-mono" x="799" y="278" text-anchor="middle" fill="var(--acquis)">même application fermée</text>
+      </svg>
+      <figcaption>
+        <strong>La brique est déjà à moitié là.</strong> Le serveur embarque <code>firebase-admin</code> pour le chat, et c'est ce même module qui envoie les notifications poussées — aucun service à souscrire, aucun prestataire à ajouter. Il reste à stocker le jeton d'appareil de chaque utilisateur et à déclencher l'envoi là où la ligne de notification est déjà écrite. Le reste du circuit — qui reçoit quoi, dans quel cas — existe et n'est pas à refaire.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Proposition 3 — le hors-ligne</h2>
+    <p class="sous">C'est là qu'une application mobile se distingue vraiment d'un site web, et ce qu'on sous-estime toujours.</p>
+
+    <figure>
+      <svg viewBox="0 0 900 240" role="img" aria-label="Les lectures sont servies depuis un cache local et fonctionnent sans réseau. Les écritures sont mises en file et rejouées au retour de la connexion. Le conflit entre deux saisies concurrentes doit être arbitré.">
+        <defs><marker id="f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <rect x="6" y="12" width="250" height="206" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text class="t-titre" x="131" y="38" text-anchor="middle">Le téléphone</text>
+        <rect x="26" y="54" width="210" height="50" rx="7" fill="var(--acquis-fond)" stroke="var(--acquis)" stroke-width="1.3"/>
+        <text class="t-lbl" x="131" y="75" text-anchor="middle">Cache de lecture</text>
+        <text class="t-mono" x="131" y="91" text-anchor="middle">planning, cours, présences, fiches</text>
+        <rect x="26" y="118" width="210" height="50" rx="7" fill="var(--neuf-fond)" stroke="var(--neuf)" stroke-width="1.3"/>
+        <text class="t-lbl" x="131" y="139" text-anchor="middle">File d'écriture</text>
+        <text class="t-mono" x="131" y="155" text-anchor="middle">présences saisies, devoirs rendus</text>
+        <text class="t-mono" x="131" y="190" text-anchor="middle" fill="var(--acquis)">l'écran ne reste jamais vide</text>
+
+        <path d="M256,79 L400,79" stroke="currentColor" stroke-width="1.5" marker-end="url(#f3)"/>
+        <text class="t-arc" x="328" y="71" text-anchor="middle">rafraîchi dès le retour du réseau</text>
+        <path d="M256,143 L400,143" stroke="var(--neuf)" stroke-width="2" marker-end="url(#f3)" color="var(--neuf)"/>
+        <text class="t-arc" x="328" y="135" text-anchor="middle" fill="var(--neuf)">rejouée dans l'ordre</text>
+
+        <rect x="404" y="12" width="250" height="206" rx="10" fill="none" stroke="currentColor" stroke-width="2"/>
+        <text class="t-titre" x="529" y="38" text-anchor="middle">API BET</text>
+        <text class="t-mono" x="529" y="64" text-anchor="middle">source de vérité unique</text>
+        <text class="t-mono" x="529" y="82" text-anchor="middle">aucune règle métier n'est déplacée</text>
+        <text class="t-mono" x="529" y="96" text-anchor="middle">dans le téléphone</text>
+        <rect x="424" y="118" width="210" height="80" rx="7" fill="var(--manque-fond)" stroke="var(--manque)" stroke-width="1.3"/>
+        <text class="t-lbl" x="529" y="139" text-anchor="middle" fill="var(--manque)">Le conflit à trancher</text>
+        <text class="t-mono" x="529" y="157" text-anchor="middle" fill="var(--manque)">deux coachs saisissent la même</text>
+        <text class="t-mono" x="529" y="171" text-anchor="middle" fill="var(--manque)">présence hors ligne : qui gagne ?</text>
+        <text class="t-mono" x="529" y="189" text-anchor="middle" fill="var(--manque)">à décider avant d'écrire le code</text>
+
+        <rect x="672" y="12" width="222" height="206" rx="10" fill="var(--code-fond)" stroke="var(--trait)" stroke-width="1.2"/>
+        <text class="t-titre" x="783" y="38" text-anchor="middle">Pourquoi ici</text>
+        <text class="t-mono" x="688" y="64">La connexion mobile en Côte</text>
+        <text class="t-mono" x="688" y="80">d'Ivoire n'est pas continue.</text>
+        <text class="t-mono" x="688" y="104">Un coach en salle, un apprenant</text>
+        <text class="t-mono" x="688" y="120">dans un transport : l'application</text>
+        <text class="t-mono" x="688" y="136">doit rester utile sans réseau,</text>
+        <text class="t-mono" x="688" y="152">sinon elle sera désinstallée.</text>
+        <text class="t-mono" x="688" y="182" fill="var(--bet)">C'est le premier motif de</text>
+        <text class="t-mono" x="688" y="198" fill="var(--bet)">désinstallation d'une application</text>
+        <text class="t-mono" x="688" y="212" fill="var(--bet)">métier.</text>
+      </svg>
+      <figcaption>
+        <strong>Le hors-ligne se décide, il ne s'ajoute pas après coup.</strong> Un cache de lecture est simple et donne 80 % du confort. La file d'écriture ouvre une vraie question : deux saisies concurrentes de la même feuille de présence. Il faut une règle — le dernier qui synchronise l'emporte, ou le serveur refuse et l'application prévient. Ce choix doit être fait avant d'écrire le code, pas découvert en recette.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Le point qui peut coûter cher</h2>
+    <div class="encart e-manque">
+      <h3>La commission des magasins — et la maquette la prévoit déjà</h3>
+      <p><strong>Apple et Google prélèvent 15 à 30 % sur ce qui est vendu dans une application et consommé numériquement.</strong> La maquette d'avril contient un écran <em>Boutique</em> et un écran <em>Paiement</em> : le sujet n'est donc pas théorique, il est déjà dessiné.</p>
+      <p>La frontière est étroite. Un cours <em>en présentiel</em> dans un centre est un service physique, hors du champ de la commission. Un cours <em>en ligne</em> peut être qualifié de contenu numérique. Votre catalogue contient les deux, et vos apprenants paient aujourd'hui par mobile money via TouchPoint — un moyen de paiement qu'Apple n'autorise pas pour du contenu numérique.</p>
+      <p><strong>La parade habituelle :</strong> l'application affiche l'échéance et l'historique, mais renvoie le paiement vers le site ou un lien reçu par message. Moins confortable, mais c'est ce que font la plupart des plateformes de formation.</p>
+      <p>À trancher <strong>avant</strong> de développer ces écrans, pas au moment de la soumission — un refus à ce stade coûte des semaines.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Découpage proposé</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:14%">Étape</th><th style="width:38%">Contenu</th><th>Pourquoi cet ordre</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Socle</strong></td><td>Projet React Native, connexion Supabase, navigation, couche d'appel à l'API, notifications poussées côté serveur et côté application</td><td>Rien de visible, mais tout en dépend. Les notifications d'abord : seule brique serveur manquante, et c'est ce qui fait revenir les gens.</td></tr>
+          <tr><td><strong>Apprenant</strong></td><td>Les 10 écrans déjà maquettés, plus présences, notifications et session live</td><td>Le plus gros volume d'utilisateurs, les écrans les plus simples, et une maquette à moitié prête. Bon terrain d'essai avant d'exposer des profils qui écrivent.</td></tr>
+          <tr><td><strong>Coach</strong></td><td>Feuille de présence hors ligne, planning, évaluations, demandes de transfert</td><td>C'est là que le mobile apporte le plus. Mais c'est le premier profil qui <em>écrit</em>, donc celui qui exige la file d'écriture et la règle de conflit.</td></tr>
+          <tr><td><strong>Parent</strong></td><td>Suivi de l'enfant, évaluation du coach, échéances</td><td>Le plus petit périmètre, largement dérivé des écrans de l'apprenant. En dernier parce qu'il réutilise presque tout.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <section>
+    <h2>Ce que vous devez trancher</h2>
+    <p class="sous">Je peux avancer sur le socle sans réponse. Pour le reste, ces choix changent l'architecture — les faire après coup coûte plusieurs fois leur prix.</p>
+
+    <div class="decision">
+      <div class="q">1 · Le coach est-il dans la première version ?</div>
+      <p>C'est lui qui justifie le hors-ligne avec file d'écriture et règle de conflit — la partie la plus délicate. Le sortir de la v1 réduit sensiblement l'effort ; l'y garder donne tout de suite l'usage qui a le plus de valeur pour BET.</p>
+      <div class="avis"><b>Mon avis :</b> l'inclure, mais en commençant par la seule feuille de présence hors ligne. C'est l'écran qui compte, et il sert de banc d'essai à toute la synchronisation.</div>
+    </div>
+
+    <div class="decision">
+      <div class="q">2 · Le paiement est-il accessible depuis l'application ?</div>
+      <p>La maquette le prévoit. Répondre « oui » sans vérifier les règles d'Apple expose à un refus de publication, et éventuellement à 30 % de commission sur vos mensualités.</p>
+      <div class="avis"><b>Mon avis :</b> afficher les échéances et l'historique, renvoyer le paiement vers le site. On rouvrira la question quand l'application sera installée et acceptée.</div>
+    </div>
+
+    <div class="decision">
+      <div class="q">3 · Qui publie sur les magasins, et sous quel compte ?</div>
+      <p>Il faut un compte développeur <strong>Apple</strong> (99 $ par an) et un compte <strong>Google Play</strong> (25 $ une fois). Ils doivent appartenir à BET, pas à un prestataire : un compte au nom d'un tiers, c'est l'application qui ne vous appartient plus le jour où vous changez de partenaire.</p>
+      <div class="avis"><b>Mon avis :</b> créez les deux comptes au nom de BET dès maintenant. La validation d'identité chez Apple prend souvent plusieurs semaines, et c'est le genre de délai qui bloque une livraison déjà prête.</div>
+    </div>
+
+    <div class="decision">
+      <div class="q">4 · La maquette d'avril fait-elle référence, ou la reprend-on ?</div>
+      <p>Elle couvre 10 des 20 écrans actuels et ignore les notifications — qui sont la raison d'être d'une application mobile. La suivre telle quelle reviendrait à livrer l'espace apprenant d'avril, pas celui d'aujourd'hui.</p>
+      <div class="avis"><b>Mon avis :</b> la garder comme référence de charte et de navigation, mais reprendre le périmètre écran par écran à partir de l'espace apprenant en production.</div>
+    </div>
+
+    <div class="decision">
+      <div class="q">5 · La plateforme e-learning entre-t-elle dans l'application ?</div>
+      <p>C'est une troisième application web, que je n'ai pas inventoriée. Si les cours en ligne doivent être suivis depuis le téléphone, le périmètre change beaucoup : lecteur vidéo, progression, exercices interactifs.</p>
+      <div class="avis"><b>Mon avis :</b> hors périmètre de la première version. À trancher après un inventaire de cette plateforme, comme on l'a fait pour le site et le tableau de bord.</div>
+    </div>
+  </section>
+
+  <div class="pied">
+    Proposition établie le 29 septembre 2026 à partir du code en production — 303 points d'entrée sur l'API, 19 profils, 17 espaces, notifications interrogées toutes les 60 secondes, <code>firebase-admin</code> déjà présent côté serveur — et du prototype <code>Backend/docs/BET Figma.html</code> du 20 avril, qui définit 22 écrans d'apprenant. Aucun chiffrage n'y figure : il dépend des arbitrages ci-dessus.
+  </div>
+
+</div>
