@@ -134,7 +134,7 @@ const CoachesSection = ({ background = "#fff" }) => {
           border: "1px solid #ffb3bc", borderRadius: 999, padding: "5px 16px",
           fontSize: ".72rem", fontWeight: 800, letterSpacing: ".08em", marginBottom: 14,
         }}>
-          👥 NOTRE ÉQUIPE
+          NOTRE ÉQUIPE
         </span>
         <h2 style={{
           fontFamily: FD, fontSize: "clamp(1.8rem,4vw,2.6rem)", fontWeight: 400,
@@ -180,12 +180,12 @@ const CoachesSection = ({ background = "#fff" }) => {
       <div style={{ textAlign: "center", marginTop: 44 }}>
         <div style={{ display: "flex", gap: 28, justifyContent: "center", flexWrap: "wrap", padding: "0 24px" }}>
           {[
-            { icon: "🎓", label: "Certifiés CELTA / DELTA" },
-            { icon: "🌍", label: "Locuteurs natifs & bilingues" },
-            { icon: "⭐", label: "+5 ans d'expérience en moyenne" },
-          ].map((item, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".85rem", color: "#475569", fontWeight: 600 }}>
-              <span style={{ fontSize: "1.1rem" }}>{item.icon}</span> {item.label}
+            "Certifiés CELTA / DELTA",
+            "Locuteurs natifs & bilingues",
+            "+5 ans d'expérience en moyenne",
+          ].map((label, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", fontSize: ".85rem", color: "#475569", fontWeight: 600 }}>
+              {label}
             </div>
           ))}
         </div>

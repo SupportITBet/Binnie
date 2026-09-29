@@ -279,10 +279,10 @@ function buildDynamicPrograms(certifCfg, offresEnLigne, offresDomicile, counts) 
 }
 
 const PROFILES = [
-  { id: "tous", label: "Tous les profils", emoji: "🌟" },
-  { id: "particulier", label: "Particulier", emoji: "👤" },
-  { id: "étudiant", label: "Étudiant", emoji: "🎓" },
-  { id: "professionnel", label: "Professionnel", emoji: "💼" },
+  { id: "tous", label: "Tous les profils" },
+  { id: "particulier", label: "Particulier" },
+  { id: "étudiant", label: "Étudiant" },
+  { id: "professionnel", label: "Professionnel" },
 ];
 
 /* ─────────────────────────────────────────────────────────
@@ -368,7 +368,7 @@ const PaymentModal = ({ program, onClose }) => {
             <div style={PS.price}>{program.priceLabel}</div>
             <div style={PS.priceNote}>par personne · accès complet</div>
             {program.spots != null && (
-              <div style={PS.urgency}>🔥 {program.spots} places restantes</div>
+              <div style={PS.urgency}>{program.spots} places restantes</div>
             )}
           </div>
         </div>
@@ -453,7 +453,7 @@ const PaymentModal = ({ program, onClose }) => {
               <button style={{ ...PS.btnNext, flex: 1 }} onClick={confirm} disabled={loading}>
                 {loading
                   ? <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}><span style={PS.spinner} /> Traitement...</span>
-                  : `🔒 Confirmer - ${program.priceLabel}`}
+                  : `Confirmer - ${program.priceLabel}`}
               </button>
             </div>
           </div>
@@ -462,7 +462,6 @@ const PaymentModal = ({ program, onClose }) => {
         {/* STEP 3 */}
         {step === 3 && (
           <div style={{ textAlign: "center", padding: "40px 32px" }}>
-            <div style={{ fontSize: "3.5rem", marginBottom: 12, animation: "floatUp 2s ease infinite" }}>🎉</div>
             <h3 style={{ fontFamily: "'Montserrat', 'Segoe UI', sans-serif", fontSize: "1.6rem", margin: "0 0 8px", color: "#011451" }}>Inscription confirmée !</h3>
             <p style={{ color: "#475569", lineHeight: 1.7, marginBottom: 8 }}>
               Un email a été envoyé à <strong>{data.email}</strong>.
@@ -908,17 +907,16 @@ const HS = {
    2. PROOF STRIP (Stats)
 ───────────────────────────────────────────────────────── */
 const STATS = [
-  { n: 8000, suf: "+", label: "Apprenants certifiés", icon: "🎓" },
-  { n:100, suf: "%", label: "Taux de réussite", icon: "🏆" },
-  { n: 6, suf: "", label: "Centres en Côte d'Ivoire", icon: "📍" },
-  { n: 8, suf: " ans", label: "D'expertise pédagogique", icon: "⭐" },
+  { n: 8000, suf: "+", label: "Apprenants certifiés" },
+  { n:100, suf: "%", label: "Taux de réussite" },
+  { n: 6, suf: "", label: "Centres en Côte d'Ivoire" },
+  { n: 8, suf: " ans", label: "D'expertise pédagogique" },
 ];
 
-const Stat = ({ n, suf, label, icon, active }) => {
+const Stat = ({ n, suf, label, active }) => {
   const val = useCounter(n, 1800, active);
   return (
     <div style={PRFS.statCard}>
-      <div style={PRFS.statIcon}>{icon}</div>
       <div style={PRFS.statNum}>{val.toLocaleString("fr")}{suf}</div>
       <div style={PRFS.statLabel}>{label}</div>
     </div>
@@ -943,7 +941,6 @@ const PRFS = {
   inner: { maxWidth: 1100, margin: "0 auto", padding: "0 24px" },
   grid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24 },
   statCard: { textAlign: "center", padding: "20px 16px", borderRadius: 16, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)" },
-  statIcon: { fontSize: "1.8rem", marginBottom: 10 },
   statNum: { fontFamily: "'Montserrat', 'Segoe UI', sans-serif", fontSize: "2.2rem", color: "#fff", lineHeight: 1 },
   statLabel: { fontSize: ".82rem", color: "rgba(255,255,255,.6)", marginTop: 6, fontWeight: 600, lineHeight: 1.35 },
 };
@@ -984,14 +981,14 @@ const ProgramCard = ({ p, inView, delay, onEnroll }) => {
         {/* Highlight */}
         <div style={PG.highlight}>{p.highlight}</div>
         {/* Urgence */}
-        {p.spots != null && <div style={PG.spots}>🔥 {p.spots} places restantes</div>}
+        {p.spots != null && <div style={PG.spots}>{p.spots} places restantes</div>}
       </div>
 
       {/* Body */}
       <div style={PG.body}>
         <div style={PG.topRow}>
           <h3 style={PG.title}>{p.title}</h3>
-          <div style={PG.rating}><span style={{ color: "#f59e0b" }}>★</span> {p.rating}</div>
+          <div style={PG.rating}>{p.rating}</div>
         </div>
         <p style={PG.sub}>{p.sub}</p>
         <p style={PG.desc}>{p.desc}</p>
@@ -1005,9 +1002,9 @@ const ProgramCard = ({ p, inView, delay, onEnroll }) => {
 
         {/* Meta */}
         <div style={PG.meta}>
-          <span style={PG.metaPill}>⏱ {p.duration}</span>
-          <span style={PG.metaPill}>📊 {p.level}</span>
-          <span style={PG.metaPill}>👥 {p.students.toLocaleString("fr")} inscrits</span>
+          <span style={PG.metaPill}>{p.duration}</span>
+          <span style={PG.metaPill}>{p.level}</span>
+          <span style={PG.metaPill}>{p.students.toLocaleString("fr")} inscrits</span>
         </div>
 
         {/* Prix + CTA */}
@@ -1077,7 +1074,7 @@ const ProgramsSection = ({ activeProfile, onFilter, onEnroll }) => {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px" }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <span style={SH.badge}>🎯 NOS CERTIFICATIONS & FORMATIONS</span>
+          <span style={SH.badge}>NOS CERTIFICATIONS & FORMATIONS</span>
           <h2 style={SH.h2}>
             Choisissez votre programme<br />
             <span style={SH.accent}>et inscrivez-vous maintenant</span>
@@ -1090,7 +1087,7 @@ const ProgramsSection = ({ activeProfile, onFilter, onEnroll }) => {
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 40 }}>
           {PROFILES.map(p => (
             <button key={p.id} className="bet-pill" style={{ ...PG.filterBtn, ...(activeProfile === p.id ? PG.filterBtnActive : {}) }} onClick={() => onFilter(p.id)}>
-              {p.emoji} {p.label}
+              {p.label}
             </button>
           ))}
         </div>
@@ -1147,7 +1144,6 @@ const TestBand = () => {
   return (
     <section ref={ref} style={{ background: "linear-gradient(135deg,#011451,#0891b2)", padding: "60px 24px", textAlign: "center" }}>
       <div style={{ maxWidth: 680, margin: "0 auto", opacity: inView ? 1 : 0, transform: inView ? "none" : "translateY(20px)", transition: "all .6s ease" }}>
-        <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>🧪</div>
         <h2 style={{ fontFamily: "'Montserrat', 'Segoe UI', sans-serif", fontSize: "clamp(1.7rem,3.5vw,2.6rem)", color: "#fff", margin: "0 0 12px", fontWeight: 400 }}>
           Vous ne savez pas quel programme<br />
           <em style={{ color: "#38bdf8" }}>choisir ?</em>
@@ -1160,7 +1156,7 @@ const TestBand = () => {
             <button style={TB.btnPrimary}
               onMouseEnter={e => e.currentTarget.style.transform = "translateY(-3px) scale(1.03)"}
               onMouseLeave={e => e.currentTarget.style.transform = "none"}>
-              🎯 Faire le test gratuit (10 min)
+              Faire le test gratuit (10 min)
             </button>
           </Link>
         </div>
@@ -1186,10 +1182,10 @@ const TB = {
 ───────────────────────────────────────────────────────── */
 /* Fallback statique - remplacé par Supabase dès le chargement */
 const TESTIS = [
-  { avatar: "👩🏾‍⚖️", nom: "Awa Koné",         role: "Étudiante en droit",          score: "TOEIC 850",  texte: "En 3 mois j'ai décroché 850 au TOEIC. Les méthodes sont vraiment efficaces et le suivi personnalisé fait toute la différence. Je recommande à 100% !", etoiles: 5, couleur: "#d97706", video_url: null },
-  { avatar: "👨🏿‍💼", nom: "Kouamé Brou",       role: "Directeur Commercial · NSIA",  score: "IELTS 7.5",  texte: "La formation entreprise a transformé notre relation client internationale. Nos équipes communiquent maintenant avec confiance en anglais.", etoiles: 5, couleur: "#0891b2", video_url: null },
-  { avatar: "👩🏽‍💻", nom: "Fatoumata Diallo",  role: "Ingénieure IT · MTN CI",       score: "TOEFL 104",  texte: "Préparé mon TOEFL en ligne depuis Abidjan. Les corrections rapides et la disponibilité des profs m'ont permis d'atteindre mon score cible.", etoiles: 5, couleur: "#0c33ac", video_url: null },
-  { avatar: "👨🏽‍🎓", nom: "Sonia Ravin",       role: "Étudiante · Université HEC",   score: "TOEIC 920",  texte: "Programme d'immersion qui a littéralement changé ma vie. 920 points au TOEIC - des portes que je croyais fermées se sont ouvertes.", etoiles: 5, couleur: "#e93747", video_url: null },
+  { nom: "Awa Koné",         role: "Étudiante en droit",          score: "TOEIC 850",  texte: "En 3 mois j'ai décroché 850 au TOEIC. Les méthodes sont vraiment efficaces et le suivi personnalisé fait toute la différence. Je recommande à 100% !", etoiles: 5, couleur: "#d97706", video_url: null },
+  { nom: "Kouamé Brou",       role: "Directeur Commercial · NSIA",  score: "IELTS 7.5",  texte: "La formation entreprise a transformé notre relation client internationale. Nos équipes communiquent maintenant avec confiance en anglais.", etoiles: 5, couleur: "#0891b2", video_url: null },
+  { nom: "Fatoumata Diallo",  role: "Ingénieure IT · MTN CI",       score: "TOEFL 104",  texte: "Préparé mon TOEFL en ligne depuis Abidjan. Les corrections rapides et la disponibilité des profs m'ont permis d'atteindre mon score cible.", etoiles: 5, couleur: "#0c33ac", video_url: null },
+  { nom: "Sonia Ravin",       role: "Étudiante · Université HEC",   score: "TOEIC 920",  texte: "Programme d'immersion qui a littéralement changé ma vie. 920 points au TOEIC - des portes que je croyais fermées se sont ouvertes.", etoiles: 5, couleur: "#e93747", video_url: null },
 ];
 
 function buildTestiEmbedUrl(url) {
@@ -1223,13 +1219,12 @@ const TestiVideoCard = ({ ti, onOpen }) => {
             onMouseLeave={e => e.currentTarget.style.transform="scale(1)"} />
           <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top,rgba(0,0,0,.55) 0%,transparent 55%)" }} />
           <div style={{ position:"absolute", bottom:12, left:14, color:"#fff", fontWeight:800, fontSize:".9rem" }}>{ti.nom}</div>
-          <span style={{ position:"absolute", bottom:12, right:12, background:"rgba(0,0,0,.55)", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:4, backdropFilter:"blur(4px)" }}>🔍 Agrandir</span>
+          <span style={{ position:"absolute", bottom:12, right:12, background:"rgba(0,0,0,.55)", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:4, backdropFilter:"blur(4px)" }}>Agrandir</span>
         </div>
       );
     }
     return (
       <div style={{ borderRadius:16, overflow:"hidden", background:`linear-gradient(135deg,${ti.couleur}22,${ti.couleur}08)`, border:`2px solid ${ti.couleur}33`, aspectRatio:"16/9", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12 }}>
-        <div style={{ fontSize:"4rem" }}>{ti.avatar}</div>
         <div style={{ fontWeight:800, fontSize:"1rem", color:ti.couleur }}>{ti.nom}</div>
         <div style={{ fontSize:".8rem", color:"#64748b" }}>{ti.role}</div>
       </div>
@@ -1246,7 +1241,7 @@ const TestiVideoCard = ({ ti, onOpen }) => {
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen style={{ width:"100%", height:"100%", display:"block", border:"none" }} />
         <button onClick={onOpen} title="Agrandir"
-          style={{ position:"absolute", top:10, right:10, background:"rgba(0,0,0,.6)", backdropFilter:"blur(6px)", border:"none", color:"#fff", fontSize:15, width:32, height:32, borderRadius:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>⛶</button>
+          style={{ position:"absolute", top:10, right:10, background:"rgba(0,0,0,.6)", backdropFilter:"blur(6px)", border:"none", color:"#fff", fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:7, cursor:"pointer" }}>Agrandir</button>
       </div>
     );
   }
@@ -1265,7 +1260,6 @@ const TestiVideoCard = ({ ti, onOpen }) => {
       {!playing && (
         <>
           <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10 }}>
-            <div style={{ fontSize:"4rem" }}>{ti.avatar||"🎓"}</div>
             <div style={{ fontWeight:800, fontSize:".95rem", color:ti.couleur||"#0c33ac" }}>{ti.nom}</div>
           </div>
           <div onClick={toggle} style={{ position:"absolute", inset:0 }}><AccPlayBtn color={ti.couleur} /></div>
@@ -1273,18 +1267,13 @@ const TestiVideoCard = ({ ti, onOpen }) => {
       )}
       <div style={{ position:"absolute", top:12, left:14, background:"rgba(0,0,0,.55)", backdropFilter:"blur(6px)", borderRadius:6, padding:"4px 10px", color:"#fff", fontWeight:700, fontSize:".78rem" }}>{ti.nom}</div>
       <button onClick={onOpen} title="Agrandir"
-        style={{ position:"absolute", top:10, right:10, background:"rgba(0,0,0,.6)", backdropFilter:"blur(6px)", border:"none", color:"#fff", fontSize:15, width:32, height:32, borderRadius:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>⛶</button>
+        style={{ position:"absolute", top:10, right:10, background:"rgba(0,0,0,.6)", backdropFilter:"blur(6px)", border:"none", color:"#fff", fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:7, cursor:"pointer" }}>Agrandir</button>
     </div>
   );
 };
 
 const TestiTextCard = ({ ti }) => (
   <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 16 }}>
-    <div style={{ display: "flex", gap: 4 }}>
-      {Array.from({ length: ti.etoiles ?? 5 }).map((_, i) => (
-        <span key={i} style={{ color: "#f59e0b", fontSize: "1.1rem" }}>★</span>
-      ))}
-    </div>
     <h3 style={{ fontFamily: "'Montserrat','Segoe UI',sans-serif", fontSize: "clamp(1.4rem,2.5vw,2rem)", fontWeight: 800, color: "#011451", margin: 0, lineHeight: 1.2 }}>{ti.nom}</h3>
     <p style={{ fontSize: "1rem", color: "#334155", lineHeight: 1.75, margin: 0 }}>"{ti.texte}"</p>
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1323,7 +1312,7 @@ const TestimonialsSection = () => {
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
         {/* En-tête */}
         <div style={{ textAlign: "center", marginBottom: 64 }}>
-          <span style={SH.badge}>💬 ILS ONT RÉUSSI</span>
+          <span style={SH.badge}>ILS ONT RÉUSSI</span>
           <h2 style={{ ...SH.h2, marginTop: 8 }}>Ils ont choisi BET<br /><span style={SH.accent}>et ils ne le regrettent pas</span></h2>
           <p style={{ color: "#64748b", fontSize: ".95rem", maxWidth: 620, margin: "14px auto 0", lineHeight: 1.7 }}>
             Rencontrez certains des apprenants qui ont rejoint BET et ont obtenu de vrais résultats. Ces témoignages illustrent la puissance de notre accompagnement.
@@ -1396,27 +1385,20 @@ const TestimonialsSection = () => {
                 style={{ position:"absolute", top:16, right:16, background:"#f1f5f9", border:"none", borderRadius:"50%", width:34, height:34, cursor:"pointer", fontSize:16, color:"#334155", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
 
               <div style={{ display:"inline-flex", alignItems:"center", gap:6, background: lightbox.type==="video" ? "#eef1ff" : "#fff0f2", color: lightbox.type==="video" ? "#0c33ac" : "#e93747", borderRadius:999, padding:"4px 12px", fontSize:".7rem", fontWeight:800, marginBottom:20, alignSelf:"flex-start" }}>
-                {lightbox.type === "video" ? "🎬 Vidéo témoignage" : "🖼️ Photo / diplôme"}
+                {lightbox.type === "video" ? "Vidéo témoignage" : "Photo / diplôme"}
               </div>
 
               <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-                <div style={{ width:54, height:54, borderRadius:"50%", background:`${lightbox.couleur||"#0c33ac"}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"1.8rem", flexShrink:0, border:`2px solid ${lightbox.couleur||"#0c33ac"}30` }}>
-                  {lightbox.avatar || "🎓"}
-                </div>
                 <div>
                   <div style={{ fontFamily:F_ACC, fontWeight:800, fontSize:"1.05rem", color:"#011451" }}>{lightbox.nom}</div>
                   {lightbox.role && <div style={{ fontSize:".78rem", color:"#64748b", marginTop:2 }}>{lightbox.role}</div>}
                 </div>
               </div>
 
-              <div style={{ fontSize:"1.3rem", letterSpacing:2, marginBottom:16 }}>
-                <span style={{ color:"#f59e0b" }}>{"★".repeat(lightbox.etoiles || 5)}</span>
-                <span style={{ color:"#e5e7eb" }}>{"☆".repeat(5 - (lightbox.etoiles || 5))}</span>
-              </div>
 
               {lightbox.score && (
                 <div style={{ display:"inline-block", background:lightbox.couleur||"#0c33ac", color:"#fff", borderRadius:999, padding:"5px 16px", fontSize:".8rem", fontWeight:800, marginBottom:18, alignSelf:"flex-start" }}>
-                  🏆 {lightbox.score}
+                  {lightbox.score}
                 </div>
               )}
 
