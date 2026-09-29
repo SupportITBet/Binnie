@@ -1,4 +1,24 @@
-Options -MultiViews
+# ── Forcer HTTPS et le domaine sans www ──────────────────────────────────────
+# EN TÊTE, impérativement : la règle de repli du routage React plus bas se termine
+# par [L], qui arrête le traitement pour toute URL ne désignant pas un fichier réel.
+# Placée après elle, cette redirection ne s'appliquerait jamais aux pages internes
+# (/about, /parcours…) et le site resterait à moitié en HTTP.
+#
+# Sans elle, l'API refuse tout : elle n'autorise que l'origine exacte
+# https://binniesenglish.net, alors qu'un visiteur arrivé en http:// ou sur www.
+# présente une origine différente - d'où les erreurs CORS sur toutes les requêtes.
+#
+# CE FICHIER EST LA SOURCE, et c'est pourquoi la règle vit ici et non sur le serveur.
+# Elle avait été posée directement dans le public_html du VPS le 28/09 ; le premier
+# déploiement suivant l'a écrasée avec la version du build, qui ne la contenait pas,
+# et le site est repassé en HTTP sans que rien ne le signale. Tant qu'elle est ici,
+# chaque build la reconduit.
 RewriteEngine On
+RewriteCond %{HTTPS} off [OR]
+RewriteCond %{HTTP_HOST} ^www\. [NC]
+RewriteRule ^(.*)$ https://binniesenglish.net/$1 [R=301,L]
+
+# ── Routage React : toute URL qui n'est pas un fichier réel rend index.html ───
+Options -MultiViews
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [QSA,L]
