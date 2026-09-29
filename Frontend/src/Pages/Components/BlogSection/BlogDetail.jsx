@@ -425,6 +425,17 @@ const BlogDetail = () => {
 
   const cat = getCat(current.category);
 
+  /* UN ARTICLE PEUT N'AVOIR AUCUN CORPS. Certains ne portent qu'une vidéo, désormais
+     affichée dans le bandeau : sous la barre de partage, il ne restait alors qu'un trait
+     de séparation suivi d'une centaine de pixels de blanc, avant les commentaires.
+     On mesure donc ce qui suit réellement la barre de partage - le texte débarrassé de
+     ses balises, la galerie, les tags - pour ne poser le séparateur que s'il sépare
+     quelque chose. */
+  const aDuTexte  = !!String(current.content || "").replace(/<[^>]*>/g, "").trim();
+  const aDesImages = (current.images?.length || 0) > 0;
+  const aDesTags   = (current.tags?.length || 0) > 0;
+  const corpsVide  = !aDuTexte && !aDesImages && !aDesTags;
+
   const articleJsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
@@ -547,7 +558,9 @@ const BlogDetail = () => {
               <article style={D.articleCard}>
 
                 {/* Share bar */}
-                <div style={D.shareBar}>
+                <div style={corpsVide
+                  ? { ...D.shareBar, marginBottom: 0, paddingBottom: 0, borderBottom: "none" }
+                  : D.shareBar}>
                   <span style={D.shareLabel}>Partager :</span>
                   {[
                     { id: "twitter",  icon: "𝕏",  bg: "#000" },
@@ -568,11 +581,13 @@ const BlogDetail = () => {
                 </div>
 
                 {/* Prose content */}
-                <div
-                  className="bet-article-body bet-prose"
-                  style={D.prose}
-                  dangerouslySetInnerHTML={{ __html: current.content }}
-                />
+                {aDuTexte && (
+                  <div
+                    className="bet-article-body bet-prose"
+                    style={D.prose}
+                    dangerouslySetInnerHTML={{ __html: current.content }}
+                  />
+                )}
 
                 {/* LA VIDÉO NE S'AFFICHE PLUS ICI.
                     Elle apparaissait deux fois sur la page : en bandeau tout en haut, et
