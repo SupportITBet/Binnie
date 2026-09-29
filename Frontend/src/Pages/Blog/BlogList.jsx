@@ -224,7 +224,7 @@ const BlogList = () => {
         {!heroMedia && (
           <div style={{ position:"relative", zIndex:3, padding:"80px 24px 52px", textAlign:"center", flex:1, display:"flex", flexDirection:"column", justifyContent:"center" }}>
             <span style={{ display:"inline-block", background:"rgba(220,38,38,.2)", color:"#fca5a5", border:"1px solid rgba(220,38,38,.35)", borderRadius:999, padding:"5px 18px", fontSize:".72rem", fontWeight:800, letterSpacing:".08em", marginBottom:16 }}>
-              📰 ACTUALITÉS &amp; RESSOURCES
+              ACTUALITÉS &amp; RESSOURCES
             </span>
             <h1 className="bl-hero-title" style={{ fontFamily:F, fontSize:"2.6rem", fontWeight:800, color:"#fff", margin:"0 0 16px", lineHeight:1.2 }}>
               News &amp; Événements <span style={{ color:"#f97316", fontStyle:"italic" }}>BET</span>

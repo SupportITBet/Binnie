@@ -173,6 +173,9 @@ const Footer = () => {
                 numerosContact() ecarte les champs vides et les doublons, et separe le
                 numero affiche (lisible) de celui du lien (chiffres seuls) - l'URL etait
                 construite avec les espaces, qui la rendaient inutilisable. */}
+            {numerosContact(contactConfig).length > 0 && (
+              <p style={{ fontWeight: 700, marginBottom: 2 }}>Contacts :</p>
+            )}
             {numerosContact(contactConfig).map(({ lien, affichage }) => (
               <p key={lien}>
                 <a
@@ -180,7 +183,7 @@ const Footer = () => {
                   target="_blank" rel="noopener noreferrer"
                   style={{ color:"inherit", textDecoration:"none" }}
                 >
-                  📱 {affichage}
+                  {affichage}
                 </a>
               </p>
             ))}

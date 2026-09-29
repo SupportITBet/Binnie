@@ -150,7 +150,7 @@ const EquipeAdminSection = ({ background = "#fff" }) => {
             border: "1px solid #c7d4f5", borderRadius: 999, padding: "5px 16px",
             fontSize: ".72rem", fontWeight: 800, letterSpacing: ".08em", marginBottom: 14,
           }}>
-            🏛️ ÉQUIPE ADMINISTRATIVE
+            ÉQUIPE ADMINISTRATIVE
           </span>
           <h2 style={{
             fontFamily: FD, fontSize: "clamp(1.8rem,4vw,2.6rem)", fontWeight: 400,

@@ -190,7 +190,7 @@ const BlogSection = () => {
           transform: inView ? "none" : "translateY(20px)",
           transition: "all .6s ease",
         }}>
-          <span style={S.badge}>📰 ACTUALITÉS &amp; RESSOURCES</span>
+          <span style={S.badge}>ACTUALITÉS &amp; RESSOURCES</span>
           <h2 style={S.h2}>
             News &amp; Événements
             <span style={S.h2Accent}> BET</span>
