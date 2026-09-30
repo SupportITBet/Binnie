@@ -50,6 +50,7 @@ import { uploadFichier, maxMoPour } from "../../utils/uploadFichier";
 import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
+import { libelleTypeCours } from "../../utils/typeCours";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
@@ -6609,7 +6610,7 @@ export default function CommercialDashboard() {
                                   </td>
                                   <td style={{ padding:"12px 14px", fontSize:12, color:"#475569", whiteSpace:"nowrap" }}>
                                     {estClassePrivee(cl) && <span style={{ display:"block", fontSize:9, fontWeight:800, color:"#9333ea", marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
-                                    {cl.type_cours === "en_ligne" ? "🌐 En ligne" : cl.type_cours === "presentiel" ? "🏢 Présentiel" : cl.type_cours === "domicile" ? "🏠 Domicile" : cl.type_cours === "hybride" ? "⚡ Hybride" : cl.type_cours || "-"}
+                                    {libelleTypeCours(cl)}
                                   </td>
                                   <td style={{ padding:"12px 14px", minWidth:160 }}>
                                     {cl.coach_nom ? (() => {
@@ -6752,8 +6753,15 @@ export default function CommercialDashboard() {
                                 <span style={{ padding:"2px 10px", borderRadius:99, fontSize:11, fontWeight:600, background:"rgba(255,255,255,.1)", color:"rgba(255,255,255,.85)" }}>{hdr.filiere}</span>
                               )}
                               <span style={{ padding:"2px 10px", borderRadius:99, fontSize:11, fontWeight:700, background: statCfg.bg, color: statCfg.color }}>{statCfg.label}</span>
+                              {/* Le badge « coaching privé » n'apparaissait QUE dans la liste :
+                                  ouvrir la fiche d'un coaching privé n'en disait plus rien, on
+                                  n'y lisait plus que la modalité. La distinction compte - un
+                                  cours particulier ne se gère pas comme un groupe. */}
+                              {estClassePrivee(hdr) && (
+                                <span style={{ padding:"2px 10px", borderRadius:99, fontSize:11, fontWeight:800, background:"rgba(255,255,255,.22)", color:"#fff" }}>🔒 Coaching privé</span>
+                              )}
                               <span style={{ padding:"2px 10px", borderRadius:99, fontSize:11, fontWeight:600, background:"rgba(255,255,255,.1)", color:"rgba(255,255,255,.85)" }}>
-                                {hdr.type_cours === "en_ligne" ? "🌐 En ligne" : hdr.type_cours === "presentiel" ? "🏢 Présentiel" : hdr.type_cours === "hybride" ? "⚡ Hybride" : "-"}
+                                {libelleTypeCours(hdr)}
                               </span>
                             </div>
                           </div>
@@ -6868,8 +6876,11 @@ export default function CommercialDashboard() {
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             {cl.niveau && <span style={{ padding:"4px 12px", borderRadius:99, fontSize:12, fontWeight:800, background:niv.bg, color:niv.color, border:`1.5px solid ${niv.color}` }}>{cl.niveau}</span>}
                             <span style={{ padding:"4px 12px", borderRadius:99, fontSize:12, fontWeight:700, background:stat.bg, color:stat.color }}>{stat.label}</span>
+                            {estClassePrivee(cl) && (
+                              <span style={{ padding:"4px 12px", borderRadius:99, fontSize:12, fontWeight:800, background:"#f3e8ff", color:"#9333ea" }}>🔒 Coaching privé</span>
+                            )}
                             <span style={{ padding:"4px 12px", borderRadius:99, fontSize:12, fontWeight:600, background:"#f1f5f9", color:"#475569" }}>
-                              {cl.type_cours === "en_ligne" ? "🌐 En ligne" : cl.type_cours === "presentiel" ? "🏢 Présentiel" : cl.type_cours === "hybride" ? "⚡ Hybride" : cl.type_cours || "-"}
+                              {libelleTypeCours(cl)}
                             </span>
                           </div>
 

@@ -16,6 +16,7 @@ import MessagerieTab from "../../Components/MessagerieTab";
 import { urlDocument, extensionDe } from "../../utils/urlDocument";
 import { urlEmbedVideo, estFichierVideo, estFichierAudio, estChaineYoutube } from "../../utils/urlVideo";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
+import { iconeEtTexteTypeCours } from "../../utils/typeCours";
 import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import { useGroupeChat, useGroupesChatUnreadTotal, useGroupesLibresNonLus } from "../../hooks/useGroupeChat";
 import ChatGroupe from "../../Components/ChatGroupe";
@@ -6002,8 +6003,10 @@ const messagesFiltres = useMemo(() => {
                       const hSem    = calcHeureSemaine(horaires);
                       const tarifH  = coachMoi?.taux_horaire || tarifs[g.type_cours] || tarifs["en_ligne"] || 5000;
                       const estimMois = hSem * 4 * tarifH;
-                      const typeIcon  = g.type_cours==="en_ligne" ? "💻" : g.type_cours==="domicile" ? "🏠" : "🏢";
-                      const typeLabel = g.type_cours==="en_ligne" ? "En ligne" : g.type_cours==="domicile" ? "Domicile" : "Présentiel";
+                      // Le repli valait « Présentiel » dès que la valeur n'était ni `en_ligne`
+                      // ni `domicile` : une classe HYBRIDE s'affichait donc « Présentiel » ici,
+                      // pendant que la commerciale lisait « ⚡ Hybride » sur la même classe.
+                      const { icone: typeIcon, texte: typeLabel } = iconeEtTexteTypeCours(g);
                       const sCol = g.statut==="actif" ? { bg:"#d1fae5", c:"#059669" } : g.statut==="suspendu" ? { bg:"#fef3c7", c:"#d97706" } : g.statut==="cloture" ? { bg:"#fee2e2", c:"#dc2626" } : { bg:"#f1f5f9", c:"#6b7280" };
                       const sLabel = g.statut==="actif" ? "Actif" : g.statut==="suspendu" ? "Suspendu" : g.statut==="cloture" ? "🔒 Clôturée" : (g.statut||"-");
                       const isCloture = g.statut === "cloture";
@@ -6944,7 +6947,9 @@ const messagesFiltres = useMemo(() => {
                     );
                   })()}
                   {selectedGroupe.date_debut && <span>📅 Début : {new Date(selectedGroupe.date_debut).toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})}</span>}
-                  <span>{selectedGroupe.type_cours==="en_ligne"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":"🏢 Centre"}</span>
+                  {/* Même repli trompeur que dans le tableau des contrats : « Centre » était
+                      affirmé pour toute valeur inattendue, hybride compris. */}
+                  <span>{(() => { const t = iconeEtTexteTypeCours(selectedGroupe); return `${t.icone} ${t.texte}`; })()}</span>
                 </div>
                 {selectedGroupe.horaire?.length > 0 && (
                   <div style={{ marginTop:8,display:"flex",gap:5,flexWrap:"wrap" }}>
