@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import NotificationBell from "../../Components/NotificationBell";
+import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import { useNotifPoller } from "../../hooks/useNotifPoller";
 import NotificationsTab from "../../Components/NotificationsTab";
 import TestsNiveauTab from "../../Components/TestsNiveauTab";
@@ -302,6 +303,12 @@ export default function PlacementTestDashboard() {
                 onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}>
                 {lang === "FR" ? "🇫🇷 FR" : "🇬🇧 EN"}
               </button>
+            {/* Seul des quinze tableaux de bord à ne pas porter ce bouton, alors qu'il en
+                lisait déjà la couleur : `PRIMARY_COLOR` vient de `admin_profil.couleur`, et
+                l'effet de rafraîchissement plus haut la relit depuis le serveur. L'agent
+                placement test héritait donc de la couleur choisie ailleurs, sans pouvoir en
+                changer depuis son propre écran. */}
+            <DashboardColorPicker />
             {accesElearning && (
               <button type="button" onClick={() => openElearningSSO(ELEARNING_URL)}
                 style={{ display:"flex", alignItems:"center", gap:7, padding:"8px 16px", background:"rgba(8,145,178,0.25)", border:"1.5px solid rgba(8,145,178,0.5)", borderRadius:10, color:"#fff", fontSize:13, fontWeight:600, cursor:"pointer", transition:"background .2s" }}
