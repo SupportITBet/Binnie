@@ -1,7 +1,7 @@
 // routes/leads.js
 import express from "express";
 import supabase from "../config/supabase.js";
-import { authenticateAdmin } from "../middlewares/requireAdmin.js";
+import { authenticateAdmin, requirePermission } from "../middlewares/requireAdmin.js";
 import { publicFormLimiter } from "../middlewares/rateLimiters.js";
 import { notifyRole } from "../services/notifyRole.js";
 
@@ -45,8 +45,12 @@ router.post("/submit", publicFormLimiter, async (req, res) => {
   }
 });
 
-// Liste des leads filtrée par scope admin
-router.get("/all", authenticateAdmin, async (req, res) => {
+// Liste des leads filtrée par scope admin.
+// Le filtrage par scope limitait le périmètre géographique mais pas le rôle : n'importe quel
+// compte admin lisait les coordonnées de tous les prospects de son centre. Le module `leads`
+// réserve cette lecture à qui en a l'usage - Collecte de données, Admin, SuperAdmin, les trois
+// seuls écrans qui appellent cette route.
+router.get("/all", authenticateAdmin, requirePermission("leads", "read"), async (req, res) => {
   try {
     const scope = req.profil?.scope || [];
     const isNational = scope.includes("national") || req.role === "super_admin";

@@ -2887,7 +2887,7 @@ router.get("/:id/mes-presences", authenticateUser, async (req, res) => {
   }
 });
 
-router.get("/:id/presences", authenticateAdmin, async (req, res) => {
+router.get("/:id/presences", authenticateAdmin, requirePermission("presences", "read"), async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
@@ -2945,7 +2945,12 @@ router.get("/:id/stats", authenticateAdmin, async (req, res) => {
   }
 });
 
-router.post("/:id/presences", authenticateAdmin, async (req, res) => {
+// Écrire une feuille de présence n'était soumis à aucun droit : tout compte admin, quel que
+// soit son rôle, pouvait marquer un apprenant absent - et donc déclencher l'auto-suspension
+// de son accès quelques lignes plus bas. Le module `presences` ferme cela. Il exige `creer`
+// et non `modifier` parce que la route est un upsert : elle supprime la feuille du jour avant
+// de la réinsérer. Seul l'Espace Professeur appelle ce POST aujourd'hui.
+router.post("/:id/presences", authenticateAdmin, requirePermission("presences", "create"), async (req, res) => {
   try {
     const { id } = req.params;
     const { date_seance, liste } = req.body;

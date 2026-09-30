@@ -274,6 +274,31 @@ export const MODULES_PERMISSIONS = [
   { id:"equipe_coachs",    lib:"Équipe Coachs",          icone:"👨‍🏫", desc:"Photos et fiches de l'équipe affichées sur le site." },
   { id:"trafic",           lib:"Trafic web",             icone:"🌐", desc:"Sondages, sources d'acquisition et statistiques de visite (lecture)." },
   { id:"suivi_prospects",  lib:"Suivi prospects",        icone:"📋", desc:"Qualification, relances et fidélisation des prospects/apprenants (statut, prochain contact, conversion en ambassadeur)." },
+
+  /* ── Modules ajoutés par l'audit du 29/09/2026 ───────────────────────────────────────
+     Six écrans apparus depuis la dernière révision de cette matrice n'y figuraient pas.
+     Chacun retombe côté serveur sur un module que les rôles concernés possèdent déjà
+     (MODULE_FALLBACK_PARENT dans Backend/src/middlewares/requireAdmin.js), et les droits
+     correspondants ont été écrits en base par
+     Backend/src/routes/scripts/accorderNouveauxModules.mjs : décocher l'un d'eux retire donc
+     un accès réel, sans que l'ajout en ait interrompu un.
+
+     ATTENTION, ces modules ne protègent pas tous la même chose. `presences` et `leads`
+     verrouillent des routes serveur (trois en tout, les seules que l'audit a trouvées
+     réellement ouvertes). Les quatre autres décrivent des écrans dont les routes sont déjà
+     gardées autrement - par rôle (`requireSuperviseurRole`, `requireGlobalSuperviseur`) ou
+     par des contrôles par action à l'intérieur du handler, comme demandesTransfert.js qui
+     vérifie en plus la propriété de la classe. Ces gardes-là sont plus fines que la matrice :
+     y superposer un requirePermission ne protégerait rien de plus et ajouterait une façon
+     de bloquer quelqu'un qui travaille. Ces quatre modules restent donc déclaratifs tant que
+     les dashboards concernés ne filtrent pas leurs onglets sur les droits - aujourd'hui seul
+     EspaceProfesseur le fait, via hasPermission(). */
+  { id:"transferts",         lib:"Transferts d'apprenants", icone:"🔀", desc:"Demander le transfert d'un apprenant, rendre son niveau, et le réaffecter à une autre classe. Circuit coach → agent placement test → onboarding ou assistante de centre." },
+  { id:"observations",       lib:"Observation des coachs",  icone:"📓", desc:"Cahiers des coachs, signalement d'anomalies et classement par catégorie de contrat." },
+  { id:"evaluations_qualite",lib:"Évaluations qualité",     icone:"⭐", desc:"Appréciations déposées par les apprenants sur leurs séances et évaluations des coachs par les parents." },
+  { id:"presences",          lib:"Présences",               icone:"✅", desc:"Saisir les feuilles de présence d'une séance, et corriger une présence déjà validée." },
+  { id:"leads",              lib:"Collecte de données",     icone:"📇", desc:"Base de clients et prospects collectés, import de fichiers et contrôle de la qualité des données." },
+  { id:"suivi_demarrage",    lib:"Suivi de démarrage",      icone:"🚀", desc:"Suivi des premières séances d'un nouvel apprenant, bilans de fin de cycle et renouvellements." },
 ];
 
 // Modules pertinents par rôle physique, alignés sur les onglets réels de
@@ -286,40 +311,54 @@ export const MODULES_PAR_ROLE = {
   // Onglets réels (SuperviseurDashboard.jsx) : Cahiers (coachs), Rapports, Éligibilité,
   // Anomalies, Deputy Superviseurs, Missions d'observation - le catalogue actuel n'a pas de
   // module dédié "cahiers coachs"/"anomalies", donc ces deux onglets restent non couverts.
-  superviseur:        ["rapports","missions"],
-  deputy_superviseur: ["rapports","missions"],
+  // Onglets réels : Plannings, Observer un cours, Gestion Deputies, Cahiers coachs,
+  // Classement, Évaluations apprenants, Évaluations parents, Rapports Deputy, Anomalies.
+  // "observations" couvre les cahiers, les anomalies et le classement ; "evaluations_qualite"
+  // les deux onglets d'évaluation ; "planning" la consultation du planning des classes.
+  superviseur:        ["rapports","missions","observations","evaluations_qualite","planning"],
+  // Le deputy voit les cahiers en lecture seule et n'a pas les anomalies : le même module
+  // les couvre, la restriction d'écriture se joue déjà dans l'écran (gardes IS_GENERAL).
+  deputy_superviseur: ["rapports","missions","observations","planning"],
   // Onglets réels (OnboardingDashboard.jsx) : Nouveaux/Mes apprenants, Suivi démarrage, Groupes,
   // Coachs, Contenus (sous-onglets Bibliothèque/Upload/Statistiques/Mini-jeux). Le sous-onglet
   // "Bibliothèque" contient aussi la bibliothèque de vidéos communautaires (contenus_biblio) -
   // module oublié ici initialement, ce qui laissait ses boutons non gatés côté dashboard.
-  onboarding:         ["inscriptions","classes","contenus_ressources","contenus_biblio","contenus_minijeux"],
+  onboarding:         ["inscriptions","classes","contenus_ressources","contenus_biblio",
+                       "contenus_minijeux","transferts","suivi_demarrage","planning"],
   // Onglets réels (PedagogicalAdvisorDashboard.jsx) : Prospects parcours, Apprenants, Groupes,
   // Coachs, Remplacements, Honoraires, Évaluations, Rapports Superviseur, Réaffectations.
-  pedagogical_advisor:["rapports","classes","remplacements","honoraires","inscriptions","support"],
+  pedagogical_advisor:["rapports","classes","remplacements","honoraires","inscriptions",
+                       "support","transferts","evaluations_qualite"],
   // Onglets réels (CommercialDashboard.jsx) : Prospects parcours, Tests reçus, Inscriptions,
   // Mes classes, Comptes entreprises, Pipeline B2B, Documents, Facturation.
-  commercial:         ["crm_entreprises","prospects_b2b","contrat","finances","inscriptions","classes","examens"],
+  commercial:         ["crm_entreprises","prospects_b2b","contrat","finances","inscriptions",
+                       "classes","examens","transferts","suivi_demarrage","planning"],
   customer_care:      ["support"],
   // Nouveau rôle distinct de Customer Care - dashboard dédié (SavDashboard.jsx) construit sur
   // le même module "support" (demandes/plaintes) en attendant un périmètre plus fin une fois
   // les vrais besoins SAV connus.
   assistant_sav:      ["support"],
   // Onglets réels (PlacementTestDashboard.jsx) : À corriger/Traités (tests de niveau), Rapports.
-  placement_test:     ["examens","rapports"],
+  placement_test:     ["examens","rapports","transferts"],
   rh:                 ["rh","honoraires"],
   // Onglets réels (ComptableDashboard.jsx) : Facturation, Paiements, Trésorerie, TVA,
   // Immobilisations, Budgets, Honoraires coaches - aucun onglet CRM entreprises.
+  // Les 12 onglets métier sont couverts par les neuf sous-modules `dash_finances_*`, qui
+  // protègent les 75 routes de dashComptabilite.js et retombent sur `finances` (cf. l'audit
+  // du 29/09/2026). Inutile d'ajouter un module « comptabilité » de plus : il ferait un
+  // interrupteur sans effet à côté de neuf qui fonctionnent.
   comptable:          ["finances","honoraires"],
   // Onglets réels (GestionnaireDashboard.jsx) : Inscriptions, Dossiers, Paiements, Requêtes.
   gestionnaire:       ["inscriptions","finances","support"],
   // Onglets réels (EspaceProfesseur.jsx) : Contrats, Apprenants, Planning, Disponibilités,
   // Présences, Évaluations, Session Live, Médiathèque (modules de cours - couvert par
   // devoirs_evaluations), Ressources, Mes demandes (remplacements), Honoraires, Récompenses.
-  coach:              ["planning","remplacements","classes","devoirs_evaluations","honoraires","contenus_ressources"],
+  coach:              ["planning","remplacements","classes","devoirs_evaluations","honoraires",
+                       "contenus_ressources","presences","transferts"],
   // DataCollectorDashboard.jsx gère des leads particuliers (Clients/Prospects/Import) - aucun
   // module du catalogue actuel ne correspond réellement (pas d'examens) ; laissé vide plutôt que
   // d'afficher un module trompeur, en attendant l'ajout d'un module "leads" côté backend.
-  data_collector:     [],
+  data_collector:     ["leads"],
   // assistant_elearning / admin_elearning n'ont pas de dashboard dash (rôles utilisés
   // uniquement pour l'accès SSO à la plateforme e-learning) - laissés vides pour éviter
   // qu'ils héritent par défaut de TOUS les modules (comportement de `null`).

@@ -297,6 +297,13 @@ export const LIBELLES_MODULES_PERMISSION = {
   support:       "Support",
   mediatheque:   "Médiathèque",
   fichiers_partages: "Fichiers partagés",
+  // ── Modules ajoutés par l'audit du 29/09/2026 ────────────────────────────
+  transferts:          "Transferts d'apprenants",
+  observations:        "Observation des coachs",
+  evaluations_qualite: "Évaluations qualité",
+  presences:           "Présences",
+  leads:               "Collecte de données",
+  suivi_demarrage:     "Suivi de démarrage",
   audit:         "Audit logs",
   configuration: "Configuration",
 };
@@ -359,6 +366,41 @@ const MODULE_FALLBACK_PARENT = {
   finances_immobilisations:"finances",
   finances_budgets:        "finances",
   finances_analytique:     "finances",
+
+  // ── Comptabilité du tableau de bord ───────────────────────────────────────
+  // Ces neuf modules protègent 75 routes de dashComptabilite.js et n'étaient
+  // rattachés à rien : absents du catalogue de Gestion des droits comme d'ici.
+  // Personne ne pouvait donc les recevoir, et une comptable à qui l'on cochait
+  // tout restait refusée sur l'essentiel de son propre écran.
+  dash_finances_facturation:    "finances",
+  dash_finances_paiements:      "finances",
+  dash_finances_tresorerie:     "finances",
+  dash_finances_fournisseurs:   "finances",
+  dash_finances_generale:       "finances",
+  dash_finances_tva:            "finances",
+  dash_finances_immobilisations:"finances",
+  dash_finances_budgets:        "finances",
+  dash_finances_analytique:     "finances",
+
+  // `mediatheque`, `crm` et `cours` servaient de parents à d'autres modules
+  // sans exister eux-mêmes dans le catalogue : la chaîne s'arrêtait dans le
+  // vide. Ils pointent désormais vers un module réellement accordable, et la
+  // résolution ci-dessous suit la chaîne jusqu'au bout.
+  mediatheque:         "contenus_ressources",
+  crm:                 "crm_entreprises",
+  cours:               "contenus_ressources",
+
+  // ── Modules ajoutés par l'audit du 29/09/2026 ─────────────────────────────
+  // Chacun retombe sur un module que les rôles concernés possèdent déjà : mettre
+  // ces écrans sous permission ne bloque donc personne du jour au lendemain. Un
+  // administrateur peut ensuite accorder le module fin lui-même, ce qui prend
+  // alors le pas sur le repli.
+  transferts:          "classes",
+  observations:        "rapports",
+  evaluations_qualite: "rapports",
+  presences:           "classes",
+  leads:               "inscriptions",
+  suivi_demarrage:     "inscriptions",
 };
 
 // ── 3. Vérifier qu'il a accès à un module + une action ──────
@@ -370,8 +412,27 @@ export const requirePermission = (module, action) => {
 
     const allPerms = req.profil?.permissions || {};
     let perms = allPerms[module];
-    if (!perms && MODULE_FALLBACK_PARENT[module]) {
-      perms = allPerms[MODULE_FALLBACK_PARENT[module]];
+
+    /* LE REPLI SUIT LA CHAÎNE, et ne s'arrête plus au premier parent.
+       `fichiers_partages` retombait sur `mediatheque`, lui-même accordable
+       nulle part : la recherche s'achevait dans le vide et la route restait
+       fermée à tout le monde. En remontant tant qu'un parent existe, une
+       scission en deux temps continue de fonctionner pour les rôles configurés
+       sur l'ancêtre.
+
+       La table contient des paires à double sens voulues - `cours` et
+       `contenus_ressources`, `crm` et `crm_entreprises` - parce que l'ancien nom
+       et le nouveau sont tous deux accordés en base selon l'ancienneté du rôle :
+       chacun doit pouvoir répondre pour l'autre. D'où le suivi des modules déjà
+       visités plutôt qu'un compteur : la remontée s'arrête exactement quand elle
+       n'a plus rien de neuf à examiner, sans tourner à vide et sans risquer la
+       boucle infinie qu'un cycle provoquerait. */
+    const vus = new Set([module]);
+    let parent = MODULE_FALLBACK_PARENT[module];
+    while (!perms && parent && !vus.has(parent)) {
+      vus.add(parent);
+      perms = allPerms[parent];
+      parent = MODULE_FALLBACK_PARENT[parent];
     }
     if (!perms || !perms[action]) {
       return res.status(403).json({
