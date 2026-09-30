@@ -39,7 +39,7 @@ const RelancerPaiement = () => {
       });
       // En cas de succès, sendPaymentInfos() redirige déjà le navigateur - rien de plus à faire.
     } catch (e) {
-      setErreur(e.message || "Impossible de lancer le paiement. Réessayez ou contactez votre conseillère.");
+      if (!e.annuleParUtilisateur) setErreur(e.message || "Impossible de lancer le paiement. Réessayez ou contactez votre conseillère.");
       setLoading(false);
     }
   };

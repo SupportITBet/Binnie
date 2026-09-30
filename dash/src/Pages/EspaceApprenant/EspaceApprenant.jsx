@@ -10,6 +10,7 @@ import MessagerieTab from "../../Components/MessagerieTab";
 import ApprenantColorPicker, { getApprenantColor } from "../../Components/ApprenantColorPicker";
 import CloudinaryUpload from "../../Components/CloudinaryUpload";
 import { useGroupesChatUnreadTotal } from "../../hooks/useGroupeChat";
+import { confirmerPaiementDefinitif } from "../../utils/confirmerPaiement";
 import { supabase } from "../../config/supabase";
 import { prochaineEcheance, delaiLisible, prochainRappel, libelleMois, statutMois, totalPayeMois, estPlanMensuel, dateEcheanceMois } from "../../utils/planMensuel";
 import { urlDocument, extensionDe } from "../../utils/urlDocument";
@@ -2332,6 +2333,9 @@ export default function EspaceApprenant() {
   // Initier un paiement TouchPoint pour une tranche de scolarité.
   const handlePayerTranche = async (tranche) => {
     if (cpLoading) return;
+    /* AVANT toute écriture serveur : renoncer ne doit laisser aucune initiation de paiement
+       derrière soi, que personne ne viendrait jamais solder. */
+    if (!await confirmerPaiementDefinitif({ montant: tranche.montant, offreLabel: tranche.label || "Paiement formation BET" })) return;
     setCpTranche(tranche);
     setCpLoading(true);
     try {
@@ -6859,6 +6863,12 @@ export default function EspaceApprenant() {
                 if (achatSending) return;
                 if(!achatForm.nom.trim()||!achatForm.email.trim()){ toast.error("Veuillez remplir votre nom et email."); return; }
                 setAchatSending(true);
+                /* AVANT la création de la commande : renoncer ne doit pas laisser une
+                   commande « en attente » que rien ne vient jamais payer. */
+                if (!await confirmerPaiementDefinitif({ montant: Number(selectedProduit.prix), offreLabel: selectedProduit.nom })) {
+                  setAchatSending(false);
+                  return;
+                }
                 try {
                   const rCmd = await fetch(`${API_URL}/api/boutique/commandes`, {
                     method:"POST", headers:{"Content-Type":"application/json"},

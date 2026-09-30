@@ -506,7 +506,7 @@ const CertificationDetail=()=>{
       setSuccess(true);
       setTimeout(()=>{setSuccess(false);setModalOpen(false);setInscForm({nom:"",email:"",tel:"",mobileNum:""});setCodePromo("");setCodePromoApplied(null);setCodePromoError("");},3000);
     }catch(e){
-      setInscErreur("Une erreur est survenue. Veuillez réessayer.");
+      if (!e.annuleParUtilisateur) setInscErreur("Une erreur est survenue. Veuillez réessayer.");
     }finally{
       setInscLoading(false);
     }

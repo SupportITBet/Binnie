@@ -472,7 +472,7 @@ export default function CentresEnLigneModal({ isOpen, onClose, onSelectAssistant
       }
       setStep(3);
     } catch (e) {
-      setErreur(e.message);
+      if (!e.annuleParUtilisateur) setErreur(e.message);
     } finally {
       setSubmitting(false);
     }

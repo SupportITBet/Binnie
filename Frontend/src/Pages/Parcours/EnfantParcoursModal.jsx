@@ -528,7 +528,7 @@ export default function EnfantParcoursModal({ isOpen, onClose }) {
       }
       setStep(5);
     } catch (e) {
-      setErreur(e.message || "Une erreur est survenue. Veuillez réessayer.");
+      if (!e.annuleParUtilisateur) setErreur(e.message || "Une erreur est survenue. Veuillez réessayer.");
     } finally {
       setSubmitting(false);
     }

@@ -726,7 +726,7 @@ export default function ParcoursModal({ isOpen, onClose, user: userProp = null, 
         return; // redirection vers la page de paiement TouchPoint en cours
       }
       setStep(4);
-    } catch (e) { setErreur(e.message); }
+    } catch (e) { if (!e.annuleParUtilisateur) setErreur(e.message); }
     finally { setSubmitting(false); }
   };
 
@@ -844,7 +844,7 @@ export default function ParcoursModal({ isOpen, onClose, user: userProp = null, 
 
       setStep(4);
       setPaiementDomicile(false);
-    } catch(e) { setErreur(e.message); }
+    } catch(e) { if (!e.annuleParUtilisateur) setErreur(e.message); }
     finally { setSubmitting(false); }
   };
 

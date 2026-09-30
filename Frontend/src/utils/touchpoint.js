@@ -1,5 +1,7 @@
 // Utilitaire partagé pour déclencher un paiement TouchPoint (Checkout page)
 // depuis n'importe quelle modale d'inscription. Voir Backend/docs/touchpoint-integration.md
+import { confirmerPaiementDefinitif } from "./confirmerPaiement";
+
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
 // Attend que window.sendPaymentInfos soit exposée - le script TouchPoint peut
@@ -99,6 +101,20 @@ export function calcMontantReduit(prixInitial, promo) {
 export async function payerAvecTouchPoint({ clientInfo, montant, offreLabel, assignationId, assistanteId, message }) {
   if (!clientInfo?.email?.trim()) throw new Error("Un email est requis pour payer en ligne.");
   if (!montant || montant <= 0) throw new Error("Montant invalide pour le paiement en ligne.");
+
+  /* LE DERNIER MOMENT OÙ L'ON PEUT ENCORE S'ARRÊTER. Passé cet écran, le paiement part vers
+     TouchPoint et aucun remboursement n'est accordé - ce que rien ne disait jusqu'ici.
+     Placée ICI, avant `/initiate`, et non plus loin : renoncer ne doit laisser aucune trace
+     de paiement côté serveur, sinon la commerciale verrait des initiations fantômes qu'aucun
+     encaissement ne vient jamais solder.
+     Placée dans CETTE fonction, et non dans les écrans : les huit qui encaissent y passent
+     tous, et le neuvième ajouté demain en héritera sans qu'on ait à y penser. */
+  const confirme = await confirmerPaiementDefinitif({ montant, offreLabel });
+  if (!confirme) {
+    const e = new Error("Paiement annulé");
+    e.annuleParUtilisateur = true;   // l'appelant distingue un refus d'une vraie panne
+    throw e;
+  }
 
   const res = await fetch(`${API_BASE}/api/touchpoint/initiate`, {
     method: "POST",

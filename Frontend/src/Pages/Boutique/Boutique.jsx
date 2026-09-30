@@ -163,7 +163,7 @@ export default function Boutique() {
         message:    JSON.stringify({ context: "boutique", commande_id: commande.id }),
       });
       setCart([]);
-    } catch (err) { setFormErr(err.message); setSending(false); }
+    } catch (err) { if (!err.annuleParUtilisateur) setFormErr(err.message); setSending(false); }
   };
 
   const openDetail = (p) => { setDetail(p); setImgIdx(0); };
