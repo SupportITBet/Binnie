@@ -109,9 +109,23 @@ echo "  tous les fichiers de src/ sont syntaxiquement valides"
 etape "Redémarrage du service"
 REDEMARRE=""
 
+# `|| true` N'EST PAS UNE PRÉCAUTION DÉCORATIVE. `grep` rend 1 quand il ne trouve rien, et
+# sous `set -euo pipefail` une affectation `X=$(… | grep …)` qui échoue FAIT SORTIR LE SCRIPT
+# - silencieusement, au beau milieu de l'étape. C'est arrivé le 30/09/2026 : le script s'est
+# arrêté après « Redémarrage du service » sans afficher ni succès, ni le message d'aide
+# pourtant prévu juste en dessous, et sans rien redémarrer.
+UNITE=""
+PROC=""
+
 if command -v systemctl >/dev/null 2>&1; then
   UNITE=$(systemctl list-units --type=service --all --no-legend --plain 2>/dev/null \
-          | awk '{print $1}' | grep -iE '^(bet|api-bet|binnie)[^ ]*\.service$' | head -1)
+          | awk '{print $1}' | grep -iE '^(bet|api-bet|binnie)[^ ]*\.service$' | head -1 || true)
+  # Second essai, par ce que l'unité LANCE plutôt que par son nom : un service peut très bien
+  # s'appeler `node-api` ou `backend` sans qu'aucun motif de nom ne le trouve.
+  if [ -z "$UNITE" ]; then
+    UNITE=$(grep -ilE "ExecStart=.*(${RACINE//\//\\/}|/opt/bet)" \
+              /etc/systemd/system/*.service 2>/dev/null | head -1 | xargs -r basename || true)
+  fi
   if [ -n "$UNITE" ]; then
     systemctl restart "$UNITE"
     REDEMARRE="systemd ($UNITE)"
@@ -119,11 +133,17 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 if [ -z "$REDEMARRE" ] && command -v pm2 >/dev/null 2>&1; then
+  # On cherche par NOM, puis par répertoire de travail : un processus nommé « server » ou
+  # « index » ne dit rien de BET, son cwd si.
   PROC=$(pm2 jlist 2>/dev/null | node -e '
     let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
-      try { const l=JSON.parse(s); const m=l.find(p=>/bet|binnie|api/i.test(p.name));
-            if (m) console.log(m.name); } catch {}
-    });' 2>/dev/null)
+      try {
+        const l = JSON.parse(s);
+        const m = l.find(p => /bet|binnie|api/i.test(p.name))
+               || l.find(p => /\/opt\/bet/.test(p.pm2_env?.pm_cwd || p.pm2_env?.pm_exec_path || ""));
+        if (m) console.log(m.name);
+      } catch {}
+    });' 2>/dev/null || true)
   if [ -n "$PROC" ]; then
     pm2 restart "$PROC" --update-env
     pm2 save >/dev/null 2>&1 || true
@@ -141,13 +161,28 @@ fi
 if [ -z "$REDEMARRE" ]; then
   rouge "✗ Aucun superviseur reconnu — le service n'a PAS été redémarré."
   echo   "  Le code et les dépendances SONT à jour ; il ne manque que le redémarrage."
-  echo   "  Cherchez lequel gère l'API, puis relancez-le à la main :"
-  echo   "      systemctl list-units --type=service | grep -i bet"
-  echo   "      pm2 list"
-  echo   "      ls $BACK/tmp/restart.txt"
   echo
-  echo   "  Puis ajoutez-le à l'étape 5 de ce script, pour que le prochain déploiement"
-  echo   "  n'ait pas à le chercher."
+  # On AFFICHE les candidats plutôt que de demander d'aller les chercher : la première
+  # version se contentait de suggérer trois commandes, ce qui obligeait à un aller-retour
+  # supplémentaire avant de savoir quoi faire.
+  echo   "  Processus Node en cours d'exécution sur cette machine :"
+  ps -eo pid,etime,cmd 2>/dev/null | grep -i "[n]ode" | head -8 | sed 's/^/      /' \
+    || echo "      (aucun)"
+  echo
+  if command -v pm2 >/dev/null 2>&1; then
+    echo "  pm2 :"
+    pm2 list --no-color 2>/dev/null | sed 's/^/      /' | head -14 || echo "      (illisible)"
+    echo
+  fi
+  if command -v systemctl >/dev/null 2>&1; then
+    echo "  Services systemd actifs dont le nom évoque node, api ou bet :"
+    systemctl list-units --type=service --state=running --no-legend --plain 2>/dev/null \
+      | awk '{print "      "$1}' | grep -iE "node|api|bet|binnie" | head -8 \
+      || echo "      (aucun)"
+    echo
+  fi
+  echo   "  Redémarrez le bon à la main, puis dites-moi lequel c'était : je l'ajouterai à"
+  echo   "  l'étape 5 pour que le prochain déploiement n'ait pas à le chercher."
   exit 1
 fi
 echo "  redémarré via $REDEMARRE"
