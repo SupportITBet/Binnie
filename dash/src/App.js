@@ -181,7 +181,18 @@ async function refreshAdminSession() {
       // Refresh impossible → session vraiment expirée → déconnexion propre.
       // Chaque portail a sa page : renvoyer un coach vers l'accès staff l'obligeait à
       // retrouver la sienne.
-      const retour = sessionCourante().portail === "coach" ? "/login-professeur" : "/bet-staff-access";
+      //
+      // Les apprenants et les parents manquaient à cette liste : ils tombaient donc dans le
+      // cas par défaut, l'accès du personnel, lequel réclame un code d'entrée et les
+      // renvoyait sur `/access`. Un apprenant en fin de session se retrouvait devant
+      // l'administration BET, sans aucun moyen de revenir à SA page de connexion.
+      const RETOUR_PAR_PORTAIL = {
+        coach:     "/login-professeur",
+        apprenant: "/connexion/apprenant",
+        parent:    "/login-particulier",
+        admin:     "/bet-staff-access",
+      };
+      const retour = RETOUR_PAR_PORTAIL[sessionCourante().portail] || "/bet-staff-access";
       _dejaDeclenche = true;
       clearAllSessionStorage();
       afficherBanniereSessionExpiree();

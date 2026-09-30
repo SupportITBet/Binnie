@@ -55,12 +55,41 @@ export function sessionCourante() {
       refresh: localStorage.getItem("coach_refresh") || "",
     };
   }
+  const adminAccess = localStorage.getItem("admin_token");
+  if (adminAccess) {
+    return {
+      portail: "admin",
+      cleAcces: "admin_token",
+      cleRefresh: "admin_refresh",
+      access: adminAccess,
+      refresh: localStorage.getItem("admin_refresh") || "",
+    };
+  }
+
+  /* APPRENANTS ET PARENTS. Ce portail manquait : faute de le reconnaître, la fonction
+     retombait sur « admin » pour un apprenant, et l'intercepteur 401 le renvoyait vers
+     l'accès du personnel - donc vers le code d'entrée `/access`, qu'il n'a évidemment pas.
+     Un apprenant dont la session expirait se retrouvait devant l'administration BET.
+     Placé APRÈS l'admin : quand les deux sessions cohabitent dans le même navigateur, la
+     priorité au personnel reproduit le comportement d'avant. */
+  const userAccess = localStorage.getItem("user_token");
+  if (userAccess) {
+    return {
+      portail: localStorage.getItem("user_profil_type") === "parent" ? "parent" : "apprenant",
+      cleAcces: "user_token",
+      cleRefresh: "user_refresh",
+      access: userAccess,
+      refresh: localStorage.getItem("user_refresh") || "",
+    };
+  }
+
+  // Aucune session : on rend le portail du personnel, comme avant.
   return {
     portail: "admin",
     cleAcces: "admin_token",
     cleRefresh: "admin_refresh",
-    access: localStorage.getItem("admin_token") || "",
-    refresh: localStorage.getItem("admin_refresh") || "",
+    access: "",
+    refresh: "",
   };
 }
 

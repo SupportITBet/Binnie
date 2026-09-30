@@ -88,4 +88,32 @@ describe("sessionCourante", () => {
     expect(s.access).toBe("");
     expect(s.refresh).toBe("");
   });
+
+  /* Le portail apprenant manquait, et la fonction retombait donc sur « admin » : à
+     l'expiration, l'intercepteur 401 renvoyait l'apprenant vers l'accès du personnel,
+     c'est-à-dire vers le code d'entrée `/access`. Ces trois cas verrouillent le retour
+     vers sa propre page de connexion. */
+  it("reconnaît un apprenant à ses propres clés", () => {
+    localStorage.setItem("user_token", "jwt-apprenant");
+    localStorage.setItem("user_refresh", "refresh-apprenant");
+    const s = sessionCourante();
+    expect(s.portail).toBe("apprenant");
+    expect(s.cleAcces).toBe("user_token");
+    expect(s.access).toBe("jwt-apprenant");
+    expect(s.refresh).toBe("refresh-apprenant");
+  });
+
+  it("distingue le parent de l'apprenant, qui partagent les mêmes clés", () => {
+    localStorage.setItem("user_token", "jwt-parent");
+    localStorage.setItem("user_profil_type", "parent");
+    expect(sessionCourante().portail).toBe("parent");
+  });
+
+  it("donne la priorité au personnel quand staff et apprenant cohabitent", () => {
+    // Reproduit le comportement d'avant : sur un poste partagé, c'est le personnel
+    // qui est réellement à l'écran quand admin_token existe.
+    localStorage.setItem("user_token", "jwt-apprenant");
+    localStorage.setItem("admin_token", "jwt-admin");
+    expect(sessionCourante().portail).toBe("admin");
+  });
 });
