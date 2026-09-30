@@ -4,6 +4,7 @@ import { authenticateUser } from "../middlewares/auth.js";
 import { peutLireRattachement } from "../services/accesApprenant.js";
 import { authenticateAdmin, requirePermission, authenticateApprenant } from "../middlewares/requireAdmin.js";
 import { logAudit } from "../middlewares/logAudit.js";
+import { photoValide } from "../utils/photoUrl.js";
 import { creerAccesApprenantCore } from "./apprenants.js";
 import { attribuerPoints, verifierBadges } from "../services/gamificationDash.js";
 import { estDelegueSurGroupe, groupesDeleguesA, refuserSiTitulaireDelegue } from "../services/delegations.js";
@@ -3045,8 +3046,14 @@ router.post("/:id/presences", authenticateAdmin, requirePermission("presences", 
 ══════════════════════════════════════════════════════════════ */
 router.post("/", authenticateAdmin, requirePermission("classes", "create"), async (req, res) => {
   try {
-    const { nom, niveau, filiere, type_cours, coach_id, centre_id, horaire, date_debut, date_fin, capacite_max, is_prive } = req.body;
+    const { nom, niveau, filiere, type_cours, coach_id, centre_id, horaire, date_debut, date_fin, capacite_max, is_prive, photo_url } = req.body;
     if (!nom) return res.status(400).json({ error: "Le nom du groupe est requis" });
+
+    /* La photo de la classe. C'est LA MÊME image que celle du fil de discussion de cette
+       classe - `ChatGroupe` lit `groupe.photo_url` sans distinguer classe et groupe libre -
+       pour qu'un apprenant ne voie pas deux visuels différents désigner le même endroit. */
+    const photoCreation = photoValide(photo_url);
+    if (photoCreation === undefined) return res.status(400).json({ error: "Photo de classe invalide." });
 
     const createdByNom = [req.profil.prenom, req.profil.nom].filter(Boolean).join(" ") || req.profil.email || "Inconnu";
 
@@ -3069,6 +3076,7 @@ router.post("/", authenticateAdmin, requirePermission("classes", "create"), asyn
          La colonne existait depuis le début et n'était jamais écrite. Elle l'est désormais,
          et `capacite_max` redevient ce qu'elle dit être : une capacité. */
       is_prive:        is_prive === true || capacite_max === 1 || capacite_max === "1",
+      photo_url:       photoCreation,
       statut:          "actif",
       created_by:      req.profil.id,
       created_by_nom:  createdByNom,
@@ -3211,6 +3219,16 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes", "update"), 
       const v = req.body[k];
       updates[k] = (VIDE_VAUT_NULL.has(k) && v === "") ? null : v;
     });
+
+    /* La photo passe par sa propre validation plutôt que par `allowed` : la recopie générique
+       ci-dessus accepterait n'importe quelle chaîne, et celle-ci finit dans un attribut `src`
+       chez tous les apprenants de la classe. Une valeur vide efface la photo - c'est ainsi
+       qu'on en retire une - tandis qu'une valeur inexploitable est refusée. */
+    if (req.body.photo_url !== undefined) {
+      const photo = photoValide(req.body.photo_url);
+      if (photo === undefined) return res.status(400).json({ error: "Photo de classe invalide." });
+      updates.photo_url = photo;
+    }
 
     const { data: ancien } = await supabase.from("groupes").select("coach_id,nom,statut,capacite_max,is_prive").eq("id", id).single();
     if (!ancien) return res.status(404).json({ error: "Groupe introuvable" });

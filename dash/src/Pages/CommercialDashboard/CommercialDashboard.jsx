@@ -12,6 +12,8 @@ import { Line, Doughnut } from "react-chartjs-2";
 import MessagerieTab from "../../Components/MessagerieTab";
 import CloudinaryUpload from "../../Components/CloudinaryUpload";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
+import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
+import PastilleGroupe from "../../Components/PastilleGroupe";
 import NotificationBell from "../../Components/NotificationBell";
 import BarreFiltres, { RangeePastilles, RangeeChamps, champFiltre } from "../../Components/BarreFiltres";
 import { useNotifPoller } from "../../hooks/useNotifPoller";
@@ -966,7 +968,7 @@ export default function CommercialDashboard() {
   const [showCreateClasse, setShowCreateClasse]  = useState(false);
   const [classeForm,       setClasseForm]        = useState({
     nom:"", niveau:"B1", filiere:"Anglais Pro", type_cours:"", coach_id:"",
-    centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[],
+    centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null,
   });
   const [classeSaving,     setClasseSaving]      = useState(false);
 
@@ -1125,7 +1127,7 @@ export default function CommercialDashboard() {
       await r.json();
       toast.success(isEdit ? "Classe mise à jour ✓" : "Classe créée ✓");
       setShowCreateClasse(false);
-      setClasseForm({ nom:"", niveau:"B1", filiere:"Anglais Pro", type_cours:"", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+      setClasseForm({ nom:"", niveau:"B1", filiere:"Anglais Pro", type_cours:"", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
       setClasseCoachSearch("");
       setShowCreateClasseInFin(false);
       // Une classe fraîchement créée peut tomber hors des filtres actifs de "Mes classes"
@@ -6496,7 +6498,7 @@ export default function CommercialDashboard() {
                           📥 Export Excel
                         </button>
                       )}
-                      <button disabled={!peut("classes","create")} title={permBtnTitle("Créer une classe",peut("classes","create"))} onClick={() => { fetchCoachs(); setClasseForm({ nom:"", niveau:"B1", filiere:"Anglais Pro", type_cours: (assistanteTypeCours && assistanteTypeCours !== "les_deux") ? assistanteTypeCours : "", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] }); setClasseCoachSearch(""); setShowCreateClasse(true); }} style={permBtnStyle(btnPrimary,peut("classes","create"))}>{peut("classes","create")?"+":"🔒"} Créer une classe</button>
+                      <button disabled={!peut("classes","create")} title={permBtnTitle("Créer une classe",peut("classes","create"))} onClick={() => { fetchCoachs(); setClasseForm({ nom:"", niveau:"B1", filiere:"Anglais Pro", type_cours: (assistanteTypeCours && assistanteTypeCours !== "les_deux") ? assistanteTypeCours : "", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null }); setClasseCoachSearch(""); setShowCreateClasse(true); }} style={permBtnStyle(btnPrimary,peut("classes","create"))}>{peut("classes","create")?"+":"🔒"} Créer une classe</button>
                     </div>
                   </div>
 
@@ -6588,8 +6590,16 @@ export default function CommercialDashboard() {
                               return (
                                 <tr key={cl.id} onClick={() => openClasseDetail(cl)} style={{ borderBottom:"1px solid #f1f5f9", background: idx%2===0 ? "#fff" : "#fafbfc", cursor:"pointer", transition:"background .12s" }} onMouseEnter={e=>e.currentTarget.style.background="#f0f9ff"} onMouseLeave={e=>e.currentTarget.style.background=idx%2===0?"#fff":"#fafbfc"}>
                                   <td style={{ padding:"12px 14px" }}>
-                                    <div style={{ fontWeight:700, color:"#0f172a" }}>{cl.nom}</div>
-                                    <div style={{ fontSize:11, color:"#94a3b8", marginTop:1 }}>{cl.filiere || "-"}</div>
+                                    {/* La photo de la classe, celle-là même qui habille son fil
+                                        de discussion : sur une liste longue, l'image situe plus
+                                        vite que le nom. */}
+                                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                                      <PastilleGroupe nom={cl.nom} url={cl.photo_url} taille={32} accent={BET_COLOR} />
+                                      <div style={{ minWidth:0 }}>
+                                        <div style={{ fontWeight:700, color:"#0f172a" }}>{cl.nom}</div>
+                                        <div style={{ fontSize:11, color:"#94a3b8", marginTop:1 }}>{cl.filiere || "-"}</div>
+                                      </div>
+                                    </div>
                                   </td>
                                   <td style={{ padding:"12px 14px" }}>
                                     {cl.niveau ? (
@@ -6656,7 +6666,8 @@ export default function CommercialDashboard() {
                                           type_cours: cl.type_cours || "", coach_id: cl.coach_id || "",
                                           centre_id: cl.centre_id || "", date_debut: cl.date_debut || "",
                                           date_fin: cl.date_fin || "", capacite_max: cl.capacite_max || 20,
-                                          horaire: cl.horaire || [], _id: cl.id, coach_id_original: cl.coach_id || "",
+                                          horaire: cl.horaire || [], photo_url: cl.photo_url || null,
+                                          _id: cl.id, coach_id_original: cl.coach_id || "",
                                         });
                                         setClasseCoachSearch(""); fetchCoachs(); setShowCreateClasse(true);
                                       }}
@@ -6912,7 +6923,7 @@ export default function CommercialDashboard() {
                           {/* Bouton modifier */}
                           <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
                             <button onClick={() => {
-                              setClasseForm({ nom:cl.nom, niveau:cl.niveau||"B1", filiere:cl.filiere||"Anglais Pro", type_cours:cl.type_cours||"", coach_id:cl.coach_id||"", centre_id:cl.centre_id||"", date_debut:cl.date_debut||"", date_fin:cl.date_fin||"", capacite_max:cl.capacite_max||20, horaire:cl.horaire||[], _id:cl.id, coach_id_original:cl.coach_id||"" });
+                              setClasseForm({ nom:cl.nom, niveau:cl.niveau||"B1", filiere:cl.filiere||"Anglais Pro", type_cours:cl.type_cours||"", coach_id:cl.coach_id||"", centre_id:cl.centre_id||"", date_debut:cl.date_debut||"", date_fin:cl.date_fin||"", capacite_max:cl.capacite_max||20, horaire:cl.horaire||[], photo_url:cl.photo_url||null, _id:cl.id, coach_id_original:cl.coach_id||"" });
                               setSelectedClasse(null); setClasseCoachSearch(""); fetchCoachs(); setShowCreateClasse(true);
                             }} style={{ padding:"9px 20px", background:BET_COLOR, color:"#fff", border:"none", borderRadius:8, fontWeight:700, fontSize:13, cursor:"pointer" }}>
                               ✏️ Modifier cette classe
@@ -12924,6 +12935,7 @@ export default function CommercialDashboard() {
               capacite_max: isPrive
                 ? 1 + (Array.isArray(sd.membres_famille) ? sd.membres_famille.length : 0)
                 : 20,
+              photo_url: null,
             });
             setClasseCoachSearch("");
             setShowCreateClasseInAssign(true);
@@ -12958,6 +12970,12 @@ export default function CommercialDashboard() {
                     placeholder="ex: Anglais Pro B2 - Mardi/Jeudi"
                     style={inputSt} />
                 </div>
+                {/* Photo - la même que celle du fil de discussion de la classe. */}
+                <ChampPhotoClasse
+                  valeur={classeForm.photo_url || null}
+                  onChange={url => setClasseForm(p => ({ ...p, photo_url: url }))}
+                  nom={classeForm.nom}
+                  accent={BET_COLOR} />
                 {champsClasseVerrouilles && (
                   <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 14px", borderRadius:9, background:"#fffbeb", border:"1px solid #fde68a", fontSize:12, color:"#92400e", fontWeight:600 }}>
                     🔒 Un coach est déjà assigné à cette classe. La filière, le niveau, le type de cours et le coach sont verrouillés pour ne pas endommager les séances/présences déjà enregistrées.
@@ -14357,7 +14375,7 @@ export default function CommercialDashboard() {
           onClose={() => setShowTransfert(false)}
           onCreateClasse={(niveauSuggere) => {
             fetchCoachs();
-            setClasseForm({ nom:"", niveau: niveauSuggere||transfertForm.niveau||"", filiere:"", type_cours:"", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+            setClasseForm({ nom:"", niveau: niveauSuggere||transfertForm.niveau||"", filiere:"", type_cours:"", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
             setClasseCoachSearch("");
             setShowCreateClasseInTransfert(true);
             setShowCreateClasse(true);

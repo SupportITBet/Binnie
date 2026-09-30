@@ -5962,7 +5962,11 @@ export default function EspaceApprenant() {
                     </div>
                   ) : (
                     <ChatGroupe
-                      groupes={[{ id: monGroupeId, nom: realGI?.nom || "Ma classe", statut: realGI?.statut || "actif" }]}
+                      groupes={[{ id: monGroupeId, nom: realGI?.nom || "Ma classe", statut: realGI?.statut || "actif",
+                                   /* `photo_url` manquait dans cet objet reconstruit : l'en-tête du fil
+                                      retombait sur les initiales alors que la classe porte une photo, et
+                                      l'apprenant voyait donc deux visuels différents pour un même endroit. */
+                                   photo_url: realGI?.photo_url || null }]}
                       profil={realP}
                       token={localStorage.getItem("user_token")}
                       accent={PRIMARY_COLOR}
@@ -5985,7 +5989,7 @@ export default function EspaceApprenant() {
                   ) : (
                     <ChatGroupe
                       source="libre"
-                      groupes={groupesLibres.map(c => ({ id: c.id, nom: c.nom, statut: "actif" }))}
+                      groupes={groupesLibres.map(c => ({ id: c.id, nom: c.nom, photo_url: c.photo_url || null, statut: "actif" }))}
                       profil={realP}
                       token={localStorage.getItem("user_token")}
                       accent={PRIMARY_COLOR}

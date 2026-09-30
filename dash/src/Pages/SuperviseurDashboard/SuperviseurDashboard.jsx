@@ -6,6 +6,7 @@ import { RangeePastilles } from "../../Components/BarreFiltres";
 import NotificationsTab    from "../../Components/NotificationsTab";
 import NotificationBell    from "../../Components/NotificationBell";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
+import PastilleGroupe from "../../Components/PastilleGroupe";
 import MessagerieTab        from "../../Components/MessagerieTab";
 import { useLanguage }     from "../../contexts/LanguageContext";
 import { useConfirm }      from "../../contexts/ConfirmContext";
@@ -2269,6 +2270,9 @@ export default function SuperviseurDashboard() {
                                   color:isSelected?BET_COLOR:isTermine?"#64748b":"#374151",
                                   cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
                                 <span>{isTermine?"⬛":"🟢"}</span>
+                                {/* La photo de la classe - la même que celle de son fil de
+                                    discussion, pour qu'un seul visuel la désigne partout. */}
+                                <PastilleGroupe nom={g.nom} url={g.photo_url} taille={20} accent={BET_COLOR} />
                                 <span>{g.nom}</span>
                                 {g.niveau && <span style={{ fontSize:10, color:isSelected?BET_COLOR:"#94a3b8", fontWeight:400 }}>· {g.niveau}</span>}
                                 {isTermine && <span style={{ fontSize:10, color:"#94a3b8", fontWeight:400 }}>(terminée)</span>}

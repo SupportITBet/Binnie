@@ -4,6 +4,7 @@ import { authenticateAdmin, authenticateUser } from "../middlewares/requireAdmin
 import { notifyUsers } from "../services/notifyRole.js";
 import { db } from "../config/firebase.js";
 import { logAudit } from "../middlewares/logAudit.js";
+import { photoValide } from "../utils/photoUrl.js";
 
 const router = express.Router();
 
@@ -372,24 +373,10 @@ router.get("/apprenants", authenticateAdmin, requireCreateur, async (req, res) =
    CRÉATION
 ══════════════════════════════════════════════════════════════ */
 
-/* La photo du groupe : une URL Cloudinary, ou rien. On refuse tout ce qui n'est pas une
-   adresse http(s) - une valeur libre finirait dans un attribut `src`, où une chaîne
-   `javascript:` serait exécutée par le navigateur de chaque membre. */
-/**
- * Valide une photo de groupe. Rend l'URL, `null` s'il n'y en a pas, ou `undefined` si la
- * valeur fournie est inexploitable - c'est ce `undefined` que l'appelant refuse.
- *
- * `v === undefined` SIGNIFIE « CHAMP ABSENT », PAS « PHOTO INVALIDE ». La création de groupe
- * n'envoie pas `photo_url` du tout : `String(undefined)` valait `"undefined"`, la regex le
- * rejetait, et toute création répondait 400 « Photo de groupe invalide » - un message qui ne
- * pouvait que dérouter, puisque aucune photo n'avait été proposée. Créer un groupe libre
- * était donc impossible depuis l'ajout de cette fonctionnalité.
- */
-const photoValide = (v) => {
-  if (v === undefined || v === null || v === "") return null;
-  const s = String(v).trim();
-  return /^https?:\/\//i.test(s) && s.length <= 500 ? s : undefined;   // undefined = refusée
-};
+/* La photo du groupe : une URL Cloudinary, ou rien. La validation vit dans
+   `utils/photoUrl.js` depuis que les CLASSES en portent une elles aussi - deux copies de la
+   même règle de sécurité auraient fini par diverger, et c'est la copie oubliée qui aurait
+   laissé passer une URL exécutable. */
 
 router.post("/", authenticateAdmin, requireCreateur, async (req, res) => {
   try {

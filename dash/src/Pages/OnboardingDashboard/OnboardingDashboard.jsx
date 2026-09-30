@@ -11,6 +11,8 @@ import NotificationBell from "../../Components/NotificationBell";
 import BarreFiltres, { RangeePastilles } from "../../Components/BarreFiltres";
 import MessagerieTab from "../../Components/MessagerieTab";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
+import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
+import PastilleGroupe from "../../Components/PastilleGroupe";
 import ArchiveTab, { ArchiveModal } from "../../Components/ArchiveTab";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useConfirm } from "../../contexts/ConfirmContext";
@@ -625,7 +627,7 @@ export default function OnboardingDashboard() {
       .then(d => setAssistantesEnLigne((d.assistantes || []).filter(a => a.type_cours === "en_ligne" || a.type_cours === "les_deux")))
       .catch(() => {});
   }, []);
-  const [groupeForm, setGroupeForm] = useState({ nom:"", niveau:"", filiere:"", type_cours:"", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+  const [groupeForm, setGroupeForm] = useState({ nom:"", niveau:"", filiere:"", type_cours:"", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
   // Voir CommercialDashboard : les filières viennent du catalogue réel, jamais d'une
   // liste recopiée - c'est elle qui reliait les inscriptions à leur offre.
   const [filieresCatalogue, setFilieresCatalogue] = useState([]);
@@ -1330,7 +1332,7 @@ export default function OnboardingDashboard() {
       if (!r.ok) throw new Error(d.error);
       setGroupes(prev => [{ ...d.groupe, nb_apprenants:0 }, ...prev]);
       setShowCreateGroupe(false);
-      setGroupeForm({ nom:"", niveau:"", filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+      setGroupeForm({ nom:"", niveau:"", filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
       toast.success("Groupe créé ✓");
       // Créée depuis le modal de transfert (ex: aucune classe compatible trouvée) -
       // la présélectionner directement au lieu de forcer un clic "Actualiser" en plus.
@@ -2930,7 +2932,7 @@ export default function OnboardingDashboard() {
   const [dossierSelectedGroupe,setDossierSelectedGroupe]= useState(null);
   const [dossierCreerGroupe,   setDossierCreerGroupe]   = useState(false);
   const [dossierPaiements,     setDossierPaiements]     = useState([]);
-  const [dossierNouveauGroupe, setDossierNouveauGroupe] = useState({ nom:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+  const [dossierNouveauGroupe, setDossierNouveauGroupe] = useState({ nom:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
   const [dossierHoraireTmp,    setDossierHoraireTmp]    = useState({ jour:"Lun", debut:"08:00", fin:"10:00" });
   /* Filtres de la liste des classes (étape 2). `filtreNiveauClasse` vide = le niveau de
      l'apprenant, valeur par défaut ; "tous" lève la restriction. Ils ne pilotent QUE
@@ -3108,7 +3110,7 @@ export default function OnboardingDashboard() {
         capacite_max: 1 + (Array.isArray(sd.membres_famille) ? sd.membres_famille.length : 0), horaire: horairePrefill });
     } else {
       setDossierCreerGroupe(false);
-      setDossierNouveauGroupe({ nom:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+      setDossierNouveauGroupe({ nom:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
     }
 
     setDossierHoraireTmp({ jour:"Lun", debut:"08:00", fin:"10:00" });
@@ -4523,7 +4525,7 @@ export default function OnboardingDashboard() {
                       🌐 Import global
                     </button>
                     <button onClick={ouvrirHistoriqueImports} title="Historique des imports - relancer un lot interrompu ou annuler un lot créé par erreur" style={{ position:"relative", padding:"8px 16px", background:"#fff", border:"1.5px solid #cbd5e1", borderRadius:8, fontSize:12, color:"#334155", cursor:"pointer", fontWeight:700 }}>📥 Historique{(nbImportsInterrompus > 0 || nbImportsAnnules > 0) && (<span style={{ position:"absolute", top:-7, right:-7, display:"flex", gap:3 }}>{nbImportsInterrompus > 0 && (<span title={`${nbImportsInterrompus} import(s) interrompu(s) - à relancer pour créer les lignes manquantes`} style={{ minWidth:18, height:18, padding:"0 5px", color:"#fff", borderRadius:99, fontSize:10, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 0 2px #fff", background:"#f59e0b" }}>{nbImportsInterrompus}</span>)}{nbImportsAnnules > 0 && (<span title={`${nbImportsAnnules} import(s) annulé(s) - les données créées ont été supprimées`} style={{ minWidth:18, height:18, padding:"0 5px", color:"#fff", borderRadius:99, fontSize:10, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 0 2px #fff", background:"#dc2626" }}>{nbImportsAnnules}</span>)}</span>)}</button>
-                    <button disabled={!peut("classes","create")} title={permBtnTitle("Créer un groupe",peut("classes","create"))} onClick={()=>{ setGroupeForm({ nom:"", niveau:"", filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] }); setGroupeCoachSearch(""); fetchCoachsDispos(coaches.map(c=>c.id)); setShowCreateGroupe(true); }} style={permBtnStyle(btnP,peut("classes","create"))}>{peut("classes","create")?"+":"🔒"} Créer un groupe</button>
+                    <button disabled={!peut("classes","create")} title={permBtnTitle("Créer un groupe",peut("classes","create"))} onClick={()=>{ setGroupeForm({ nom:"", niveau:"", filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null }); setGroupeCoachSearch(""); fetchCoachsDispos(coaches.map(c=>c.id)); setShowCreateGroupe(true); }} style={permBtnStyle(btnP,peut("classes","create"))}>{peut("classes","create")?"+":"🔒"} Créer un groupe</button>
                   </div>
                 </div>
                 {/* Filtres rapides - type de cours + statut */}
@@ -4601,6 +4603,9 @@ export default function OnboardingDashboard() {
                                     <td style={{ padding:"10px 14px" }}>
                                       <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                                         <div style={{ width:4,height:36,borderRadius:99,background:isActif?C:"#94a3b8",flexShrink:0 }}/>
+                                        {/* La photo de la classe, celle-là même qui habille son
+                                            fil de discussion. */}
+                                        <PastilleGroupe nom={g.nom} url={g.photo_url} taille={32} accent={C} />
                                         <div>
                                           <div style={{ fontWeight:800,color:"#0f172a",whiteSpace:"nowrap" }}>{g.nom}</div>
                                           {horaires.length>0 && (
@@ -4730,7 +4735,7 @@ export default function OnboardingDashboard() {
                       <div style={{ display:"flex",gap:8,flexShrink:0,marginTop:2 }}>
                         <button disabled={!peut("classes","update")} title={permBtnTitle("Modifier",peut("classes","update"))} onClick={()=>{
                           const hs = Array.isArray(selectedGroupe.horaire)?selectedGroupe.horaire:(typeof selectedGroupe.horaire==="string"?(()=>{try{return JSON.parse(selectedGroupe.horaire);}catch{return[];}})():[]);
-                          setGroupeForm({ nom:selectedGroupe.nom||"", niveau:selectedGroupe.niveau||"", filiere:selectedGroupe.filiere||"", type_cours:selectedGroupe.type_cours||"en_ligne", coach_id:selectedGroupe.coach_id||"", date_debut:selectedGroupe.date_debut?selectedGroupe.date_debut.slice(0,10):"", date_fin:selectedGroupe.date_fin?selectedGroupe.date_fin.slice(0,10):"", capacite_max:selectedGroupe.capacite_max||20, horaire:hs });
+                          setGroupeForm({ nom:selectedGroupe.nom||"", niveau:selectedGroupe.niveau||"", filiere:selectedGroupe.filiere||"", type_cours:selectedGroupe.type_cours||"en_ligne", coach_id:selectedGroupe.coach_id||"", date_debut:selectedGroupe.date_debut?selectedGroupe.date_debut.slice(0,10):"", date_fin:selectedGroupe.date_fin?selectedGroupe.date_fin.slice(0,10):"", capacite_max:selectedGroupe.capacite_max||20, horaire:hs, photo_url:selectedGroupe.photo_url||null });
                           setShowEditGroupe(true);
                         }} style={permBtnStyle({ padding:"7px 14px",background:"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:12 },peut("classes","update"))}>
                           {peut("classes","update")?"✏️":"🔒"} Modifier
@@ -6335,6 +6340,14 @@ export default function OnboardingDashboard() {
                         <div style={{ gridColumn:"1/-1" }}>
                           <label style={lbl}>Nom du groupe *</label>
                           <input style={inp} value={groupeForm.nom} onChange={e=>setGroupeForm(f=>({...f,nom:e.target.value}))} placeholder="ex: Groupe B2 Soir" />
+                        </div>
+                        <div style={{ gridColumn:"1/-1" }}>
+                          {/* Photo - la même que celle du fil de discussion de la classe. */}
+                          <ChampPhotoClasse
+                            valeur={groupeForm.photo_url || null}
+                            onChange={url => setGroupeForm(f => ({ ...f, photo_url: url }))}
+                            nom={groupeForm.nom}
+                            accent={_C0} />
                         </div>
                         <div>
                           <label style={lbl}>Niveau</label>
@@ -9377,6 +9390,12 @@ export default function OnboardingDashboard() {
                             <label style={lbl}>Nom du groupe *</label>
                             <input style={inp} value={groupeForm.nom} onChange={e=>setGroupeForm(f=>({...f,nom:e.target.value}))} placeholder="ex: Anglais Pro B2 - Mardi/Jeudi" />
                           </div>
+                          {/* Photo - la même que celle du fil de discussion de la classe. */}
+                          <ChampPhotoClasse
+                            valeur={groupeForm.photo_url || null}
+                            onChange={url => setGroupeForm(f => ({ ...f, photo_url: url }))}
+                            nom={groupeForm.nom}
+                            accent={_C0} />
                           {/* Filière + Niveau */}
                           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
                             <div>
@@ -9528,7 +9547,7 @@ export default function OnboardingDashboard() {
                           </div>
                           <div style={{ display:"flex",gap:8 }}>
                             <button onClick={()=>{
-                              setGroupeForm({ nom:"", niveau: transfertNiveauCible!=="tous" ? transfertNiveauCible : (selectedApprenantGroupe.niveau||""), filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[] });
+                              setGroupeForm({ nom:"", niveau: transfertNiveauCible!=="tous" ? transfertNiveauCible : (selectedApprenantGroupe.niveau||""), filiere:"", type_cours:"en_ligne", coach_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
                               setGroupeCoachSearch("");
                               fetchCoachsDispos(coaches.map(c=>c.id));
                               setShowCreateGroupe(true);
