@@ -2885,7 +2885,7 @@ export default function PedagogicalAdvisorDashboard() {
                             <td style={{ padding:"12px 16px" }}>
                               <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                                 <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:999, background:"#f0fdf4", color:"#15803d", display:"inline-block", width:"fit-content" }}>
-                                  {p.type_cours === "en_ligne" ? "💻 En ligne" : p.type_cours === "domicile" ? "🏠 À domicile" : p.type_cours === "presentiel" ? "🏢 Présentiel" : "-"}
+                                  {p.type_cours === "hybride" ? "⚡ Hybride" : p.type_cours === "en_ligne" ? "💻 En ligne" : p.type_cours === "domicile" ? "🏠 À domicile" : p.type_cours === "presentiel" ? "🏢 Présentiel" : "-"}
                                 </span>
                                 {p.type_coaching && (
                                   <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:999, background:"#f3e8ff", color:"#7c3aed", display:"inline-block", width:"fit-content" }}>
@@ -3296,7 +3296,7 @@ export default function PedagogicalAdvisorDashboard() {
                                 <td style={{ padding:"12px 16px" }}>
                                   <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                                     <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:999, background:"#dbeafe", color:"#1d4ed8", display:"inline-block", width:"fit-content" }}>
-                                      {a.type_cours === "en_ligne" ? "💻 En ligne" : a.type_cours === "domicile" ? "🏠 Domicile" : a.type_cours === "presentiel" ? "🏢 Présentiel" : "-"}
+                                      {a.type_cours === "hybride" ? "⚡ Hybride" : a.type_cours === "en_ligne" ? "💻 En ligne" : a.type_cours === "domicile" ? "🏠 Domicile" : a.type_cours === "presentiel" ? "🏢 Présentiel" : "-"}
                                     </span>
                                     {a.type_coaching && (
                                       <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:999, background:"#f0fdf4", color:"#15803d", display:"inline-block", width:"fit-content" }}>
@@ -4709,7 +4709,7 @@ export default function PedagogicalAdvisorDashboard() {
                             <td style={{ padding:"12px 16px", color:"#64748b" }}>{g.filiere || "-"}</td>
                             <td style={{ padding:"12px 16px", fontSize:12, color:"#475569", whiteSpace:"nowrap" }}>
                               {estClassePrivee(g) && <span style={{ display:"block", fontSize:9, fontWeight:800, color:"#9333ea", marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
-                              {g.type_cours==="en_ligne"||g.type_cours==="prive" ? "💻 En ligne" : g.type_cours==="domicile" ? "🏠 Domicile" : g.type_cours==="presentiel"||g.type_cours==="centre" ? "🏢 Présentiel" : "-"}
+                              {g.type_cours==="hybride" ? "⚡ Hybride" : g.type_cours==="en_ligne"||g.type_cours==="prive" ? "💻 En ligne" : g.type_cours==="domicile" ? "🏠 Domicile" : g.type_cours==="presentiel"||g.type_cours==="centre" ? "🏢 Présentiel" : "-"}
                             </td>
                             <td style={{ padding:"12px 16px", color: g.coach_nom ? "#374151" : "#f59e0b", fontWeight:600 }}>
                               {g.coach_nom ? (
@@ -8493,7 +8493,7 @@ export default function PedagogicalAdvisorDashboard() {
                       ) : (
                         <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                           <div style={{ fontSize:12, fontWeight:700, color:"#0f172a" }}>
-                            {d.type_cours === "presentiel" ? "🏫 Présentiel" : d.type_cours === "en_ligne" ? "🌐 En ligne" : d.type_cours === "domicile" ? "🏠 Domicile" : d.type_cours}
+                            {d.type_cours === "hybride" ? "⚡ Hybride" : d.type_cours === "presentiel" ? "🏫 Présentiel" : d.type_cours === "en_ligne" ? "🌐 En ligne" : d.type_cours === "domicile" ? "🏠 Domicile" : d.type_cours}
                             {d.type_coaching ? ` · ${d.type_coaching}` : ""}
                           </div>
                           {d.inscription_offre && <div style={{ fontSize:11, color:"#374151" }}>📚 {d.inscription_offre}</div>}
@@ -8665,7 +8665,7 @@ export default function PedagogicalAdvisorDashboard() {
         ? { color:"#6b7280", bg:"#f3f4f6", label:"Terminé" }
         : { color:"#f59e0b", bg:"#fef3c7", label:ap.statut||"-" };
 
-      const modeLabel = asg?.type_cours==="en_ligne"?"💻 En ligne"
+      const modeLabel = asg?.type_cours==="hybride"?"⚡ Hybride":asg?.type_cours==="en_ligne"?"💻 En ligne"
         : asg?.type_cours==="domicile"?"🏠 À domicile"
         : asg?.type_cours==="presentiel"?`🏢 Présentiel${asg?.centres?.nom?" · "+asg.centres.nom:""}`
         : asg?.type_cours||"-";

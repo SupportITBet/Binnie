@@ -2613,7 +2613,7 @@ export default function CommercialDashboard() {
         cl.nom || "",
         cl.filiere || "",
         cl.niveau || "",
-        cl.type_cours === "en_ligne" ? "En ligne" : cl.type_cours === "presentiel" ? "Présentiel" : cl.type_cours || "",
+        libelleTypeCours(cl),
         cl.coach_nom || "Non assigné",
         cl.nb_apprenants || 0,
         cl.capacite_max || 20,

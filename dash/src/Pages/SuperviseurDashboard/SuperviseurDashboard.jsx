@@ -8,6 +8,7 @@ import NotificationBell    from "../../Components/NotificationBell";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import PastilleGroupe from "../../Components/PastilleGroupe";
 import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
+import { libelleTypeCours } from "../../utils/typeCours";
 import MessagerieTab        from "../../Components/MessagerieTab";
 import { useLanguage }     from "../../contexts/LanguageContext";
 import { useConfirm }      from "../../contexts/ConfirmContext";
@@ -3139,7 +3140,7 @@ export default function SuperviseurDashboard() {
                 <tbody>
                   {pageItems.map((cl, idx) => {
                     const sCol = cl.statut==="actif" ? { c:"#16a34a",bg:"#dcfce7" } : cl.statut==="termine" ? { c:"#475569",bg:"#f1f5f9" } : { c:"#d97706",bg:"#fef9c3" };
-                    const typeLabel = cl.type_cours==="en_ligne" ? "💻 En ligne" : cl.type_cours==="domicile" ? "🏠 Domicile" : "🏢 Présentiel";
+                    const typeLabel = libelleTypeCours(cl);
                     const rowBg = idx%2===0?"#fff":"#fafafa";
                     return (
                       /* La ligne entière ouvre la fiche de la classe, sur ses apprenants -
@@ -3631,7 +3632,7 @@ export default function SuperviseurDashboard() {
                 {selectedGroupe.statut && <span style={{ background:"rgba(255,255,255,0.12)", borderRadius:6, padding:"2px 10px" }}>{selectedGroupe.statut}</span>}
                 {selectedGroupe.nb_apprenants !== undefined && <span>👤 {selectedGroupe.nb_apprenants} apprenant{selectedGroupe.nb_apprenants!==1?"s":""}</span>}
                 {selectedGroupe.filiere && <span>📂 {selectedGroupe.filiere}</span>}
-                {selectedGroupe.type_cours && <span>{selectedGroupe.type_cours==="en_ligne"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":"🏢 Présentiel"}</span>}
+                {selectedGroupe.type_cours && <span>{libelleTypeCours(selectedGroupe)}</span>}
               </div>
             </div>
 
@@ -3683,7 +3684,7 @@ export default function SuperviseurDashboard() {
                       ["Code",       g.code||"-"],
                       ["Niveau",     g.niveau||"-"],
                       ["Filière",    g.filiere||"-"],
-                      ["Type",       g.type_cours==="en_ligne"?"💻 En ligne":g.type_cours==="domicile"?"🏠 Domicile":"🏢 Présentiel"],
+                      ["Type",       libelleTypeCours(g)],
                       ["Effectif",   `${g.nb_apprenants ?? groupeDetail.apprenants.length ?? 0} / ${g.capacite_max||20}`],
                       ["Statut",     g.statut||"-"],
                       ["Début",      g.date_debut ? fmtDate(g.date_debut) : "-"],
@@ -4517,7 +4518,7 @@ export default function SuperviseurDashboard() {
                                 {supClPageItems.map((g, idx) => {
                                   const sCol = g.statut==="actif" ? { c:"#16a34a",bg:"#dcfce7" } : g.statut==="cloture" ? { c:"#475569",bg:"#f1f5f9" } : g.statut==="termine" ? { c:"#475569",bg:"#f1f5f9" } : { c:"#d97706",bg:"#fef9c3" };
                                   const sLabel = g.statut==="actif" ? "Actif" : g.statut==="cloture" ? "🔒 Clôturée" : g.statut==="termine" ? "Terminée" : (g.statut||"-");
-                                  const typeLabel = g.type_cours==="en_ligne" ? "💻 En ligne" : g.type_cours==="domicile" ? "🏠 Domicile" : "🏢 Présentiel";
+                                  const typeLabel = libelleTypeCours(g);
                                   const rowBg = idx%2===0?"#fff":"#fafafa";
                                   return (
                                     <tr key={g.id} style={{ borderBottom:"1px solid #f1f5f9", background:rowBg, cursor:"pointer" }}

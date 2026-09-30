@@ -16,6 +16,7 @@ import { exporterExcelStyle } from "../../utils/exporterExcel";
 import NotificationBell from "../../Components/NotificationBell";
 import BarreFiltres, { RangeePastilles, RangeeChamps, champFiltre } from "../../Components/BarreFiltres";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
+import { libelleTypeCours } from "../../utils/typeCours";
 import { supabase } from "../../config/supabase";
 import "./temoignages.css";
 import { useConfirm, useAlerte } from "../../contexts/ConfirmContext";
@@ -16380,6 +16381,7 @@ export default function SuperAdminDashboard() {
                           { v:"tous",       l:"Tous",          n: groupesSansPrives.length },
                           { v:"en_ligne",   l:"💻 En ligne",   n: groupesSansPrives.filter(g=>g.type_cours==="en_ligne").length },
                           { v:"presentiel", l:"🏢 Présentiel", n: groupesSansPrives.filter(g=>g.type_cours==="presentiel"||g.type_cours==="centre").length },
+                          { v:"hybride",    l:"⚡ Hybride",    n: groupesSansPrives.filter(g=>g.type_cours==="hybride").length },
                         ].map(t=>(
                           <button key={t.v} onClick={()=>{ setAdminFiltreTypeGroupe(t.v); setAdminGroupePage(0); }}
                             style={{ padding:"4px 12px", borderRadius:20, border:"1.5px solid", fontSize:11, fontWeight:600, cursor:"pointer",
@@ -16492,7 +16494,7 @@ export default function SuperAdminDashboard() {
                           {(() => {
                             const g = adminSelectedGroupe;
                             const horaires = Array.isArray(g.horaire) ? g.horaire : (typeof g.horaire==="string" ? (() => { try { return JSON.parse(g.horaire); } catch { return []; } })() : []);
-                            const typeLabel = g.type_cours==="en_ligne"?"💻 En ligne":g.type_cours==="domicile"?"🏠 À domicile":g.type_cours==="presentiel"?"🏢 Présentiel":"🏢 Centre";
+                            const typeLabel = libelleTypeCours(g);
                             const nbActifs = adminGroupeDetail.apprenants.filter(a=>a.statut!=="retire").length || g.nb_apprenants || 0;
                             return (
                               <div style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", padding:"22px 24px 18px", position:"relative" }}>
@@ -20841,7 +20843,7 @@ export default function SuperAdminDashboard() {
                                 </div>
                                 <div style={{ display:"flex", flexDirection:"column", gap:5, fontSize:12, color:"#64748b" }}>
                                   {g.filiere && <span>📂 {g.filiere}</span>}
-                                  {g.type_cours && <span>{g.type_cours==="en_ligne"?"💻 En ligne":g.type_cours==="domicile"?"🏠 Domicile":"🏢 Présentiel"}</span>}
+                                  {g.type_cours && <span>{libelleTypeCours(g)}</span>}
                                   {g.nb_apprenants !== undefined && g.nb_apprenants !== null && (
                                     <span>👤 {g.nb_apprenants} apprenant{g.nb_apprenants!==1?"s":""}</span>
                                   )}
@@ -21160,7 +21162,7 @@ export default function SuperAdminDashboard() {
                     <span style={{ background:statutCfg.bg, color:statutCfg.color, borderRadius:6, padding:"2px 10px", fontWeight:700, fontSize:10 }}>{statutCfg.label}</span>
                     {g.filiere && <span>📂 {g.filiere}</span>}
                     {g.nb_apprenants !== undefined && <span>👤 {g.nb_apprenants} apprenant{g.nb_apprenants!==1?"s":""}</span>}
-                    {g.type_cours && <span>{g.type_cours==="en_ligne"?"💻 En ligne":g.type_cours==="domicile"?"🏠 Domicile":"🏢 Présentiel"}</span>}
+                    {g.type_cours && <span>{libelleTypeCours(g)}</span>}
                   </div>
                 </div>
 

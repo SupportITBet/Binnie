@@ -14,6 +14,7 @@ import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
 import PastilleGroupe from "../../Components/PastilleGroupe";
 import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
+import { iconeEtTexteTypeCours } from "../../utils/typeCours";
 import ArchiveTab, { ArchiveModal } from "../../Components/ArchiveTab";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useConfirm } from "../../contexts/ConfirmContext";
@@ -4644,7 +4645,7 @@ export default function OnboardingDashboard() {
                                     {/* Type */}
                                     <td style={{ padding:"10px 14px",whiteSpace:"nowrap",fontSize:11,color:"#374151",fontWeight:600 }}>
                                       {estPriveRow && <span style={{ display:"block",fontSize:9,fontWeight:800,color:"#9333ea",marginBottom:2 }}>🔒 COACHING PRIVÉ</span>}
-                                      {g.type_cours==="en_ligne"||g.type_cours==="prive"?"💻 En ligne":g.type_cours==="domicile"?"🏠 Domicile":g.type_cours==="centre"?"🏢 Centre":"-"}
+                                      {g.type_cours==="hybride"?"⚡ Hybride":g.type_cours==="en_ligne"||g.type_cours==="prive"?"💻 En ligne":g.type_cours==="domicile"?"🏠 Domicile":g.type_cours==="centre"?"🏢 Centre":"-"}
                                     </td>
 
                                     {/* Apprenants - un ratio "X / 20" n'a pas de sens pour un binôme
@@ -4734,7 +4735,7 @@ export default function OnboardingDashboard() {
                           {(()=>{ const c=coaches.find(x=>x.id===selectedGroupe.coach_id); const n=c?`${c.prenom||""} ${c.nom||""}`.trim():(selectedGroupe.coach_nom||null); return n?<span style={{ fontWeight:700,color:"#e9d5ff" }}>👤 {n}</span>:null; })()}
                           <span>🧑‍🎓 {groupeDetail.apprenants.filter(a=>a.statut!=="retire").length} apprenant{groupeDetail.apprenants.filter(a=>a.statut!=="retire").length!==1?"s":""}</span>
                           {selectedGroupe.date_debut && <span>📅 Début : {new Date(selectedGroupe.date_debut).toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})}</span>}
-                          <span>{selectedGroupe.type_cours==="prive"?"🔒 Privé":selectedGroupe.type_cours==="en_ligne"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":"🏢 Centre"}</span>
+                          <span>{selectedGroupe.type_cours==="hybride"?"⚡ Hybride":selectedGroupe.type_cours==="prive"?"🔒 Privé":selectedGroupe.type_cours==="en_ligne"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":"🏢 Centre"}</span>
                           <span style={{ padding:"1px 8px",borderRadius:99,background:selectedGroupe.statut==="actif"?"rgba(34,197,94,0.3)":"rgba(148,163,184,0.3)",fontSize:10,fontWeight:700 }}>{selectedGroupe.statut==="actif"?"Actif":selectedGroupe.statut==="cloture"?"🔒 Clôturée":"Inactif"}</span>
                         </div>
                         {(() => {
@@ -4805,7 +4806,7 @@ export default function OnboardingDashboard() {
                                 <div><div style={{ fontSize:10,color:"#9ca3af",marginBottom:2 }}>Statut</div><div style={{ fontSize:13,fontWeight:700,color:selectedGroupe.statut==="actif"?"#22c55e":"#6b7280" }}>{selectedGroupe.statut==="actif"?"Actif":selectedGroupe.statut==="cloture"?"🔒 Clôturée":selectedGroupe.statut||"-"}</div></div>
                                 <div><div style={{ fontSize:10,color:"#9ca3af",marginBottom:2 }}>Niveau</div><div style={{ fontSize:13,fontWeight:600,color:"#0f172a" }}>{selectedGroupe.niveau||"-"} {NIVEAUX_LABELS_INFOS[selectedGroupe.niveau]?`- ${NIVEAUX_LABELS_INFOS[selectedGroupe.niveau]}`:""}</div></div>
                                 {!estPriveInfos && <div><div style={{ fontSize:10,color:"#9ca3af",marginBottom:2 }}>Filière</div><div style={{ fontSize:13,fontWeight:600,color:"#0f172a" }}>{selectedGroupe.filiere||"-"}</div></div>}
-                                <div><div style={{ fontSize:10,color:"#9ca3af",marginBottom:2 }}>Lieu de coaching</div><div style={{ fontSize:13,fontWeight:600,color:"#0f172a" }}>{selectedGroupe.type_cours==="en_ligne"||selectedGroupe.type_cours==="prive"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":selectedGroupe.type_cours==="centre"?"🏢 Centre":selectedGroupe.type_cours||"-"}</div></div>
+                                <div><div style={{ fontSize:10,color:"#9ca3af",marginBottom:2 }}>Lieu de coaching</div><div style={{ fontSize:13,fontWeight:600,color:"#0f172a" }}>{selectedGroupe.type_cours==="hybride"?"⚡ Hybride":selectedGroupe.type_cours==="en_ligne"||selectedGroupe.type_cours==="prive"?"💻 En ligne":selectedGroupe.type_cours==="domicile"?"🏠 Domicile":selectedGroupe.type_cours==="centre"?"🏢 Centre":selectedGroupe.type_cours||"-"}</div></div>
                                 {!estPriveInfos && <div><div style={{ fontSize:10,color:"#9ca3af",marginBottom:2 }}>Centre</div><div style={{ fontSize:13,fontWeight:600,color:"#0f172a" }}>{selectedGroupe.centre_id||"-"}</div></div>}
                               </div>
                             </div>
@@ -5652,7 +5653,7 @@ export default function OnboardingDashboard() {
                                 <div style={{ display:"flex", gap:14, flexWrap:"wrap", fontSize:12, color:"#ddd6fe" }}>
                                   {selectedGroupe?.niveau && <span>📊 {selectedGroupe.niveau}</span>}
                                   {selectedGroupe?.filiere && <span>🎓 {selectedGroupe.filiere}</span>}
-                                  {selectedGroupe?.type_cours && <span>{selectedGroupe.type_cours === "prive" ? "🔒 Privé" : selectedGroupe.type_cours === "en_ligne" ? "💻 En ligne" : selectedGroupe.type_cours === "domicile" ? "🏠 Domicile" : "🏢 Centre"}</span>}
+                                  {selectedGroupe?.type_cours && <span>{selectedGroupe.type_cours === "hybride" ? "⚡ Hybride" : selectedGroupe.type_cours === "prive" ? "🔒 Privé" : selectedGroupe.type_cours === "en_ligne" ? "💻 En ligne" : selectedGroupe.type_cours === "domicile" ? "🏠 Domicile" : "🏢 Centre"}</span>}
                                   {selectedGroupe?.date_debut && <span>📅 Début : {new Date(selectedGroupe.date_debut).toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})}</span>}
                                 </div>
                               </div>
@@ -7894,9 +7895,10 @@ export default function OnboardingDashboard() {
                                     ? { c:"#475569", bg:"#f1f5f9" }
                                     : { c:"#d97706", bg:"#fef9c3" };
                                   const sLabel = g.statut==="actif" ? "Actif" : g.statut==="cloture" ? "🔒 Clôturée" : (g.statut||"-");
-                                  const typeLabel = g.type_cours==="en_ligne" ? { icon:"💻", label:"En ligne" }
-                                    : g.type_cours==="domicile"  ? { icon:"🏠", label:"Domicile" }
-                                    : { icon:"🏢", label:"Présentiel" };
+                                  // Le repli AFFIRMAIT « Présentiel » pour toute valeur inattendue,
+                                  // hybride compris.
+                                  const { icone: _ic, texte: _tx } = iconeEtTexteTypeCours(g);
+                                  const typeLabel = { icon: _ic, label: _tx };
                                   const rowBg = idx%2===0?"#fff":"#fafafa";
                                   return (
                                     <tr key={g.id}
@@ -7968,6 +7970,12 @@ export default function OnboardingDashboard() {
 
                       // Calcul honoraire par classe via grille tarifaire
                       const lignes = paCoachGroupes.map(g => {
+                        /* ⚠ UNE CLASSE HYBRIDE EST FACTURÉE AU TARIF PRÉSENTIEL, faute d'une
+                           règle établie. Ce n'est pas un choix technique : la grille tarifaire
+                           ne connaît que en_ligne / présentiel / domicile, et personne n'a
+                           encore tranché ce que vaut l'heure d'une classe qui mélange les deux.
+                           Le repli retenu est le plus cher des deux, pour ne pas sous-payer un
+                           coach par défaut. À revoir dès que la règle existe. */
                         const typeKey = g.type_cours === "en_ligne" ? "en_ligne"
                           : g.type_cours === "domicile" ? "domicile"
                           : "presentiel";
@@ -9590,7 +9598,8 @@ export default function OnboardingDashboard() {
                             {groupesCibles.map(g=>{
                               const sel = transfertForm.nouveau_groupe_id===g.id;
                               const TYPE_ICO = { prive:"🔒",en_ligne:"💻",domicile:"🏠",centre:"🏢" };
-                              const typeLabel = g.type_cours==="en_ligne"?"En ligne":g.type_cours==="domicile"?"Domicile":g.type_cours==="prive"?"Privé":"Centre";
+                              // Dernier repli qui affirmait « Centre » pour toute valeur inattendue.
+                              const typeLabel = iconeEtTexteTypeCours(g).texte;
                               return (
                                 <div key={g.id} onClick={()=>setTransfertForm(f=>({...f,nouveau_groupe_id:g.id}))}
                                   style={{ padding:"14px 16px",borderRadius:12,border:`2px solid ${sel?"#7c3aed":"#e5e7eb"}`,
