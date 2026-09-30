@@ -1056,10 +1056,18 @@ router.get("/planning", authenticateAdmin, async (req, res) => {
     const enrichies = seances.map((s) => {
       const live   = liveParSeance[s.id] || null;
       const groupe = groupeParId[s.groupe_id] || null;
-      // Le type de cours vient du groupe ; à défaut, la présence d'un lien de visio
-      // suffit à classer la séance comme « en ligne » (cas des coachings privés, qui
-      // n'ont pas toujours de groupe rattaché).
-      const typeCours = groupe?.type_cours || (live?.lien ? "en_ligne" : null);
+      /* Le type de cours de LA SÉANCE, qui n'est pas forcément celui de sa classe.
+         Une classe hybride mélange les deux : ses séances se tiennent les unes au centre,
+         les autres en ligne. « hybride » décrit donc la classe, jamais une séance - la
+         propager telle quelle afficherait « ⚡ Hybride » sur un cours qui a bien lieu à un
+         endroit précis, et ne dirait pas lequel.
+         Ordre : ce que la séance déclare elle-même, puis ce que dit sa classe quand ce n'est
+         pas « hybride », puis le repli historique sur la présence d'un lien de visio (cas des
+         coachings privés, qui n'ont pas toujours de groupe rattaché). */
+      const typeClasse = groupe?.type_cours || null;
+      const typeCours = s.type_cours
+        || (typeClasse && typeClasse !== "hybride" ? typeClasse : null)
+        || (live?.lien ? "en_ligne" : null);
       return {
         id: s.id,
         titre: s.titre,
@@ -1080,6 +1088,9 @@ router.get("/planning", authenticateAdmin, async (req, res) => {
         groupe_nom: groupe?.nom || "-",
         groupe_niveau: groupe?.niveau || null,
         type_cours: typeCours,
+        // Le type de la CLASSE, distinct de celui de la séance : il permet de filtrer
+        // « hybride » côté planning, alors qu'aucune séance ne porte jamais cette valeur.
+        type_cours_classe: typeClasse,
         plateforme: live?.plateforme || null,
         lien: live?.lien || null,
         // Traçabilité de la séance en direct - c'est ce que le PA, la commerciale,
@@ -1100,8 +1111,13 @@ router.get("/planning", authenticateAdmin, async (req, res) => {
       };
     });
 
+    /* Filtrer sur « hybride » porte sur la CLASSE, pas sur la séance : aucune séance ne
+       déclare jamais ce type, donc une égalité stricte n'aurait rien rendu et l'option de
+       filtre aurait paru cassée. Pour les autres valeurs, le comportement ne change pas. */
     const filtrees = type_cours
-      ? enrichies.filter((s) => s.type_cours === type_cours)
+      ? enrichies.filter((s) => type_cours === "hybride"
+          ? s.type_cours_classe === "hybride"
+          : s.type_cours === type_cours)
       : enrichies;
 
     res.json({ seances: filtrees });

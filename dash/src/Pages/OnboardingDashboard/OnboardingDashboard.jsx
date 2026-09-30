@@ -224,6 +224,7 @@ const GRADES       = ["Vacataire","CDD","CDI","Freelance"];
 const TYPES_COURS  = [
   { key:"en_ligne",   label:"En ligne",    icon:"💻" },
   { key:"presentiel", label:"Présentiel",  icon:"🏢" },
+  { key:"hybride",    label:"Hybride",     icon:"⚡" },
   { key:"domicile",   label:"Domicile",    icon:"🏠" },
 ];
 const GRILLE_DEFAULT = {
@@ -9437,13 +9438,16 @@ export default function OnboardingDashboard() {
                               </select>
                             </div>
                           </div>
-                          {/* Type de cours - onboarding ne gère que le en ligne : Hybride retiré,
-                              Présentiel grisé (non cliquable), seul En ligne reste actif. */}
+                          {/* Type de cours. HYBRIDE EST DÉSORMAIS PROPOSÉ : des apprenants
+                              suivent une partie de leurs séances en ligne et l'autre au centre.
+                              Une classe hybride reste UNE classe - c'est chaque SÉANCE qui se
+                              tient d'une façon ou de l'autre. Le Présentiel seul reste grisé :
+                              l'onboarding ne gère pas de classe uniquement présentielle. */}
                           <div>
                             <label style={lbl}>Type de cours</label>
                             <div style={{ display:"flex", gap:8 }}>
-                              {TYPE_COURS_GRP.filter(t => t.id !== "hybride").map(t => {
-                                const disabled = t.id !== "en_ligne";
+                              {TYPE_COURS_GRP.map(t => {
+                                const disabled = t.id !== "en_ligne" && t.id !== "hybride";
                                 return (
                                   <button key={t.id} disabled={disabled} onClick={() => !disabled && setGroupeForm(f=>({...f,type_cours:t.id}))}
                                     style={{ flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:700, cursor: disabled ? "not-allowed" : "pointer",

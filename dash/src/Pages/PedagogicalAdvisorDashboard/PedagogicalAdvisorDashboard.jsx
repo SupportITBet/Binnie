@@ -2161,6 +2161,7 @@ export default function PedagogicalAdvisorDashboard() {
   const TYPES_COURS  = [
     { key:"en_ligne",   label:"En ligne",    icon:"💻" },
     { key:"presentiel", label:"Présentiel",  icon:"🏢" },
+    { key:"hybride",    label:"Hybride",     icon:"⚡" },
     { key:"domicile",   label:"Domicile",    icon:"🏠" },
   ];
   const NIVEAUX_GRP  = ["A1-A2","B1-B2","C1-C2"];

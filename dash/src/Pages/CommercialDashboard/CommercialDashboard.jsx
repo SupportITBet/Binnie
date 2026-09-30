@@ -9012,6 +9012,7 @@ export default function CommercialDashboard() {
                       <option value="tous">Tous les modes</option>
                       <option value="en_ligne">En ligne</option>
                       <option value="presentiel">Présentiel</option>
+                      <option value="hybride">Hybride</option>
                     </select>
                     <select value={assignFiltreStatut} onChange={e => setAssignFiltreStatut(e.target.value)} style={selectSt}>
                       <option value="tous">Tous les statuts</option>
@@ -9787,6 +9788,7 @@ export default function CommercialDashboard() {
                       <option value="tous">Tous les modes</option>
                       <option value="en_ligne">En ligne</option>
                       <option value="presentiel">Présentiel</option>
+                      <option value="hybride">Hybride</option>
                     </select>
                     <select value={appTypeCoach} onChange={e => { setAppTypeCoach(e.target.value); setAppPage(0); }} style={{ ...inputSt, width:150, margin:0 }}>
                       <option value="tous">Tout coaching</option>
@@ -13027,13 +13029,19 @@ export default function CommercialDashboard() {
                     </select>
                   </div>
                 </div>
-                {/* Type cours - Hybride retiré ; une assistante présentiel ne peut créer que du
-                    présentiel (En ligne grisé), même logique de verrouillage que champsClasseVerrouilles. */}
+                {/* Type cours. HYBRIDE EST DÉSORMAIS PROPOSÉ : des apprenants suivent
+                    réellement une partie de leurs séances au centre et l'autre en ligne, et
+                    la valeur existait déjà partout ailleurs (affichage, historiques, offres
+                    entreprise) - seul ce formulaire la retirait. Une classe hybride reste UNE
+                    classe : c'est chaque SÉANCE qui se tient en ligne ou au centre.
+                    Le verrouillage par canal demeure pour le reste : une assistante présentiel
+                    ne crée pas de classe en ligne. Mais l'hybride lui est ouvert, puisqu'il
+                    comprend du présentiel. */}
                 <div>
                   <label style={labelSt}>Type de cours</label>
                   <div style={{ display:"flex", gap:8 }}>
-                    {TYPE_COURS.filter(t => t.id !== "hybride").map(t => {
-                      const verrouPresentiel = assistanteTypeCours === "presentiel" && t.id !== "presentiel";
+                    {TYPE_COURS.map(t => {
+                      const verrouPresentiel = assistanteTypeCours === "presentiel" && t.id !== "presentiel" && t.id !== "hybride";
                       const disabled = champsClasseVerrouilles || verrouPresentiel;
                       return (
                         <button key={t.id} disabled={disabled} onClick={() => !disabled && setClasseForm(p=>({...p,type_cours:t.id}))}
