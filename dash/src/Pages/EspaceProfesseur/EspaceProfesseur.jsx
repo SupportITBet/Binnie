@@ -440,6 +440,21 @@ const Sbadge  = ({ s })  => { const m=STATUT_ETUD[s]||STATUT_ETUD.actif; return 
 const fmtDate = (d, opts) => d ? new Date(d).toLocaleDateString("fr-FR", opts||{ day:"numeric", month:"short", year:"numeric" }) : "-";
 const fmtDateCourt = (d) => d ? new Date(d).toLocaleDateString("fr-FR",{ weekday:"short", day:"numeric", month:"short" }) : "-";
 
+/* Date compacte pour une colonne de tableau : « 29 sept. 2026 ». `fmtDate` ci-dessus est
+   redéfini plus bas dans la page avec le jour de la semaine, ce qui convient à une fiche
+   mais déborde d'une colonne. */
+const fmtDateTableau = (d) => d
+  ? new Date(d).toLocaleDateString("fr-FR", { day:"2-digit", month:"short", year:"numeric" })
+  : "—";
+
+/* Un contenu jamais retouché porte un `updated_at` posé à l'insertion, à quelques
+   millisecondes de son `created_at`. Afficher deux fois la même date dans deux colonnes
+   voisines ferait lire « modifié » là où rien ne l'a été : on rend la colonne vide. Le seuil
+   absorbe l'écart d'écriture entre les deux champs sans masquer une vraie modification. */
+const jamaisModifie = (ct) =>
+  !ct.updated_at || !ct.created_at ||
+  Math.abs(new Date(ct.updated_at) - new Date(ct.created_at)) < 2000;
+
 
 /* ═══════════════════════════════════════════════════════
    PAGE PRINCIPALE
@@ -5448,7 +5463,7 @@ const messagesFiltres = useMemo(() => {
                         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                           <thead>
                             <tr style={{ background:"#f8fafc" }}>
-                              {["TYPE","TITRE","CLASSES","DURÉE","LU PAR","STATUT","ACTIONS"].map(h=>(
+                              {["TYPE","TITRE","CLASSES","DURÉE","LU PAR","CRÉÉ LE","MIS À JOUR","STATUT","ACTIONS"].map(h=>(
                                 <th key={h} style={{ textAlign:"left", padding:"9px 12px", fontSize:10.5, fontWeight:800, color:"#94a3b8", letterSpacing:".05em", borderBottom:"1px solid #e5e7eb", whiteSpace:"nowrap" }}>{h}</th>
                               ))}
                             </tr>
@@ -5497,6 +5512,22 @@ const messagesFiltres = useMemo(() => {
                                         </button>
                                       );
                                     })()}
+                                  </td>
+                                  {/* Créé le / Mis à jour - les deux dates arrivaient déjà du
+                                      serveur (mapContenu les renvoie), mais aucune colonne ne
+                                      les montrait : impossible de savoir depuis le tableau si
+                                      un contenu datait de la semaine ou de l'an dernier.
+                                      La date de PUBLICATION, elle, n'est pas conservée en base
+                                      - `modules_elearning` n'a pas de colonne pour elle, et
+                                      `updated_at` cesse de la refléter dès la première
+                                      retouche. Mieux vaut ne rien afficher que l'approximer. */}
+                                  <td style={{ padding:"9px 12px", borderBottom:"1px solid #f1f5f9", whiteSpace:"nowrap", color:"#64748b", fontSize:12 }}>
+                                    {fmtDateTableau(ct.created_at)}
+                                  </td>
+                                  <td style={{ padding:"9px 12px", borderBottom:"1px solid #f1f5f9", whiteSpace:"nowrap", fontSize:12 }}>
+                                    {jamaisModifie(ct)
+                                      ? <span style={{ color:"#cbd5e1" }} title="Jamais retouché depuis sa création">—</span>
+                                      : <span style={{ color:"#64748b" }}>{fmtDateTableau(ct.updated_at)}</span>}
                                   </td>
                                   <td style={{ padding:"9px 12px", borderBottom:"1px solid #f1f5f9", whiteSpace:"nowrap" }}>
                                     <span style={{ fontSize:11, fontWeight:700, padding:"2px 9px", borderRadius:999,
