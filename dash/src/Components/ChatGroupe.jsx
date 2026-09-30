@@ -184,9 +184,17 @@ export default function ChatGroupe({ groupes = [], profil, token, accent = "#036
   const closes   = groupes.filter(estCloturee);
   const visibles = voirCloturees ? [...actives, ...closes] : actives;
 
-  // Non-lus classe par classe. Un badge agrégé ne tombe pas à zéro quand on ouvre une seule
-  // conversation sur trois, et rien n'indiquait laquelle il restait à ouvrir.
-  const nonLus = useGroupesChatUnread(visibles.map(g => g.id), profil?.id);
+  /* Non-lus classe par classe. Un badge agrégé ne tombe pas à zéro quand on ouvre une seule
+     conversation sur trois, et rien n'indiquait laquelle il restait à ouvrir.
+
+     `prefixe` EST INDISPENSABLE ICI. Il était omis, donc le hook retombait sur sa valeur par
+     défaut « groupe » : pour les groupes libres, il interrogeait des conversations
+     `groupe_<id>` qui n'existent pas - les leurs sont préfixées `libre_`. Le compte restait
+     donc à zéro quoi qu'il arrive, et un groupe libre ne portait jamais son point noir ni ne
+     remontait en tête de liste, alors que les classes, elles, le faisaient. La pastille de
+     l'ONGLET fonctionnait pourtant, parce qu'elle passe par un autre hook
+     (`useGroupesLibresNonLus`) : de quoi croire que tout allait bien. */
+  const nonLus = useGroupesChatUnread(visibles.map(g => g.id), profil?.id, prefixe);
 
   const groupe = visibles.find(g => g.id === groupeId) || null;
   const lectureSeule = groupe ? estCloturee(groupe) : false;
