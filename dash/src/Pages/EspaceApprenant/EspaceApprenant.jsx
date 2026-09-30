@@ -1598,6 +1598,13 @@ export default function EspaceApprenant() {
     return r;
   }, [mesFichiers, filterRessource]);
 
+  /* Les documents déposés hors de sa période de présence sont renvoyés marqués, pour être
+     grisés dans la liste. Les compteurs, eux, ne doivent annoncer que ce qui s'ouvre : un
+     badge « 12 » sur l'onglet dont trois ne répondent pas se lit comme une panne. */
+  const nbRessourcesAccessibles = useMemo(
+    () => (mesFichiers ?? []).filter(f => !f.hors_fenetre).length,
+    [mesFichiers]);
+
   const formatDate = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : "-";
   const formatDateFull = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" }) : "-";
 
@@ -1657,7 +1664,7 @@ export default function EspaceApprenant() {
     { key:"presences",          label:"Mes présences",      icon:"✅", count: appPresences ? appPresences.filter(p=>p.statut==="absent").length || null : null, danger: appPresences ? appPresences.filter(p=>p.statut==="absent").length >= 3 : false },
     { key:"notifications_appr", label:"Notifications",      icon:"🔔", count:appNotifsNonLus || null, danger:appNotifsNonLus > 0 },
     { key:"planning",           label: isCoachingPrive ? "Mes séances" : "Planning",  icon:"📅", count:planningCount },
-    { key:"ressources",         label:"Ressources",         icon:"📂", count:(mesFichiers?.length) || null },
+    { key:"ressources",         label:"Ressources",         icon:"📂", count:nbRessourcesAccessibles || null },
     { key:"contacts",           label:"Contacts & Support", icon:"📞", count:null },
     { key:"boutique",           label:"Boutique",           icon:"🛒", count:produits.length || null },
     { key:"messages",           label:"Messages",           icon:"💬", count:msgNonLus || null, danger:msgNonLus > 0 },
@@ -2732,7 +2739,7 @@ export default function EspaceApprenant() {
                     sub={prochaineSeance?.sub ?? (isCoachingPrive ? "Aucune séance prévue" : "Aucun cours planifié")}
                     onClick={()=>setActiveTab("planning")}
                   />
-                  <StatCard label="Ressources" value={mesFichiers?.length ?? "…"} color="#059669" icon="📂" sub={mesFichiers ? `${mesFichiers.length} fichier${mesFichiers.length!==1?"s":""}`:"chargement"} onClick={()=>setActiveTab("ressources")} />
+                  <StatCard label="Ressources" value={mesFichiers ? nbRessourcesAccessibles : "…"} color="#059669" icon="📂" sub={mesFichiers ? `${nbRessourcesAccessibles} fichier${nbRessourcesAccessibles!==1?"s":""}`:"chargement"} onClick={()=>setActiveTab("ressources")} />
                   <StatCard label="Messages" value={msgNonLus > 0 ? msgNonLus : "📬"} color={msgNonLus>0?"#dc2626":"#9ca3af"} icon="💬" sub={msgNonLus > 0 ? `${msgNonLus} non lu${msgNonLus>1?"s":""}` : "À jour"} onClick={()=>setActiveTab("messages")} />
                   {/* Absences - présence pour tous */}
                   {appPresences && (
@@ -4968,7 +4975,15 @@ export default function EspaceApprenant() {
                   <div style={{ marginBottom:20 }}>
                     <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:"#0f172a" }}>📂 Ressources partagées</h2>
                     <p style={{ margin:"4px 0 0", fontSize:12, color:"#9ca3af" }}>
-                      {mesFichiersLoading ? "Chargement…" : `${ressourcesFiltrees.length} fichier${ressourcesFiltrees.length!==1?"s":""} partagé${ressourcesFiltrees.length!==1?"s":""} par votre coach`}
+                      {/* Le décompte sépare les deux : depuis que les documents hors de sa
+                          période de présence sont grisés plutôt qu'absents, annoncer un total
+                          brut promettrait des fichiers qui ne s'ouvrent pas. */}
+                      {mesFichiersLoading ? "Chargement…" : (() => {
+                        const bloques    = ressourcesFiltrees.filter(f => f.hors_fenetre).length;
+                        const accessible = ressourcesFiltrees.length - bloques;
+                        return `${accessible} fichier${accessible!==1?"s":""} partagé${accessible!==1?"s":""} par votre coach`
+                          + (bloques ? ` · ${bloques} hors de votre période` : "");
+                      })()}
                     </p>
                   </div>
 
@@ -5002,10 +5017,25 @@ export default function EspaceApprenant() {
                         const meta = getMeta(f);
                         const taille = tailleFmt(f.taille_ko);
                         const dateAjout = f.created_at ? new Date(f.created_at).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : null;
+                        /* HORS DE SA FENÊTRE DE PRÉSENCE. Ces documents étaient purement et
+                           simplement absents de la liste : l'apprenant voyait moins de fichiers
+                           que ses camarades, sans savoir pourquoi. Ils sont désormais grisés
+                           avec leur raison, comme le sont déjà ses cours. Le serveur ne renvoie
+                           que deux causes ici - déposé avant son arrivée, ou pendant un arrêt ;
+                           ce qui a été déposé après son départ d'une classe reste absent, il n'y
+                           était plus et ne l'a donc jamais eu. */
+                        const verrouille = !!f.hors_fenetre;
+                        const raison = f.motif === "avant_arrivee"
+                          ? "Déposé avant votre arrivée dans cette classe"
+                          : "Déposé pendant votre période d'arrêt";
                         return (
-                          <div key={f.id} style={{ borderRadius:10, border:"1px solid #e5e7eb", background:"#fff", padding:14, display:"flex", flexDirection:"column", gap:10 }}>
-                            <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
-                              <div style={{ width:40, height:40, borderRadius:8, background:meta.color+"15", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{meta.icon}</div>
+                          <div key={f.id}
+                            title={verrouille ? raison : undefined}
+                            style={{ borderRadius:10, border:`1px solid ${verrouille ? "#e2e8f0" : "#e5e7eb"}`, background: verrouille ? "#f8fafc" : "#fff", padding:14, display:"flex", flexDirection:"column", gap:10, cursor: verrouille ? "not-allowed" : undefined }}>
+                            <div style={{ display:"flex", alignItems:"flex-start", gap:10, opacity: verrouille ? .6 : 1 }}>
+                              <div style={{ width:40, height:40, borderRadius:8, background: verrouille ? "#e2e8f0" : meta.color+"15", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
+                                {verrouille ? (f.motif === "avant_arrivee" ? "🕓" : "🔒") : meta.icon}
+                              </div>
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ fontWeight:700, fontSize:13, color:"#0f172a", lineHeight:1.4, marginBottom:2 }}>{f.nom}</div>
                                 <div style={{ display:"flex", gap:8, fontSize:11, color:"#9ca3af" }}>
@@ -5015,7 +5045,11 @@ export default function EspaceApprenant() {
                                 </div>
                               </div>
                             </div>
-                            {DOC_TYPES.includes(f.type_fichier||f.type) ? (
+                            {verrouille ? (
+                              <div style={{ padding:"9px", background:"#f1f5f9", color:"#64748b", borderRadius:7, fontWeight:600, fontSize:11.5, textAlign:"center", lineHeight:1.4 }}>
+                                {f.motif === "avant_arrivee" ? "🕓" : "🔒"} {raison}
+                              </div>
+                            ) : DOC_TYPES.includes(f.type_fichier||f.type) ? (
                               <button onClick={() => handleDownload(f)}
                                 style={{ display:"block", width:"100%", padding:"9px", background:PRIMARY_COLOR, color:"#fff", borderRadius:7, cursor:"pointer", fontWeight:700, fontSize:12, textAlign:"center", border:"none" }}>
                                 ⬇️ Télécharger

@@ -268,6 +268,42 @@ function verrousDepuis(rattachements, contenus, estLu) {
  * @param {object} ratt   le rattachement : { date_ajout, date_retrait, note }
  * @param {(x) => string} dateDe  où lire la date de publication de chaque élément
  */
+/**
+ * Comme `bornerAFenetre`, mais GRISE au lieu de masquer.
+ *
+ * POURQUOI LES DEUX COEXISTENT. Masquer convient à ce dont l'absence ne se remarque pas -
+ * une séance à laquelle l'apprenant n'a jamais assisté n'a pas à figurer dans son planning.
+ * Les ressources partagées, elles, se comptent et se commentent entre apprenants : les faire
+ * disparaître laisse celui qui vient d'arriver devant une liste plus courte que celle de ses
+ * camarades, sans un mot d'explication. Un document grisé qui dit « déposé avant votre
+ * arrivée » informe ; le même document absent laisse croire à une panne.
+ *
+ * TOUT N'EST PAS GRISÉ POUR AUTANT. `apres_depart` reste masqué : ce que l'ancien coach a
+ * déposé APRÈS le transfert appartient à une classe que l'apprenant a quittée. Le lui montrer
+ * n'explique rien - il n'y était plus - et ne ferait que l'encombrer.
+ *
+ * @param {object[]} liste
+ * @param {object} ratt            le rattachement : { date_ajout, date_retrait, note }
+ * @param {(x) => string} dateDe   où lire la date de publication de chaque élément
+ * @param {string[]} motifsGrises  les motifs qui donnent un élément grisé plutôt qu'absent
+ */
+export function annoterFenetre(liste, ratt, dateDe,
+                               motifsGrises = [MOTIF.AVANT_ARRIVEE, MOTIF.PENDANT_ABSENCE]) {
+  if (!ratt) return liste || [];
+  const fenetres = periodesDe(ratt);
+  // Aucune borne connue : on ne grise rien plutôt que de tout barrer.
+  if (!fenetres.length || fenetres.every(f => f.debut === null && f.fin === null)) return liste || [];
+
+  const sortie = [];
+  for (const x of liste || []) {
+    const { dedans, motif } = dansLaFenetre({ created_at: dateDe(x) }, ratt);
+    if (dedans) { sortie.push(x); continue; }
+    if (!motifsGrises.includes(motif)) continue;   // masqué, comme avant
+    sortie.push({ ...x, hors_fenetre: true, motif });
+  }
+  return sortie;
+}
+
 export function bornerAFenetre(liste, ratt, dateDe) {
   if (!ratt) return liste || [];
   const fenetres = periodesDe(ratt);

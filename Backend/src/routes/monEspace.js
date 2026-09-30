@@ -1,6 +1,6 @@
 import express from "express";
 import supabase from "../config/supabase.js";
-import { bornerAFenetre } from "../services/lectureSequentielle.js";
+import { bornerAFenetre, annoterFenetre } from "../services/lectureSequentielle.js";
 import { emailAutorise } from "../services/accesApprenant.js";
 import { authenticateUser } from "../middlewares/auth.js";
 import { historiqueTestsDe } from "./levelTest.js";
@@ -139,7 +139,10 @@ async function getIds(email) {
  * Chaque ligne repart avec `_classe` : deux présences du même jour dans deux classes
  * différentes seraient sinon indistinguables une fois fusionnées.
  */
-async function lireSurLeParcours(parcours, table, champs, dateDe, affiner) {
+/* `griser` choisit ce qu'on fait de ce qui tombe HORS de la fenêtre de présence : l'écarter
+   (défaut) ou le renvoyer marqué, à charge pour l'écran de l'afficher en gris. Voir
+   `annoterFenetre` pour la raison du choix selon la nature de la donnée. */
+async function lireSurLeParcours(parcours, table, champs, dateDe, affiner, griser = false) {
   const lignes = (parcours || []).filter(l => l.groupe_id);
   if (!lignes.length) return [];
 
@@ -151,7 +154,10 @@ async function lireSurLeParcours(parcours, table, champs, dateDe, affiner) {
       console.warn(`[lireSurLeParcours] ${table} / groupe ${ratt.groupe_id}:`, error.message);
       return [];
     }
-    return bornerAFenetre(data || [], ratt, dateDe)
+    const retenus = griser
+      ? annoterFenetre(data || [], ratt, dateDe)
+      : bornerAFenetre(data || [], ratt, dateDe);
+    return retenus
       .map(x => ({ ...x, _classe: { groupe_id: ratt.groupe_id, ga_id: ratt.id, statut: ratt.statut,
                                     date_ajout: ratt.date_ajout, date_retrait: ratt.date_retrait } }));
   }));
@@ -368,10 +374,17 @@ router.get("/fichiers", authenticateUser, async (req, res) => {
 
        BORNÉ A SA FENÊTRE DANS CHAQUE CLASSE, et c'est ce qui rend l'ouverture sûre : sans ce
        bornage, il verrait aussi ce que son ancien coach a déposé APRÈS son départ - ses cours
-       se ferment, ses ressources doivent se fermer avec. */
+       se ferment, ses ressources doivent se fermer avec.
+
+       GRISÉ, ET NON PLUS MASQUÉ, pour les deux cas qui se produisent en cours de parcours :
+       déposé avant son entrée dans la classe, ou pendant une période d'arrêt. Les faire
+       disparaître laissait l'apprenant devant une liste plus courte que celle de ses
+       camarades, sans un mot d'explication - alors que ses COURS, eux, étaient déjà grisés
+       avec leur raison. Ce qui a été déposé après son départ reste masqué : il n'y était
+       plus, et ne l'a donc jamais eu. */
     if (fichiers.length === 0 && parcours?.length) {
       const visibles = await lireSurLeParcours(
-        parcours, "groupes_fichiers", "*", f => f.created_at,
+        parcours, "groupes_fichiers", "*", f => f.created_at, null, true,
       );
       if (visibles.length) {
         const classes = await nomsDesClasses(parcours);
