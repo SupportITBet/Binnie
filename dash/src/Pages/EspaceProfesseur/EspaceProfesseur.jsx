@@ -843,6 +843,10 @@ export default function EspaceProfesseur() {
   const [mediathFamille,     setMediathFamille]     = useState("toutes"); // toutes|actives|terminees
   // { contenu, data, loading } - qui a lu ce contenu, et qui ne l'a pas ouvert.
   const [lecteursModal,      setLecteursModal]      = useState(null);
+  /* Confirmation avant publication. Publier n'est pas enregistrer : le contenu part vers les
+     apprenants de TOUTES les classes visées, et la notification est envoyée. Le bouton était
+     juste à côté de « Sauvegarder brouillon », sans rien pour distinguer les deux gestes. */
+  const [confirmPublication, setConfirmPublication] = useState(false);
   // Compteurs de lecture par contenu, chargés en une fois pour la colonne « Lu par ».
   const [luParContenu,       setLuParContenu]       = useState({});
   // { action:"publier"|"depublier"|"supprimer", contenu } - publier prévient tous les
@@ -1762,30 +1766,7 @@ export default function EspaceProfesseur() {
       .then(d => { if (d?.coach) setCoachMoi(d.coach); })
       .catch(() => {});
     fetchLiveSessions();
-    // Charger la médiathèque : une liste PLATE de contenus, chacun publié vers N classes.
-    // `cours` conserve son nom d'état - il porte désormais des contenus, le niveau Cours
-    // ayant été supprimé.
-    fetch(`${API_URL}/api/cours-elearning`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => {
-        if (!r.ok) { console.error("[EspaceProfesseur] GET médiathèque:", r.status); return { contenus: null }; }
-        return r.json();
-      })
-      .then(d => {
-        if (!d.contenus) return;
-        setCours(d.contenus);
-        // `modulesContent` reste l'index des blocs, désormais à plat : un contenu = une clé.
-        const mc = {};
-        d.contenus.forEach(ct => {
-          mc[String(ct.id)] = {
-            id: ct.id, titre: ct.titre || "", objectifs: ct.objectifs || [],
-            dureeEstimee: ct.dureeEstimee || 60, statut: ct.statut || "brouillon",
-            blocs: ct.blocs || [], ordre: ct.ordre || 1,
-          };
-        });
-        setModulesContent(mc);
-        chargerCompteursLecture(d.contenus);
-      })
-      .catch(e => { console.error("[EspaceProfesseur] fetch médiathèque:", e.message); });
+    rechargerMediatheque();
 
     // Charger les ressources partagées depuis la BD (tous les groupes)
     fetch(`${API_URL}/api/groupes`, { headers: { Authorization: `Bearer ${token}` } })
@@ -2698,6 +2679,10 @@ export default function EspaceProfesseur() {
       toast.success(`Brouillon enregistré - ${updatedBlocs.length} bloc(s) ✓`);
     }
     fermerEditeurModule();
+    // Relire la ligne telle que le serveur la connaît. La mise à jour optimiste plus haut
+    // suffit au statut et au titre, mais pas aux classes visées ni à la date de mise à jour :
+    // sans ce rechargement, il fallait recharger la page à la main pour voir le résultat.
+    rechargerMediatheque();
   };
 
 
@@ -2802,6 +2787,43 @@ export default function EspaceProfesseur() {
    * Un appel par contenu : la liste d'un coach reste courte, et cela évite une route
    * d'agrégation supplémentaire. Les brouillons sont ignorés - personne ne peut les lire.
    */
+  /**
+   * Recharge la médiathèque depuis le serveur : une liste PLATE de contenus, chacun publié
+   * vers N classes. `cours` conserve son nom d'état - il porte désormais des contenus, le
+   * niveau Cours ayant été supprimé.
+   *
+   * POURQUOI C'EST UNE FONCTION, et plus un fetch écrit au fil du chargement initial : il
+   * faut pouvoir la rejouer après un enregistrement. La mise à jour optimiste de
+   * `saveModuleContent` ne recopie qu'une PARTIE des champs de la ligne - elle omet
+   * `groupe_ids` et `groupe_noms`. Changer les classes visées d'un contenu laissait donc le
+   * tableau afficher les anciennes jusqu'à ce qu'on recharge la page à la main. Et
+   * `updated_at` n'est connu que du serveur : la colonne « Mis à jour » ne pouvait bouger
+   * d'aucune autre façon.
+   */
+  const rechargerMediatheque = async () => {
+    const token = localStorage.getItem("coach_token") || localStorage.getItem("admin_token");
+    try {
+      const r = await fetch(`${API_URL}/api/cours-elearning`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) { console.error("[EspaceProfesseur] GET médiathèque:", r.status); return; }
+      const d = await r.json();
+      if (!d.contenus) return;
+      setCours(d.contenus);
+      // `modulesContent` reste l'index des blocs, désormais à plat : un contenu = une clé.
+      const mc = {};
+      d.contenus.forEach(ct => {
+        mc[String(ct.id)] = {
+          id: ct.id, titre: ct.titre || "", objectifs: ct.objectifs || [],
+          dureeEstimee: ct.dureeEstimee || 60, statut: ct.statut || "brouillon",
+          blocs: ct.blocs || [], ordre: ct.ordre || 1,
+        };
+      });
+      setModulesContent(mc);
+      chargerCompteursLecture(d.contenus);
+    } catch (e) {
+      console.error("[EspaceProfesseur] fetch médiathèque:", e.message);
+    }
+  };
+
   const chargerCompteursLecture = async (liste) => {
     const token = localStorage.getItem("coach_token") || localStorage.getItem("admin_token");
     const publies = (liste || []).filter(c => c.statut === "publie");
@@ -2846,6 +2868,9 @@ export default function EspaceProfesseur() {
     setShowBlocForm(false);
     setBlocForm(BLOC_FORM_VIDE);
     setBlocEnEdition(null);
+    // Sans cela, la confirmation rouverte resterait affichée à la prochaine ouverture de
+    // l'éditeur, par-dessus un contenu qui n'est plus celui qu'elle décrivait.
+    setConfirmPublication(false);
   };
 
   /** Recharge un bloc existant dans le formulaire pour le corriger. */
@@ -9596,9 +9621,74 @@ const messagesFiltres = useMemo(() => {
               <div style={{ padding:"14px 24px",borderTop:"1px solid #e5e7eb",display:"flex",gap:10,justifyContent:"flex-end",background:"#f9fafb",borderRadius:"0 0 14px 14px" }}>
                 <button onClick={fermerEditeurModule} style={btnSecondary}>Annuler</button>
                 <button onClick={()=>saveModuleContent("brouillon")} style={{ ...btnSecondary,borderColor:"#d1d5db" }}>💾 Sauvegarder brouillon</button>
-                <button onClick={()=>saveModuleContent("publie")} style={btnPrimary}>🚀 Publier le module</button>
+                <button onClick={()=>setConfirmPublication(true)} style={btnPrimary}>🚀 Publier le module</button>
               </div>
             </div>
+
+            {/* ══ CONFIRMATION DE PUBLICATION ══
+                Publier n'est pas enregistrer : le contenu devient visible pour les apprenants
+                de toutes les classes visées, et la notification part. Les deux boutons étaient
+                côte à côte, de même taille, sans rien pour distinguer le geste réversible du
+                geste qui prévient tout le monde. La modale nomme les classes concernées :
+                c'est l'information qui manquait pour décider. */}
+            {confirmPublication && (() => {
+              const idsVises  = moduleForm.groupe_ids || [];
+              const nomsVises = idsVises.map(id =>
+                groupes.find(g => String(g.id) === String(id))?.nom || "Classe retirée");
+              const dejaPublie = cours.find(c => String(c.id) === String(editingModuleContent?.moduleId))?.statut === "publie";
+              return (
+                <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.6)", zIndex:1200, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+                  onClick={()=>setConfirmPublication(false)}>
+                  <div style={{ background:"#fff", borderRadius:16, width:"min(520px,94vw)", maxHeight:"88vh", overflowY:"auto", boxShadow:"0 24px 60px rgba(0,0,0,.35)" }}
+                    onClick={e=>e.stopPropagation()}>
+                    <div style={{ background:`linear-gradient(135deg,${BET},#0e4f6b)`, padding:"18px 24px", borderRadius:"16px 16px 0 0" }}>
+                      <div style={{ fontSize:16, fontWeight:800, color:"#fff" }}>
+                        {dejaPublie ? "🚀 Republier ce contenu ?" : "🚀 Publier ce contenu ?"}
+                      </div>
+                      <div style={{ fontSize:12, color:"rgba(255,255,255,.85)", marginTop:3 }}>{moduleForm.titre}</div>
+                    </div>
+
+                    <div style={{ padding:"20px 24px" }}>
+                      {idsVises.length === 0 ? (
+                        <div style={{ padding:"12px 14px", borderRadius:10, background:"#fef2f2", border:"1px solid #fecaca", color:"#b91c1c", fontSize:13, fontWeight:600 }}>
+                          Aucune classe sélectionnée — ce contenu ne serait visible par personne.
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:13, color:"#334155", marginBottom:10 }}>
+                            Il deviendra visible dans la médiathèque des apprenants de
+                            {idsVises.length > 1 ? <b> ces {idsVises.length} classes</b> : <b> cette classe</b>},
+                            qui recevront une notification.
+                          </div>
+                          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
+                            {nomsVises.map((nom,i) => (
+                              <span key={i} style={{ fontSize:11.5, fontWeight:600, padding:"3px 10px", borderRadius:999, background:"#f1f5f9", color:"#475569" }}>{nom}</span>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      <div style={{ fontSize:12.5, color:"#64748b", borderTop:"1px solid #f1f5f9", paddingTop:12 }}>
+                        {blocs.length} bloc(s) · {moduleForm.dureeEstimee || 0} min
+                        {dejaPublie && (
+                          <div style={{ marginTop:8, color:"#b45309" }}>
+                            Ce contenu est déjà publié : vous remplacez la version que les apprenants voient.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ padding:"14px 24px", borderTop:"1px solid #e5e7eb", display:"flex", gap:10, justifyContent:"flex-end", background:"#f9fafb", borderRadius:"0 0 16px 16px" }}>
+                      <button onClick={()=>setConfirmPublication(false)} style={btnSecondary}>Annuler</button>
+                      <button style={btnPrimary}
+                        onClick={()=>{ setConfirmPublication(false); saveModuleContent("publie"); }}>
+                        {dejaPublie ? "Republier" : "Publier"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 

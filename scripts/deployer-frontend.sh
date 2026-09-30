@@ -100,10 +100,27 @@ if [ -n "$(ls -A "$CIBLE" 2>/dev/null)" ]; then
   fi
 fi
 
-# ── 1. Le code ───────────────────────────────────────────────────────────────
-etape "Mise à jour du code"
+# ── 1. Le code est-il à jour ? ───────────────────────────────────────────────
+#
+# Ce script faisait `git pull` ici. C'était un piège : bash lit un script au fur et à
+# mesure de son exécution, sans le charger entièrement en mémoire. Le pull réécrivait
+# donc le fichier que bash était en train de lire, et la suite était interprétée à un
+# décalage d'octets qui ne correspondait plus à rien (28/09/2026). Le script se contente
+# désormais de VÉRIFIER, et refuse si le code n'est pas à jour.
+etape "Vérification du code"
 cd "$RACINE"
-git pull --ff-only
+git fetch --quiet origin
+LOCAL=$(git rev-parse HEAD)
+DISTANT=$(git rev-parse '@{u}' 2>/dev/null || echo "$LOCAL")
+if [ "$LOCAL" != "$DISTANT" ]; then
+  rouge "✗ Le code local n'est pas celui d'origine."
+  echo   "  local   : $(git log -1 --format='%h %s' "$LOCAL")"
+  echo   "  distant : $(git log -1 --format='%h %s' "$DISTANT")"
+  echo
+  echo   "  Mettez à jour AVANT de relancer ce script, jamais pendant :"
+  echo   "      git -C $RACINE pull --ff-only && $0 $CIBLE"
+  exit 1
+fi
 echo "  commit : $(git log -1 --format='%h %s')"
 
 # ── 2. La configuration ──────────────────────────────────────────────────────
@@ -114,6 +131,21 @@ if [ ! -f "$FRONT/.env.production" ]; then
   echo   "  serveur, une fois pour toutes. Sans lui, le site appellerait localhost."
   exit 1
 fi
+
+# `.env.local` PRIME sur `.env.production`, y compris pour un build de production : c'est
+# la règle de priorité de react-scripts, et elle surprend tout le monde. Un `.env.local`
+# oublié ici imposerait silencieusement ses valeurs à la place de celles qu'on vérifie
+# juste en dessous — les contrôles liraient un fichier, la construction un autre.
+for PARASITE in "$FRONT/.env.local" "$FRONT/.env.production.local"; do
+  if [ -f "$PARASITE" ]; then
+    rouge "✗ $PARASITE existe."
+    echo   "  react-scripts lui donne la PRIORITÉ sur .env.production : ses valeurs"
+    echo   "  remplaceraient celles que ce script vient de contrôler, sans rien signaler."
+    echo   "  Écartez-le avant de publier :"
+    echo   "      mv $PARASITE $PARASITE.hors-service"
+    exit 1
+  fi
+done
 
 API=$(grep -E "^REACT_APP_API_URL=" "$FRONT/.env.production" | cut -d= -f2- | tr -d '[:space:]')
 if [ -z "$API" ]; then
@@ -149,7 +181,10 @@ etape "Contrôle du résultat"
 [ -f build/index.html ] || { rouge "✗ build/index.html absent — construction incomplète."; exit 1; }
 [ -f build/.htaccess ]  || { rouge "✗ build/.htaccess absent — seule la page d'accueil répondrait."; exit 1; }
 
-if grep -qs "localhost:5001" build/static/js/main.*.js; then
+# TOUS les fragments, pas seulement main.*.js : une partie du code part dans des modules
+# chargés à la demande, et une adresse erronée s'y cache sans apparaître dans le fragment
+# principal. Une vérification limitée à main.*.js a déjà laissé passer du code.
+if grep -qs "localhost:5001" build/static/js/*.js; then
   rouge "✗ Le build contient encore « localhost:5001 »."
   echo   "  La construction n'a pas lu .env.production. Rien n'a été publié."
   exit 1

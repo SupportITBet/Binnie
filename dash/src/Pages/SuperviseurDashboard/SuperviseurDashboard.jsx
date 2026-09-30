@@ -78,6 +78,47 @@ const SALLE_ABANDONNEE = (s) =>
   (Date.now() - new Date(s.demarree_at).getTime()) > HEURES_AVANT_SALLE_ABANDONNEE * 3600000;
 const EN_DIRECT = (s) => s?.statut === "en_cours" && !SALLE_ABANDONNEE(s);
 
+/* OUVERTURE DE LA SALLE VIRTUELLE - le même délai que chez le coach, l'apprenant et le
+   parent. Cet écran-ci ne connaissait aucune règle d'heure : « Rejoindre » s'affichait en
+   vert sur des cours programmés dans huit jours, et menait vers une réunion que personne
+   n'avait encore ouverte. Le superviseur y entrait seul, sans comprendre pourquoi.
+   Le planning est rechargé toutes les deux minutes (voir le useEffect plus bas), donc le
+   bouton se déverrouille de lui-même au moment voulu, sans que l'écran soit rechargé. */
+const MINUTES_OUVERTURE_SALLE = 10;
+const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
+
+/** Instant d'ouverture de la salle, ou null si la séance n'a pas d'horaire exploitable. */
+const OUVERTURE_SALLE = (s) => {
+  if (!s?.date || !s?.heure) return null;
+  const debut = new Date(`${s.date}T${s.heure}`);
+  return isNaN(debut.getTime()) ? null : new Date(debut.getTime() - MS_OUVERTURE_SALLE);
+};
+
+/* Deux exceptions volontaires à la règle des dix minutes :
+   - une séance DÉJÀ DÉMARRÉE est joignable quelle que soit l'heure prévue. C'est le coach
+     qui a ouvert la salle, et c'est précisément ce moment-là qu'un superviseur observe ;
+   - une séance sans date ni heure exploitables reste joignable. Mieux vaut un bouton de
+     trop qu'un superviseur bloqué par une donnée incomplète qu'il ne peut pas corriger. */
+const SALLE_OUVERTE = (s) => {
+  if (EN_DIRECT(s)) return true;
+  const ouverture = OUVERTURE_SALLE(s);
+  return !ouverture || Date.now() >= ouverture.getTime();
+};
+
+/** Minutes restantes avant l'ouverture - au moins 1, pour ne jamais afficher « dans 0 min ». */
+const MINUTES_AVANT_OUVERTURE = (s) => {
+  const o = OUVERTURE_SALLE(s);
+  return o ? Math.max(1, Math.round((o.getTime() - Date.now()) / 60000)) : 0;
+};
+
+/** Libellé du verrou : « dans 25 min » sous l'heure, la date au-delà. */
+const LIBELLE_VERROU_SALLE = (s) => {
+  const min = MINUTES_AVANT_OUVERTURE(s);
+  if (min < 60)   return `🔒 dans ${min} min`;
+  if (min < 1440) return `🔒 dans ${Math.floor(min / 60)} h`;
+  return "🔒 Pas encore ouverte";
+};
+
 const API_URL       = process.env.REACT_APP_API_URL       || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
@@ -2843,8 +2884,10 @@ export default function SuperviseurDashboard() {
                     const badge = PLANNING_BADGE[s.statut] || { c:"#6b7280", bg:"#f1f5f9", label:s.statut||"-" };
                     const plat  = PLATEFORME_BADGE[s.plateforme] || { icon:"💻", label:s.plateforme||"-" };
                     const rowBg = idx%2===0?"#fff":"#fafafa";
-                    const peutRejoindre = s.plateforme !== "presentiel" && s.lien && !SESSION_CLOSE(s.statut);
-                    const lienInerte    = s.plateforme !== "presentiel" && s.lien && SESSION_CLOSE(s.statut);
+                    const salleExiste   = s.plateforme !== "presentiel" && s.lien;
+                    const peutRejoindre = salleExiste && !SESSION_CLOSE(s.statut) && SALLE_OUVERTE(s);
+                    const tropTot       = salleExiste && !SESSION_CLOSE(s.statut) && !SALLE_OUVERTE(s);
+                    const lienInerte    = salleExiste && SESSION_CLOSE(s.statut);
                     return (
                       <tr key={s.id} style={{ borderBottom:"1px solid #f1f5f9", background:rowBg, cursor:"pointer" }}
                         onClick={()=>setPlanningDetail(s)}
@@ -2871,6 +2914,16 @@ export default function SuperviseurDashboard() {
                                 style={{ padding:"4px 10px", borderRadius:7, border:"none", background: EN_DIRECT(s) ? "#b91c1c" : "#16a34a", color:"#fff", fontSize:11, fontWeight: EN_DIRECT(s) ? 800 : 700, cursor:"pointer", whiteSpace:"nowrap" }}>
                                 {EN_DIRECT(s) ? "▶ Rejoindre maintenant" : "🔗 Rejoindre"}
                               </button>
+                            )}
+                            {/* Trop tôt : le bouton reste VISIBLE mais verrouillé, et dit dans
+                                combien de temps il s'ouvrira. Le masquer ferait croire qu'aucune
+                                salle n'est prévue - la même raison qui garde le lien inerte
+                                ci-dessous plutôt que de le retirer. */}
+                            {tropTot && (
+                              <span title={`La salle ouvre ${MINUTES_OUVERTURE_SALLE} min avant le début du cours`}
+                                style={{ padding:"4px 10px", borderRadius:7, background:"#f1f5f9", color:"#94a3b8", fontSize:11, fontWeight:700, whiteSpace:"nowrap", cursor:"not-allowed" }}>
+                                {LIBELLE_VERROU_SALLE(s)}
+                              </span>
                             )}
                             {/* Le lien reste visible mais inerte : le masquer laisserait croire
                                 qu'aucune salle n'avait été prévue pour ce cours. */}
@@ -2907,8 +2960,10 @@ export default function SuperviseurDashboard() {
         {planningDetail && (() => {
           const badge = PLANNING_BADGE[planningDetail.statut] || { c:"#6b7280", bg:"#f1f5f9", label:planningDetail.statut||"-" };
           const plat  = PLATEFORME_BADGE[planningDetail.plateforme] || { icon:"💻", label:planningDetail.plateforme||"-" };
-          const peutRejoindre = planningDetail.plateforme !== "presentiel" && planningDetail.lien && !SESSION_CLOSE(planningDetail.statut);
-          const lienInerteDetail = planningDetail.plateforme !== "presentiel" && planningDetail.lien && SESSION_CLOSE(planningDetail.statut);
+          const salleExisteDetail = planningDetail.plateforme !== "presentiel" && planningDetail.lien;
+          const peutRejoindre     = salleExisteDetail && !SESSION_CLOSE(planningDetail.statut) && SALLE_OUVERTE(planningDetail);
+          const tropTotDetail     = salleExisteDetail && !SESSION_CLOSE(planningDetail.statut) && !SALLE_OUVERTE(planningDetail);
+          const lienInerteDetail  = salleExisteDetail && SESSION_CLOSE(planningDetail.statut);
           return (
             <div onClick={()=>setPlanningDetail(null)} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:20 }}>
               <div onClick={e=>e.stopPropagation()} style={{ background:"#fff", borderRadius:14, padding:28, maxWidth:640, width:"100%", maxHeight:"85vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.25)" }}>
@@ -2970,6 +3025,15 @@ export default function SuperviseurDashboard() {
                     style={{ marginTop:18, width:"100%", padding:"10px", borderRadius:9, border:"none", background: EN_DIRECT(planningDetail) ? "#b91c1c" : "#16a34a", color:"#fff", fontWeight: EN_DIRECT(planningDetail) ? 800 : 700, fontSize:13, cursor:"pointer" }}>
                     {EN_DIRECT(planningDetail) ? "▶ Rejoindre maintenant" : "🔗 Rejoindre la session"}
                   </button>
+                )}
+                {tropTotDetail && (
+                  <div title={`La salle ouvre ${MINUTES_OUVERTURE_SALLE} min avant le début du cours`}
+                    style={{ marginTop:18, width:"100%", padding:"10px", borderRadius:9, background:"#f1f5f9", color:"#94a3b8", fontWeight:700, fontSize:13, textAlign:"center", cursor:"not-allowed" }}>
+                    {LIBELLE_VERROU_SALLE(planningDetail)}
+                    <div style={{ fontWeight:600, fontSize:11.5, marginTop:3 }}>
+                      La salle ouvre {MINUTES_OUVERTURE_SALLE} min avant le début du cours.
+                    </div>
+                  </div>
                 )}
                 {lienInerteDetail && (
                   <div title={RAISON_CLOSE(planningDetail.statut)}
