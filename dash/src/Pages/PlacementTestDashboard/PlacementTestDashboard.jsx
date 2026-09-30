@@ -242,7 +242,10 @@ export default function PlacementTestDashboard() {
   const notifsBanderolePT = toutesNotifsPT.filter(n => !n.lu).slice(0, 3);
 
   const TABS = [
-    { key:"taches",         label:"Mes tâches",     icon:"✅", badge: stats.aCorriger || null },
+    // « Mes tâches » ne comptait que les tests à corriger, alors que les demandes de
+    // transfert attendent tout autant cet agent : un dossier bloqué faute de niveau rendu
+    // n'apparaissait nulle part sur l'écran censé résumer ce qui reste à faire.
+    { key:"taches",         label:"Mes tâches",     icon:"✅", badge: (stats.aCorriger + dossiersAReaffecter) || null },
     { key:"overview",       label:"Vue d'ensemble",  icon:"🏠" },
     { key:"file",           label:"À corriger",      icon:"📥", badge:stats.aCorriger },
     // Les demandes de transfert des coachs : c'est l'agent placement test qui fait avancer
@@ -379,6 +382,9 @@ export default function PlacementTestDashboard() {
             {activeTab === "taches" && (() => {
               const taches = [
                 { icon:"📥", label:"Tests à corriger", n:stats.aCorriger, tab:"file" },
+                // Ces dossiers-là attendent que cet agent rende le niveau : sans lui, la
+                // commerciale ou l'onboarding ne peuvent pas réaffecter l'apprenant.
+                { icon:"🔄", label:"Demandes de transfert à traiter", n:dossiersAReaffecter, tab:"transferts" },
               ];
               const enCours = taches.filter(t => t.n > 0);
               const total = enCours.reduce((s,t)=>s+t.n, 0);

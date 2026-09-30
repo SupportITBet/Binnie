@@ -5222,7 +5222,12 @@ export default function CommercialDashboard() {
   const tachesSuivi        = suiviApprenants.filter(a => !Object.values(suiviChecklistEffectif(a)).every(Boolean)).length;
   const tachesPaiements    = paiements.filter(p => p.statut === "en_attente").length;
   const tachesB2bDemandes  = b2bDemandes.filter(d => d.statut === "en_attente").length;
-  const tachesTotal = (hasB2C ? tachesAssignations + tachesTests + (isCommercialeCentre ? tachesSuivi : 0) + tachesPaiements : 0)
+  /* `dossiersAReaffecter` manquait ici alors qu'il porte déjà son propre badge sur l'onglet :
+     une assistante de centre avec un dossier revenu du test de niveau le voyait signalé sur
+     « Dossiers à réaffecter », mais « Mes tâches » l'ignorait - or c'est justement l'écran
+     censé dispenser de parcourir les onglets un par un. Il compte les demandes au statut
+     `test_fait`, c'est-à-dire celles qui n'attendent plus qu'elle. */
+  const tachesTotal = (hasB2C ? tachesAssignations + tachesTests + dossiersAReaffecter + (isCommercialeCentre ? tachesSuivi : 0) + tachesPaiements : 0)
     + (hasB2B ? b2bProspectsActifs + b2bFacturesEnRetard + (!hasB2C ? tachesB2bDemandes : 0) : 0);
 
   const TABS = [
@@ -5457,6 +5462,10 @@ export default function CommercialDashboard() {
                 ...(hasB2C ? [
                   { icon:"🎯", label:"Prospects à traiter",        n:tachesAssignations, tab:"assignations" },
                   { icon:"📝", label:"Tests de niveau à corriger", n:tachesTests,        tab:"tests" },
+                  // Placé juste après les tests : c'est la suite du même circuit - le coach
+                  // demande le transfert, l'agent placement rend le niveau, et le dossier
+                  // revient ici en attendant sa nouvelle classe.
+                  { icon:"🔄", label:"Dossiers à réaffecter",      n:dossiersAReaffecter, tab:"reaffecter" },
                   ...(isCommercialeCentre ? [{ icon:"✅", label:"Suivis de démarrage incomplets", n:tachesSuivi, tab:"suivi" }] : []),
                   { icon:"💳", label:"Paiements en attente",       n:tachesPaiements,    tab:"paiements" },
                 ] : []),
