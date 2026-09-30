@@ -7,6 +7,7 @@ import NotificationsTab    from "../../Components/NotificationsTab";
 import NotificationBell    from "../../Components/NotificationBell";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import PastilleGroupe from "../../Components/PastilleGroupe";
+import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import MessagerieTab        from "../../Components/MessagerieTab";
 import { useLanguage }     from "../../contexts/LanguageContext";
 import { useConfirm }      from "../../contexts/ConfirmContext";
@@ -3616,8 +3617,15 @@ export default function SuperviseurDashboard() {
             <div style={{ background:BET_GRADIENT, padding:"20px 24px", borderRadius:"16px 16px 0 0", flexShrink:0, position:"relative" }}>
               <button onClick={()=>{ setSelectedGroupe(null); setGroupeDetail({ apprenants:[], fichiers:[] }); setGroupeSeances([]); setGroupePresences([]); }}
                 style={{ position:"absolute", top:14, right:14, background:"rgba(255,255,255,0.2)", border:"none", borderRadius:"50%", width:30, height:30, cursor:"pointer", color:"#fff", fontSize:16 }}>✕</button>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)", fontWeight:600, marginBottom:4 }}>👥 Groupe de cours</div>
-              <div style={{ fontSize:20, fontWeight:800, color:"#fff", marginBottom:6 }}>{selectedGroupe.nom || "-"}</div>
+              {/* La photo de la classe, en lecture seule : le superviseur observe, il ne
+                  gère pas les classes. Cliquable pour l'agrandir. */}
+              <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:6 }}>
+                <PhotoClasseEntete groupe={selectedGroupe} taille={48} />
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)", fontWeight:600, marginBottom:4 }}>👥 Groupe de cours</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:"#fff" }}>{selectedGroupe.nom || "-"}</div>
+                </div>
+              </div>
               <div style={{ display:"flex", gap:10, flexWrap:"wrap", fontSize:12, color:"rgba(255,255,255,0.75)", alignItems:"center" }}>
                 {selectedGroupe.niveau && <span style={{ background:"rgba(255,255,255,0.15)", borderRadius:6, padding:"2px 10px", fontWeight:700, color:"#fff" }}>Niveau {selectedGroupe.niveau}</span>}
                 {selectedGroupe.statut && <span style={{ background:"rgba(255,255,255,0.12)", borderRadius:6, padding:"2px 10px" }}>{selectedGroupe.statut}</span>}

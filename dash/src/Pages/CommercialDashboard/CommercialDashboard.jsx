@@ -14,6 +14,7 @@ import CloudinaryUpload from "../../Components/CloudinaryUpload";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
 import PastilleGroupe from "../../Components/PastilleGroupe";
+import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import NotificationBell from "../../Components/NotificationBell";
 import BarreFiltres, { RangeePastilles, RangeeChamps, champFiltre } from "../../Components/BarreFiltres";
 import { useNotifPoller } from "../../hooks/useNotifPoller";
@@ -6726,7 +6727,20 @@ export default function CommercialDashboard() {
                     return (
                       <div style={{ background: BET_GRADIENT, borderRadius:"18px 18px 0 0", padding:"20px 24px 0 24px", flexShrink:0 }}>
                         {/* Ligne titre + fermer */}
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14, gap:16 }}>
+                          {/* LA PHOTO DE LA CLASSE, modifiable d'ici. L'assistante crée la
+                              classe : elle doit pouvoir corriger l'image en consultant la
+                              fiche, sans rouvrir le formulaire. L'enregistrement est immédiat
+                              - cette modale n'a pas de bouton « Enregistrer ». */}
+                          <PhotoClasseEntete
+                            groupe={hdr}
+                            modifiable={peut("classes","update")}
+                            authHeaders={authHeaders}
+                            onChange={url => {
+                              setSelectedClasse(c => c ? { ...c, photo_url: url } : c);
+                              setClasseDetailData(d => d ? { ...d, groupe: { ...d.groupe, photo_url: url } } : d);
+                              setClasses(prev => prev.map(c => c.id === hdr.id ? { ...c, photo_url: url } : c));
+                            }} />
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:11, color:"rgba(255,255,255,.55)", fontWeight:600, letterSpacing:".08em", textTransform:"uppercase", marginBottom:5 }}>Détail de la classe</div>
                             <div style={{ fontSize:22, fontWeight:900, color:"#fff", lineHeight:1.2 }}>{hdr.nom}</div>

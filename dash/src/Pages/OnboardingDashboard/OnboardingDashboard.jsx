@@ -13,6 +13,7 @@ import MessagerieTab from "../../Components/MessagerieTab";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
 import PastilleGroupe from "../../Components/PastilleGroupe";
+import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import ArchiveTab, { ArchiveModal } from "../../Components/ArchiveTab";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useConfirm } from "../../contexts/ConfirmContext";
@@ -4711,6 +4712,18 @@ export default function OnboardingDashboard() {
 
                     {/* En-tête modal */}
                     <div style={{ background:C_GRAD,padding:"18px 24px",color:"#fff",flexShrink:0,display:"flex",gap:16,alignItems:"flex-start" }}>
+                      {/* LA PHOTO DU GROUPE, modifiable d'ici. L'onboarding crée la classe :
+                          elle doit pouvoir corriger l'image en consultant la fiche, sans
+                          rouvrir le formulaire. L'enregistrement est immédiat - cette modale
+                          n'a pas de bouton « Enregistrer ». */}
+                      <PhotoClasseEntete
+                        groupe={selectedGroupe}
+                        modifiable={peut("classes","update")}
+                        authHeaders={authHeaders}
+                        onChange={url => {
+                          setSelectedGroupe(g => g ? { ...g, photo_url: url } : g);
+                          setGroupes(prev => prev.map(g => g.id === selectedGroupe.id ? { ...g, photo_url: url } : g));
+                        }} />
                       <div style={{ flex:1,minWidth:0 }}>
                         <div style={{ fontSize:10,color:"#c4b5fd",fontWeight:700,letterSpacing:"0.08em",marginBottom:3 }}>GROUPE</div>
                         <div style={{ fontSize:19,fontWeight:900,marginBottom:5 }}>{selectedGroupe.nom}</div>

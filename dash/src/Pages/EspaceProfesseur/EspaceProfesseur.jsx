@@ -16,6 +16,7 @@ import MessagerieTab from "../../Components/MessagerieTab";
 import { urlDocument, extensionDe } from "../../utils/urlDocument";
 import { urlEmbedVideo, estFichierVideo, estFichierAudio, estChaineYoutube } from "../../utils/urlVideo";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
+import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import { useGroupeChat, useGroupesChatUnreadTotal, useGroupesLibresNonLus } from "../../hooks/useGroupeChat";
 import ChatGroupe from "../../Components/ChatGroupe";
 import GroupesLibres from "../../Components/GroupesLibres";
@@ -6902,6 +6903,9 @@ const messagesFiltres = useMemo(() => {
 
             {/* En-tête modal */}
             <div style={{ background:BET_GRAD,padding:"18px 24px",color:"#fff",flexShrink:0,display:"flex",gap:16,alignItems:"flex-start" }}>
+              {/* La photo de la classe, en lecture seule : le coach enseigne, il ne crée
+                  pas la classe. Cliquable pour l'agrandir. */}
+              <PhotoClasseEntete groupe={selectedGroupe} taille={48} />
               <div style={{ flex:1,minWidth:0 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:3 }}>
                   <div style={{ fontSize:10,color:"#7dd3fc",fontWeight:700,letterSpacing:"0.08em" }}>GROUPE</div>
