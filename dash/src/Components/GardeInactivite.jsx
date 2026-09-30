@@ -19,6 +19,9 @@ import {
 export default function GardeInactivite() {
   const [restant, setRestant] = useState(null);   // ms restantes, seulement pendant le préavis
   const deconnexionFaite = useRef(false);
+  /* Mémorise si une session était ouverte au tour précédent, pour repérer l'instant exact où
+     quelqu'un se connecte - c'est là, et seulement là, que le compte à rebours doit repartir. */
+  const etaitConnecte = useRef(false);
 
   useEffect(() => {
     const connecte = () => {
@@ -59,7 +62,24 @@ export default function GardeInactivite() {
     // Une seconde suffit : le compte à rebours du préavis doit s'égrener visiblement, et
     // c'est un travail négligeable pour le navigateur.
     const minuteur = setInterval(() => {
-      if (!connecte()) { setRestant(null); return; }
+      const estConnecte = connecte();
+
+      /* LE COMPTE À REBOURS DÉMARRE À LA CONNEXION, pas au chargement de la page.
+         Il partait de `marquerActivite()` ci-dessus, appelé au montage, et les gestes faits
+         PENDANT la connexion ne le rafraîchissaient pas - `surActivite` ne marque que si
+         l'on est déjà connecté. Un onglet laissé ouvert sur l'écran de connexion consommait
+         donc le délai avant même qu'on entre : on se connectait, et la seconde d'après on
+         était rejeté vers /access?raison=inactivite sans avoir rien fait. C'est le cas le
+         plus banal qui soit - on laisse l'onglet le soir, on se connecte le lendemain.
+         Repérer la bascule « déconnecté → connecté » suffit à repartir d'une heure pleine. */
+      if (estConnecte && !etaitConnecte.current) {
+        etaitConnecte.current = true;
+        marquerActivite();
+        setRestant(null);
+        return;
+      }
+      if (!estConnecte) { etaitConnecte.current = false; setRestant(null); return; }
+
       const ms = tempsRestant();
       if (ms === Infinity) { setRestant(null); return; }   // salle de cours ouverte
       if (ms <= 0) { deconnecter(); return; }
