@@ -8427,8 +8427,7 @@ const messagesFiltres = useMemo(() => {
                 { id:"autre",       label:"Autre",        icon:"🔗", color:"#6b7280", bg:"#f3f4f6" },
               ];
               const now = new Date();
-              const MODE_DEV = process.env.NODE_ENV === "development";
-              const inputS = { width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px solid #e2e8f0", fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+              const inputS ={ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px solid #e2e8f0", fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
 
               const sessionActive = salleOuverte ? (liveSessions.find(s => s.id === salleOuverte) || sessionEnCours) : null;
               const upcoming = liveSessions
@@ -8692,7 +8691,10 @@ const messagesFiltres = useMemo(() => {
                     <div style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:12, padding:"14px 18px", marginBottom:20, fontSize:12, color:"#1E40AF" }}>
                       <div style={{ fontWeight:700, marginBottom:8 }}>📋 Déroulement type d'une session :</div>
                       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                        {["J-1 : Rappel auto 🔔","H-15min : Salle accessible 🔓","Prof ouvre la salle 🎥","Apprenants rejoignent 👥","Cours + chat + main levée 📚","Saisie présences ✅","Clôture & Replay ⏹"].map((e,i) => (
+                        {/* Le délai est LU depuis la constante, plus écrit en toutes lettres :
+                            l'étiquette annonçait « H-15min » alors que la règle appliquée
+                            partout ailleurs était passée à 10 minutes. */}
+                        {["J-1 : Rappel auto 🔔",`H-${MINUTES_OUVERTURE_SALLE}min : Salle accessible 🔓`,"Prof ouvre la salle 🎥","Apprenants rejoignent 👥","Cours + chat + main levée 📚","Saisie présences ✅","Clôture & Replay ⏹"].map((e,i) => (
                           <span key={i} style={{ background:"#DBEAFE", borderRadius:20, padding:"3px 10px", fontWeight:600 }}>{e}</span>
                         ))}
                       </div>
@@ -8711,10 +8713,17 @@ const messagesFiltres = useMemo(() => {
                       const grp = groupes.find(g=>g.id===s.groupe_id);
                       const plat = PLATFORMS.find(p=>p.id===s.plateforme) || PLATFORMS[5];
                       const debut = new Date(`${s.date}T${s.heure}`);
-                      const debutMoins15 = new Date(debut.getTime() - MS_OUVERTURE_SALLE);
-                      const disponible = MODE_DEV || now >= debutMoins15;
+                      const ouvertureSalle = new Date(debut.getTime() - MS_OUVERTURE_SALLE);
+                      /* `MODE_DEV ||` ouvrait TOUTES les salles dès que NODE_ENV valait
+                         « development » : une session du 3 octobre s'affichait « ✅ Salle
+                         disponible » le 30 septembre, et l'écran de test ne montrait plus du
+                         tout ce que voient les coachs. Un raccourci de test qui fait mentir
+                         l'écran coûte plus qu'il ne fait gagner - pour essayer l'ouverture
+                         d'une salle, il suffit de programmer une session dans quelques
+                         minutes. */
+                      const disponible = now >= ouvertureSalle;
                       const deplie = sessionsDepliees.has(s.id);
-                      const minutesAvant = disponible ? 0 : Math.round((debutMoins15 - now) / 60000);
+                      const minutesAvant = disponible ? 0 : Math.round((ouvertureSalle - now) / 60000);
                       return (
                         <div key={s.id} style={{ background:disponible?"#F0FDF4":"#fff", borderRadius:14, border:`1.5px solid ${disponible?"#6EE7B7":"#e5e7eb"}`, marginBottom:12, overflow:"hidden" }}>
                           <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:16, flexWrap:"wrap" }}>
@@ -8731,7 +8740,7 @@ const messagesFiltres = useMemo(() => {
                               </div>
                               {!disponible && (
                                 <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>
-                                  🔒 Disponible H-15min avant le cours
+                                  🔒 Disponible H-{MINUTES_OUVERTURE_SALLE}min avant le cours
                                   {minutesAvant < 1440 && <span> ({minutesAvant<60?`dans ${minutesAvant} min`:`dans ${Math.floor(minutesAvant/60)}h`})</span>}
                                 </div>
                               )}
@@ -12057,7 +12066,26 @@ const messagesFiltres = useMemo(() => {
                       style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:"#b45309", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
                       📅 Reprogrammer
                     </button>
-                  ) : sd.statut !== "terminee" && (
+                  ) : sd.statut !== "terminee" && (() => {
+                    /* SECONDE PORTE VERS LA MÊME ACTION. La carte de la liste respecte le
+                       délai d'ouverture, mais cette modale-ci ne connaissait aucune règle
+                       d'heure : on y démarrait une séance prévue dans trois jours. Le verrou
+                       est le même des deux côtés, sans quoi la règle ne tient pas.
+                       Une séance sans horaire exploitable reste ouvrable : mieux vaut un
+                       bouton de trop qu'un coach bloqué devant sa propre classe. */
+                    const debutSd = sd.date && sd.heure ? new Date(`${sd.date}T${sd.heure}`) : null;
+                    const ouvertureSd = debutSd && !isNaN(debutSd.getTime())
+                      ? new Date(debutSd.getTime() - MS_OUVERTURE_SALLE) : null;
+                    if (ouvertureSd && new Date() < ouvertureSd) {
+                      const min = Math.max(1, Math.round((ouvertureSd - new Date()) / 60000));
+                      return (
+                        <div title={`Ouvrable ${MINUTES_OUVERTURE_SALLE} min avant le début`}
+                          style={{ flex:1, padding:"12px", borderRadius:10, background:"#f1f5f9", color:"#94a3b8", fontSize:13, fontWeight:700, textAlign:"center", cursor:"not-allowed" }}>
+                          🔒 {min < 60 ? `dans ${min} min` : min < 1440 ? `dans ${Math.floor(min/60)} h` : "Pas encore ouvrable"}
+                        </div>
+                      );
+                    }
+                    return (
                     <button onClick={() => openConfirm(
                       isPresent ? "Démarrer le cours" : "Ouvrir la salle",
                       isPresent
@@ -12072,7 +12100,8 @@ const messagesFiltres = useMemo(() => {
                     style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background: isPresent?"#059669":"#1d4ed8", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
                       {isPresent ? "🏢 Démarrer" : "🎥 Ouvrir la salle"}
                     </button>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             </div>
