@@ -19735,6 +19735,11 @@ export default function AdminDashboard() {
                                   style={{ padding:"5px 7px", borderRadius:7, border:`1.5px solid ${hasDraft ? "#fde68a" : "#d1d5db"}`, fontSize:11, color:"#0f172a", cursor:"pointer", background:"#fff" }}>
                                   <option value="en_ligne">💻 En ligne</option>
                                   <option value="presentiel">🏢 Présentiel</option>
+                                  {/* « Les deux » manquait ici alors que le reste du code le gère depuis
+                                      longtemps : c'est le profil d'une assistante qui couvre les DEUX canaux,
+                                      donc la seule qui puisse suivre une classe hybride de bout en bout.
+                                      Aucune ne pouvait le recevoir, faute de cette seule ligne. */}
+                                  <option value="les_deux">🔀 Les deux</option>
                                 </select>
                               </div>
                               {/* Profil */}

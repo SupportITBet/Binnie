@@ -260,17 +260,27 @@ router.get("/", authenticateAdmin, async (req, res) => {
        marchant dessus sur les mêmes apprenants, sans le savoir.
        Le placement test, lui, teste TOUT LE MONDE : sa file reste entière.
        `type_cours` nul = demande créée avant cette colonne : montrée aux deux plutôt que
-       cachée à tous, un dossier invisible étant pire qu'un dossier vu par le mauvais métier. */
+       cachée à tous, un dossier invisible étant pire qu'un dossier vu par le mauvais métier.
+
+       L'HYBRIDE APPARAÎT DANS LES DEUX FILES, et il le faut : une classe hybride se donne au
+       centre ET en ligne, les deux équipes la suivent. La demande recopie le `type_cours` de
+       la classe (voir plus haut), donc une classe hybride produit une demande « hybride » :
+       sans cette liste, le filtre `= en_ligne` l'aurait rendue invisible à l'onboarding comme
+       à l'assistante en ligne, et seule la présentiel l'aurait vue - l'inverse du partage
+       voulu. Côté présentiel, `neq.en_ligne` la laisse déjà passer.
+       QUI VOIT N'EST PAS QUI AGIT : `commercialePeutReaffecter` est inchangé, l'assistante en
+       ligne suit ses dossiers sans les réaffecter - c'est l'onboarding qui affecte la classe. */
+    const CANAUX_EN_LIGNE = "en_ligne,hybride";
     if (estCommerciale(req.role)) {
       /* Le canal de l'assistante, pas une règle unique : celle du présentiel traite ses
          dossiers, celle du en ligne suit les siens sans pouvoir agir. Lui montrer la file de
          l'autre lui donnerait du travail qui n'est pas le sien - et lui cacherait le sien. */
       const canal = await canalDeLAssistante(req.profil);
       if (canal === "presentiel")     q = q.or("type_cours.neq.en_ligne,type_cours.is.null");
-      else if (canal === "en_ligne")  q = q.or("type_cours.eq.en_ligne,type_cours.is.null");
+      else if (canal === "en_ligne")  q = q.or(`type_cours.in.(${CANAUX_EN_LIGNE}),type_cours.is.null`);
       // `les_deux` ou canal inconnu : on ne filtre pas, elle suit les deux périmètres.
     } else if (req.role === "onboarding" || req.role === "admin_onboarding") {
-      q = q.or("type_cours.eq.en_ligne,type_cours.is.null");
+      q = q.or(`type_cours.in.(${CANAUX_EN_LIGNE}),type_cours.is.null`);
     }
     // Un coach ne voit QUE les demandes de ses propres classes : celles des collègues ne le
     // regardent pas, et son écran n'a pas à lui montrer des dossiers sur lesquels il ne peut rien.

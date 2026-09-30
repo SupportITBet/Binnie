@@ -22,7 +22,7 @@ export function usePlanningSeances(authHeaders) {
   const [planSeances,   setPlanSeances]   = useState([]);
   const [planLoading,   setPlanLoading]   = useState(false);
   const [planErreur,    setPlanErreur]    = useState(null);
-  const [planType,      setPlanType]      = useState("tous");   // tous | en_ligne | presentiel | prive
+  const [planType,      setPlanType]      = useState("tous");   // tous | en_ligne | presentiel | hybride | prive
   const [planStatut,    setPlanStatut]    = useState("tous");
   const [planDu,        setPlanDu]        = useState("");
   const [planAu,        setPlanAu]        = useState("");
@@ -114,7 +114,7 @@ export function usePlanningSeances(authHeaders) {
     "Coach":      x.coach_nom || "",
     "Classe":     x.groupe_nom || "",
     "Niveau":     x.groupe_niveau || "",
-    "Type":       { en_ligne:"En ligne", presentiel:"Présentiel", prive:"Privé", domicile:"Domicile" }[x.type_cours] || x.type_cours || "",
+    "Type":       { en_ligne:"En ligne", presentiel:"Présentiel", hybride:"Hybride", prive:"Privé", domicile:"Domicile" }[x.type_cours] || x.type_cours || "",
     "Durée":      x.duree_h ? `${parseFloat(x.duree_h).toFixed(1)}h` : "",
     "Présences":  x.nb_presences_total ? `${x.nb_presents}/${x.nb_presences_total}` : "",
     "Statut":     { planifiee:"Planifiée", en_cours:"En direct", realisee:"Réalisée", terminee:"Terminée", annulee:"Annulée" }[x.statut] || x.statut || "",
@@ -213,6 +213,7 @@ export default function PlanningSeances({
   const cfgType = {
     en_ligne:   { l:"💻 En ligne",   c:"#0369a1", bg:"#e0f2fe" },
     presentiel: { l:"🏢 Présentiel", c:"#7c2d12", bg:"#ffedd5" },
+    hybride:    { l:"⚡ Hybride",    c:"#a16207", bg:"#fef9c3" },
     prive:      { l:"👤 Privé",      c:"#6d28d9", bg:"#ede9fe" },
     domicile:   { l:"🏠 Domicile",   c:"#166534", bg:"#dcfce7" },
   };
@@ -245,7 +246,11 @@ export default function PlanningSeances({
         </div>
 
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:12 }}>
-          {[["tous","Tous"],["en_ligne","💻 En ligne"],["presentiel","🏢 Présentiel"],["prive","👤 Privé"]].map(([k,l]) => (
+          {/* « Hybride » porte sur la CLASSE et non sur la séance : aucune séance ne déclare
+              jamais ce type, c'est le serveur qui fait la correspondance (voir seances.js,
+              filtre du planning). Une séance de classe hybride s'affiche donc avec SA propre
+              modalité - en ligne ou présentiel - et c'est bien ce qu'on veut lire ici. */}
+          {[["tous","Tous"],["en_ligne","💻 En ligne"],["presentiel","🏢 Présentiel"],["hybride","⚡ Hybride"],["prive","👤 Privé"]].map(([k,l]) => (
             <button key={k} onClick={()=>setPlanType(k)}
               style={{ padding:"5px 13px", borderRadius:999, fontSize:12, fontWeight:700, cursor:"pointer",
                 border:`1px solid ${planType===k?"#0891b2":"#e5e7eb"}`,

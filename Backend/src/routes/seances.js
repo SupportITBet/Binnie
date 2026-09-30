@@ -1061,12 +1061,16 @@ router.get("/planning", authenticateAdmin, async (req, res) => {
          les autres en ligne. « hybride » décrit donc la classe, jamais une séance - la
          propager telle quelle afficherait « ⚡ Hybride » sur un cours qui a bien lieu à un
          endroit précis, et ne dirait pas lequel.
-         Ordre : ce que la séance déclare elle-même, puis ce que dit sa classe quand ce n'est
-         pas « hybride », puis le repli historique sur la présence d'un lien de visio (cas des
-         coachings privés, qui n'ont pas toujours de groupe rattaché). */
+         Ordre : ce que la séance déclare elle-même ; puis ce que dit sa classe quand ce n'est
+         pas « hybride » ; puis LA PLATEFORME choisie par le coach en programmant la session -
+         il y choisit déjà « Présentiel » ou un outil de visio, ce qui répond exactement à la
+         question pour une classe hybride, sans qu'aucun écran supplémentaire soit nécessaire ;
+         puis le repli historique sur la simple présence d'un lien (cas des coachings privés,
+         qui n'ont pas toujours de groupe rattaché). */
       const typeClasse = groupe?.type_cours || null;
       const typeCours = s.type_cours
         || (typeClasse && typeClasse !== "hybride" ? typeClasse : null)
+        || (live?.plateforme ? (live.plateforme === "presentiel" ? "presentiel" : "en_ligne") : null)
         || (live?.lien ? "en_ligne" : null);
       return {
         id: s.id,
