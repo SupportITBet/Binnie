@@ -48,6 +48,21 @@ import { exporterFicheApprenantPDF, ligneInfo } from "../../utils/fichePdfAppren
    Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
    main dans quatre fichiers pour le changer d'une minute : nommé ici, il se relit et se
    corrige d'un seul endroit par application. */
+/* LA CLASSE COMMANDE LA MODALITÉ DE SES SESSIONS. Une classe EN LIGNE ne se donne pas au
+   centre, une classe PRÉSENTIEL n'a pas de lien de visio - les deux choix restaient pourtant
+   ouverts, si bien qu'on pouvait programmer une session qui ne correspondait pas à sa classe,
+   et les apprenants se présentaient au mauvais endroit.
+   Seule la classe HYBRIDE laisse le choix : c'est sa définition même, une partie des séances
+   au centre, l'autre en ligne. Sans classe (coaching privé, séance hors groupe), on ne
+   contraint rien - le coach reste seul juge. */
+const MODALITES_SESSION_PAR_CLASSE = {
+  en_ligne:   ["ligne"],
+  presentiel: ["presentiel"],
+  hybride:    ["ligne", "presentiel"],
+};
+const modalitesSessionPour = (groupe) =>
+  MODALITES_SESSION_PAR_CLASSE[groupe?.type_cours] || ["ligne", "presentiel"];
+
 const MINUTES_OUVERTURE_SALLE = 10;
 const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
 /* ═══════════════════════════════════════════════════════
@@ -8455,10 +8470,18 @@ const messagesFiltres = useMemo(() => {
               const openEdit = (s) => {
                 setLiveEditId(s.id);
                 setModeMultiple(false);
+                /* La modalité ENREGISTRÉE peut ne plus être permise : session créée avant que
+                   la classe soit contrainte, ou classe passée depuis d'hybride à un seul canal.
+                   On la ramène dans le permis à l'ouverture, sinon le formulaire s'ouvrirait
+                   invalide et bloquerait jusqu'à la moindre correction d'horaire - alors que le
+                   coach vient peut-être seulement déplacer son cours d'une demi-heure. */
+                const okEdit = modalitesSessionPour(groupes.find(g => String(g.id) === String(s.groupe_id)));
+                const stockee = s.lien?.startsWith("presentiel") ? "presentiel" : "ligne";
+                const retenue = okEdit.includes(stockee) ? stockee : okEdit[0];
                 setFormNouvelleSession({
                   titre: s.titre,
-                  type_session: s.lien?.startsWith("presentiel") ? "presentiel" : "ligne",
-                  lien_visio: s.lien?.startsWith("presentiel") ? "" : (s.lien||""),
+                  type_session: retenue,
+                  lien_visio: retenue === "presentiel" ? "" : (s.lien||""),
                   date_session: s.date,
                   heure_debut: s.heure,
                   heure_fin: s.heure_fin||"",
@@ -8889,13 +8912,29 @@ const messagesFiltres = useMemo(() => {
                     const f = formNouvelleSession;
                     const setF = (patch) => setFormNouvelleSession(prev=>({...prev,...patch}));
                     const grpUnique = groupes.find(g=>g.id===f.groupe_id);
+
+                    /* LA CLASSE COMMANDE LA MODALITÉ DE SES SESSIONS. Une classe EN LIGNE ne
+                       se donne pas au centre, et une classe PRÉSENTIEL n'a pas de lien de
+                       visio : les deux choix restaient pourtant ouverts, si bien qu'on pouvait
+                       programmer une session qui ne correspondait pas à sa classe - et les
+                       apprenants se présentaient au mauvais endroit.
+                       Seule la classe HYBRIDE laisse le choix : c'est précisément sa
+                       définition, une partie des séances au centre, l'autre en ligne.
+                       Sans classe choisie (coaching privé, séance hors groupe), on ne
+                       contraint rien : le coach reste seul juge. */
+                    const modalitesOk = modalitesSessionPour(grpUnique);
                     // Le lien doit être EXPLOITABLE, pas seulement non vide : le bouton
                     // « Zoom » insère « https://zoom.us/j/ », et sans identifiant collé
                     // derrière l'apprenant clique sur une page vide le jour du cours.
                     const analyseLien = f.type_session === "presentiel"
                       ? { valide: true, raison: "", plateforme: null }
                       : analyserLienVisio(f.lien_visio);
-                    const valideUnique = f.titre.trim() && f.date_session && f.heure_debut && f.heure_fin && analyseLien.valide;
+                    // La dernière condition est une ceinture de sécurité : les boutons interdits
+                    // sont déjà désactivés et la modalité corrigée au changement de classe. Elle
+                    // couvre le cas d'un état devenu incohérent autrement (classe modifiée dans
+                    // un autre onglet, formulaire rouvert sur d'anciennes valeurs).
+                    const valideUnique = f.titre.trim() && f.date_session && f.heure_debut && f.heure_fin
+                      && analyseLien.valide && modalitesOk.includes(f.type_session || "ligne");
 
                     const sauvegarderUnique = async () => {
                       if (savingLiveSession) return;
@@ -8934,6 +8973,10 @@ const messagesFiltres = useMemo(() => {
                     const cf = commonFields;
                     const setCF = (patch) => setCommonFields(prev=>({...prev,...patch}));
                     const grpMulti = groupes.find(g=>g.id===cf.groupe_id);
+                    // Même règle que pour la session unique : la classe commande la modalité.
+                    // Un programme complet en porte une seule pour toutes ses lignes, donc la
+                    // contrainte s'applique une fois, sur la classe du programme.
+                    const modalitesOkMulti = modalitesSessionPour(grpMulti);
                     // Le lien d'une ligne est exigé exploitable, exactement comme en création
                     // unique. Ce contrôle manquait ici, et le code comblait le vide en
                     // inventant « https://zoom.us/j/nouveau » - une adresse qui n'ouvre rien
@@ -8944,7 +8987,8 @@ const messagesFiltres = useMemo(() => {
                       || analyserLienVisio(lienDeLaLigne(s)).valide;
                     const lignesValides = sessionsMultiples.filter(s=>s.titre.trim()&&s.date_session&&lienLigneOk(s));
                     const lignesLienInvalide = sessionsMultiples.filter(s=>s.titre.trim()&&s.date_session&&!lienLigneOk(s));
-                    const valideMultiple = cf.groupe_id && cf.heure_debut && cf.heure_fin && lignesValides.length>0;
+                    const valideMultiple = cf.groupe_id && cf.heure_debut && cf.heure_fin && lignesValides.length>0
+                      && modalitesOkMulti.includes(cf.type_session || "ligne");
 
                     const genererLignes = (n) => setSessionsMultiples(Array.from({length:n},(_,i)=>
                       sessionsMultiples[i]?{...sessionsMultiples[i]}:{titre:"",date_session:"",heure_debut:cf.heure_debut,heure_fin:cf.heure_fin,lien_visio:cf.lien_visio,contenu_ids:[]}
@@ -9101,7 +9145,22 @@ const messagesFiltres = useMemo(() => {
                               </div>
                               <div>
                                 <label style={LBL}>Groupe / Classe</label>
-                                <select style={inputS} value={f.groupe_id} onChange={e=>setF({groupe_id:e.target.value})}>
+                                {/* Changer de classe peut rendre la modalité choisie impossible
+                                    (on passait d'une classe hybride en présentiel à une classe
+                                    en ligne) : on la corrige ICI, au moment du choix, plutôt
+                                    que de laisser un formulaire dans un état invalide. */}
+                                <select style={inputS} value={f.groupe_id} onChange={e=>{
+                                  const g  = groupes.find(x => String(x.id) === String(e.target.value));
+                                  const ok = modalitesSessionPour(g);
+                                  const courante = f.type_session || "ligne";
+                                  setF({
+                                    groupe_id: e.target.value,
+                                    ...(ok.includes(courante) ? {} : {
+                                      type_session: ok[0],
+                                      lien_visio:   ok[0] === "presentiel" ? "" : f.lien_visio,
+                                    }),
+                                  });
+                                }}>
                                   <option value="">- Aucun groupe spécifique -</option>
                                   {groupes.map(g=><option key={g.id} value={g.id}>{g.nom}{g.niveau?` · ${g.niveau}`:""}</option>)}
                                 </select>
@@ -9117,11 +9176,28 @@ const messagesFiltres = useMemo(() => {
                               <div>
                                 <label style={LBL}>Type de session</label>
                                 <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                                  {/* La modalité interdite reste VISIBLE mais grisée, et dit
+                                      pourquoi : la masquer ferait croire que l'écran est
+                                      incomplet, alors que c'est la classe qui décide. */}
                                   {[{val:"ligne",ic:"📹",lib:"En ligne",sub:"Zoom · Meet · Teams · Jitsi",col:BET},{val:"presentiel",ic:"🏢",lib:"Présentiel",sub:"Pas de lien requis",col:"#F59E0B"}].map(({val,ic,lib,sub,col})=>{
-                                    const actif=(f.type_session||"ligne")===val;
-                                    return <button key={val} onClick={()=>setF({type_session:val,lien_visio:val==="presentiel"?"":f.lien_visio})} style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${actif?col:"#e5e7eb"}`, background:actif?`${col}15`:"#fff", cursor:"pointer", textAlign:"center" }}><div style={{ fontSize:22, marginBottom:3 }}>{ic}</div><div style={{ fontSize:13, fontWeight:700, color:actif?col:"#0f172a" }}>{lib}</div><div style={{ fontSize:10, color:actif?col:"#9ca3af" }}>{sub}</div></button>;
+                                    const autorise = modalitesOk.includes(val);
+                                    const actif = autorise && (f.type_session||"ligne")===val;
+                                    return <button key={val} disabled={!autorise}
+                                      title={autorise ? undefined : `La classe « ${grpUnique?.nom} » se donne ${grpUnique?.type_cours === "en_ligne" ? "uniquement en ligne" : "uniquement au centre"}.`}
+                                      onClick={()=>autorise&&setF({type_session:val,lien_visio:val==="presentiel"?"":f.lien_visio})}
+                                      style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${actif?col:"#e5e7eb"}`, background:actif?`${col}15`:"#fff", cursor: autorise?"pointer":"not-allowed", textAlign:"center", opacity: autorise?1:.45 }}><div style={{ fontSize:22, marginBottom:3 }}>{ic}</div><div style={{ fontSize:13, fontWeight:700, color:actif?col:"#0f172a" }}>{lib}</div><div style={{ fontSize:10, color:actif?col:"#9ca3af" }}>{sub}</div></button>;
                                   })}
                                 </div>
+                                {grpUnique && modalitesOk.length === 1 && (
+                                  <div style={{ marginBottom:8, padding:"8px 12px", borderRadius:8, background:"#F1F5F9", border:"1px solid #E2E8F0", fontSize:11.5, color:"#475569" }}>
+                                    📚 « {grpUnique.nom} » est une classe {grpUnique.type_cours === "en_ligne" ? "en ligne" : "présentielle"} : ses sessions le sont aussi.
+                                  </div>
+                                )}
+                                {grpUnique?.type_cours === "hybride" && (
+                                  <div style={{ marginBottom:8, padding:"8px 12px", borderRadius:8, background:"#FEF9C3", border:"1px solid #FDE68A", fontSize:11.5, color:"#854D0E" }}>
+                                    ⚡ « {grpUnique.nom} » est une classe hybride : choisissez pour CETTE session si elle se tient au centre ou en ligne.
+                                  </div>
+                                )}
                                 {(f.type_session||"ligne")==="presentiel" && <div style={{ padding:"8px 12px", borderRadius:8, background:"#FFFBEB", border:"1px solid #FDE68A", fontSize:12, color:"#92400E" }}>🏢 Session présentielle - aucun lien de visioconférence requis.</div>}
                               </div>
                               {/* Lien visio */}
@@ -9187,7 +9263,18 @@ const messagesFiltres = useMemo(() => {
                                 <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:12, alignItems:"end" }}>
                                   <div>
                                     <label style={{...LBL,color:"#1E40AF"}}>Groupe *</label>
-                                    <select style={inputS} value={cf.groupe_id} onChange={e=>setCF({groupe_id:e.target.value})}>
+                                    <select style={inputS} value={cf.groupe_id} onChange={e=>{
+                                      const g  = groupes.find(x => String(x.id) === String(e.target.value));
+                                      const ok = modalitesSessionPour(g);
+                                      const courante = cf.type_session || "ligne";
+                                      setCF({
+                                        groupe_id: e.target.value,
+                                        ...(ok.includes(courante) ? {} : {
+                                          type_session: ok[0],
+                                          lien_visio:   ok[0] === "presentiel" ? "" : cf.lien_visio,
+                                        }),
+                                      });
+                                    }}>
                                       <option value="">- Sélectionner -</option>
                                       {groupes.map(g=><option key={g.id} value={g.id}>{g.nom}{g.niveau?` · ${g.niveau}`:""}</option>)}
                                     </select>
@@ -9204,8 +9291,11 @@ const messagesFiltres = useMemo(() => {
                                     <label style={{...LBL,color:"#1E40AF"}}>Type (commun)</label>
                                     <div style={{ display:"flex", gap:8, marginBottom:10 }}>
                                       {[{val:"ligne",ic:"📹",lib:"En ligne",col:BET},{val:"presentiel",ic:"🏢",lib:"Présentiel",col:"#F59E0B"}].map(({val,ic,lib,col})=>{
-                                        const actif=(cf.type_session||"ligne")===val;
-                                        return <button key={val} onClick={()=>setCF({type_session:val,lien_visio:val==="presentiel"?"":cf.lien_visio})} style={{ flex:1, padding:"8px 10px", borderRadius:8, border:`2px solid ${actif?col:"#e5e7eb"}`, background:actif?`${col}15`:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><span>{ic}</span><span style={{ fontSize:12, fontWeight:700, color:actif?col:"#0f172a" }}>{lib}</span></button>;
+                                        const autorise = modalitesOkMulti.includes(val);
+                                        const actif = autorise && (cf.type_session||"ligne")===val;
+                                        return <button key={val} disabled={!autorise}
+                                          title={autorise ? undefined : `La classe « ${grpMulti?.nom} » se donne ${grpMulti?.type_cours === "en_ligne" ? "uniquement en ligne" : "uniquement au centre"}.`}
+                                          onClick={()=>autorise&&setCF({type_session:val,lien_visio:val==="presentiel"?"":cf.lien_visio})} style={{ flex:1, padding:"8px 10px", borderRadius:8, border:`2px solid ${actif?col:"#e5e7eb"}`, background:actif?`${col}15`:"#fff", cursor: autorise?"pointer":"not-allowed", opacity: autorise?1:.45, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><span>{ic}</span><span style={{ fontSize:12, fontWeight:700, color:actif?col:"#0f172a" }}>{lib}</span></button>;
                                       })}
                                     </div>
                                   </div>
