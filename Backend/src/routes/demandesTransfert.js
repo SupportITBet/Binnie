@@ -383,6 +383,15 @@ router.get("/", authenticateAdmin, async (req, res) => {
         ? await commercialePeutReaffecter(req.profil)
         : estOnboarding(req.role),
       je_peux_tester:     estPlacement(req.role),
+      /* POUR LES MIGRATIONS, L'AUTORITÉ SE LIT SUR LE CANAL D'ARRIVÉE, pas sur le rôle seul :
+         `je_peux_reaffecter` ne suffit pas à le dire. L'écran saurait sinon qu'une personne
+         peut réaffecter « en général » et lui proposerait un bouton que le serveur refuserait
+         - côté en ligne, l'affectation revient toujours à l'onboarding. On répond donc
+         explicitement, canal par canal. */
+      je_peux_executer_vers: {
+        en_ligne:   await peutExecuterVers("en_ligne", req),
+        presentiel: await peutExecuterVers("presentiel", req),
+      },
     });
   } catch (err) {
     console.error("[demandes-transfert GET]", err.message || err);

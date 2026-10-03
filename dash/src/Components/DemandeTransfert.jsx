@@ -26,8 +26,30 @@ const MOTIFS = {
   autre:             "Autre",
 };
 
+/* MIGRATION DE CANAL — liste propre, parce que les motifs ci-dessus parlent tous de niveau,
+   de rythme ou de groupe, et qu'aucun ne décrit un déménagement. Doit rester identique à
+   MOTIFS_MIGRATION_CANAL dans Backend/src/routes/demandesTransfert.js : le serveur valide
+   contre sa propre liste, et un libellé absent d'un côté donnerait un motif refusé. */
+const MOTIFS_MIGRATION = {
+  demenagement:         "Déménagement ou éloignement du centre",
+  horaires_centre:      "Horaires du centre incompatibles",
+  preference_client:    "Préférence de l'apprenant ou de sa famille",
+  contrainte_connexion: "Contrainte de connexion ou d'équipement",
+  decision_commerciale: "Décision commerciale",
+  autre:                "Autre (précisé en commentaire)",
+};
+
+/** Une demande est-elle une migration de canal ? */
+const estMigration = (d) => d?.type_demande === "changement_coaching";
+/** Le libellé du motif, dans la bonne liste. */
+const libelleMotif = (d) => (estMigration(d) ? MOTIFS_MIGRATION : MOTIFS)[d?.motif] || d?.motif;
+/** Le canal visé : l'opposé de celui d'où l'on part. Même règle que le serveur. */
+const canalCibleDe = (src) => (src === "en_ligne" ? "presentiel" : "en_ligne");
+const libelleCanal = (c) => (c === "en_ligne" ? "💻 En ligne" : c === "hybride" ? "⚡ Hybride" : "🏢 Présentiel");
+
 const ETATS = {
-  en_attente_test: { l: "En attente du test", c: "#b45309", bg: "#fef3c7" },
+  en_attente_test:   { l: "En attente du test",  c: "#b45309", bg: "#fef3c7" },
+  en_attente_accord: { l: "Attend un accord",    c: "#7A4BC4", bg: "#f2edfb" },
   test_fait:       { l: "Prêt à réaffecter",  c: "#15803d", bg: "#dcfce7" },
   traitee:         { l: "Réaffecté",          c: "#475569", bg: "#f1f5f9" },
   refusee:         { l: "Refusée",            c: "#b91c1c", bg: "#fee2e2" },
@@ -160,6 +182,111 @@ export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309",
 }
 
 /* ══════════════════════════════════════════════════════════════
+   LA MIGRATION DE CANAL — en ligne ↔ présentiel
+══════════════════════════════════════════════════════════════ */
+/**
+ * Le bouton qui ouvre une migration de canal, sur la fiche d'un apprenant.
+ *
+ * DISTINCT DU TRANSFERT DU COACH, et volontairement. Le coach signale qu'un apprenant n'est
+ * pas à sa place — une question de niveau, qui appelle un test. Ici, l'apprenant est au bon
+ * niveau : c'est l'ENDROIT où il suit ses cours qui change. Deux gestes différents, deux
+ * boutons différents, deux listes de motifs.
+ *
+ * L'ÉMETTRICE N'EXÉCUTE PAS. Elle ouvre un dossier que l'autre équipe accepte — celle qui
+ * gère le canal d'arrivée. La phrase du modal le dit, sans quoi elle attendrait un
+ * déplacement immédiat et croirait à une panne quand rien ne bouge.
+ *
+ * @param {string} canalActuel  le canal d'où part l'apprenant, pour nommer la destination.
+ */
+export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent = "#7A4BC4", authHdrs, onEmise }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [motif, setMotif] = useState("");
+  const [detail, setDetail] = useState("");
+  const [envoi, setEnvoi] = useState(false);
+
+  const cible = canalCibleDe(canalActuel);
+  const versPresentiel = cible === "presentiel";
+
+  const envoyer = async () => {
+    if (!motif) return;
+    setEnvoi(true);
+    try {
+      const r = await fetch(`${API_URL}/api/demandes-transfert`, {
+        method: "POST", headers: authHdrs(),
+        body: JSON.stringify({ ga_id: gaId, motif, detail: detail.trim() || null, type_demande: "changement_coaching" }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Demande impossible");
+      toast.success(`Migration transmise à l'équipe ${versPresentiel ? "du centre" : "onboarding"} ✓`);
+      setOuvert(false); setMotif(""); setDetail("");
+      onEmise?.(d.demande);
+    } catch (e) {
+      toast.error(e.message || "Demande impossible");
+    } finally { setEnvoi(false); }
+  };
+
+  return (
+    <>
+      <button type="button" onClick={() => setOuvert(true)}
+        title={`Faire passer ${nomApprenant} ${versPresentiel ? "au présentiel" : "en ligne"} — sans test de niveau`}
+        style={{ padding: "8px 16px", background: "#fff", border: `1.5px solid ${accent}55`, borderRadius: 8,
+          color: accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        🔀 Migrer {versPresentiel ? "vers le présentiel" : "vers le en ligne"}
+      </button>
+
+      {ouvert && (
+        <div onClick={e => { if (e.target === e.currentTarget && !envoi) setOuvert(false); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 10000,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%", maxWidth: 480 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
+              Migrer {nomApprenant} {versPresentiel ? "vers le présentiel" : "vers le en ligne"}
+            </div>
+            <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 14px" }}>
+              {libelleCanal(canalActuel)} → <strong style={{ color: accent }}>{libelleCanal(cible)}</strong>.
+              {" "}<strong>Aucun test de niveau</strong> : l'apprenant garde son niveau, son historique,
+              ses séances et ses ressources. Seules sa classe et son canal changent.
+            </p>
+            <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 16px" }}>
+              La demande part à l'<strong>équipe {versPresentiel ? "du centre d'accueil" : "onboarding"}</strong>,
+              qui choisira la classe d'arrivée{versPresentiel ? "" : " — l'affectation en ligne lui revient toujours"}.
+              Le tarif pourra être ajusté au même moment.
+            </p>
+
+            <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
+              Motif <span style={{ color: "#dc2626" }}>*</span>
+            </label>
+            <select value={motif} onChange={e => setMotif(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", marginBottom: 12, boxSizing: "border-box" }}>
+              <option value="">— Choisir —</option>
+              {Object.entries(MOTIFS_MIGRATION).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+
+            <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
+              Précision <span style={{ fontWeight: 400, color: "#94a3b8" }}>(facultatif)</span>
+            </label>
+            <textarea value={detail} onChange={e => setDetail(e.target.value)} rows={3}
+              placeholder="Ce que l'équipe d'accueil doit savoir…"
+              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box", marginBottom: 16 }} />
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setOuvert(false)} disabled={envoi}
+                style={{ padding: "9px 18px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                Annuler
+              </button>
+              <button onClick={envoyer} disabled={!motif || envoi}
+                style={{ padding: "9px 20px", background: !motif || envoi ? "#cbd5e1" : accent, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: !motif || envoi ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                {envoi ? "Envoi…" : "Transmettre la migration"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
    LA FILE DE TRAVAIL — onboarding et placement test
 ══════════════════════════════════════════════════════════════ */
 /**
@@ -189,6 +316,11 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
      à « Réaffecté » sans que personne ne bouge, et il quittait la file en laissant l'apprenant
      dans sa classe d'origine - une disparition silencieuse, pire que l'absence de bouton. */
   const [reaffectation, setReaffectation] = useState(null);   // { demande }
+  const [canauxExecutables, setCanauxExecutables] = useState({});
+  const [nouvelleMensualite, setNouvelleMensualite] = useState("");
+  /** Cette personne peut-elle ACCEPTER cette migration ? La question porte sur le canal
+      d'arrivée, jamais sur celui de départ. */
+  const peutExecuterMigration = (d) => !!canauxExecutables[canalCibleDe(d?.type_cours)];
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(false);
   const [classeChoisie, setClasseChoisie] = useState("");
@@ -202,6 +334,9 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
       setDemandes(d.demandes || []);
       setNonInstalle(!!d.non_installe);
       setPeutReaffecter(!!d.je_peux_reaffecter);
+      /* L'autorité par canal d'ARRIVÉE, que le serveur seul connaît : une assistante peut
+         réaffecter « en général » sans pouvoir accepter une arrivée en ligne. */
+      setCanauxExecutables(d.je_peux_executer_vers || {});
     } catch (e) {
       toast.error(e.message || "Chargement impossible");
     } finally { setChargement(false); }
@@ -284,6 +419,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
      On les charge à l'ouverture et non au montage : la liste des classes change souvent, et
      la recharger à chaque affichage de la file pour un bouton rarement cliqué serait coûteux. */
   const ouvrirReaffectation = async (d) => {
+    setNouvelleMensualite("");   // jamais le montant du dossier précédent
     setReaffectation({ demande: d });
     setClasseChoisie("");
     setClassesLoading(true);
@@ -320,14 +456,17 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
         body: JSON.stringify({
           ga_id: d.ga_id,
           nouveau_groupe_id: classeChoisie,
-          motif: MOTIFS[d.motif] || d.motif,
+          motif: libelleMotif(d),
           initiateur: "assistant",
         }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Transfert impossible");
 
-      await patch(d, { statut: "traitee", groupe_cible_id: classeChoisie },
+      await patch(d, {
+        statut: "traitee", groupe_cible_id: classeChoisie,
+        ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite) } : {}),
+      },
         `${[d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ")} a été transféré ✓`);
       setReaffectation(null);
     } catch (e) {
@@ -337,11 +476,11 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
 
   const visibles = demandes.filter(d =>
     filtre === "toutes" ? true
-    : filtre === "ouvertes" ? ["en_attente_test", "test_fait"].includes(d.statut)
+    : filtre === "ouvertes" ? ["en_attente_test", "test_fait", "en_attente_accord"].includes(d.statut)
     : d.statut === filtre);
 
   const compte = (f) => f === "toutes" ? demandes.length
-    : f === "ouvertes" ? demandes.filter(d => ["en_attente_test", "test_fait"].includes(d.statut)).length
+    : f === "ouvertes" ? demandes.filter(d => ["en_attente_test", "test_fait", "en_attente_accord"].includes(d.statut)).length
     : demandes.filter(d => d.statut === f).length;
 
   if (nonInstalle) {
@@ -400,6 +539,14 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                 <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 8 }}>
                   <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{nom}</span>
                   <span style={{ background: e.bg, color: e.c, borderRadius: 99, padding: "2px 10px", fontSize: 10.5, fontWeight: 800 }}>{e.l}</span>
+                  {/* UNE MIGRATION SE LIT D'UN COUP D'ŒIL. Sans ce badge, elle se confond
+                      avec un changement de groupe ordinaire dans la même file - alors qu'elle
+                      ne suit pas le même circuit et n'appelle pas le même geste. */}
+                  {estMigration(d) && (
+                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 9px", borderRadius: 99, background: "#f2edfb", color: "#7A4BC4", border: "1px solid #ddd0f5" }}>
+                      🔀 {libelleCanal(d.type_cours)} → {libelleCanal(canalCibleDe(d.type_cours))}
+                    </span>
+                  )}
                   {d.niveau_actuel && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 9px", borderRadius: 99, background: "#1e3a8a", color: "#fff" }}>{d.niveau_actuel}</span>}
                   {d.niveau_obtenu && (
                     <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 9px", borderRadius: 99, background: "#dcfce7", color: "#15803d" }}>
@@ -412,7 +559,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "5px 18px", fontSize: 12.5, color: "#334155", marginBottom: 10 }}>
                   <div><span style={{ color: "#94a3b8" }}>Classe : </span><strong>{d.groupe_nom || "-"}</strong></div>
                   <div><span style={{ color: "#94a3b8" }}>Coach : </span><strong>{d.coach_nom || "-"}</strong></div>
-                  <div><span style={{ color: "#94a3b8" }}>Motif : </span><strong>{MOTIFS[d.motif] || d.motif}</strong></div>
+                  <div><span style={{ color: "#94a3b8" }}>Motif : </span><strong>{libelleMotif(d)}</strong></div>
                 </div>
 
                 {d.detail && (
@@ -449,7 +596,39 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                     </>
                   )}
 
-                  {mode === "onboarding" && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
+                  {/* UNE MIGRATION EN ATTENTE D'ACCORD. Elle ne passe pas par le test : le
+                      bouton n'est donc jamais grisé pour cette raison. En revanche, seul celui
+                      qui a autorité sur le canal d'ARRIVÉE peut l'accepter - côté en ligne,
+                      l'onboarding et lui seul. Le serveur tranche ; ici on évite de proposer
+                      un geste qu'il refuserait. */}
+                  {mode === "onboarding" && estMigration(d) && d.statut === "en_attente_accord" && (
+                    <>
+                      {peutExecuterMigration(d) ? (
+                        <button disabled={occupe}
+                          title={`Accepter la migration de ${nom} vers ${libelleCanal(canalCibleDe(d.type_cours))} et choisir sa classe d'arrivée`}
+                          /* TOUJOURS la modale de ce composant, jamais celle de l'écran hôte.
+                             L'écran de transfert de l'onboarding est bâti autour du test de
+                             niveau - filtre par niveau, recherche de classes compatibles - et
+                             ne porte pas le champ TARIF. Or le tarif est la raison d'être de
+                             cette migration pour la comptabilité : y déléguer, c'est le perdre. */
+                          onClick={() => ouvrirReaffectation(d)}
+                          style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit", background: "#7A4BC4", color: "#fff", cursor: "pointer" }}>
+                          ✅ Accepter la migration
+                        </button>
+                      ) : (
+                        <span title={`L'affectation à une classe ${libelleCanal(canalCibleDe(d.type_cours)).replace(/^\S+\s/, "")} ne vous revient pas — vous suivez ce dossier.`}
+                          style={{ padding: "7px 14px", borderRadius: 8, background: "#f1f5f9", color: "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "not-allowed" }}>
+                          👁 Suivi — l'autre équipe accepte
+                        </span>
+                      )}
+                      <button onClick={() => { setAction({ demande: d, type: "refus" }); setValeur(""); }}
+                        style={{ padding: "7px 14px", background: "#fff", border: "1.5px solid #fecaca", borderRadius: 8, color: "#b91c1c", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                        Refuser
+                      </button>
+                    </>
+                  )}
+
+                  {mode === "onboarding" && !estMigration(d) && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
                     <>
                       {/* GRISÉ TANT QUE LE TEST N'EST PAS REVENU, et l'infobulle dit pourquoi :
                           un bouton inerte sans explication passe pour une panne. */}
@@ -480,7 +659,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                   {/* DIRE POURQUOI IL N'Y A PAS DE BOUTON. Une carte sans action ressemble à une
                       panne ; elle est ici une règle de métier - les classes en ligne sont
                       réaffectées par l'onboarding, l'assistante en ligne suit le dossier. */}
-                  {mode === "onboarding" && !peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
+                  {mode === "onboarding" && !peutReaffecter && ["en_attente_test", "test_fait", "en_attente_accord"].includes(d.statut) && (
                     <span style={{ fontSize: 11.5, color: "#64748b", alignSelf: "center" }}>
                       👁 Suivi seul — la réaffectation est faite par l'équipe onboarding
                     </span>
@@ -504,12 +683,47 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
               <div style={{ fontSize: 16.5, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
                 Réaffecter {nom}
               </div>
+              {estMigration(d) ? (
+                /* UNE MIGRATION NE PARLE PAS DE NIVEAU. Reprendre la phrase du changement de
+                   groupe afficherait « Test passé : niveau undefined » — exactement le genre
+                   de détail qui fait douter de tout le reste de l'écran. */
+                <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  Migration <strong style={{ color: "#7A4BC4" }}>{libelleCanal(d.type_cours)} → {libelleCanal(canalCibleDe(d.type_cours))}</strong>
+                  {d.groupe_nom ? <> · quitte <strong>{d.groupe_nom}</strong></> : null}.
+                  {" "}L'apprenant garde son niveau, son historique et toutes ses données : seules
+                  sa classe et son canal changent.
+                </p>
+              ) : (
               <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 14px" }}>
                 Test passé : niveau <strong style={{ color: "#15803d" }}>{d.niveau_obtenu}</strong>
                 {d.groupe_nom ? <> · quitte <strong>{d.groupe_nom}</strong></> : null}.
                 {" "}Le transfert est immédiat : l'apprenant change de classe et son ancienne inscription
                 se referme avec sa date de sortie et le motif.
               </p>
+              )}
+
+              {/* ── LE TARIF, DANS LE MÊME GESTE ─────────────────────────────────────
+                  C'est la raison d'être de cette migration pour la comptabilité : en ligne et
+                  présentiel ne coûtent pas la même chose. Le sortir de cet écran, c'est le
+                  perdre — personne ne revient sur un écran qu'il a quitté, et le dossier reste
+                  migré au mauvais tarif.
+                  Laissé VIDE, rien ne change : on ne force pas une saisie à qui n'a pas la
+                  réponse, et un tarif inventé vaut moins qu'un tarif inchangé. */}
+              {estMigration(d) && (
+                <div style={{ background: "#faf8ff", border: "1px solid #e4d9f8", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+                  <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#5b3a94", marginBottom: 5 }}>
+                    Nouvelle mensualité <span style={{ fontWeight: 400, color: "#8b7ab0" }}>(facultatif)</span>
+                  </label>
+                  <input type="number" min="0" step="1000" value={nouvelleMensualite}
+                    onChange={ev => setNouvelleMensualite(ev.target.value)}
+                    placeholder="Laisser vide pour ne rien changer"
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e4d9f8", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
+                  <div style={{ fontSize: 11.5, color: "#6b5a8a", marginTop: 6, lineHeight: 1.55 }}>
+                    S'applique aux mois <strong>à venir</strong> : les mois déjà écrits gardent
+                    leur montant, et aucun mois payé n'est touché.
+                  </div>
+                </div>
+              )}
 
               {classesLoading ? (
                 <div style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>Chargement des classes…</div>

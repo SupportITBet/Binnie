@@ -51,6 +51,7 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
 import { libelleTypeCours } from "../../utils/typeCours";
+import { BoutonMigrationCanal } from "../../Components/DemandeTransfert";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
@@ -10894,6 +10895,21 @@ export default function CommercialDashboard() {
                         {a.type_cours === "en_ligne"
                           ? "L'affectation et le changement de groupe sont gérés par l'Onboarding."
                           : "Le changement de groupe se fait depuis l'onglet « Dossiers à réaffecter », après la demande du coach et le test de niveau."}
+                      </div>
+                    )}
+                    {/* CHANGER DE CANAL N'EST PAS CHANGER DE GROUPE. Le message ci-dessus parle du
+                        changement de classe, qui exige une demande du coach et un test de niveau. La
+                        migration en ligne ↔ présentiel ne pose aucune question de niveau : elle a son
+                        propre circuit, et c'est l'équipe du canal d'ARRIVÉE qui accepte.
+                        Réservée au coaching de groupe, comme le transfert. */}
+                    {a.type_coaching !== "prive" && commClasseInfo?.ga_id && (
+                      <div style={{ marginTop:8 }}>
+                        <BoutonMigrationCanal
+                          gaId={commClasseInfo.ga_id}
+                          nomApprenant={a.prospect_nom || "cet apprenant"}
+                          canalActuel={a.type_cours}
+                          authHdrs={authHeaders}
+                          onEmise={() => toast.info("Suivez l'avancement dans « Dossiers à réaffecter ».")} />
                       </div>
                     )}
                     {/* L'ÉVOLUTION, quand il y a plus d'un test : « B1 → C1 » explique le
