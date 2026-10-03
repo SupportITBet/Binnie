@@ -458,6 +458,11 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
           nouveau_groupe_id: classeChoisie,
           motif: libelleMotif(d),
           initiateur: "assistant",
+          /* Pour une migration, la route de transfert doit pouvoir RELIRE la demande : c'est
+             elle qui autorise l'assistante du centre à sortir l'apprenant d'une classe en
+             ligne, ce que la règle générale lui interdit. On envoie l'identifiant, le serveur
+             vérifie tout le reste. */
+          ...(estMigration(d) ? { demande_id: d.id } : {}),
         }),
       });
       const j = await r.json();

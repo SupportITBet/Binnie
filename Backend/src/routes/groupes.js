@@ -1750,7 +1750,32 @@ router.post("/transfert", authenticateAdmin, requirePermission("classes", "updat
        LES DEUX CÔTÉS sont contrôlés - sortir d'une classe en ligne comme y entrer fait
        entrer le dossier dans le périmètre de l'Onboarding.
        Le présentiel reste ouvert : la commerciale y affecte elle-même classe et coach. */
-    if (req.role === "commercial"
+    /* L'EXCEPTION : UNE MIGRATION DE CANAL ACCEPTÉE.
+       La règle ci-dessus empêche une commerciale de toucher aux classes en ligne de sa propre
+       initiative, et elle doit le rester. Mais une migration en ligne → présentiel part
+       FORCÉMENT d'une classe en ligne : l'assistante du centre qui vient d'accepter le dossier
+       se serait vue refuser le geste qu'on venait de l'autoriser à faire. Le bouton se serait
+       affiché, le clic aurait rendu un 403, et la migration n'aurait jamais pu aboutir.
+
+       VÉRIFIÉE ICI, PAS DÉCLARÉE PAR LE NAVIGATEUR. On relit la demande en base et on exige
+       tout : qu'elle existe, qu'elle soit bien une migration, qu'elle attende encore un accord,
+       qu'elle porte sur CET apprenant, et que la classe d'arrivée ne soit pas en ligne - car
+       vers le en ligne, c'est l'onboarding qui affecte, jamais une assistante. Un simple
+       indicateur envoyé par l'écran aurait suffi à contourner toute la règle. */
+    let migrationAcceptee = false;
+    if (req.body.demande_id) {
+      const { data: dem } = await supabase
+        .from("demandes_transfert")
+        .select("id, ga_id, statut, type_demande")
+        .eq("id", req.body.demande_id).maybeSingle();
+      migrationAcceptee = !!dem
+        && dem.type_demande === "changement_coaching"
+        && dem.statut === "en_attente_accord"
+        && String(dem.ga_id) === String(ga_id)
+        && nouveauGroupe.type_cours !== "en_ligne";
+    }
+
+    if (req.role === "commercial" && !migrationAcceptee
         && (ancienGroupe?.type_cours === "en_ligne" || nouveauGroupe.type_cours === "en_ligne")) {
       return res.status(403).json({
         error: "Les classes en ligne sont affectées par l'Onboarding - rapprochez-vous d'elle pour ce changement de groupe.",
