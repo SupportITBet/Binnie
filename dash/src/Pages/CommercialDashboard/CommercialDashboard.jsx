@@ -10303,6 +10303,21 @@ export default function CommercialDashboard() {
                   </div>
                 </div>
                 {accesBloque && <span style={{ background:"#ef4444", color:"#fff", borderRadius:999, fontSize:11, fontWeight:800, padding:"4px 12px" }}>🔒 Accès bloqué</span>}
+                {/* LA MIGRATION EST UNE ACTION SUR LA FICHE, pas une information dans son corps.
+                    Elle etait perdue en bas du contenu, sous un pave de texte ; a cote d'« Export
+                    PDF » elle se trouve la ou l'on cherche les gestes possibles. */}
+                {a.type_coaching !== "prive" && commClasseInfo?.ga_id && (
+                  <BoutonMigrationCanal
+                    gaId={commClasseInfo.ga_id}
+                    nomApprenant={a.prospect_nom || "cet apprenant"}
+                    canalActuel={a.type_cours}
+                    authHdrs={authHeaders}
+                    onEmise={() => toast("Suivez l'avancement dans « Dossiers à réaffecter ».", { icon: "🔀" })}
+                    styleBouton={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+                      background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.25)",
+                      borderRadius:8, color:"#fff", fontSize:12.5, fontWeight:700, cursor:"pointer",
+                      fontFamily:"inherit", whiteSpace:"nowrap" }} />
+                )}
                 <button onClick={exporterFicheApprenantPDF} style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:700, whiteSpace:"nowrap", flexShrink:0 }}>📄 Export PDF</button>
                 <button onClick={() => setApprenantModal(null)} style={{ background:"rgba(255,255,255,0.15)", border:"none", color:"#fff", width:30, height:30, borderRadius:"50%", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>✕</button>
               </div>
@@ -10895,25 +10910,6 @@ export default function CommercialDashboard() {
                         {a.type_cours === "en_ligne"
                           ? "L'affectation et le changement de groupe sont gérés par l'Onboarding."
                           : "Le changement de groupe se fait depuis l'onglet « Dossiers à réaffecter », après la demande du coach et le test de niveau."}
-                      </div>
-                    )}
-                    {/* CHANGER DE CANAL N'EST PAS CHANGER DE GROUPE. Le message ci-dessus parle du
-                        changement de classe, qui exige une demande du coach et un test de niveau. La
-                        migration en ligne ↔ présentiel ne pose aucune question de niveau : elle a son
-                        propre circuit, et c'est l'équipe du canal d'ARRIVÉE qui accepte.
-                        Réservée au coaching de groupe, comme le transfert. */}
-                    {a.type_coaching !== "prive" && commClasseInfo?.ga_id && (
-                      <div style={{ marginTop:8 }}>
-                        <BoutonMigrationCanal
-                          gaId={commClasseInfo.ga_id}
-                          nomApprenant={a.prospect_nom || "cet apprenant"}
-                          canalActuel={a.type_cours}
-                          authHdrs={authHeaders}
-                          /* `toast()` et non `toast.info()` : cet écran utilise react-hot-toast, qui
-                             n'expose que success, error, loading et l'appel direct. `.info`
-                             appartient à react-toastify, l'autre bibliothèque du projet - les
-                             deux cohabitent, et seul le fichier dit laquelle s'applique. */
-                          onEmise={() => toast("Suivez l'avancement dans « Dossiers à réaffecter ».", { icon: "🔀" })} />
                       </div>
                     )}
                     {/* L'ÉVOLUTION, quand il y a plus d'un test : « B1 → C1 » explique le

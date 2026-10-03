@@ -198,7 +198,10 @@ export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309",
  *
  * @param {string} canalActuel  le canal d'où part l'apprenant, pour nommer la destination.
  */
-export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent = "#7A4BC4", authHdrs, onEmise }) {
+/* `styleBouton` permet à l'écran hôte d'imposer l'apparence : ce bouton vit tantôt dans le
+   corps d'une fiche sur fond clair, tantôt dans un bandeau sombre à côté d'« Export PDF ».
+   Le style par défaut couvre le premier cas. */
+export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent = "#7A4BC4", authHdrs, onEmise, styleBouton }) {
   const [ouvert, setOuvert] = useState(false);
   const [motif, setMotif] = useState("");
   const [detail, setDetail] = useState("");
@@ -229,7 +232,7 @@ export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent =
     <>
       <button type="button" onClick={() => setOuvert(true)}
         title={`Faire passer ${nomApprenant} ${versPresentiel ? "au présentiel" : "en ligne"} — sans test de niveau`}
-        style={{ padding: "8px 16px", background: "#fff", border: `1.5px solid ${accent}55`, borderRadius: 8,
+        style={styleBouton || { padding: "8px 16px", background: "#fff", border: `1.5px solid ${accent}55`, borderRadius: 8,
           color: accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
         🔀 Migrer {versPresentiel ? "vers le présentiel" : "vers le en ligne"}
       </button>
