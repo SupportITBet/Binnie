@@ -4911,7 +4911,12 @@ export default function SuperAdminDashboard() {
       toast.success(`Demande approuvée, ${demande.nom} a été ajouté`);
     } else {
       addAuditEntry("DEMANDE_REFUSEE", `Demande de ${demande.nom} refusée`, "warning");
-      toast.warning(`Demande de ${demande.nom} refusée`);
+      /* `toast()` et non `toast.warning()` : cet écran utilise react-hot-toast, qui
+         n'expose que success, error, loading et l'appel direct. `.warning` appartient à
+         react-toastify, l'autre bibliothèque du projet. L'appel levait donc une
+         TypeError au moment précis du refus - le refus était bien enregistré, mais
+         l'écran paraissait planter juste après. */
+      toast(`Demande de ${demande.nom} refusée`, { icon: "🚫" });
     }
     setDemandes(demandes.filter(d=>d.id!==id));
     setShowDemandeModal(false);

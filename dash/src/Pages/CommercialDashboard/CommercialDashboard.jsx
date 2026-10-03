@@ -10909,7 +10909,11 @@ export default function CommercialDashboard() {
                           nomApprenant={a.prospect_nom || "cet apprenant"}
                           canalActuel={a.type_cours}
                           authHdrs={authHeaders}
-                          onEmise={() => toast.info("Suivez l'avancement dans « Dossiers à réaffecter ».")} />
+                          /* `toast()` et non `toast.info()` : cet écran utilise react-hot-toast, qui
+                             n'expose que success, error, loading et l'appel direct. `.info`
+                             appartient à react-toastify, l'autre bibliothèque du projet - les
+                             deux cohabitent, et seul le fichier dit laquelle s'applique. */
+                          onEmise={() => toast("Suivez l'avancement dans « Dossiers à réaffecter ».", { icon: "🔀" })} />
                       </div>
                     )}
                     {/* L'ÉVOLUTION, quand il y a plus d'un test : « B1 → C1 » explique le
