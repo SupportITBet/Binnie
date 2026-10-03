@@ -104,10 +104,14 @@ create index if not exists idx_demandes_transfert_coach   on demandes_transfert 
 comment on table demandes_transfert is
   'Demandes de changement de classe ou de coaching émises par un coach. Circuit : coach → agent placement test (niveau) → onboarding (réaffectation).';
 comment on column demandes_transfert.statut is
-  'en_attente_test | test_fait | traitee | refusee. L''onboarding ne peut réaffecter qu''à partir de test_fait.';
+  'changement_groupe : en_attente_test → test_fait → traitee|refusee. '
+  'changement_coaching (migration en ligne ↔ présentiel) : en_attente_accord → traitee|refusee, '
+  'sans test de niveau — changer de canal n''est pas un problème de niveau. '
+  'Colonne libre : aucune contrainte à jouer pour ajouter en_attente_accord.';
 
 -- ── Contrôle ────────────────────────────────────────────────────────────────────
 select count(*) as demandes,
        count(*) filter (where statut = 'en_attente_test') as en_attente_test,
-       count(*) filter (where statut = 'test_fait')       as pretes_a_reaffecter
+       count(*) filter (where statut = 'test_fait')         as pretes_a_reaffecter,
+       count(*) filter (where statut = 'en_attente_accord') as migrations_en_attente
 from demandes_transfert;

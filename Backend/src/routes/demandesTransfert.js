@@ -38,7 +38,59 @@ export const MOTIFS_TRANSFERT = {
   autre:              "Autre (précisé par le coach)",
 };
 
-const STATUTS = ["en_attente_test", "test_fait", "traitee", "refusee"];
+/* MIGRATION DE CANAL — en ligne ↔ présentiel. Un circuit distinct, parce que la question
+   posée n'est pas la même : changer de canal n'est pas un problème de NIVEAU, c'est un
+   passage de relais entre deux équipes. D'où une liste de motifs propre : les six ci-dessus
+   parlent tous de niveau, de rythme ou de groupe, et aucun ne décrit un déménagement.
+   Fermée elle aussi, pour rester dénombrable - c'est elle qui dira dans six mois pourquoi
+   les gens changent de canal, là où un « autre » généralisé ne renseigne personne. */
+export const MOTIFS_MIGRATION_CANAL = {
+  demenagement:        "Déménagement ou éloignement du centre",
+  horaires_centre:     "Horaires du centre incompatibles",
+  preference_client:   "Préférence de l'apprenant ou de sa famille",
+  contrainte_connexion:"Contrainte de connexion ou d'équipement",
+  decision_commerciale:"Décision commerciale",
+  autre:               "Autre (précisé en commentaire)",
+};
+
+/** Les motifs valables pour un type de demande donné. */
+const motifsDe = (typeDemande) =>
+  typeDemande === "changement_coaching" ? MOTIFS_MIGRATION_CANAL : MOTIFS_TRANSFERT;
+
+/* `en_attente_accord` est le pendant de `en_attente_test` pour une migration de canal : le
+   dossier attend qu'une PERSONNE accepte, et non qu'une information revienne. */
+const STATUTS = ["en_attente_test", "test_fait", "en_attente_accord", "traitee", "refusee"];
+
+/**
+ * Le canal visé par une migration : l'opposé de celui d'où l'on part.
+ *
+ * DÉDUIT PLUTÔT QUE STOCKÉ. Une migration va d'un canal à l'autre par définition - inutile
+ * d'ajouter une colonne que la base devrait apprendre, et qui pourrait contredire la classe
+ * réellement choisie à l'arrivée. La vérité définitive reste le `type_cours` de la classe
+ * d'arrivée, lu au moment de la clôture ; celui-ci ne sert qu'à router la demande vers la
+ * bonne file avant qu'une classe soit choisie.
+ */
+const canalCibleDe = (canalSource) => (canalSource === "en_ligne" ? "presentiel" : "en_ligne");
+
+/**
+ * Qui a le droit d'EXÉCUTER une migration vers ce canal ?
+ *
+ * LA RÈGLE MÉTIER, POSÉE LE 03/10/2026 : pour le EN LIGNE, c'est toujours l'onboarding qui
+ * assigne l'apprenant à sa nouvelle classe - jamais une assistante, même celle qui a reçu la
+ * demande du client. Cela reprend exactement le partage déjà appliqué par
+ * `commercialePeutReaffecter`, et c'est ce qui évite d'avoir à y ouvrir une exception : une
+ * exception mal cadrée aurait rouvert le cloisonnement que tout le reste du circuit protège.
+ *
+ * Vers le PRÉSENTIEL, l'assistante du centre exécute - elle y est son propre onboarding - et
+ * l'onboarding le peut aussi, comme sur le circuit existant.
+ */
+async function peutExecuterVers(canalCible, req) {
+  if (canalCible === "en_ligne") {
+    return ["onboarding", "admin_onboarding", "super_admin", "admin"].includes(req.role);
+  }
+  if (estCommerciale(req.role)) return await commercialePeutReaffecter(req.profil);
+  return estOnboarding(req.role);
+}
 
 /* LES ASSISTANTES PRÉSENTIEL RÉAFFECTENT AUSSI. L'onboarding ne s'occupe que des classes en
    ligne ; en présentiel, c'est la commerciale qui affecte classe et coach. Réserver la
@@ -89,7 +141,12 @@ router.post("/", authenticateAdmin, async (req, res) => {
   try {
     const { ga_id, motif, detail, type_demande } = req.body || {};
     if (!ga_id) return res.status(400).json({ error: "L'apprenant concerné est requis." });
-    if (!motif || !MOTIFS_TRANSFERT[motif]) {
+
+    /* Le type fixe la liste de motifs recevable : une migration de canal ne se justifie pas
+       par « niveau trop bas », et un changement de groupe pas par « déménagement ». Valider
+       contre une seule liste laissait passer n'importe quel motif de l'autre circuit. */
+    const typeDemande = type_demande === "changement_coaching" ? "changement_coaching" : "changement_groupe";
+    if (!motif || !motifsDe(typeDemande)[motif]) {
       return res.status(400).json({ error: "Choisissez un motif dans la liste." });
     }
 
@@ -138,10 +195,16 @@ router.post("/", authenticateAdmin, async (req, res) => {
       type_cours:       groupe?.type_cours || null,
       coach_id:         groupe?.coach_id || null,
       coach_nom:        null,   // renseigné juste après
-      type_demande:     type_demande === "changement_coaching" ? "changement_coaching" : "changement_groupe",
+      type_demande:     typeDemande,
       motif,
       detail:           (detail || "").trim() || null,
-      statut:           "en_attente_test",
+      /* UNE MIGRATION DE CANAL NE PASSE PAS PAR LE TEST DE NIVEAU. L'apprenant garde le sien :
+         ce qui change, c'est l'endroit où il suit ses cours, pas ce qu'il sait faire. Le
+         dossier attend donc l'ACCORD de l'équipe qui va le recevoir, et non le retour d'une
+         information. La valeur `changement_coaching` était acceptée ici depuis le début mais
+         ne commandait rien : le dossier partait quand même en attente de test, et la clôture
+         le réclamait. */
+      statut:           typeDemande === "changement_coaching" ? "en_attente_accord" : "en_attente_test",
       cree_par:         req.profil.id,
     };
 
@@ -271,16 +334,22 @@ router.get("/", authenticateAdmin, async (req, res) => {
        QUI VOIT N'EST PAS QUI AGIT : `commercialePeutReaffecter` est inchangé, l'assistante en
        ligne suit ses dossiers sans les réaffecter - c'est l'onboarding qui affecte la classe. */
     const CANAUX_EN_LIGNE = "en_ligne,hybride";
+    /* UNE MIGRATION DE CANAL APPARAÎT DANS LES DEUX FILES, et c'est tout son principe : elle
+       traverse la frontière entre les deux équipes, donc aucune des deux ne doit la découvrir
+       après coup. Celle qui émet suit l'avancement, celle qui reçoit accepte et exécute.
+       Sans cette clause, une demande partie du présentiel vers le en ligne serait restée
+       invisible à l'onboarding - c'est-à-dire à la seule équipe qui peut la traiter. */
+    const MIGRATIONS = "type_demande.eq.changement_coaching";
     if (estCommerciale(req.role)) {
       /* Le canal de l'assistante, pas une règle unique : celle du présentiel traite ses
          dossiers, celle du en ligne suit les siens sans pouvoir agir. Lui montrer la file de
          l'autre lui donnerait du travail qui n'est pas le sien - et lui cacherait le sien. */
       const canal = await canalDeLAssistante(req.profil);
-      if (canal === "presentiel")     q = q.or("type_cours.neq.en_ligne,type_cours.is.null");
-      else if (canal === "en_ligne")  q = q.or(`type_cours.in.(${CANAUX_EN_LIGNE}),type_cours.is.null`);
+      if (canal === "presentiel")     q = q.or(`type_cours.neq.en_ligne,type_cours.is.null,${MIGRATIONS}`);
+      else if (canal === "en_ligne")  q = q.or(`type_cours.in.(${CANAUX_EN_LIGNE}),type_cours.is.null,${MIGRATIONS}`);
       // `les_deux` ou canal inconnu : on ne filtre pas, elle suit les deux périmètres.
     } else if (req.role === "onboarding" || req.role === "admin_onboarding") {
-      q = q.or(`type_cours.in.(${CANAUX_EN_LIGNE}),type_cours.is.null`);
+      q = q.or(`type_cours.in.(${CANAUX_EN_LIGNE}),type_cours.is.null,${MIGRATIONS}`);
     }
     // Un coach ne voit QUE les demandes de ses propres classes : celles des collègues ne le
     // regardent pas, et son écran n'a pas à lui montrer des dossiers sur lesquels il ne peut rien.
@@ -337,6 +406,10 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
     }
 
     const maj = { updated_at: new Date().toISOString() };
+    /* Ce qui a pu échouer SANS annuler la réaffectation : le canal et le centre du
+       dossier, le nouveau tarif. L'écran doit pouvoir le dire plutôt que d'annoncer une
+       migration complète alors qu'il en manque la moitié. */
+    const resultatMigration = {};
     let action = null;
 
     /* ── Le placement test rend le niveau ─────────────────────────────────────── */
@@ -423,24 +496,50 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
 
     /* ── L'onboarding referme le dossier ──────────────────────────────────────── */
     if (req.body.statut === "traitee") {
+      const estMigration = demande.type_demande === "changement_coaching";
+      const canalCible   = canalCibleDe(demande.type_cours);
+
       if (!estOnboarding(req.role)) {
         return res.status(403).json({ error: "Seule l'équipe onboarding peut réaffecter un apprenant." });
       }
-      if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
-        return res.status(403).json({
-          error: "Les classes en ligne sont réaffectées par l'équipe onboarding. "
-               + "Vous suivez le dossier, mais le changement de classe ne vous revient pas.",
-        });
-      }
-      /* LE VERROU. Le niveau détermine la classe cible : refermer le dossier sans lui, ce
-         serait replacer l'apprenant au jugé, et la demande n'aurait servi à rien. L'écran
-         grise déjà le bouton ; on le refuse aussi ici, car un bouton grisé n'est pas un droit
-         retiré. */
-      if (demande.statut !== "test_fait") {
-        return res.status(409).json({
-          error: "Le test de niveau n'a pas encore été passé : la réaffectation n'est pas possible.",
-          en_attente_test: true,
-        });
+
+      if (estMigration) {
+        /* L'AUTORITÉ SE LIT SUR LE CANAL D'ARRIVÉE, pas sur celui de départ. Une migration
+           traverse la frontière entre les deux équipes : c'est celle qui REÇOIT l'apprenant
+           qui a la main, puisque c'est elle qui gère la classe où il atterrit.
+           Vers le en ligne, c'est donc toujours l'onboarding - une assistante en ligne suit
+           son dossier mais n'assigne jamais la classe. */
+        if (!(await peutExecuterVers(canalCible, req))) {
+          return res.status(403).json({
+            error: canalCible === "en_ligne"
+              ? "L'affectation à une classe en ligne revient à l'équipe onboarding. "
+                + "Vous suivez cette migration, mais le choix de la classe ne vous revient pas."
+              : "L'affectation à une classe présentiel revient à l'assistante du centre d'accueil.",
+          });
+        }
+        if (demande.statut !== "en_attente_accord") {
+          return res.status(409).json({ error: "Cette migration n'est plus en attente d'accord." });
+        }
+      } else {
+        if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
+          return res.status(403).json({
+            error: "Les classes en ligne sont réaffectées par l'équipe onboarding. "
+                 + "Vous suivez le dossier, mais le changement de classe ne vous revient pas.",
+          });
+        }
+        /* LE VERROU. Le niveau détermine la classe cible : refermer le dossier sans lui, ce
+           serait replacer l'apprenant au jugé, et la demande n'aurait servi à rien. L'écran
+           grise déjà le bouton ; on le refuse aussi ici, car un bouton grisé n'est pas un droit
+           retiré.
+           IL NE S'APPLIQUE QU'AU CHANGEMENT DE GROUPE : une migration de canal ne pose aucune
+           question de niveau, et l'exiger d'elle reviendrait à faire repasser un test à
+           quelqu'un qui déménage. */
+        if (demande.statut !== "test_fait") {
+          return res.status(409).json({
+            error: "Le test de niveau n'a pas encore été passé : la réaffectation n'est pas possible.",
+            en_attente_test: true,
+          });
+        }
       }
       /* PAS DE DOSSIER CLOS SANS CLASSE D'ARRIVÉE. « Réaffecté » veut dire que l'apprenant est
          quelque part : sans `groupe_cible_id`, le dossier quittait la file alors que personne
@@ -458,6 +557,84 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
       maj.traite_le       = new Date().toISOString();
       maj.traite_par      = req.profil.id;
       action = "traitee";
+
+      /* ── LE DOSSIER SUIT LA CLASSE ────────────────────────────────────────────────────
+         La route de transfert déplace l'inscription, et c'est tout ce qu'elle fait. Le CANAL
+         et le CENTRE vivent sur `assignations_parcours` et n'étaient jamais réécrits : un
+         apprenant migré restait affiché « En ligne » indéfiniment, assis dans un centre — et
+         c'est ce champ, pas la classe, que lisent les fiches de la commerciale, du PA et de
+         l'admin.
+         La vérité est le `type_cours` de la classe RÉELLEMENT choisie, pas le canal annoncé à
+         l'ouverture : l'assistante peut très bien accepter dans une classe hybride.
+         NON BLOQUANT : le changement de classe est l'acte principal, et un échec ici ne doit
+         pas l'annuler. Mais il est tracé, parce qu'un dossier à moitié migré est précisément
+         ce que ce circuit existe pour éviter. */
+      if (estMigration) {
+        try {
+          const { data: classeArrivee } = await supabase
+            .from("groupes").select("type_cours, centre_id")
+            .eq("id", req.body.groupe_cible_id).maybeSingle();
+
+          const majDossier = {};
+          if (classeArrivee?.type_cours) majDossier.type_cours = classeArrivee.type_cours;
+          /* Le centre d'arrivée, et JAMAIS un effacement : en présentiel → en ligne, on garde
+             le centre d'origine comme rattachement historique. Le vider ferait mentir les
+             statistiques par centre rétroactivement, et ferait perdre à l'assistante la
+             visibilité sur un apprenant qu'elle a suivi. */
+          if (classeArrivee?.centre_id) majDossier.centre_id = classeArrivee.centre_id;
+
+          if (Object.keys(majDossier).length && demande.email_apprenant) {
+            const { error: eDossier } = await supabase
+              .from("assignations_parcours").update(majDossier)
+              .ilike("prospect_email", demande.email_apprenant);
+            if (eDossier) throw eDossier;
+          }
+        } catch (e) {
+          console.warn("[migration canal] dossier non mis à jour:", e.message);
+          resultatMigration.dossier_non_maj = e.message;
+        }
+
+        /* ── LE TARIF, DANS LE MÊME GESTE ─────────────────────────────────────────────
+           C'est la raison d'être de cette migration pour la comptabilité : en ligne et
+           présentiel ne coûtent pas la même chose. Le sortir du geste, c'est le perdre -
+           personne ne revient sur un écran qu'il a quitté.
+           On n'écrit QUE `plan.mensualite` : les trois générateurs de mois (cron, webhook
+           TouchPoint, reprise après pause) le lisent au moment de créer un mois, et aucun ne
+           recalcule les mois déjà écrits. Le passé garde donc son prix, la suite prend le
+           nouveau - exactement la règle voulue, sans toucher à un seul mois existant. */
+        const nouvelleMensualite = Number(req.body.nouvelle_mensualite);
+        if (nouvelleMensualite > 0 && demande.email_apprenant) {
+          try {
+            const { data: dossier } = await supabase
+              .from("assignations_parcours").select("id, plan_paiement")
+              .ilike("prospect_email", demande.email_apprenant).maybeSingle();
+            const plan = dossier?.plan_paiement;
+            if (dossier && plan && typeof plan === "object" && plan.type === "mensuel") {
+              const ancienne = Number(plan.mensualite) || 0;
+              if (ancienne !== nouvelleMensualite) {
+                const planMaj = {
+                  ...plan,
+                  mensualite: nouvelleMensualite,
+                  /* La trace, sans laquelle personne ne saura expliquer l'écart dans six mois.
+                     On empile plutôt qu'on remplace : un apprenant peut migrer deux fois. */
+                  changements_tarif: [...(plan.changements_tarif || []), {
+                    de: ancienne, vers: nouvelleMensualite,
+                    motif: "migration_canal", demande_id: demande.id,
+                    le: new Date().toISOString(), par: req.profil.id,
+                  }],
+                };
+                const { error: ePlan } = await supabase
+                  .from("assignations_parcours").update({ plan_paiement: planMaj }).eq("id", dossier.id);
+                if (ePlan) throw ePlan;
+                resultatMigration.mensualite = { de: ancienne, vers: nouvelleMensualite };
+              }
+            }
+          } catch (e) {
+            console.warn("[migration canal] mensualité non mise à jour:", e.message);
+            resultatMigration.mensualite_non_maj = e.message;
+          }
+        }
+      }
 
       /* LE NIVEAU DU TEST DEVIENT CELUI DE L'APPRENANT, et l'ancien est conservé à côté.
          Sans cela, le test aurait servi à choisir la classe puis aurait été oublié : la fiche
@@ -604,7 +781,8 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
       }
     })();
 
-    res.json({ demande: data });
+    res.json({ demande: data,
+      ...(Object.keys(resultatMigration).length ? { migration: resultatMigration } : {}) });
   } catch (err) {
     console.error("[demandes-transfert PATCH]", err.message || err);
     res.status(500).json({ error: "Mise à jour impossible" });
