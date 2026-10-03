@@ -275,21 +275,40 @@ router.post("/", authenticateAdmin, async (req, res) => {
         const pourPlacement = (destinataires || []).filter(u => estPlacement(u.role)).map(u => u.id);
         const pourOnboarding = (destinataires || []).filter(u => estOnboarding(u.role)).map(u => u.id);
 
-        if (pourPlacement.length) {
+        /* LE LIBELLÉ VIENT DE LA BONNE LISTE. `MOTIFS_TRANSFERT[motif]` rendait `undefined`
+           sur une migration, dont les motifs vivent dans leur propre liste : les cloches
+           annonçaient « Motif : undefined ». */
+        const motifLisible = motifsDe(typeDemande)[motif] || motif;
+        const migration = typeDemande === "changement_coaching";
+
+        /* ON NE RÉVEILLE PAS LE PLACEMENT TEST POUR UNE MIGRATION. Elle ne demande aucun test,
+           et l'annoncer comme tel lui créait du travail inexistant - puis l'aurait laissé
+           attendre un dossier qui ne lui serait jamais revenu. */
+        if (pourPlacement.length && !migration) {
           await notifyUsers(pourPlacement, {
             type:  "demande_transfert",
             titre: `🧪 Test de niveau à faire passer — ${apprenant}`,
             message: `${nomDe(req.profil)} demande le transfert de ${apprenant} (${ligne.groupe_nom || "classe"}). `
-                   + `Motif : ${MOTIFS_TRANSFERT[motif]}. Le dossier attend votre test de niveau pour avancer.`,
+                   + `Motif : ${motifLisible}. Le dossier attend votre test de niveau pour avancer.`,
             meta: { demande_id: demande.id, ga_id },
           });
         }
         if (pourOnboarding.length) {
+          /* Et le message dit la vérité du circuit emprunté : une migration attend un ACCORD,
+             pas un test. Annoncer « dès que le test sera passé » aurait fait attendre une
+             étape qui n'arrive jamais. */
+          const canalCible = canalCibleDe(ligne.type_cours);
           await notifyUsers(pourOnboarding, {
             type:  "demande_transfert",
-            titre: `🔄 Nouveau dossier à réaffecter — ${apprenant}`,
-            message: `${nomDe(req.profil)} demande le transfert de ${apprenant} (${ligne.groupe_nom || "classe"}). `
-                   + `Motif : ${MOTIFS_TRANSFERT[motif]}. La réaffectation sera possible dès que le test de niveau sera passé.`,
+            titre: migration
+              ? `🔀 Migration à valider — ${apprenant}`
+              : `🔄 Nouveau dossier à réaffecter — ${apprenant}`,
+            message: migration
+              ? `${nomDe(req.profil)} demande le passage de ${apprenant} (${ligne.groupe_nom || "classe"}) `
+                + `vers le ${canalCible === "en_ligne" ? "en ligne" : "présentiel"}. Motif : ${motifLisible}. `
+                + `Aucun test de niveau n'est requis : le dossier attend l'accord de l'équipe qui recevra l'apprenant.`
+              : `${nomDe(req.profil)} demande le transfert de ${apprenant} (${ligne.groupe_nom || "classe"}). `
+                + `Motif : ${motifLisible}. La réaffectation sera possible dès que le test de niveau sera passé.`,
             meta: { demande_id: demande.id, ga_id },
           });
         }
@@ -302,7 +321,7 @@ router.post("/", authenticateAdmin, async (req, res) => {
       acteur_id: req.profil.id, acteur_nom: nomDe(req.profil), acteur_email: req.profil.email,
       acteur_role: req.role, action_type: "creation", module: "inscriptions",
       entite_type: "demande_transfert", entite_id: demande.id,
-      detail: `Demande de transfert de ${ligne.prenom_apprenant || ""} ${ligne.nom_apprenant || ""} — ${MOTIFS_TRANSFERT[motif]}`,
+      detail: `Demande de transfert de ${ligne.prenom_apprenant || ""} ${ligne.nom_apprenant || ""} — ${motifsDe(typeDemande)[motif]}`,
     }).catch(() => {});
 
     res.status(201).json({ demande });
