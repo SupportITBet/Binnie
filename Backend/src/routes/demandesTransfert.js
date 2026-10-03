@@ -173,7 +173,11 @@ router.post("/", authenticateAdmin, async (req, res) => {
     // de l'onboarding se remplirait de dossiers identiques.
     const { data: dejaOuverte } = await supabase
       .from("demandes_transfert").select("id, statut")
-      .eq("ga_id", ga_id).in("statut", ["en_attente_test", "test_fait"]).limit(1);
+      /* `en_attente_accord` MANQUAIT, et c'est ainsi qu'une migration pouvait être émise
+         autant de fois qu'on cliquait : le garde ne la reconnaissait pas comme ouverte, et la
+         file des deux équipes se remplissait de dossiers identiques - exactement ce que ce
+         garde existe pour empêcher. Constaté en production le 03/10/2026. */
+      .eq("ga_id", ga_id).in("statut", ["en_attente_test", "test_fait", "en_attente_accord"]).limit(1);
     if (dejaOuverte?.length) {
       return res.status(409).json({
         error: "Une demande est déjà en cours pour cet apprenant.",
@@ -721,7 +725,17 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
       if (!estOnboarding(req.role)) {
         return res.status(403).json({ error: "Seule l'équipe onboarding peut refuser une demande." });
       }
-      if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
+      /* REFUSER EST UNE DÉCISION, PAS UN SUIVI. Sur une migration, elle revient à la même
+         personne que l'acceptation : celle qui a autorité sur le canal d'ARRIVÉE. Une
+         assistante qui ne peut pas accepter voyait pourtant un bouton « Refuser » - elle
+         pouvait donc clore un dossier qu'elle n'avait pas qualité pour trancher. */
+      if (demande.type_demande === "changement_coaching") {
+        if (!(await peutExecuterVers(canalCibleDe(demande.type_cours), req))) {
+          return res.status(403).json({
+            error: "Vous suivez cette migration, mais la décision revient à l'équipe qui reçoit l'apprenant.",
+          });
+        }
+      } else if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
         return res.status(403).json({
           error: "Les classes en ligne sont réaffectées par l'équipe onboarding. "
                + "Vous suivez le dossier, mais le changement de classe ne vous revient pas.",

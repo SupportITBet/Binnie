@@ -320,10 +320,30 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
      dans sa classe d'origine - une disparition silencieuse, pire que l'absence de bouton. */
   const [reaffectation, setReaffectation] = useState(null);   // { demande }
   const [canauxExecutables, setCanauxExecutables] = useState({});
+  const [detailDemande, setDetailDemande] = useState(null);   // { demande }
+  const [parcours, setParcours] = useState(null);             // null = en cours de chargement
   const [nouvelleMensualite, setNouvelleMensualite] = useState("");
   /** Cette personne peut-elle ACCEPTER cette migration ? La question porte sur le canal
       d'arrivée, jamais sur celui de départ. */
   const peutExecuterMigration = (d) => !!canauxExecutables[canalCibleDe(d?.type_cours)];
+
+  /* LE DÉTAIL AVANT LA DÉCISION. Accepter une migration, c'est engager une classe, un centre
+     et un tarif : la carte ne porte que le strict nécessaire pour trier la file. On va donc
+     chercher le PARCOURS de l'apprenant - où il est passé, depuis quand - qui est ce qu'on
+     veut vraiment savoir avant de l'accueillir. La route existe déjà et sert les mêmes
+     données au coach et à la commerciale. */
+  const ouvrirDetail = async (d) => {
+    setDetailDemande({ demande: d });
+    setParcours(null);
+    if (!d.ga_id) { setParcours([]); return; }
+    try {
+      const r = await fetch(`${API_URL}/api/groupes/apprenants/${d.ga_id}/historique`, { headers: authHdrs() });
+      const j = await r.json();
+      setParcours(Array.isArray(j) ? j : (j.historique || j.lignes || []));
+    } catch {
+      setParcours([]);   // un parcours illisible ne doit pas empêcher de lire le reste
+    }
+  };
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(false);
   const [classeChoisie, setClasseChoisie] = useState("");
@@ -583,6 +603,13 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
 
                 {/* ── Les actions, selon le métier ─────────────────────────────── */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {/* Sur TOUTES les cartes, pas seulement les migrations : la question « qui
+                      est cette personne et d'où vient-elle » se pose aussi avant un simple
+                      changement de groupe. */}
+                  <button onClick={() => ouvrirDetail(d)}
+                    style={{ padding: "7px 14px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#475569", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                    👁 Détails
+                  </button>
                   {mode === "placement" && attendTest && (
                     <>
                       {/* EN LIGNE — le lien pré-rempli, exactement comme pour un prospect. */}
@@ -629,10 +656,16 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                           👁 Suivi — l'autre équipe accepte
                         </span>
                       )}
-                      <button onClick={() => { setAction({ demande: d, type: "refus" }); setValeur(""); }}
-                        style={{ padding: "7px 14px", background: "#fff", border: "1.5px solid #fecaca", borderRadius: 8, color: "#b91c1c", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                        Refuser
-                      </button>
+                      {/* REFUSER EST UNE DÉCISION, PAS UN SUIVI. Le bouton s'affichait à tout le
+                          monde, y compris à celle qui lit juste au-dessus qu'elle ne fait que
+                          suivre : elle pouvait donc clore un dossier qu'elle n'a pas qualité
+                          pour trancher. Il suit désormais la même règle que l'acceptation. */}
+                      {peutExecuterMigration(d) && (
+                        <button onClick={() => { setAction({ demande: d, type: "refus" }); setValeur(""); }}
+                          style={{ padding: "7px 14px", background: "#fff", border: "1.5px solid #fecaca", borderRadius: 8, color: "#b91c1c", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                          Refuser
+                        </button>
+                      )}
                     </>
                   )}
 
@@ -667,7 +700,9 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                   {/* DIRE POURQUOI IL N'Y A PAS DE BOUTON. Une carte sans action ressemble à une
                       panne ; elle est ici une règle de métier - les classes en ligne sont
                       réaffectées par l'onboarding, l'assistante en ligne suit le dossier. */}
-                  {mode === "onboarding" && !peutReaffecter && ["en_attente_test", "test_fait", "en_attente_accord"].includes(d.statut) && (
+                  {/* `!estMigration` : une migration affiche DÉJÀ « Suivi — l'autre équipe
+                      accepte », et les deux messages se superposaient sur la même carte. */}
+                  {mode === "onboarding" && !estMigration(d) && !peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
                     <span style={{ fontSize: 11.5, color: "#64748b", alignSelf: "center" }}>
                       👁 Suivi seul — la réaffectation est faite par l'équipe onboarding
                     </span>
@@ -678,6 +713,102 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
           })}
         </div>
       )}
+
+      {/* ── Le détail d'un dossier, avant de décider ─────────────────────────── */}
+      {detailDemande && (() => {
+        const d = detailDemande.demande;
+        const nom = [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ") || "Apprenant";
+        const e = ETATS[d.statut] || ETATS.en_attente_test;
+        const Ligne = ({ l, v }) => (
+          <div style={{ display: "flex", gap: 10, padding: "7px 0", borderBottom: "1px solid #f1f5f9" }}>
+            <span style={{ color: "#94a3b8", fontSize: 12.5, minWidth: 128, flexShrink: 0 }}>{l}</span>
+            <span style={{ fontSize: 12.5, color: "#0f172a", fontWeight: 600 }}>{v || "-"}</span>
+          </div>
+        );
+        return (
+          <div onClick={ev => { if (ev.target === ev.currentTarget) setDetailDemande(null); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+              <div style={{ padding: "18px 24px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 16.5, fontWeight: 800, color: "#0f172a" }}>{nom}</span>
+                <span style={{ background: e.bg, color: e.c, borderRadius: 99, padding: "2px 10px", fontSize: 10.5, fontWeight: 800 }}>{e.l}</span>
+                {estMigration(d) && (
+                  <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 9px", borderRadius: 99, background: "#f2edfb", color: "#7A4BC4", border: "1px solid #ddd0f5" }}>
+                    🔀 {libelleCanal(d.type_cours)} → {libelleCanal(canalCibleDe(d.type_cours))}
+                  </span>
+                )}
+                <button onClick={() => setDetailDemande(null)}
+                  style={{ marginLeft: "auto", background: "#f1f5f9", border: "none", borderRadius: 8, width: 30, height: 30, cursor: "pointer", color: "#64748b", fontSize: 15 }}>✕</button>
+              </div>
+
+              <div style={{ padding: "16px 24px", overflowY: "auto" }}>
+                <Ligne l="E-mail"        v={d.email_apprenant} />
+                <Ligne l="Classe        " v={d.groupe_nom} />
+                <Ligne l="Coach"         v={d.coach_nom} />
+                <Ligne l="Niveau actuel" v={d.niveau_actuel} />
+                {d.niveau_obtenu && <Ligne l="Niveau du test" v={d.niveau_obtenu} />}
+                <Ligne l="Motif"         v={libelleMotif(d)} />
+                <Ligne l="Demandée le"   v={fmt(d.created_at)} />
+
+                {d.detail && (
+                  <div style={{ background: "#f8fafc", borderLeft: `3px solid ${accent}`, borderRadius: 6, padding: "10px 13px", fontSize: 12.5, color: "#475569", lineHeight: 1.6, margin: "12px 0" }}>
+                    « {d.detail} »
+                  </div>
+                )}
+
+                {/* LE PARCOURS — ce qu'on veut vraiment savoir avant d'accueillir quelqu'un :
+                    d'où il vient, depuis quand, et s'il a déjà changé de classe. */}
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: "#475569", margin: "18px 0 8px" }}>
+                  Son parcours
+                </div>
+                {parcours === null ? (
+                  <div style={{ fontSize: 12.5, color: "#94a3b8", padding: "10px 0" }}>Chargement…</div>
+                ) : parcours.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: "#94a3b8", padding: "10px 0" }}>
+                    Aucune autre classe connue — c'est sa première.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    {parcours.map((h, i) => (
+                      <div key={h.id || i} style={{ padding: "8px 11px", background: "#f8fafc", borderRadius: 8 }}>
+                        <div style={{ display: "flex", gap: 9, alignItems: "baseline", fontSize: 12.5, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700, color: "#0f172a" }}>{h.groupe_nom || "Classe"}</span>
+                          {h.niveau && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 99, background: "#e0e7ff", color: "#3730a3" }}>{h.niveau}</span>}
+                          {h.statut === "transfere" && <span style={{ fontSize: 10.5, color: "#94a3b8" }}>transféré</span>}
+                          <span style={{ marginLeft: "auto", color: "#94a3b8", fontSize: 11.5, whiteSpace: "nowrap" }}>
+                            {fmt(h.date_ajout)}{h.date_retrait ? ` → ${fmt(h.date_retrait)}` : " → en cours"}
+                          </span>
+                        </div>
+                        {(h.coach_nom || h.centre_nom) && (
+                          <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 3 }}>
+                            {[h.coach_nom && `Coach : ${h.coach_nom}`, h.centre_nom && `📍 ${h.centre_nom}`].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 10, background: "#f8fafc" }}>
+                <button onClick={() => setDetailDemande(null)}
+                  style={{ padding: "9px 18px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  Fermer
+                </button>
+                {/* L'action depuis le détail : on vient d'y lire ce qu'il fallait pour décider,
+                    refermer pour rouvrir la carte serait un pas de trop. */}
+                {estMigration(d) && d.statut === "en_attente_accord" && peutExecuterMigration(d) && (
+                  <button onClick={() => { setDetailDemande(null); ouvrirReaffectation(d); }}
+                    style={{ padding: "9px 20px", background: "#7A4BC4", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                    ✅ Accepter la migration
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Choix de la nouvelle classe ──────────────────────────────────────── */}
       {reaffectation && (() => {
