@@ -12,6 +12,7 @@ import BarreFiltres, { RangeePastilles } from "../../Components/BarreFiltres";
 import MessagerieTab from "../../Components/MessagerieTab";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
+import ChampTarifMigration from "../../Components/ChampTarifMigration";
 import PastilleGroupe from "../../Components/PastilleGroupe";
 import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import { iconeEtTexteTypeCours } from "../../utils/typeCours";
@@ -1107,6 +1108,10 @@ export default function OnboardingDashboard() {
           nouveau_groupe_id: transfertForm.nouveau_groupe_id,
           motif:             motifFinal,
           initiateur:        transfertForm.initiateur,
+          /* Sans lui, la route refuserait de sortir l'apprenant d'une classe en ligne : c'est
+             la demande acceptée qui autorise ce mouvement, et le serveur la relit pour s'en
+             assurer. */
+          ...(demandeEnCours?.type_demande === "changement_coaching" ? { demande_id: demandeEnCours.id } : {}),
         }),
       });
       const d = await r.json();
@@ -1123,7 +1128,10 @@ export default function OnboardingDashboard() {
           const rd = await fetch(`${API_URL}/api/demandes-transfert/${demandeEnCours.id}`, {
             method: "PATCH",
             headers: { Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
-            body: JSON.stringify({ statut: "traitee", groupe_cible_id: transfertForm.nouveau_groupe_id }),
+            body: JSON.stringify({
+              statut: "traitee", groupe_cible_id: transfertForm.nouveau_groupe_id,
+              ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite) } : {}),
+            }),
           });
           if (!rd.ok) {
             const dd = await rd.json().catch(()=>({}));
@@ -3639,6 +3647,28 @@ export default function OnboardingDashboard() {
   /* Ouvrir NOTRE écran de transfert depuis un dossier à réaffecter, pré-réglé sur le niveau
      rendu par le test : c'est lui qui désigne la classe d'arrivée, et l'ouvrir sur « tous »
      obligerait à refaire à la main le tri que le test vient de trancher. */
+  /* LE TARIF DANS L'ÉCRAN DE TRANSFERT. Une migration de canal change le prix - en ligne et
+     présentiel ne coûtent pas la même chose - et c'est l'assistante qui accepte qui le sait.
+     On charge le plan du dossier pour lui MONTRER la mensualité actuelle : saisir un nouveau
+     montant sans voir l'ancien, c'est décider à l'aveugle. */
+  const [planMigration, setPlanMigration] = useState(null);      // null = non chargé
+  const [nouvelleMensualite, setNouvelleMensualite] = useState("");
+
+  const chargerPlanDeLApprenant = async (email) => {
+    setPlanMigration(null);
+    if (!email) { setPlanMigration({}); return; }
+    try {
+      const token = localStorage.getItem("admin_token");
+      const r = await fetch(`${API_URL}/api/parcours/assignations?prospect_email=${encodeURIComponent(email)}`,
+        { headers:{ Authorization:`Bearer ${token}` } });
+      const j = await r.json();
+      const dossier = (Array.isArray(j) ? j : (j.assignations || []))[0] || null;
+      setPlanMigration(dossier?.plan_paiement || {});
+    } catch {
+      setPlanMigration({});   // un plan illisible ne doit pas empêcher le transfert
+    }
+  };
+
   const ouvrirTransfertDepuisDemande = (d) => {
     setDemandeEnCours(d);
     setSelectedApprenantGroupe({
@@ -3651,6 +3681,9 @@ export default function OnboardingDashboard() {
       groupes: { nom: d.groupe_nom },
     });
     setTransfertForm({ nouveau_groupe_id:"", motif: d.detail || "", initiateur:"coach", jours:[] });
+    setNouvelleMensualite("");
+    if (d.type_demande === "changement_coaching") chargerPlanDeLApprenant(d.email_apprenant);
+    else setPlanMigration(null);
     setGroupesCibles([]);
     const niv = d.niveau_obtenu || "tous";
     setTransfertNiveauCible(niv);
@@ -9543,6 +9576,23 @@ export default function OnboardingDashboard() {
 
                     {/* Corps scrollable */}
                     <div style={{ flex:1,overflowY:"auto",padding:"24px" }}>
+
+                      {/* MIGRATION DE CANAL — le contexte, puis le tarif. L'assistante qui
+                          accepte ne connaît pas forcément le dossier : lui dire d'où part
+                          l'apprenant et où il va évite qu'elle le cherche ailleurs. */}
+                      {demandeEnCours?.type_demande === "changement_coaching" && (
+                        <>
+                          <div style={{ background:"#f2edfb", border:"1px solid #ddd0f5", borderRadius:10, padding:"11px 14px", marginBottom:14, fontSize:12.5, color:"#5b3a94", lineHeight:1.6 }}>
+                            🔀 <strong>Migration de canal</strong> — aucun test de niveau requis.
+                            L'apprenant garde son niveau, son historique et toutes ses données :
+                            seules sa classe et son canal changent.
+                          </div>
+                          <ChampTarifMigration
+                            plan={planMigration}
+                            valeur={nouvelleMensualite}
+                            onChange={setNouvelleMensualite} />
+                        </>
+                      )}
 
                       {/* Motif */}
                       <div style={{ marginBottom:20 }}>

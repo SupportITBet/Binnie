@@ -641,12 +641,13 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                       {peutExecuterMigration(d) ? (
                         <button disabled={occupe}
                           title={`Accepter la migration de ${nom} vers ${libelleCanal(canalCibleDe(d.type_cours))} et choisir sa classe d'arrivée`}
-                          /* TOUJOURS la modale de ce composant, jamais celle de l'écran hôte.
-                             L'écran de transfert de l'onboarding est bâti autour du test de
-                             niveau - filtre par niveau, recherche de classes compatibles - et
-                             ne porte pas le champ TARIF. Or le tarif est la raison d'être de
-                             cette migration pour la comptabilité : y déléguer, c'est le perdre. */
-                          onClick={() => ouvrirReaffectation(d)}
+                          /* LE MÊME ÉCRAN QUE POUR UN TRANSFERT ORDINAIRE. J'avais d'abord
+                             imposé la modale de ce composant pour ne pas perdre le champ tarif ;
+                             c'était le mauvais arbitrage. L'écran de l'onboarding sait chercher
+                             une classe, en créer une, choisir les jours - tout ce qu'une
+                             migration demande aussi. Le tarif y a été ajouté plutôt que de
+                             priver l'assistante de son outil habituel. */
+                          onClick={() => onReaffecter ? onReaffecter(d) : ouvrirReaffectation(d)}
                           style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit", background: "#7A4BC4", color: "#fff", cursor: "pointer" }}>
                           ✅ Accepter la migration
                         </button>

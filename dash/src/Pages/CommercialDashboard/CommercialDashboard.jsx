@@ -13,6 +13,7 @@ import MessagerieTab from "../../Components/MessagerieTab";
 import CloudinaryUpload from "../../Components/CloudinaryUpload";
 import DashboardColorPicker from "../../Components/DashboardColorPicker";
 import ChampPhotoClasse from "../../Components/ChampPhotoClasse";
+import ChampTarifMigration from "../../Components/ChampTarifMigration";
 import PastilleGroupe from "../../Components/PastilleGroupe";
 import PhotoClasseEntete from "../../Components/PhotoClasseEntete";
 import NotificationBell from "../../Components/NotificationBell";
@@ -3130,8 +3131,28 @@ export default function CommercialDashboard() {
   const [demandeEnCours, setDemandeEnCours] = useState(null);
   const [refreshReaffecter, setRefreshReaffecter] = useState(0);
 
+  /* Le plan de paiement du dossier, pour MONTRER la mensualité actuelle avant d'en saisir une
+     autre : décider d'un tarif sans voir celui en cours, c'est décider à l'aveugle. */
+  const [planMigration, setPlanMigration] = useState(null);
+  const [nouvelleMensualite, setNouvelleMensualite] = useState("");
+
+  const chargerPlanDeLApprenant = async (email) => {
+    setPlanMigration(null);
+    if (!email) { setPlanMigration({}); return; }
+    try {
+      const r = await fetch(`${API_URL}/api/parcours/assignations?prospect_email=${encodeURIComponent(email)}`,
+        { headers: authHeaders() });
+      const j = await r.json();
+      const dossier = (Array.isArray(j) ? j : (j.assignations || []))[0] || null;
+      setPlanMigration(dossier?.plan_paiement || {});
+    } catch { setPlanMigration({}); }
+  };
+
   const ouvrirTransfertDepuisDemande = (d) => {
     setDemandeEnCours(d);
+    setNouvelleMensualite("");
+    if (d.type_demande === "changement_coaching") chargerPlanDeLApprenant(d.email_apprenant);
+    else setPlanMigration(null);
     ouvrirTransfert({
       ga_id: d.ga_id,
       // Le niveau rendu par le test d'abord : c'est lui qui désigne la classe d'arrivée.
@@ -3189,6 +3210,9 @@ export default function CommercialDashboard() {
           nouveau_groupe_id: classeId,
           motif:             "Changement de classe",
           initiateur:        "assistant",
+          /* Sans lui, la route refuse de sortir l'apprenant d'une classe en ligne : c'est la
+             demande acceptée qui autorise ce mouvement, et le serveur la relit. */
+          ...(demandeEnCours?.type_demande === "changement_coaching" ? { demande_id: demandeEnCours.id } : {}),
         }),
       });
       const d = await r.json();
@@ -3202,7 +3226,10 @@ export default function CommercialDashboard() {
         try {
           const rd = await fetch(`${API_URL}/api/demandes-transfert/${demandeEnCours.id}`, {
             method: "PATCH", headers: authHeaders(),
-            body: JSON.stringify({ statut: "traitee", groupe_cible_id: classeId }),
+            body: JSON.stringify({
+              statut: "traitee", groupe_cible_id: classeId,
+              ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite) } : {}),
+            }),
           });
           if (!rd.ok) {
             const dd = await rd.json().catch(()=>({}));
@@ -14422,6 +14449,23 @@ export default function CommercialDashboard() {
           coachDispoMap={coachDispoMap}
           onSave={finaliserTransfert}
           onClose={() => setShowTransfert(false)}
+          /* MIGRATION DE CANAL : le contexte et le tarif, en tête du même modal. L'assistante
+             qui accepte ne connaît pas forcément le dossier - lui dire d'où part l'apprenant
+             lui évite de le chercher ailleurs - et le tarif doit se décider ici, sans quoi il
+             se perd : personne ne revient sur un écran qu'il a quitté. */
+          enTete={demandeEnCours?.type_demande === "changement_coaching" ? (
+            <>
+              <div style={{ background:"#f2edfb", border:"1px solid #ddd0f5", borderRadius:10, padding:"11px 14px", marginBottom:14, fontSize:12.5, color:"#5b3a94", lineHeight:1.6 }}>
+                🔀 <strong>Migration de canal</strong> — aucun test de niveau requis.
+                L'apprenant garde son niveau, son historique et toutes ses données :
+                seules sa classe et son canal changent.
+              </div>
+              <ChampTarifMigration
+                plan={planMigration}
+                valeur={nouvelleMensualite}
+                onChange={setNouvelleMensualite} />
+            </>
+          ) : null}
           onCreateClasse={(niveauSuggere) => {
             fetchCoachs();
             setClasseForm({ nom:"", niveau: niveauSuggere||transfertForm.niveau||"", filiere:"", type_cours:"", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
@@ -17352,7 +17396,10 @@ const DocDossierModal = ({ assignation: a, onSave, onClose }) => {
 /* ═══════════════════════════════════════════════════════
    ASSIGNATION CLASSE & COACH - CENTRES PRÉSENTIEL
 ═══════════════════════════════════════════════════════ */
-const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap, onSave, onClose, onCreateClasse }) => {
+/* `enTete` : du contenu que l'appelant insère en haut du corps. Sert à la migration de
+   canal, qui emprunte CE modal - celui de l'affectation initiale - plutôt que d'en
+   imposer un autre pour le même geste, et qui doit y ajouter son contexte et son tarif. */
+const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap, onSave, onClose, onCreateClasse, enTete }) => {
   const alerte = useAlerte();
   const confirm = useConfirm();
   const [classeId, setClasseId] = useState(a.suivi_demarrage?.classe_id || "");
@@ -17419,6 +17466,7 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
 
         {/* Contenu scrollable */}
         <div style={{ flex:1, overflowY:"auto", padding:"18px 22px" }}>
+          {enTete}
 
           {/* ── ÉTAPE 1 : CLASSES ── */}
           {step === "classe" && (() => {
