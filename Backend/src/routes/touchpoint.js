@@ -156,21 +156,30 @@ async function finalizeSuccessfulPayment(existing, { order_number, paid_amount, 
   // ni dans les notifications de la commerciale, même une fois correctement rattaché à sa fiche.
   let commercialUtilisateurId = null;
   if (!isApprenantPaiement) {
-    // existing.assistante_id (transmis à /initiate) n'est pas toujours fiable - un lien de
-    // relance de paiement généré depuis le dashboard peut l'omettre (données pas encore
-    // rafraîchies côté navigateur). Le dossier (assignations_parcours), lui, est la source de
-    // vérité : on retombe dessus dès que possible plutôt que de laisser le paiement orphelin
-    // (commercial_id placeholder, aucune commerciale créditée/notifiée).
-    let assistanteIdResolu = existing.assistante_id || null;
-    if (!assistanteIdResolu && prospectAssignationId) {
+    /* QUI EST CRÉDITÉ : CELLE QUI SUIT LE DOSSIER AU MOMENT DU PAIEMENT.
+       `existing.assistante_id` est figé à l'émission du lien. Deux raisons de ne pas s'y fier :
+       il est parfois absent (un lien de relance généré depuis le dashboard peut l'omettre,
+       données pas encore rafraîchies côté navigateur) ; et surtout il devient FAUX quand
+       l'apprenant a changé de main entre-temps - une migration de canal transfère le dossier à
+       une autre assistante, et un vieux lien payé après coup créditait l'ancienne.
+       Le dossier est la source de vérité, on le lit donc EN PREMIER et plus seulement à défaut.
+       Le figé ne sert que de repli : si le dossier n'a pas d'assistante - cas d'une migration
+       vers le en ligne encore à attribuer - mieux vaut créditer celle qui a émis le lien que
+       de laisser le paiement orphelin. */
+    let assistanteIdResolu = null;
+    if (prospectAssignationId) {
       const { data: assignation } = await supabase
         .from("assignations_parcours").select("assistante_id").eq("id", prospectAssignationId).maybeSingle();
       assistanteIdResolu = assignation?.assistante_id || null;
-      // Écrit le fallback sur la ligne elle-même pour que /admin/all (tableau SuperAdmin)
-      // affiche directement la bonne commerciale sans devoir re-résoudre à chaque lecture.
-      if (assistanteIdResolu) {
-        await supabase.from("paiements_touchpoint").update({ assistante_id: assistanteIdResolu }).eq("id", existing.id);
-      }
+    }
+    if (!assistanteIdResolu) assistanteIdResolu = existing.assistante_id || null;
+
+    /* On aligne la ligne de paiement sur ce qui vient d'être décidé, pour que le tableau du
+       SuperAdmin affiche la bonne commerciale sans re-résoudre à chaque lecture - et pour que
+       la trace du paiement dise la même chose que le crédit. */
+    if (assistanteIdResolu && assistanteIdResolu !== existing.assistante_id) {
+      await supabase.from("paiements_touchpoint")
+        .update({ assistante_id: assistanteIdResolu }).eq("id", existing.id);
     }
     if (assistanteIdResolu) {
       const { data: assistante } = await supabase.from("assistantes").select("email").eq("id", assistanteIdResolu).maybeSingle();
