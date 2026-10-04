@@ -880,6 +880,11 @@ router.get("/apprenants", authenticateAdmin, async (req, res) => {
         coach_nom:             coachMap[groupe.coach_id] || "-",
         note_obj:              noteObj,
         assistante_nom:        ga.added_by ? (onboardingMap[ga.added_by] || null) : null,
+        /* L'IDENTIFIANT DU DOSSIER, sans lequel l'écran ne peut rien écrire dessus. Il
+           manquait : l'onboarding voit l'assistante d'un apprenant mais n'avait aucun moyen
+           de la changer après une migration de canal - il aurait fallu retrouver le dossier
+           par e-mail depuis le navigateur, c'est-à-dire refaire mal ce que le serveur sait. */
+        assignation_id:        byId?.id ?? null,
         assistante_commerciale: byId?.assistantes ?? (emailKey ? (commercialMap[emailKey] || null) : null),
         nom_parent:            byId?.nom_parent ?? (emailKey ? (nomParentMap[emailKey] || null) : null),
         email_parent:          byId?.email_parent ?? (emailKey ? (emailParentMap[emailKey] || null) : null),
@@ -2813,6 +2818,9 @@ router.get("/:id", authenticateAdmin, async (req, res) => {
         assistante_onboarding:      addedByData ? addedByData.nom  : null,
         assistante_onboarding_role: addedByData ? addedByData.role : null,
         assistante_nom:             addedByData ? addedByData.nom  : null,
+        // Même raison qu'au premier enrichissement : sans l'identifiant du dossier,
+        // l'écran ne peut pas en changer l'assistante.
+        assignation_id:             byId2?.id ?? null,
         assistante_commerciale:     byId2?.assistantes ?? (emailKey ? (commercialMap[emailKey] || null) : null),
         nom_parent:                 byId2?.nom_parent ?? (emailKey ? (nomParentMap2[emailKey] || null) : null),
         email_parent:               byId2?.email_parent ?? (emailKey ? (emailParentMap2[emailKey] || null) : null),

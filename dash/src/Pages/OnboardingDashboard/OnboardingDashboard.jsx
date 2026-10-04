@@ -3651,6 +3651,39 @@ export default function OnboardingDashboard() {
      présentiel ne coûtent pas la même chose - et c'est l'assistante qui accepte qui le sait.
      On charge le plan du dossier pour lui MONTRER la mensualité actuelle : saisir un nouveau
      montant sans voir l'ancien, c'est décider à l'aveugle. */
+  /* ATTRIBUER UN DOSSIER MIGRÉ. Après une migration vers le en ligne, le dossier perd son
+     assistante : celle du présentiel ne suit plus l'apprenant, et aucune assistante en ligne
+     ne le voit tant qu'il ne lui a pas été confié. C'est voulu - mieux vaut un dossier
+     visiblement sans propriétaire qu'un dossier attribué au hasard - mais encore faut-il
+     pouvoir l'attribuer, et l'onboarding n'avait aucun écran pour le faire. */
+  const [assistantesLigne, setAssistantesLigne] = useState([]);
+  const [attributionEnCours, setAttributionEnCours] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/parcours/assistantes-ligne`)
+      .then(r => r.ok ? r.json() : { assistantes: [] })
+      .then(d => setAssistantesLigne(d.assistantes || []))
+      .catch(() => {});
+  }, []);
+
+  const attribuerAssistante = async (assignationId, assistanteId) => {
+    if (!assignationId || !assistanteId) return;
+    setAttributionEnCours(true);
+    try {
+      const r = await fetch(`${API_URL}/api/parcours/assignations/${assignationId}`, {
+        method: "PATCH", headers: authHeaders(),
+        body: JSON.stringify({ assistante_id: assistanteId }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Attribution impossible");
+      const choisie = assistantesLigne.find(a => String(a.id) === String(assistanteId));
+      setSelectedApprenantGroupe(prev => prev ? { ...prev, assistante_commerciale: choisie || prev.assistante_commerciale } : prev);
+      toast.success(`Dossier confié à ${choisie ? `${choisie.prenom || ""} ${choisie.nom || ""}`.trim() : "l'assistante"} ✓`);
+    } catch (e) {
+      toast.error(e.message || "Attribution impossible");
+    } finally { setAttributionEnCours(false); }
+  };
+
   const [planMigration, setPlanMigration] = useState(null);      // null = non chargé
   const [nouvelleMensualite, setNouvelleMensualite] = useState("");
 
@@ -5651,6 +5684,29 @@ export default function OnboardingDashboard() {
                                     </div>
                                   );
                                 })()}
+                                {/* ATTRIBUER LE DOSSIER. Visible quand il n'a plus d'assistante — le cas d'une
+                                    migration vers le en ligne, qui le laisse volontairement sans propriétaire.
+                                    Tant que personne n'est choisi, aucune assistante en ligne ne voit ce dossier :
+                                    c'est l'onboarding qui le lui confie, et lui seul. */}
+                                {!selectedApprenantGroupe.assistante_commerciale && selectedApprenantGroupe.assignation_id && (
+                                  <div style={{ padding:"12px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10 }}>
+                                    <div style={{ fontSize:11.5, fontWeight:800, color:"#92400e", marginBottom:6 }}>
+                                      ⚠ Dossier sans assistante — à attribuer
+                                    </div>
+                                    <div style={{ fontSize:11.5, color:"#92400e", marginBottom:8, lineHeight:1.5 }}>
+                                      Tant qu'il n'est pas confié, aucune assistante en ligne ne voit cet apprenant.
+                                    </div>
+                                    <select disabled={attributionEnCours}
+                                      onChange={e => attribuerAssistante(selectedApprenantGroupe.assignation_id, e.target.value)}
+                                      defaultValue=""
+                                      style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px solid #fde68a", fontSize:13, fontFamily:"inherit", background:"#fff", boxSizing:"border-box" }}>
+                                      <option value="">— Confier à une assistante en ligne —</option>
+                                      {assistantesLigne.map(a => (
+                                        <option key={a.id} value={a.id}>{`${a.prenom || ""} ${a.nom || ""}`.trim()}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
                                 <div style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#fff",borderRadius:8,border:"1px solid #d1fae5" }}>
                                   <div style={{ width:32,height:32,borderRadius:"50%",background:"#d1fae5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0 }}>🎓</div>
                                   <div>

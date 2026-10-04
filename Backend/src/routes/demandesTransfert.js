@@ -121,6 +121,14 @@ async function canalDeLAssistante(profil) {
   return data?.type_cours || null;   // presentiel | en_ligne | les_deux | null
 }
 
+/** La fiche `assistantes` de la personne connectée, ou null si elle n'en a pas. */
+async function assistanteDe(profil) {
+  if (!profil?.email) return null;
+  const { data } = await supabase
+    .from("assistantes").select("id, type_cours").ilike("email", profil.email).maybeSingle();
+  return data || null;
+}
+
 async function commercialePeutReaffecter(profil) {
   const canal = await canalDeLAssistante(profil);
   // `type_cours` absent : on refuse. Un droit d'écriture ne s'accorde pas par défaut.
@@ -697,6 +705,31 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
 
           const majDossier = {};
           if (classeArrivee?.type_cours) majDossier.type_cours = classeArrivee.type_cours;
+
+          /* ── À QUI EST L'APPRENANT APRÈS LA MIGRATION ─────────────────────────────────
+             `assistante_id` n'était pas touché : le dossier restait la propriété de
+             l'assistante du canal qu'il vient de QUITTER. Elle le gardait dans sa liste - qui
+             est filtrée sur ce champ - et aucune assistante du nouveau canal ne le voyait.
+             Le profil affichait donc l'ancienne assistante sur un dossier parti ailleurs.
+
+             VERS LE PRÉSENTIEL, celle qui accepte prend le dossier : elle a la main sur la
+             classe d'arrivée, c'est elle qui suivra l'apprenant. Rien à attribuer ensuite.
+
+             VERS LE EN LIGNE, le dossier devient « à attribuer » : l'onboarding exécute mais
+             n'est pas une assistante, et c'est lui qui désignera laquelle des quatorze suivra
+             l'apprenant. Tant qu'il ne l'a pas fait, aucune assistante en ligne ne voit le
+             dossier - c'est voulu : mieux vaut un dossier visiblement sans propriétaire qu'un
+             dossier attribué au hasard. L'onboarding, lui, le voit : son périmètre est global. */
+          if (canalCible === "en_ligne") {
+            majDossier.assistante_id = null;
+            resultatMigration.a_attribuer = true;
+          } else {
+            const moi = await assistanteDe(req.profil);
+            if (moi?.id) {
+              majDossier.assistante_id = moi.id;
+              resultatMigration.assistante_id = moi.id;   // pour la prévenir plus bas
+            }
+          }
           /* Le centre d'arrivée, et JAMAIS un effacement : en présentiel → en ligne, on garde
              le centre d'origine comme rattachement historique. Le vider ferait mentir les
              statistiques par centre rétroactivement, et ferait perdre à l'assistante la
@@ -885,6 +918,74 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
          devient actionnable pour eux : sans cette notification, il resterait à attendre dans
          l'onglet que quelqu'un pense à l'ouvrir. On prévient l'onboarding ET les assistantes
          présentiel, puisque les deux réaffectent selon le type de classe. */
+      /* ── UNE MIGRATION PRÉVIENT TOUTE LA CHAÎNE ─────────────────────────────────────
+         Un changement de canal déplace l'apprenant d'une équipe à l'autre : le coach qui le
+         perd, celui qui le reçoit, l'assistante qui en hérite, et ceux qui pilotent. Chacun
+         l'apprenait jusqu'ici en s'en apercevant - ou pas du tout.
+         `ids` couvre déjà le coach d'origine et l'émettrice ; on complète avec le reste, en
+         évitant les doublons. Non bloquant : la migration est faite, une notification perdue
+         ne doit pas la remettre en cause. */
+      if (action === "traitee" && demande.type_demande === "changement_coaching") {
+        try {
+          const dest = new Set();
+          const ajouter = (x) => { if (x && !ids.includes(x)) dest.add(x); };
+
+          const canalArr = canalCibleDe(demande.type_cours);
+          let nomClasseArr = null;
+
+          // Le coach qui REÇOIT l'apprenant : il va le voir arriver dans sa classe.
+          if (maj.groupe_cible_id) {
+            const { data: g } = await supabase
+              .from("groupes").select("nom, coach_id").eq("id", maj.groupe_cible_id).maybeSingle();
+            nomClasseArr = g?.nom || null;
+            ajouter(g?.coach_id);
+          }
+
+          // L'assistante qui hérite du dossier - seulement si une l'a pris. Vers le en ligne,
+          // il reste à attribuer : c'est l'onboarding qu'on prévient, pas une assistante
+          // choisie au hasard.
+          if (resultatMigration.assistante_id) {
+            const { data: ass } = await supabase
+              .from("assistantes").select("email").eq("id", resultatMigration.assistante_id).maybeSingle();
+            if (ass?.email) {
+              const { data: u } = await supabase
+                .from("utilisateurs").select("id").ilike("email", ass.email).maybeSingle();
+              ajouter(u?.id);
+            }
+          }
+
+          // Le pilotage : conseil pédagogique, admin, super admin.
+          const { data: pilotes } = await supabase
+            .from("utilisateurs").select("id")
+            .in("role", ["pedagogical_advisor", "admin", "super_admin"]).eq("actif", true);
+          (pilotes || []).forEach(u => ajouter(u.id));
+
+          // Et l'onboarding quand le dossier attend encore un propriétaire.
+          if (resultatMigration.a_attribuer) {
+            const { data: onb } = await supabase
+              .from("utilisateurs").select("id").in("role", ["onboarding", "admin_onboarding"]).eq("actif", true);
+            (onb || []).forEach(u => ajouter(u.id));
+          }
+
+          const libelleCanal = (c) => (c === "en_ligne" ? "en ligne" : c === "hybride" ? "hybride" : "présentiel");
+          if (dest.size) {
+            await notifyUsers([...dest], {
+              type:  "demande_transfert",
+              titre: `🔀 Migration effectuée — ${apprenant}`,
+              message: `${apprenant} passe du ${libelleCanal(demande.type_cours)} au ${libelleCanal(canalArr)}`
+                     + `${demande.groupe_nom ? `, en quittant ${demande.groupe_nom}` : ""}`
+                     + `${nomClasseArr ? ` pour ${nomClasseArr}` : ""}. `
+                     + `Son niveau, son historique et ses données le suivent.`
+                     + `${resultatMigration.a_attribuer ? " ⚠ Le dossier attend encore une assistante en ligne." : ""}`
+                     + `${resultatMigration.mensualite ? ` Mensualité : ${resultatMigration.mensualite.de} → ${resultatMigration.mensualite.vers} F.` : ""}`,
+              meta: { demande_id: demande.id, groupe_cible_id: maj.groupe_cible_id || null, canal: canalArr },
+            });
+          }
+        } catch (e) {
+          console.warn("[demandes-transfert PATCH] notification migration:", e.message);
+        }
+      }
+
       if (action === "test") {
         try {
           const { data: reaffecteurs } = await supabase
