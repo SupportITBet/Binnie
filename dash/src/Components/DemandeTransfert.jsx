@@ -293,7 +293,12 @@ export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent =
    LA FILE DE TRAVAIL — onboarding et placement test
 ══════════════════════════════════════════════════════════════ */
 /**
- * @param {Function} [onReaffecter]  le tableau de bord hôte prend la main sur la réaffectation.
+ * @param {Function} onReaffecter  le tableau de bord hôte EXÉCUTE la réaffectation - ce
+ *   composant ne la fait plus lui-même. Il avait son propre sélecteur de classe, bien plus
+ *   pauvre : pas de recherche, pas de création à la volée, pas de choix des jours. L'imposer
+ *   pour une migration privait l'assistante de l'écran qu'elle connaît, alors que le geste est
+ *   le même. Sans `onReaffecter`, aucun bouton d'action n'est proposé : il n'y aurait rien à
+ *   ouvrir, et un bouton inerte vaut moins qu'un bouton absent.
  *   L'onboarding a déjà son écran de transfert - filtre de niveau, recherche de classes
  *   compatibles, création de groupe à la volée, choix des jours. Lui imposer le sélecteur
  *   minimal de ce composant aurait été un recul : deux écrans pour le même geste, et le moins
@@ -318,11 +323,9 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
      LE BOUTON NE DOIT PAS SE CONTENTER DE CLORE LE DOSSIER. Il le faisait : le dossier passait
      à « Réaffecté » sans que personne ne bouge, et il quittait la file en laissant l'apprenant
      dans sa classe d'origine - une disparition silencieuse, pire que l'absence de bouton. */
-  const [reaffectation, setReaffectation] = useState(null);   // { demande }
   const [canauxExecutables, setCanauxExecutables] = useState({});
   const [detailDemande, setDetailDemande] = useState(null);   // { demande }
   const [parcours, setParcours] = useState(null);             // null = en cours de chargement
-  const [nouvelleMensualite, setNouvelleMensualite] = useState("");
   /** Cette personne peut-elle ACCEPTER cette migration ? La question porte sur le canal
       d'arrivée, jamais sur celui de départ. */
   const peutExecuterMigration = (d) => !!canauxExecutables[canalCibleDe(d?.type_cours)];
@@ -344,9 +347,6 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
       setParcours([]);   // un parcours illisible ne doit pas empêcher de lire le reste
     }
   };
-  const [classes, setClasses] = useState([]);
-  const [classesLoading, setClassesLoading] = useState(false);
-  const [classeChoisie, setClasseChoisie] = useState("");
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -438,69 +438,6 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
     } finally { setVerifie(null); }
   };
 
-  /* Ouvrir la réaffectation : charger les classes où l'apprenant pourrait aller.
-     On les charge à l'ouverture et non au montage : la liste des classes change souvent, et
-     la recharger à chaque affichage de la file pour un bouton rarement cliqué serait coûteux. */
-  const ouvrirReaffectation = async (d) => {
-    setNouvelleMensualite("");   // jamais le montant du dossier précédent
-    setReaffectation({ demande: d });
-    setClasseChoisie("");
-    setClassesLoading(true);
-    try {
-      const r = await fetch(`${API_URL}/api/groupes`, { headers: authHdrs() });
-      const j = await r.json();
-      const liste = (j.groupes || [])
-        // Ni la classe qu'il quitte, ni une classe fermée : les proposer serait proposer
-        // de ne rien faire, ou d'envoyer l'apprenant dans une classe qui n'existe plus.
-        .filter(g => g.id !== d.groupe_id && g.statut !== "cloture" && g.statut !== "termine")
-        .sort((a, b) => {
-          // Le niveau rendu par le test d'abord : c'est la raison même de la demande.
-          const pa = (a.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase() ? 0 : 1;
-          const pb = (b.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase() ? 0 : 1;
-          return pa - pb || String(a.nom || "").localeCompare(String(b.nom || ""));
-        });
-      setClasses(liste);
-    } catch {
-      toast.error("Chargement des classes impossible");
-      setClasses([]);
-    } finally { setClassesLoading(false); }
-  };
-
-  /* Exécuter le transfert, PUIS refermer le dossier. Dans cet ordre, et la seconde étape
-     seulement si la première a réussi : refermer un dossier dont le déplacement a échoué le
-     ferait disparaître de la file sans que rien n'ait bougé. */
-  const reaffecter = async () => {
-    const d = reaffectation?.demande;
-    if (!d || !classeChoisie) return;
-    setOccupe(true);
-    try {
-      const r = await fetch(`${API_URL}/api/groupes/transfert`, {
-        method: "POST", headers: authHdrs(),
-        body: JSON.stringify({
-          ga_id: d.ga_id,
-          nouveau_groupe_id: classeChoisie,
-          motif: libelleMotif(d),
-          initiateur: "assistant",
-          /* Pour une migration, la route de transfert doit pouvoir RELIRE la demande : c'est
-             elle qui autorise l'assistante du centre à sortir l'apprenant d'une classe en
-             ligne, ce que la règle générale lui interdit. On envoie l'identifiant, le serveur
-             vérifie tout le reste. */
-          ...(estMigration(d) ? { demande_id: d.id } : {}),
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Transfert impossible");
-
-      await patch(d, {
-        statut: "traitee", groupe_cible_id: classeChoisie,
-        ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite) } : {}),
-      },
-        `${[d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ")} a été transféré ✓`);
-      setReaffectation(null);
-    } catch (e) {
-      toast.error(e.message || "Transfert impossible");
-    } finally { setOccupe(false); }
-  };
 
   const visibles = demandes.filter(d =>
     filtre === "toutes" ? true
@@ -636,7 +573,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                       qui a autorité sur le canal d'ARRIVÉE peut l'accepter - côté en ligne,
                       l'onboarding et lui seul. Le serveur tranche ; ici on évite de proposer
                       un geste qu'il refuserait. */}
-                  {mode === "onboarding" && estMigration(d) && d.statut === "en_attente_accord" && (
+                  {mode === "onboarding" && onReaffecter && estMigration(d) && d.statut === "en_attente_accord" && (
                     <>
                       {peutExecuterMigration(d) ? (
                         <button disabled={occupe}
@@ -647,7 +584,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                              une classe, en créer une, choisir les jours - tout ce qu'une
                              migration demande aussi. Le tarif y a été ajouté plutôt que de
                              priver l'assistante de son outil habituel. */
-                          onClick={() => onReaffecter ? onReaffecter(d) : ouvrirReaffectation(d)}
+                          onClick={() => onReaffecter?.(d)}
                           style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit", background: "#7A4BC4", color: "#fff", cursor: "pointer" }}>
                           ✅ Accepter la migration
                         </button>
@@ -670,7 +607,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                     </>
                   )}
 
-                  {mode === "onboarding" && !estMigration(d) && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
+                  {mode === "onboarding" && onReaffecter && !estMigration(d) && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
                     <>
                       {/* GRISÉ TANT QUE LE TEST N'EST PAS REVENU, et l'infobulle dit pourquoi :
                           un bouton inerte sans explication passe pour une panne. */}
@@ -679,7 +616,7 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                         title={attendTest
                           ? "Le test de niveau n'a pas encore été passé par l'agent placement test. C'est son résultat qui détermine la nouvelle classe."
                           : `Réaffecter ${nom} — niveau obtenu : ${d.niveau_obtenu}`}
-                        onClick={() => onReaffecter ? onReaffecter(d) : ouvrirReaffectation(d)}
+                        onClick={() => onReaffecter?.(d)}
                         style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit",
                           background: attendTest ? "#e2e8f0" : accent, color: attendTest ? "#94a3b8" : "#fff",
                           cursor: attendTest ? "not-allowed" : "pointer" }}>
@@ -799,112 +736,12 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                 </button>
                 {/* L'action depuis le détail : on vient d'y lire ce qu'il fallait pour décider,
                     refermer pour rouvrir la carte serait un pas de trop. */}
-                {estMigration(d) && d.statut === "en_attente_accord" && peutExecuterMigration(d) && (
-                  <button onClick={() => { setDetailDemande(null); ouvrirReaffectation(d); }}
+                {estMigration(d) && d.statut === "en_attente_accord" && peutExecuterMigration(d) && onReaffecter && (
+                  <button onClick={() => { setDetailDemande(null); onReaffecter?.(d); }}
                     style={{ padding: "9px 20px", background: "#7A4BC4", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                     ✅ Accepter la migration
                   </button>
                 )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── Choix de la nouvelle classe ──────────────────────────────────────── */}
-      {reaffectation && (() => {
-        const d = reaffectation.demande;
-        const nom = [d.prenom_apprenant, d.nom_apprenant].filter(Boolean).join(" ") || "l'apprenant";
-        const auNiveau = classes.filter(g => (g.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase());
-        return (
-          <div onClick={ev => { if (ev.target === ev.currentTarget && !occupe) setReaffectation(null); }}
-            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-            <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%", maxWidth: 540, maxHeight: "86vh", display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 16.5, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
-                Réaffecter {nom}
-              </div>
-              {estMigration(d) ? (
-                /* UNE MIGRATION NE PARLE PAS DE NIVEAU. Reprendre la phrase du changement de
-                   groupe afficherait « Test passé : niveau undefined » — exactement le genre
-                   de détail qui fait douter de tout le reste de l'écran. */
-                <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 14px" }}>
-                  Migration <strong style={{ color: "#7A4BC4" }}>{libelleCanal(d.type_cours)} → {libelleCanal(canalCibleDe(d.type_cours))}</strong>
-                  {d.groupe_nom ? <> · quitte <strong>{d.groupe_nom}</strong></> : null}.
-                  {" "}L'apprenant garde son niveau, son historique et toutes ses données : seules
-                  sa classe et son canal changent.
-                </p>
-              ) : (
-              <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 14px" }}>
-                Test passé : niveau <strong style={{ color: "#15803d" }}>{d.niveau_obtenu}</strong>
-                {d.groupe_nom ? <> · quitte <strong>{d.groupe_nom}</strong></> : null}.
-                {" "}Le transfert est immédiat : l'apprenant change de classe et son ancienne inscription
-                se referme avec sa date de sortie et le motif.
-              </p>
-              )}
-
-              {/* ── LE TARIF, DANS LE MÊME GESTE ─────────────────────────────────────
-                  C'est la raison d'être de cette migration pour la comptabilité : en ligne et
-                  présentiel ne coûtent pas la même chose. Le sortir de cet écran, c'est le
-                  perdre — personne ne revient sur un écran qu'il a quitté, et le dossier reste
-                  migré au mauvais tarif.
-                  Laissé VIDE, rien ne change : on ne force pas une saisie à qui n'a pas la
-                  réponse, et un tarif inventé vaut moins qu'un tarif inchangé. */}
-              {estMigration(d) && (
-                <div style={{ background: "#faf8ff", border: "1px solid #e4d9f8", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-                  <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#5b3a94", marginBottom: 5 }}>
-                    Nouvelle mensualité <span style={{ fontWeight: 400, color: "#8b7ab0" }}>(facultatif)</span>
-                  </label>
-                  <input type="number" min="0" step="1000" value={nouvelleMensualite}
-                    onChange={ev => setNouvelleMensualite(ev.target.value)}
-                    placeholder="Laisser vide pour ne rien changer"
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e4d9f8", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
-                  <div style={{ fontSize: 11.5, color: "#6b5a8a", marginTop: 6, lineHeight: 1.55 }}>
-                    S'applique aux mois <strong>à venir</strong> : les mois déjà écrits gardent
-                    leur montant, et aucun mois payé n'est touché.
-                  </div>
-                </div>
-              )}
-
-              {classesLoading ? (
-                <div style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>Chargement des classes…</div>
-              ) : classes.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 24, background: "#fff7ed", borderRadius: 10, border: "1px dashed #fed7aa", fontSize: 12.5, color: "#9a3412" }}>
-                  Aucune autre classe ouverte n'est disponible.
-                </div>
-              ) : (
-                <>
-                  {/* Les classes AU BON NIVEAU sont remontées en tête et signalées : c'est le
-                      résultat du test qui a motivé toute la demande, il doit guider le choix. */}
-                  {auNiveau.length > 0 && (
-                    <div style={{ fontSize: 11.5, color: "#15803d", fontWeight: 700, marginBottom: 6 }}>
-                      ✓ {auNiveau.length} classe{auNiveau.length > 1 ? "s" : ""} au niveau {d.niveau_obtenu}
-                    </div>
-                  )}
-                  <select value={classeChoisie} onChange={e => setClasseChoisie(e.target.value)}
-                    style={{ ...champ, marginBottom: 16 }}>
-                    <option value="">— Choisir la nouvelle classe —</option>
-                    {classes.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {(g.niveau || "").toUpperCase() === (d.niveau_obtenu || "").toUpperCase() ? "✓ " : ""}
-                        {g.nom}{g.niveau ? ` · ${g.niveau}` : ""}
-                        {g.nb_apprenants != null ? ` · ${g.nb_apprenants}/${g.capacite_max || 20}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-
-              <div style={{ display: "flex", gap: 10, marginTop: "auto" }}>
-                <button onClick={() => setReaffectation(null)} disabled={occupe}
-                  style={{ flex: 1, padding: 12, borderRadius: 9, border: "none", background: "#f1f5f9", color: "#374151", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
-                  Annuler
-                </button>
-                <button onClick={reaffecter} disabled={!classeChoisie || occupe}
-                  style={{ flex: 1.5, padding: 12, borderRadius: 9, border: "none", fontFamily: "inherit", fontWeight: 700, fontSize: 13, color: "#fff",
-                    background: classeChoisie ? accent : "#cbd5e1",
-                    cursor: classeChoisie && !occupe ? "pointer" : "not-allowed" }}>
-                  {occupe ? "Transfert…" : "Transférer dans cette classe"}
-                </button>
               </div>
             </div>
           </div>
