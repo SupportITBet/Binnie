@@ -134,6 +134,90 @@ const tableAbsente = (e) => e?.code === "42P01" || /demandes_transfert/i.test(e?
 
 const nomDe = (p) => `${p?.prenom || ""} ${p?.nom || ""}`.trim() || "Un membre de l'équipe";
 
+/**
+ * LE DOSSIER COMMERCIAL D'UN APPRENANT, à partir de sa demande de transfert.
+ *
+ * POURQUOI CE N'EST PAS UNE SIMPLE ÉGALITÉ D'E-MAIL. `demandes_transfert.email_apprenant`
+ * recopie `groupes_apprenants.email_apprenant`, qui est parfois un identifiant TECHNIQUE
+ * fabriqué à l'inscription - `tel.0789800862.prenomnom@betacademy.app` pour quelqu'un sans
+ * adresse propre. Le dossier, lui, porte l'e-mail réellement communiqué. Les deux ne se
+ * rejoignent jamais, et la mise à jour partait alors sur ZÉRO ligne sans lever d'erreur :
+ * le canal restait « en ligne », le tarif ne bougeait pas, et rien ne le disait.
+ * Constaté le 04/10/2026 sur un dossier réel.
+ *
+ * `apprenant_id` aurait été le lien naturel : il existe des deux côtés, mais n'est renseigné
+ * sur AUCUN des 88 dossiers. Inutilisable tant qu'une reprise de données ne l'aura pas posé.
+ *
+ * ON NE DEVINE JAMAIS PAR LE NOM. Deux dossiers « Coulibaly Naomie » coexistent avec des
+ * e-mails différents : rapprocher par nom aurait modifié le tarif du mauvais apprenant. Un
+ * critère n'est retenu que s'il désigne UN SEUL dossier - sinon on renonce et on le dit.
+ *
+ * @returns {Promise<object|null>} le dossier, ou null si rien de sûr ne le désigne.
+ */
+async function resoudreDossierDepuisDemande(demande) {
+  const CHAMPS = "id, prospect_email, prospect_telephone, telephone_parent, plan_paiement";
+
+  const unSeul = (lignes) => (lignes?.length === 1 ? lignes[0] : null);
+
+  // 1. L'e-mail de la demande, puis celui de l'inscription - ils diffèrent parfois.
+  const emails = [demande?.email_apprenant];
+  let ga = null;
+  if (demande?.ga_id) {
+    const { data } = await supabase.from("groupes_apprenants")
+      .select("email_apprenant, telephone").eq("id", demande.ga_id).maybeSingle();
+    ga = data || null;
+    if (ga?.email_apprenant) emails.push(ga.email_apprenant);
+  }
+  for (const e of [...new Set(emails.filter(Boolean))]) {
+    const { data } = await supabase.from("assignations_parcours").select(CHAMPS).ilike("prospect_email", e);
+    const trouve = unSeul(data);
+    if (trouve) return trouve;
+  }
+
+  // 2. Le téléphone, comparé sur ses huit derniers chiffres : les indicatifs et les espaces
+  //    varient d'une saisie à l'autre, le numéro lui-même non.
+  const huit = (t) => String(t || "").replace(/\D/g, "").slice(-8);
+  const tel = huit(ga?.telephone) || huit(String(demande?.email_apprenant || "").match(/tel\.(\d+)\./)?.[1]);
+  if (tel.length === 8) {
+    const { data } = await supabase.from("assignations_parcours").select(CHAMPS);
+    const candidats = (data || []).filter(a => huit(a.prospect_telephone) === tel || huit(a.telephone_parent) === tel);
+    const trouve = unSeul(candidats);
+    if (trouve) return trouve;
+  }
+
+  return null;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   GET /api/demandes-transfert/:id/dossier — le plan de paiement rattaché
+══════════════════════════════════════════════════════════════ */
+/**
+ * L'écran d'acceptation doit MONTRER la mensualité en cours avant d'en proposer une autre :
+ * saisir un tarif sans voir l'ancien, c'est décider à l'aveugle.
+ *
+ * C'est le SERVEUR qui résout le dossier, et pas l'écran. Le rapprochement n'a rien d'évident
+ * - l'e-mail de l'inscription est parfois un identifiant technique - et le refaire côté
+ * navigateur aurait donné deux résolutions différentes pour la même question, dont une seule
+ * juste. Celle-ci est exactement celle qu'emploiera l'écriture au moment de la clôture.
+ */
+router.get("/:id/dossier", authenticateAdmin, async (req, res) => {
+  try {
+    const { data: demande, error } = await supabase
+      .from("demandes_transfert").select("*").eq("id", req.params.id).maybeSingle();
+    if (error && tableAbsente(error)) return res.json({ plan: null, non_installe: true });
+    if (!demande) return res.status(404).json({ error: "Demande introuvable" });
+
+    const dossier = await resoudreDossierDepuisDemande(demande);
+    if (!dossier) return res.json({ plan: null, dossier_introuvable: true });
+
+    res.json({ assignation_id: dossier.id, plan: dossier.plan_paiement || null });
+  } catch (e) {
+    console.error("[demandes-transfert dossier]", e.message || e);
+    res.status(500).json({ error: "Lecture impossible" });
+  }
+});
+
 /* ══════════════════════════════════════════════════════════════
    POST /api/demandes-transfert — le coach émet la demande
 ══════════════════════════════════════════════════════════════ */
@@ -602,6 +686,10 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
          pas l'annuler. Mais il est tracé, parce qu'un dossier à moitié migré est précisément
          ce que ce circuit existe pour éviter. */
       if (estMigration) {
+        /* Résolu UNE FOIS pour les deux écritures qui suivent. Le rapprochement par e-mail
+           seul tombait à côté quand l'inscription porte un identifiant technique. */
+        const dossierMigration = await resoudreDossierDepuisDemande(demande);
+        if (!dossierMigration) resultatMigration.dossier_introuvable = true;
         try {
           const { data: classeArrivee } = await supabase
             .from("groupes").select("type_cours, centre_id")
@@ -615,10 +703,9 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
              visibilité sur un apprenant qu'elle a suivi. */
           if (classeArrivee?.centre_id) majDossier.centre_id = classeArrivee.centre_id;
 
-          if (Object.keys(majDossier).length && demande.email_apprenant) {
+          if (Object.keys(majDossier).length && dossierMigration) {
             const { error: eDossier } = await supabase
-              .from("assignations_parcours").update(majDossier)
-              .ilike("prospect_email", demande.email_apprenant);
+              .from("assignations_parcours").update(majDossier).eq("id", dossierMigration.id);
             if (eDossier) throw eDossier;
           }
         } catch (e) {
@@ -635,11 +722,9 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
            recalcule les mois déjà écrits. Le passé garde donc son prix, la suite prend le
            nouveau - exactement la règle voulue, sans toucher à un seul mois existant. */
         const nouvelleMensualite = Number(req.body.nouvelle_mensualite);
-        if (nouvelleMensualite > 0 && demande.email_apprenant) {
+        if (nouvelleMensualite > 0 && dossierMigration) {
           try {
-            const { data: dossier } = await supabase
-              .from("assignations_parcours").select("id, plan_paiement")
-              .ilike("prospect_email", demande.email_apprenant).maybeSingle();
+            const dossier = dossierMigration;
             const plan = dossier?.plan_paiement;
             if (dossier && plan && typeof plan === "object" && plan.type === "mensuel") {
               const ancienne = Number(plan.mensualite) || 0;

@@ -3654,19 +3654,19 @@ export default function OnboardingDashboard() {
   const [planMigration, setPlanMigration] = useState(null);      // null = non chargé
   const [nouvelleMensualite, setNouvelleMensualite] = useState("");
 
-  const chargerPlanDeLApprenant = async (email) => {
+  /* LE SERVEUR RÉSOUT LE DOSSIER, pas l'écran. Le rapprochement n'a rien d'évident :
+     l'e-mail de l'inscription est parfois un identifiant technique fabriqué à partir du
+     téléphone, et ne correspond alors à aucun dossier. Le refaire ici aurait donné deux
+     résolutions pour la même question, dont une seule juste - et c'est l'écran qui aurait
+     affiché « aucun plan mensuel » sur un dossier qui en a un. */
+  const chargerPlanDeLApprenant = async (demandeId) => {
     setPlanMigration(null);
-    if (!email) { setPlanMigration({}); return; }
+    if (!demandeId) { setPlanMigration({}); return; }
     try {
-      const token = localStorage.getItem("admin_token");
-      const r = await fetch(`${API_URL}/api/parcours/assignations?prospect_email=${encodeURIComponent(email)}`,
-        { headers:{ Authorization:`Bearer ${token}` } });
+      const r = await fetch(`${API_URL}/api/demandes-transfert/${demandeId}/dossier`, { headers: { Authorization:`Bearer ${localStorage.getItem("admin_token")}` } });
       const j = await r.json();
-      const dossier = (Array.isArray(j) ? j : (j.assignations || []))[0] || null;
-      setPlanMigration(dossier?.plan_paiement || {});
-    } catch {
-      setPlanMigration({});   // un plan illisible ne doit pas empêcher le transfert
-    }
+      setPlanMigration(j.plan || {});
+    } catch { setPlanMigration({}); }
   };
 
   const ouvrirTransfertDepuisDemande = (d) => {
@@ -3682,7 +3682,7 @@ export default function OnboardingDashboard() {
     });
     setTransfertForm({ nouveau_groupe_id:"", motif: d.detail || "", initiateur:"coach", jours:[] });
     setNouvelleMensualite("");
-    if (d.type_demande === "changement_coaching") chargerPlanDeLApprenant(d.email_apprenant);
+    if (d.type_demande === "changement_coaching") chargerPlanDeLApprenant(d.id);
     else setPlanMigration(null);
     setGroupesCibles([]);
     const niv = d.niveau_obtenu || "tous";
