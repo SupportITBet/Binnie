@@ -369,190 +369,17 @@ const CATALOGUE_JEUX = [
   { id:'mots_croises', icone:'🔍', titre:'Mots croisés',          desc:"Remplis la grille à l'aide des définitions.",               couleur:'#D97706', bg:'#FFFBEB' },
   { id:'mots_caches',  icone:'🕵️', titre:'Mots cachés',           desc:'Trouve les mots cachés dans la grille de lettres.',         couleur:'#4338CA', bg:'#EEF2FF' },
 ];
-const QCM_MOTS = [
-  { mot:'Hello',       options:['Bonjour','Au revoir','Merci','S\'il vous plaît'], correct:'Bonjour' },
-  { mot:'Goodbye',     options:['Bonjour','Bonsoir','Au revoir','Bienvenue'],      correct:'Au revoir' },
-  { mot:'Thank you',   options:['Pardon','Merci','De rien','S\'il vous plaît'],    correct:'Merci' },
-  { mot:'Please',      options:['Merci','Pardon','S\'il vous plaît','Bonjour'],    correct:'S\'il vous plaît' },
-  { mot:'Sorry',       options:['Bienvenue','Désolé','Bonjour','Bonsoir'],         correct:'Désolé' },
-  { mot:'Yes',         options:['Non','Peut-être','Oui','Jamais'],                 correct:'Oui' },
-  { mot:'No',          options:['Oui','Non','Peut-être','Toujours'],               correct:'Non' },
-  { mot:'Good morning',options:['Bonsoir','Bonne nuit','Bonjour','Bon après-midi'],correct:'Bonjour' },
-  { mot:'Friend',      options:['Ennemi','Famille','Ami','Collègue'],              correct:'Ami' },
-  { mot:'Water',       options:['Feu','Eau','Air','Terre'],                        correct:'Eau' },
-];
-const ASSOC_PAIRES_DATA = [
-  { fr:'Bonjour',   en:'Hello' },
-  { fr:'Merci',     en:'Thank you' },
-  { fr:'Chat',      en:'Cat' },
-  { fr:'Chien',     en:'Dog' },
-  { fr:'Maison',    en:'House' },
-  { fr:'Voiture',   en:'Car' },
-];
-const LACUNES_DATA = [
-  { phrase:'My ___ is Aminata.', mot:'name',    indice:'Ton prénom/nom' },
-  { phrase:'I am ___ years old.', mot:'twelve',  indice:'Ton âge (12)' },
-  { phrase:'___ morning !',       mot:'Good',    indice:'Salutation matinale' },
-  { phrase:'Nice to ___ you !',   mot:'meet',    indice:'Enchanté de vous rencontrer' },
-  { phrase:'I ___ from Abidjan.', mot:'am',      indice:'Verbe être (1ère pers.)' },
-];
-const ANAGRAMME_DATA = [
-  { mot:'CAT',   melange:'TCA',  indice:'🐱 Un animal domestique' },
-  { mot:'DOG',   melange:'GOD',  indice:'🐶 Le meilleur ami de l\'homme' },
-  { mot:'SUN',   melange:'UNS',  indice:'☀️ Brille dans le ciel' },
-  { mot:'TREE',  melange:'EETR', indice:'🌳 Pousse dans la forêt' },
-  { mot:'BIRD',  melange:'RIBD', indice:'🐦 Vole dans les airs' },
-  { mot:'BLUE',  melange:'ULBE', indice:'🔵 Une couleur' },
-  { mot:'FISH',  melange:'HIFSF', indice:'🐟 Vit dans l\'eau' },
-  { mot:'STAR',  melange:'RATS', indice:'⭐ Brille la nuit' },
-];
-const SPRINT_MOTS = [
-  {en:'apple',fr:'pomme'},{en:'book',fr:'livre'},{en:'car',fr:'voiture'},{en:'door',fr:'porte'},
-  {en:'eye',fr:'œil'},{en:'fish',fr:'poisson'},{en:'girl',fr:'fille'},{en:'hand',fr:'main'},
-  {en:'ice',fr:'glace'},{en:'jump',fr:'sauter'},{en:'key',fr:'clé'},{en:'lamp',fr:'lampe'},
-  {en:'moon',fr:'lune'},{en:'nose',fr:'nez'},{en:'open',fr:'ouvrir'},{en:'pen',fr:'stylo'},
-  {en:'rain',fr:'pluie'},{en:'sea',fr:'mer'},{en:'tree',fr:'arbre'},{en:'up',fr:'en haut'},
-  {en:'voice',fr:'voix'},{en:'wind',fr:'vent'},{en:'year',fr:'année'},{en:'zero',fr:'zéro'},
-  {en:'air',fr:'air'},{en:'bed',fr:'lit'},{en:'cat',fr:'chat'},{en:'day',fr:'jour'},
-  {en:'eat',fr:'manger'},{en:'fly',fr:'voler'},
-];
-const VRAI_FAUX_DATA = [
-  { enonce:'"I goed to school yesterday" is correct.',        correct:false, explication:'❌ Faux - le passé de "go" est "went" (irrégulier). ✅ "I went to school."' },
-  { enonce:'"She doesn\'t like coffee" is correct.',          correct:true,  explication:'✅ Vrai - on utilise "doesn\'t" à la 3e personne du singulier.' },
-  { enonce:'"Childrens are playing" is correct.',             correct:false, explication:'❌ Faux - "children" est déjà le pluriel irrégulier de "child". ✅ "Children are playing."' },
-  { enonce:'"He has been living here for 5 years" is correct.',correct:true, explication:'✅ Vrai - present perfect + "for" pour une durée qui continue.' },
-  { enonce:'"I am agree with you" is correct.',               correct:false, explication:'❌ Faux - "agree" est un verbe, pas un adjectif. ✅ "I agree with you."' },
-  { enonce:'"Much students were absent" is correct.',         correct:false, explication:'❌ Faux - "many" pour les noms dénombrables. ✅ "Many students were absent."' },
-  { enonce:'"She speaks English very well" is correct.',      correct:true,  explication:'✅ Vrai - structure correcte avec adverbe de manière après le complément.' },
-  { enonce:'"I didn\'t went to the party" is correct.',       correct:false, explication:'❌ Faux - après "didn\'t", on utilise l\'infinitif. ✅ "I didn\'t go to the party."' },
-];
-const REORDRE_DATA = [
-  { mots:['I','school','to','go'],               correct:['I','go','to','school'],               fr:'Je vais à l\'école.' },
-  { mots:['she','English','speaks'],              correct:['she','speaks','English'],              fr:'Elle parle anglais.' },
-  { mots:['cats','love','I'],                     correct:['I','love','cats'],                     fr:'J\'adore les chats.' },
-  { mots:['playing','are','they','football'],     correct:['they','are','playing','football'],     fr:'Ils jouent au foot.' },
-  { mots:['yesterday','went','I','market','to','the'], correct:['I','went','to','the','market','yesterday'], fr:'Je suis allé(e) au marché hier.' },
-  { mots:['much','how','cost','does','it'],       correct:['how','much','does','it','cost'],       fr:'Combien ça coûte ?' },
-  { mots:['rain','it','will','tomorrow'],         correct:['it','will','rain','tomorrow'],         fr:'Il va pleuvoir demain.' },
-  { mots:['never','coffee','drunk','have','I'],   correct:['I','have','never','drunk','coffee'],   fr:'Je n\'ai jamais bu de café.' },
-];
-const DIALOGUE_DATA = [
-  { situation:'☕ Au café', repliques:[
-    { loc:'Serveur', texte:'Good morning! What would you like?' },
-    { loc:'Toi', options:['I would like a coffee, please.','Give me coffee now!','Coffee! Coffee!'], correct:0 },
-    { loc:'Serveur', texte:'Of course! Anything else?' },
-    { loc:'Toi', options:['No, thank you.','No want nothing.','I no want more.'], correct:0 },
-    { loc:'Serveur', texte:'That\'ll be 500 FCFA, please.' },
-    { loc:'Toi', options:['Here you are.','Take money!','Give change!'], correct:0 },
-  ]},
-  { situation:'🏪 En magasin', repliques:[
-    { loc:'Vendeur', texte:'Can I help you?' },
-    { loc:'Toi', options:['I\'m looking for a blue shirt.','I want shirt blue.','Blue shirt give me.'], correct:0 },
-    { loc:'Vendeur', texte:'What size are you?' },
-    { loc:'Toi', options:['I\'m a medium, please.','My size medium.','Medium I am.'], correct:0 },
-    { loc:'Vendeur', texte:'Here you go. Would you like to try it on?' },
-    { loc:'Toi', options:['Yes, please. Where are the fitting rooms?','Yes. Where room?','Yes fitting room where?'], correct:0 },
-  ]},
-  { situation:'📞 Au téléphone', repliques:[
-    { loc:'Réceptionniste', texte:'Good afternoon, BET Training. How can I help you?' },
-    { loc:'Toi', options:['I\'d like to book an appointment, please.','I want appointment!','Appointment make for me.'], correct:0 },
-    { loc:'Réceptionniste', texte:'Of course. What date suits you?' },
-    { loc:'Toi', options:['Is Wednesday at 10am available?','Wednesday 10 ok?','I want Wednesday morning.'], correct:0 },
-    { loc:'Réceptionniste', texte:'Yes, that works. Can I have your name, please?' },
-    { loc:'Toi', options:['My name is Aminata Koné.','Name me Aminata.','I Aminata Koné.'], correct:0 },
-  ]},
-];
-const FLASHCARDS_DATA = [
-  { recto:'to be',     verso:'être\nam / is / are',         categorie:'Verbes essentiels' },
-  { recto:'to have',   verso:'avoir\nhave / has',           categorie:'Verbes essentiels' },
-  { recto:'to go',     verso:'aller\ngo → went (irrég.)',   categorie:'Verbes essentiels' },
-  { recto:'to make',   verso:'faire / fabriquer\nmake → made', categorie:'Verbes essentiels' },
-  { recto:'to take',   verso:'prendre\ntake → took',        categorie:'Verbes essentiels' },
-  { recto:'to come',   verso:'venir\ncome → came',          categorie:'Verbes essentiels' },
-  { recto:'Present Perfect', verso:'have/has + past participle\n"I have lived here for 5 years."', categorie:'Grammaire' },
-  { recto:'Past Simple', verso:'Action terminée dans le passé\n"I went to school yesterday."',     categorie:'Grammaire' },
-  { recto:'will + verb', verso:'Futur simple\n"It will rain tomorrow."',                           categorie:'Grammaire' },
-  { recto:'since vs for', verso:'"since" = point de départ → since 2020\n"for" = durée → for 3 years', categorie:'Grammaire' },
-];
-const CONJUGAISON_DATA = [
-  { infinitif:'go',    temps:'passé simple (I)',   correct:'went',   indice:'Aller (irrégulier)' },
-  { infinitif:'be',    temps:'passé simple (I)',   correct:'was',    indice:'Être (irrégulier)' },
-  { infinitif:'have',  temps:'passé simple (I)',   correct:'had',    indice:'Avoir (irrégulier)' },
-  { infinitif:'see',   temps:'passé simple (I)',   correct:'saw',    indice:'Voir (irrégulier)' },
-  { infinitif:'come',  temps:'passé simple (I)',   correct:'came',   indice:'Venir (irrégulier)' },
-  { infinitif:'take',  temps:'passé simple (I)',   correct:'took',   indice:'Prendre (irrégulier)' },
-  { infinitif:'give',  temps:'passé simple (I)',   correct:'gave',   indice:'Donner (irrégulier)' },
-  { infinitif:'speak', temps:'passé simple (I)',   correct:'spoke',  indice:'Parler (irrégulier)' },
-  { infinitif:'write', temps:'passé simple (I)',   correct:'wrote',  indice:'Écrire (irrégulier)' },
-  { infinitif:'know',  temps:'passé simple (I)',   correct:'knew',   indice:'Savoir (irrégulier)' },
-];
-const CECR_DATA = [
-  { niveau:'A1', q:'What is the plural of "child"?', options:['childs','children','childes','child'], correct:'children' },
-  { niveau:'A1', q:'Choose the correct form: "She ___ coffee."', options:['like','likes','liking','liked'], correct:'likes' },
-  { niveau:'A2', q:'Complete: "I have lived here ___ 2020."', options:['for','since','during','while'], correct:'since' },
-  { niveau:'A2', q:'"I went" is the past of which verb?', options:['to come','to go','to get','to give'], correct:'to go' },
-  { niveau:'B1', q:'Which sentence is in the passive voice?', options:['She read the book.','The book was read by her.','She reads books.','She will read.'], correct:'The book was read by her.' },
-  { niveau:'B1', q:'Complete: "If I ___ you, I would study harder."', options:['am','was','were','be'], correct:'were' },
-  { niveau:'A1', q:'"How much does it cost?" - best reply?', options:['It costs 500 FCFA.','It cost 500 FCFA.','500 FCFA cost it.','Costs 500 FCFA it.'], correct:'It costs 500 FCFA.' },
-  { niveau:'A2', q:'Choose the correct word: "There ___ a lot of students."', options:['is','are','am','be'], correct:'are' },
-  { niveau:'B1', q:'Which is correct?', options:['I am agree','I agree','I am agreeing','I agreed to'], correct:'I agree' },
-  { niveau:'A1', q:'What does "beautiful" mean?', options:['laid','petit','magnifique','rapide'], correct:'magnifique' },
-];
-const DICTEE_DATA = [
-  { mot:'beautiful',  indice:'adj. 🌸 - magnifique' },
-  { mot:'necessary',  indice:'adj. ✅ - nécessaire' },
-  { mot:'Wednesday',  indice:'📅 - le milieu de la semaine' },
-  { mot:'February',   indice:'📅 - 2ème mois de l\'année' },
-  { mot:'government', indice:'🏛️ - autorité qui dirige un pays' },
-  { mot:'knowledge',  indice:'🧠 - ce qu\'on sait, le savoir' },
-  { mot:'language',   indice:'🗣️ - ce qu\'on parle (ex: English)' },
-  { mot:'experience', indice:'💼 - ce qu\'on a vécu ou appris' },
-  { mot:'different',  indice:'↔️ - pas pareil, distinct' },
-  { mot:'important',  indice:'⭐ - qui compte beaucoup' },
-];
-// Traduction inverse - FR → EN
-const TRADUCTION_DATA = [
-  { fr:'pomme',    mot:'apple' },
-  { fr:'chien',    mot:'dog' },
-  { fr:'maison',   mot:'house' },
-  { fr:'voiture',  mot:'car' },
-  { fr:'livre',    mot:'book' },
-  { fr:'école',    mot:'school' },
-  { fr:'ami',      mot:'friend' },
-  { fr:'travail',  mot:'work' },
-  { fr:'temps',    mot:'time' },
-  { fr:'famille',  mot:'family' },
-];
-// Mots croisés - une grille fixe (lignes/colonnes 0-indexées), 2 mots horizontaux + 2 verticaux
-const CROSSWORD = {
-  lignes: 5, colonnes: 5,
-  cases: { '1,2':'M','2,1':'C','2,2':'A','2,3':'T','3,2':'P','3,3':'E','4,1':'S','4,2':'U','4,3':'N' },
-  mots: [
-    { id:'map', numero:1, dir:'v', ligne:1, colonne:2, longueur:3, mot:'MAP', indice:'🗺️ Aide à trouver son chemin' },
-    { id:'cat', numero:2, dir:'h', ligne:2, colonne:1, longueur:3, mot:'CAT', indice:"🐱 Un animal qui dit 'meow'" },
-    { id:'ten', numero:3, dir:'v', ligne:2, colonne:3, longueur:3, mot:'TEN', indice:'🔟 Le nombre après neuf' },
-    { id:'sun', numero:4, dir:'h', ligne:4, colonne:1, longueur:3, mot:'SUN', indice:'☀️ Brille pendant la journée' },
-  ],
-};
-// Mots cachés - grille de lettres avec mots placés horizontalement, verticalement et en diagonale
-const WORDSEARCH_TAILLE = 8;
-const WORDSEARCH_MOTS_POS = [
-  { mot:'CAT', ligne:0, colonne:0, dir:'h' },
-  { mot:'DOG', ligne:0, colonne:4, dir:'v' },
-  { mot:'SUN', ligne:3, colonne:1, dir:'h' },
-  { mot:'RUN', ligne:2, colonne:6, dir:'v' },
-  { mot:'BIG', ligne:5, colonne:0, dir:'diag' },
-];
-function construireGrilleMotsCaches() {
-  const grille = Array.from({ length: WORDSEARCH_TAILLE }, (_, r) =>
-    Array.from({ length: WORDSEARCH_TAILLE }, (_, c) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[(r * 7 + c * 5) % 26])
-  );
-  WORDSEARCH_MOTS_POS.forEach(({ mot, ligne, colonne, dir }) => {
-    const [dr, dc] = dir === 'h' ? [0, 1] : dir === 'v' ? [1, 0] : [1, 1];
-    mot.split('').forEach((lettre, i) => { grille[ligne + dr * i][colonne + dc * i] = lettre; });
-  });
-  return grille;
-}
+
+/* Les QUINZE BANQUES DE QUESTIONS étaient ici, en dur : 184 lignes de contenu pédagogique
+   enfermées dans un composant React de ce seul dashboard. C'est la raison pour laquelle
+   l'application mobile ne pouvait faire jouer aucun mini-jeu.
+
+   Elles vivent maintenant dans `Backend/src/data/minijeux.js` et sont servies par
+   `GET /api/dash/contenus/mini-jeux/:id/questions`. Les deux clients lisent la même banque,
+   et une question corrigée l'est pour les deux à la fois.
+
+   La grille des mots cachés est construite côté serveur pour la même raison : la formule de
+   remplissage était recopiée ici, et deux copies d'une formule finissent par différer. */
 
 /* ═══════════════════════════════════════════════════════
    VALEURS DE REPLI (utilisées tant que l'API n'a pas répondu)
@@ -883,6 +710,47 @@ export default function EspaceApprenant() {
   const jeuActif = jeuxInstances?.find(x => x.id === jeu) || null;
   const jeuActifType = jeuActif?.type || null;
 
+  /* ═══════════════════════════════════════════════════════════════════════════════════════
+     LES QUESTIONS VIENNENT DU SERVEUR, PLUS DE CE FICHIER.
+
+     Elles étaient écrites en dur ici, dans quinze constantes de module (190 lignes). C'était
+     la raison pour laquelle l'application mobile ne pouvait faire jouer aucun jeu : les
+     moteurs ET leur contenu n'existaient que dans ce client. Elles vivent maintenant dans
+     `Backend/src/data/minijeux.js` et arrivent par `GET /mini-jeux/:id/questions`.
+
+     LES NOMS SONT CONSERVÉS À L'IDENTIQUE (`QCM_MOTS`, `CROSSWORD`…) parce qu'ils sont
+     référencés une soixantaine de fois dans le JSX plus bas. Les renommer n'aurait rien
+     apporté et aurait multiplié les occasions de se tromper.
+
+     LE REPLI EST UN TABLEAU VIDE, jamais `undefined` : le JSX lit `.length` et `.map()` sans
+     condition, et les `useEffect` de fin de partie s'évaluent à chaque rendu — y compris
+     avant qu'un jeu soit choisi.
+     ═══════════════════════════════════════════════════════════════════════════════════════ */
+  const [jeuContenu, setJeuContenu] = useState(null);
+  const [jeuContenuErreur, setJeuContenuErreur] = useState(null);
+  const jc = jeuContenu || {};
+
+  const QCM_MOTS          = jc.questions || [];
+  const LACUNES_DATA      = jc.questions || [];
+  const ANAGRAMME_DATA    = jc.questions || [];
+  const VRAI_FAUX_DATA    = jc.questions || [];
+  const CONJUGAISON_DATA  = jc.questions || [];
+  const CECR_DATA         = jc.questions || [];
+  const DICTEE_DATA       = jc.questions || [];
+  const TRADUCTION_DATA   = jc.questions || [];
+  const REORDRE_DATA      = jc.questions || [];
+  const ASSOC_PAIRES_DATA = jc.paires    || [];
+  const DIALOGUE_DATA     = jc.scenes    || [];
+  /* `mots` sert à TROIS types différents — le sprint (paires en/fr), les mots croisés (mots
+     placés dans la grille) et les mots cachés (positions). Un seul jeu est actif à la fois,
+     mais sans ce filtre par type un rendu transitoire donnerait les mots d'un jeu au moteur
+     d'un autre, et `m.en` serait `undefined` sans erreur visible. */
+  const SPRINT_MOTS       = jeuActifType === 'sprint' ? (jc.mots || []) : [];
+  const FLASHCARDS_DATA   = jc.cartes    || [];
+  const CROSSWORD         = { lignes: 0, colonnes: 0, cases: {}, mots: [], ...(jeuActifType === 'mots_croises' ? jc : {}) };
+  const WORDSEARCH_MOTS_POS = jeuActifType === 'mots_caches' ? (jc.mots || []) : [];
+  const WORDSEARCH_TAILLE = jc.taille || 8;
+
   // QCM Flash
   const [qcmIdx, setQcmIdx] = useState(0);
   const [qcmScore, setQcmScore] = useState(0);
@@ -959,7 +827,9 @@ export default function EspaceApprenant() {
   const [crossValide, setCrossValide] = useState(null); // null | { motsOk: [id...], score }
   const [crossFini, setCrossFini] = useState(false);
   // Mots cachés
-  const [wsGrille, setWsGrille] = useState(() => construireGrilleMotsCaches());
+  // La grille est construite et servie par le serveur (`Backend/src/data/minijeux.js`) : deux
+  // implémentations de la même formule de remplissage, c'était une occasion de dériver pour rien.
+  const [wsGrille, setWsGrille] = useState([]);
   const [wsDebut, setWsDebut] = useState(null);
   const [wsTrouves, setWsTrouves] = useState([]);
   const [wsCellsTrouvees, setWsCellsTrouvees] = useState([]);
@@ -2102,10 +1972,9 @@ export default function EspaceApprenant() {
     setAssocSel(null); setAssocOk([]);
     setLacuneIdx(0); setLacuneInput(''); setLacuneScore(0); setLacuneFini(false); setLacuneMontre(false);
     setAnaIdx(0); setAnaInput(''); setAnaScore(0); setAnaFini(false); setAnaMontre(false);
-    setSprintScore(0); setSprintTemps(60); setSprintFini(false); setSprintIdx(0); setSprintMots([...SPRINT_MOTS].sort(()=>Math.random()-0.5));
+    setSprintScore(0); setSprintTemps(60); setSprintFini(false); setSprintIdx(0);
     setVfIdx(0); setVfScore(0); setVfFini(false); setVfChoix(null);
     setReordreIdx(0); setReordreScore(0); setReodreFini(false); setReordreSelec([]); setReordreValide(null);
-    setReodreMots(REORDRE_DATA[0] ? [...REORDRE_DATA[0].mots].sort(()=>Math.random()-0.5) : []);
     setDialogueIdx(0); setDialogueEtape(0); setDialogueScore(0); setDialogueFini(false);
     setFlashIdx(0); setFlashRetourne(false); setFlashSus([]);
     setConjIdx(0); setConjInput(''); setConjScore(0); setConjFini(false); setConjMontre(false);
@@ -2113,8 +1982,46 @@ export default function EspaceApprenant() {
     setDicteeIdx(0); setDicteeInput(''); setDicteeScore(0); setDicteeFini(false); setDicteeMontre(false);
     setTraIdx(0); setTraInput(''); setTraScore(0); setTraFini(false); setTraMontre(false);
     setCrossInputs({}); setCrossValide(null); setCrossFini(false);
-    setWsGrille(construireGrilleMotsCaches()); setWsDebut(null); setWsTrouves([]); setWsCellsTrouvees([]); setWsFini(false);
+    setWsDebut(null); setWsTrouves([]); setWsCellsTrouvees([]); setWsFini(false);
+    /* LES LISTES MÉLANGÉES NE SONT PLUS POSÉES ICI. Elles dérivaient des constantes du fichier,
+       disponibles immédiatement ; elles viennent maintenant du serveur et n'arrivent qu'après
+       la requête. Les poser ici donnerait des tableaux vides, donc une grille vide et un sprint
+       sans mots. C'est l'effet sur `jeuContenu`, juste en dessous, qui les remplit. */
   }
+
+  /* ── Chargement du contenu de la partie ──────────────────────────────────────────────
+     Déclenché par `jeu` (l'id de l'instance) : chaque partie redemande ses questions, ce qui
+     permet aussi au serveur de refuser une tentative de trop avant qu'elle soit jouée. */
+  useEffect(() => {
+    if (!jeu) { setJeuContenu(null); setJeuContenuErreur(null); return; }
+    let vivant = true;
+    setJeuContenu(null); setJeuContenuErreur(null);
+    const token = localStorage.getItem("user_token");
+    (async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/dash/contenus/mini-jeux/${jeu}/questions`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!vivant) return;
+        if (!r.ok) { setJeuContenuErreur(d.error || "Ce jeu n'a pas pu être chargé."); return; }
+        setJeuContenu(d.contenu || {});
+        /* Les listes mélangées et la grille, une fois le contenu connu. Le mélange est fait ici
+           et non au rendu : le refaire à chaque rendu changerait le mot affiché à chaque frappe. */
+        const c = d.contenu || {};
+        if (Array.isArray(c.mots) && d.jeu?.type === 'sprint') {
+          setSprintMots([...c.mots].sort(() => Math.random() - 0.5));
+        }
+        if (Array.isArray(c.questions) && c.questions[0]?.mots) {
+          setReodreMots([...c.questions[0].mots].sort(() => Math.random() - 0.5));
+        }
+        if (Array.isArray(c.grille)) setWsGrille(c.grille);
+      } catch {
+        if (vivant) setJeuContenuErreur("Ce jeu n'a pas pu être chargé.");
+      }
+    })();
+    return () => { vivant = false; };
+  }, [jeu]);
 
   /* La reponse du serveur est LUE avant de toucher a l'ecran. Ces deux fonctions
      envoyaient la requete sans jamais la regarder : l'ecran affichait « terminé » quoi
@@ -3191,7 +3098,27 @@ export default function EspaceApprenant() {
                     <div style={{ background:'#F8FAFC', borderRadius:20, width:'100%', maxWidth:640, maxHeight:'90vh', overflowY:'auto', padding:24, position:'relative', boxShadow:'0 32px 80px rgba(0,0,0,0.4)' }}>
                       <button onClick={()=>setJeu(null)} title="Fermer" style={{ position:'absolute', top:14, right:14, width:34, height:34, borderRadius:10, border:'none', background:'#fff', color:'#475569', fontSize:16, fontWeight:800, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.1)', zIndex:1 }}>✕</button>
 
-                      {jeuActifType === 'qcm' ? (
+                      {/* ── CHARGEMENT ET REFUS DU SERVEUR ──
+                          Les questions arrivent par le réseau depuis qu'elles ne sont plus en dur
+                          dans ce fichier : il y a donc une attente, et un refus possible. Sans ces
+                          deux états, un jeu dont le contenu n'arrive pas afficherait sa coque vide
+                          — une grille sans lettres, un QCM sans question — ce qui se lit comme un
+                          bug plutôt que comme « réessayez ». Le refus le plus courant est volontaire :
+                          le serveur n'ouvre pas une partie au-delà de `max_tentatives`. */}
+                      {jeuContenuErreur ? (
+                        <div style={{ textAlign:'center', padding:'48px 24px' }}>
+                          <div style={{ fontSize:48, marginBottom:14 }}>{/épuis/i.test(jeuContenuErreur) ? '🔒' : '⚠️'}</div>
+                          <div style={{ fontSize:18, fontWeight:800, color:'#0F172A', marginBottom:8 }}>
+                            {/épuis/i.test(jeuContenuErreur) ? 'Tentatives épuisées' : 'Partie indisponible'}
+                          </div>
+                          <div style={{ fontSize:14, color:'#475569', marginBottom:22, lineHeight:1.6 }}>{jeuContenuErreur}</div>
+                          <button onClick={()=>setJeu(null)} style={btnGhost}>Retour aux jeux</button>
+                        </div>
+                      ) : !jeuContenu ? (
+                        <div style={{ textAlign:'center', padding:'60px 24px', color:'#94A3B8', fontSize:14 }}>
+                          Préparation de la partie…
+                        </div>
+                      ) : jeuActifType === 'qcm' ? (
                         <div style={{ maxWidth:600, margin:'0 auto' }}>
                           <button onClick={()=>setJeu(null)} style={retourBtn}>← Retour aux jeux</button>
                           {qcmFini ? (
@@ -3764,7 +3691,7 @@ export default function EspaceApprenant() {
                                 ? <div style={{ padding:'8px 16px', borderRadius:8, background:'#FFF7ED', border:'1px solid #FED7AA', color:'#92400E', fontSize:12, fontWeight:600, marginBottom:16 }}>💡 {(tentativesJeu[jeu]||0)===0?'Un réessai autorisé !':'Dernière tentative !'}</div>
                                 : <div style={{ padding:'8px 16px', borderRadius:8, background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', fontSize:12, fontWeight:600, marginBottom:16 }}>🔒 Score final : <strong>{wsTrouves.length}/{WORDSEARCH_MOTS_POS.length}</strong></div>}
                               <div style={{ display:'flex', gap:12, justifyContent:'center' }}>
-                                {(tentativesJeu[jeu]||0) < (jeuActif?.max_tentatives||2) && <button onClick={()=>{ setTentativesJeu(p=>({...p,[jeu]:(p[jeu]||0)+1})); setWsGrille(construireGrilleMotsCaches()); setWsDebut(null); setWsTrouves([]); setWsCellsTrouvees([]); setWsFini(false); }} style={btnG('#4338CA')}>🔄 Rejouer</button>}
+                                {(tentativesJeu[jeu]||0) < (jeuActif?.max_tentatives||2) && <button onClick={()=>{ setTentativesJeu(p=>({...p,[jeu]:(p[jeu]||0)+1})); setWsDebut(null); setWsTrouves([]); setWsCellsTrouvees([]); setWsFini(false); }} style={btnG('#4338CA')}>🔄 Rejouer</button>}
                                 <button onClick={()=>setJeu(null)} style={btnGhost}>Changer de jeu</button>
                               </div>
                             </div>

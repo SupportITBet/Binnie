@@ -3,6 +3,7 @@ import supabase from "../config/supabase.js";
 import { authenticateAdmin, authenticateUser, requirePermission } from "../middlewares/requireAdmin.js";
 import { logAudit } from "../middlewares/logAudit.js";
 import { attribuerPoints, attribuerBonusProgression } from "../services/gamificationDash.js";
+import { contenuPourType, TYPES_JOUABLES } from "../data/minijeux.js";
 
 const router = express.Router();
 
@@ -462,7 +463,13 @@ router.get("/mini-jeux/publiques", authenticateUser, async (req, res) => {
     // des instances plutôt qu'un dictionnaire par type, pour les distinguer.
     const { data, error } = await supabase.from("contenus_mini_jeux_dash").select("id, type, nom, cible, max_tentatives, nb_questions").eq("actif", true).order("created_at", { ascending: true });
     if (error) throw error;
-    res.json({ jeux: data || [] });
+
+    /* `jouable` dit si un moteur existe pour ce `type`. Un admin peut créer une instance avec
+       un type libre ; sans ce drapeau, le client proposerait une partie qui s'ouvrirait sur un
+       écran vide. Les clients s'en servent pour griser la carte au lieu de la masquer — le jeu
+       est bien publié, c'est le moteur qui manque. */
+    const jeux = (data || []).map(j => ({ ...j, jouable: TYPES_JOUABLES.includes(j.type) }));
+    res.json({ jeux });
   } catch (err) {
     console.error("[contenus-dash/mini-jeux/publiques GET]", err);
     res.status(500).json({ error: "Erreur interne" });
@@ -512,10 +519,115 @@ router.get("/mini-jeux/mes-resultats", authenticateUser, async (req, res) => {
   }
 });
 
+/**
+ * GET /mini-jeux/:id/questions - le contenu jouable d'une instance.
+ *
+ * POURQUOI CETTE ROUTE EXISTE. Les questions des quinze jeux étaient écrites en dur dans
+ * `dash/src/Pages/EspaceApprenant/EspaceApprenant.jsx`, donc dans un seul client : l'application
+ * mobile ne pouvait faire jouer aucun jeu sans qu'on recopie 190 lignes de questions dans un
+ * second projet. Elles vivent maintenant dans `src/data/minijeux.js` et sont servies ici.
+ *
+ * ELLE REFUSE DE SERVIR UNE PARTIE DE TROP. Le plafond `max_tentatives` était jusqu'ici une
+ * simple politesse du client ; il est désormais vérifié ici ET à l'enregistrement du résultat.
+ * Les deux contrôles sont utiles et ne font pas le même travail : celui-ci évite de laisser
+ * l'apprenant jouer une partie qui serait refusée à la fin, l'autre est le vrai verrou.
+ *
+ * `tentatives_restantes` est renvoyé pour que le client puisse l'afficher AVANT la partie, sans
+ * recouper lui-même `mes-resultats` avec le plafond.
+ */
+router.get("/mini-jeux/:id/questions", authenticateUser, async (req, res) => {
+  try {
+    const { data: jeu, error } = await supabase
+      .from("contenus_mini_jeux_dash")
+      .select("id, type, nom, cible, max_tentatives, nb_questions, actif")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!jeu) return res.status(404).json({ error: "Jeu introuvable" });
+    if (!jeu.actif) return res.status(403).json({ error: "Ce jeu n'est plus publié" });
+
+    const contenu = contenuPourType(jeu.type);
+    if (!contenu) {
+      return res.status(422).json({
+        error: `Aucun moteur de jeu pour le type « ${jeu.type} »`,
+        type: jeu.type,
+      });
+    }
+
+    const { count } = await supabase
+      .from("contenus_mini_jeux_resultats_dash")
+      .select("id", { count: "exact", head: true })
+      .eq("jeu_id", jeu.id)
+      .eq("apprenant_id", req.profil.id);
+
+    const faites = count || 0;
+    const max = Number(jeu.max_tentatives) || null;
+    const restantes = max != null ? Math.max(0, max - faites) : null;
+
+    if (restantes === 0) {
+      return res.status(409).json({
+        error: "Tentatives épuisées pour ce jeu",
+        tentatives_faites: faites,
+        tentatives_restantes: 0,
+        max_tentatives: max,
+      });
+    }
+
+    const { nb, ...jouable } = contenu;
+    res.json({
+      jeu: { id: jeu.id, nom: jeu.nom, type: jeu.type, cible: jeu.cible, max_tentatives: max },
+      // `score_max` vient de la banque, pas de la colonne `nb_questions` : c'est la banque qui
+      // décide combien de points une partie peut rapporter.
+      score_max: nb,
+      tentatives_faites: faites,
+      tentatives_restantes: restantes,
+      contenu: jouable,
+    });
+  } catch (err) {
+    console.error("[contenus-dash/mini-jeux/questions GET]", err);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+});
+
 router.post("/mini-jeux/:id/resultat", authenticateUser, async (req, res) => {
   try {
-    const { score, score_max, tentative_numero } = req.body;
+    const { score, score_max } = req.body;
     if (score === undefined) return res.status(400).json({ error: "score requis" });
+
+    /* ───────────────────────────────────────────────────────────────────────────────────────
+       LE PLAFOND DE TENTATIVES EST VÉRIFIÉ ICI, ET C'EST NOUVEAU.
+
+       Cette route acceptait auparavant n'importe quel nombre de résultats et attribuait des
+       points à chacun : `max_tentatives` n'existait que parce que l'écran web refusait de
+       lancer une 3e partie, et `tentative_numero` était simplement ce que le client affirmait.
+       Un second client — l'application mobile — ou un appel direct offrait donc des points
+       sans limite.
+
+       `tentative_numero` est maintenant COMPTÉ, plus reçu : c'est la seule valeur en laquelle
+       on peut avoir confiance, et elle sert ensuite au bonus de progression.
+       ─────────────────────────────────────────────────────────────────────────────────────── */
+    const { data: jeuPlafond } = await supabase
+      .from("contenus_mini_jeux_dash")
+      .select("nom, max_tentatives")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (!jeuPlafond) return res.status(404).json({ error: "Jeu introuvable" });
+
+    const { count: dejaFaites } = await supabase
+      .from("contenus_mini_jeux_resultats_dash")
+      .select("id", { count: "exact", head: true })
+      .eq("jeu_id", req.params.id)
+      .eq("apprenant_id", req.profil.id);
+
+    const maxTentatives = Number(jeuPlafond.max_tentatives) || null;
+    if (maxTentatives != null && (dejaFaites || 0) >= maxTentatives) {
+      return res.status(409).json({
+        error: "Tentatives épuisées pour ce jeu",
+        tentatives_faites: dejaFaites || 0,
+        max_tentatives: maxTentatives,
+      });
+    }
+    const tentative_numero = (dejaFaites || 0) + 1;
 
     const pourcentage = score_max ? Math.round((score / score_max) * 100) : null;
     const apprenantNom = `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim() || req.profil?.email || "Apprenant";
@@ -533,7 +645,7 @@ router.post("/mini-jeux/:id/resultat", authenticateUser, async (req, res) => {
       apprenant_id: req.profil.id,
       apprenant_nom: apprenantNom,
       score, score_max: score_max || null, pourcentage,
-      tentative_numero: tentative_numero || 1,
+      tentative_numero,
     });
     if (errInsert) throw errInsert;
 
@@ -553,14 +665,21 @@ router.post("/mini-jeux/:id/resultat", authenticateUser, async (req, res) => {
 
     // Gamification : points de participation (barème "score % × 0,2", 4 à 20 pts) + bonus
     // "progression au réessai" si ce score bat le meilleur précédent sur ce même jeu.
-    const { data: jeuInfo } = await supabase.from("contenus_mini_jeux_dash").select("nom").eq("id", req.params.id).maybeSingle();
     const pointsJeu = pourcentage != null ? Math.max(4, Math.min(20, Math.round(pourcentage * 0.2))) : 4;
-    attribuerPoints(req.profil.id, "mini_jeu", req.params.id, pointsJeu, `Mini-jeu - ${jeuInfo?.nom || "partie"}`).catch(() => {});
-    if ((tentative_numero || 1) > 1 && pourcentage != null && pourcentage > meilleurPrecedent) {
+    attribuerPoints(req.profil.id, "mini_jeu", req.params.id, pointsJeu, `Mini-jeu - ${jeuPlafond.nom || "partie"}`).catch(() => {});
+    if (tentative_numero > 1 && pourcentage != null && pourcentage > meilleurPrecedent) {
       attribuerBonusProgression(req.profil.id, req.params.id).catch(() => {});
     }
 
-    res.status(201).json({ ok: true, pourcentage });
+    /* Le client a besoin de savoir s'il peut rejouer : c'est le serveur qui tranche maintenant,
+       inutile de le laisser recouper le plafond lui-même. */
+    res.status(201).json({
+      ok: true,
+      pourcentage,
+      points: pointsJeu,
+      tentative_numero,
+      tentatives_restantes: maxTentatives != null ? Math.max(0, maxTentatives - tentative_numero) : null,
+    });
   } catch (err) {
     console.error("[contenus-dash/mini-jeux/resultat POST]", err);
     res.status(500).json({ error: "Erreur interne" });
