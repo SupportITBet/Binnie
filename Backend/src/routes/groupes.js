@@ -1558,7 +1558,7 @@ router.get("/apprenant-by-email", authenticateAdmin, async (req, res) => {
     if (assignation_id) {
       const { data: gaParNote } = await supabase
         .from("groupes_apprenants")
-        .select("id, groupe_id, nom_apprenant, prenom_apprenant, statut, date_ajout, date_retrait, niveau, note")
+        .select("id, groupe_id, nom_apprenant, prenom_apprenant, email_apprenant, statut, date_ajout, date_retrait, niveau, note")
         .ilike("note", `%${assignation_id}%`)
         .order("date_ajout", { ascending: false })
         .limit(1)
@@ -1577,7 +1577,7 @@ router.get("/apprenant-by-email", authenticateAdmin, async (req, res) => {
     if (!ga && email) {
       const { data: gaParEmail } = await supabase
         .from("groupes_apprenants")
-        .select("id, groupe_id, nom_apprenant, prenom_apprenant, statut, date_ajout, date_retrait, niveau, note")
+        .select("id, groupe_id, nom_apprenant, prenom_apprenant, email_apprenant, statut, date_ajout, date_retrait, niveau, note")
         .eq("email_apprenant", email.toLowerCase())
         .neq("statut", "transfere")
         .order("date_ajout", { ascending: false })
@@ -1662,6 +1662,13 @@ router.get("/apprenant-by-email", authenticateAdmin, async (req, res) => {
         // du DOSSIER (« converti »…), plus celui du rattachement.
         date_retrait:    ga.date_retrait || null,
         ga_id:           ga.id,
+        /* L'E-MAIL DE L'INSCRIPTION, et pas seulement celui du dossier commercial.
+           Les écrans qui ouvrent une fiche n'avaient que `prospect_email`, qui est NULL sur
+           une partie des dossiers — et l'inscription porte souvent un identifiant technique
+           (`tel.0789800862.nom@betacademy.app`) qui n'apparaît nulle part ailleurs. Toute
+           lecture faite « par e-mail » depuis cette fiche partait donc sur rien, en silence,
+           pour exactement les apprenants concernés. */
+        email_apprenant: ga.email_apprenant || null,
         coach_nom,
         coach_photo,
         coach_email,

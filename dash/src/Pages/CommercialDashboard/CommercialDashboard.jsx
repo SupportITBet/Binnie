@@ -3334,10 +3334,46 @@ export default function CommercialDashboard() {
     );
     const dateAjout = commClasseInfo.date_ajout ? commClasseInfo.date_ajout.slice(0,10) : null;
     setCommAppPresLoading(true);
-    fetch(`${API_URL}/api/groupes/${commClasseInfo.id}/presences`, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : { presences: [] })
+
+    /* ── LES PRÉSENCES DE TOUT LE PARCOURS, PAS SEULEMENT DE LA CLASSE DU MOMENT ──────────
+       Cet onglet n'interrogeait que `/api/groupes/<classe actuelle>/presences`. Après un
+       transfert, celles des classes précédentes DISPARAISSAIENT de la fiche : mesuré le
+       07/10/2026 sur un apprenant transféré d'Angré vers II Plateaux — 0 présence affichée,
+       3 bien présentes en base.
+
+       Elles n'avaient jamais été perdues : une présence reste attachée à l'inscription et à la
+       séance où elle a eu lieu, ce qui est la seule façon juste de la stocker — la déplacer
+       vers la nouvelle classe ferait croire que l'apprenant était là un jour où cette classe
+       n'existait pas pour lui. Ce qui manquait, c'était de les LIRE sur tout le parcours.
+
+       `/api/mon-espace/presences` le fait déjà, et c'est la route de l'espace apprenant : même
+       lecture pour l'apprenant et pour son assistante, donc aucun risque qu'ils voient deux
+       assiduités différentes. Elle est ouverte au personnel BET (`emailAutorise`) et rend, pour
+       chaque ligne, `classe_nom` et `classe_passee` — ce qui permet de les GROUPER par classe
+       plutôt que de les mélanger. */
+    /* L'e-mail de l'INSCRIPTION d'abord : c'est le seul que porte un apprenant à identifiant
+       technique, et `prospect_email` est NULL sur une partie des dossiers. */
+    const emailApp = commClasseInfo.email_apprenant
+      || apprenantModal.email_apprenant || apprenantModal.prospect_email || null;
+
+    const lectureParcours = emailApp
+      ? fetch(`${API_URL}/api/mon-espace/presences?email=${encodeURIComponent(emailApp)}`, { headers: authHeaders() })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    lectureParcours
+      .then(parcours => {
+        /* Repli sur l'ancienne lecture si la route parcours n'a rien donné (e-mail inconnu,
+           API pas encore déployée) : mieux vaut les présences de la classe actuelle que pas de
+           présences du tout. */
+        if (parcours?.presences?.length) return { presences: parcours.presences, _parcours: true };
+        return fetch(`${API_URL}/api/groupes/${commClasseInfo.id}/presences`, { headers: authHeaders() })
+          .then(r => r.ok ? r.json() : { presences: [] });
+      })
       .then(d => {
-        const presences = filterFn(d.presences || []);
+        // La route parcours ne rend QUE les siennes ; celle du groupe rend toute la classe.
+        const presences = d._parcours ? (d.presences || []) : filterFn(d.presences || []);
         return fetch(`${API_URL}/api/seances?groupe_id=${commClasseInfo.id}`, { headers: authHeaders() })
           .then(r => r.ok ? r.json() : { seances: [] })
           .then(ds => {
@@ -11629,8 +11665,17 @@ export default function CommercialDashboard() {
                           ⚠️ Cet apprenant n'est pas encore assigné à une classe - aucune présence disponible.
                         </div>
                       )}
-                      {/* KPIs */}
+                      {/* KPIs — sur TOUT le parcours depuis que les classes précédentes y sont
+                          incluses. On le dit quand il y en a plusieurs : « 12 séances » sans
+                          précision laisserait croire qu'elles ont toutes eu lieu dans la classe
+                          affichée juste au-dessus. */}
                       {commAppPres.length > 0 && (
+                        <>
+                        {new Set(commAppPres.map(p => p.classe_nom).filter(Boolean)).size > 1 && (
+                          <div style={{ fontSize:11, color:"#64748b", marginBottom:8 }}>
+                            Sur l'ensemble de son parcours, toutes classes confondues.
+                          </div>
+                        )}
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
                           {[
                             { l:"Séances",    v:commAppPres.length,  c:"#0f172a" },
@@ -11644,6 +11689,7 @@ export default function CommercialDashboard() {
                             </div>
                           ))}
                         </div>
+                        </>
                       )}
                       {/* Liste */}
                       {commAppPresLoading ? (
@@ -11655,20 +11701,74 @@ export default function CommercialDashboard() {
                           <div style={{ fontSize:12, marginTop:4, color:"#cbd5e1" }}>Le coach renseigne les présences depuis son espace.</div>
                         </div>
                       ) : (
-                        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                          {[...commAppPres].sort((a,b)=>b.date_seance?.localeCompare(a.date_seance||"")||0).map((p, i) => {
-                            const st = STATUT_P[p.statut] || { label:p.statut, bg:"#f3f4f6", c:"#374151" };
-                            return (
-                              <div key={p.id||i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:10, background: i%2===0?"#fff":"#f8fafc", border:"1px solid #f1f5f9" }}>
-                                <div style={{ fontWeight:700, color:"#0f172a", minWidth:130, fontSize:13 }}>
-                                  {p.date_seance ? new Date(p.date_seance).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short",year:"numeric"}) : "-"}
-                                </div>
-                                <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:st.bg, color:st.c, flexShrink:0 }}>{st.label}</span>
-                                {p.note && <div style={{ fontSize:12, color:"#6b7280", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.note}</div>}
-                              </div>
-                            );
-                          })}
-                        </div>
+                        /* ── GROUPÉES PAR CLASSE, JAMAIS MÉLANGÉES ──────────────────────────
+                           Les présences d'un apprenant transféré viennent de plusieurs classes.
+                           Les empiler dans une seule liste chronologique donnerait une suite de
+                           dates sans dire laquelle appartient à quelle classe — on ne saurait
+                           plus lire l'assiduité de la classe en cours, ni celle d'avant.
+                           Un bloc par classe, la classe ACTUELLE en premier, les précédentes
+                           ensuite et explicitement nommées comme telles. Chaque bloc porte son
+                           propre taux : c'est ce que regarde le coach qui reçoit l'apprenant. */
+                        (() => {
+                          const groupes = new Map();
+                          [...commAppPres]
+                            .sort((x, y) => (y.date_seance || "").localeCompare(x.date_seance || ""))
+                            .forEach(p => {
+                              /* Sans `classe_nom` (repli sur l'ancienne lecture, ou séance
+                                 ajoutée localement), tout retombe dans la classe du moment —
+                                 c'est le comportement d'avant, qui reste juste dans ce cas. */
+                              const cle = p.classe_nom || commClasseInfo?.nom || "Sa classe";
+                              if (!groupes.has(cle)) groupes.set(cle, { nom: cle, passee: !!p.classe_passee, lignes: [] });
+                              groupes.get(cle).lignes.push(p);
+                            });
+                          const blocs = [...groupes.values()].sort((x, y) => Number(x.passee) - Number(y.passee));
+
+                          return (
+                            <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+                              {blocs.map(bloc => {
+                                const pointees = bloc.lignes.filter(p => ["present","absent","retard","excuse"].includes(p.statut));
+                                const presents = pointees.filter(p => p.statut === "present").length;
+                                const tauxBloc = pointees.length ? Math.round(presents / pointees.length * 100) : null;
+                                return (
+                                  <div key={bloc.nom}>
+                                    {/* L'en-tête n'apparaît que s'il y a plusieurs classes : sur un
+                                        apprenant jamais transféré, il n'apprendrait rien. */}
+                                    {blocs.length > 1 && (
+                                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                                        <span style={{ fontSize:12.5, fontWeight:800, color: bloc.passee ? "#64748b" : "#0f172a" }}>
+                                          🏫 {bloc.nom}
+                                        </span>
+                                        {bloc.passee && (
+                                          <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background:"#f1f5f9", color:"#64748b" }}>
+                                            ancienne classe
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize:11, color:"#94a3b8" }}>
+                                          {bloc.lignes.length} séance{bloc.lignes.length > 1 ? "s" : ""}
+                                          {tauxBloc !== null && ` · ${tauxBloc}% de présence`}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <div style={{ display:"flex", flexDirection:"column", gap:6, opacity: bloc.passee ? 0.88 : 1 }}>
+                                      {bloc.lignes.map((p, i) => {
+                                        const st = STATUT_P[p.statut] || { label:p.statut, bg:"#f3f4f6", c:"#374151" };
+                                        return (
+                                          <div key={p.id||`${bloc.nom}-${i}`} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:10, background: i%2===0?"#fff":"#f8fafc", border:"1px solid #f1f5f9" }}>
+                                            <div style={{ fontWeight:700, color:"#0f172a", minWidth:130, fontSize:13 }}>
+                                              {p.date_seance ? new Date(p.date_seance).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short",year:"numeric"}) : "-"}
+                                            </div>
+                                            <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:st.bg, color:st.c, flexShrink:0 }}>{st.label}</span>
+                                            {p.note && <div style={{ fontSize:12, color:"#6b7280", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.note}</div>}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   );
