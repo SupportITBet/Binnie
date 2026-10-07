@@ -9984,8 +9984,10 @@ export default function CommercialDashboard() {
                                 const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
                                 const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
                                 const reste     = totalDu - totalReçu;
-                                const niveauColor = NIVEAU_COLOR[testProspect?.niveau] || "#6b7280";
-                                const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
+        /* LA LISTE garde le canal du DOSSIER : elle parcourt des centaines de lignes et n'a
+           pas la classe de chacune. `commClasseInfo` ne vaut que pour la fiche OUVERTE —
+           s'en servir ici collerait la classe de l'apprenant affiché à toutes les lignes. */
+        const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
                                 const coachLabel = ["groupe","standard"].includes(a.type_coaching) ? "Groupe" : a.type_coaching === "prive" ? "Privé" : "-";
 
                                 const plan = a.plan_paiement || {};
@@ -10241,7 +10243,26 @@ export default function CommercialDashboard() {
         const plan = a.plan_paiement || {};
         const tranches = plan.tranches || [];
         const accesBloque = a.acces_bloque || false;
-        const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
+        /* ── LA CLASSE EN COURS FAIT FOI, PAS LE DOSSIER ──────────────────────────────────
+           `a.type_cours` et `a.centre_nom` viennent de `assignations_parcours`, qui est réécrit
+           APRÈS coup par les transferts — et parfois incomplètement. Constaté le 07/10/2026 :
+           un apprenant migré vers « Anglais B2 soir WITH ISMAEL » (classe hybride, SANS centre)
+           gardait sur sa fiche « Hybride · BET Angré », le centre de son ancienne classe. Son
+           assistante lisait donc un centre où il ne va plus.
+
+           La classe où il est RÉELLEMENT inscrit est la source la plus fraîche : c'est elle que
+           l'onglet « Classe & coach assignés » affiche juste en dessous, et les deux se
+           contredisaient à l'écran. `commClasseInfo` la porte déjà (`apprenant-by-email`).
+
+           LE DOSSIER RESTE LE REPLI, et il le faut : un apprenant pas encore affecté n'a pas de
+           classe, et c'est alors le canal vendu qui renseigne. On ne prend du dossier que ce qui
+           manque — le centre de la classe n'écrase pas celui du dossier s'il est absent, car
+           `libelleCanal` n'affiche de toute façon un centre que pour un canal qui en a un. */
+        const canalEffectif  = commClasseInfo?.type_cours || a.type_cours;
+        const centreEffectif = commClasseInfo
+          ? (commClasseInfo.centre_nom || null)
+          : a.centre_nom;
+        const modeLabel = libelleCanal(canalEffectif, centreEffectif);
         const coachLabel = ["groupe","standard"].includes(a.type_coaching) ? "Groupe" : a.type_coaching === "prive" ? "Privé" : "-";
         const today = new Date(); today.setHours(0,0,0,0);
         const sp = a.suivi_presences || {};
@@ -12683,7 +12704,9 @@ export default function CommercialDashboard() {
         const pmts = a.pmts || paiements.filter(p => p.assignationId === a.id);
         const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
         const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
-        const reste     = totalDu - totalReçu;
+        /* Ce modal a sa PROPRE cible (un paiement, une progression) : `commClasseInfo`
+           désigne la fiche ouverte ailleurs, pas forcément le même apprenant. On reste
+           donc sur le canal du dossier, qui accompagne la ligne affichée. */
         const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const PSTAT = { en_attente:{label:"En attente",color:"#d97706",bg:"#fef3c7",icon:"⏳"}, partiel:{label:"Partiel",color:"#0891b2",bg:"#e0f2fe",icon:"🔄"}, reçu:{label:"Effectué",color:"#16a34a",bg:"#dcfce7",icon:"✅"}, confirme:{label:"Effectué",color:"#16a34a",bg:"#dcfce7",icon:"✅"}, paye:{label:"Effectué",color:"#16a34a",bg:"#dcfce7",icon:"✅"}, remboursé:{label:"Remboursé",color:"#7c3aed",bg:"#ede9fe",icon:"↩️"} };
 
@@ -12937,7 +12960,9 @@ export default function CommercialDashboard() {
         const pmts      = paiements.filter(p => p.assignationId === a.id);
         const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
         const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
-        const testLie   = tests.find(t => t.email && a.prospect_email && t.email.toLowerCase()===a.prospect_email.toLowerCase());
+        /* Ce modal a sa PROPRE cible (un paiement, une progression) : `commClasseInfo`
+           désigne la fiche ouverte ailleurs, pas forcément le même apprenant. On reste
+           donc sur le canal du dossier, qui accompagne la ligne affichée. */
         const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const coachLabel= ["groupe","standard"].includes(a.type_coaching)?"Coaching groupe":a.type_coaching==="prive"?"Coaching privé":"-";
         const inscLie   = inscriptions.find(i => i.email && a.prospect_email && i.email.toLowerCase()===a.prospect_email.toLowerCase());
@@ -14832,7 +14857,9 @@ export default function CommercialDashboard() {
         const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
         const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
         const reste     = totalDu - totalReçu;
-        const testLie   = tests.find(t => t.email && a.prospect_email && t.email.toLowerCase()===a.prospect_email.toLowerCase());
+        /* Ce modal a sa PROPRE cible (un paiement, une progression) : `commClasseInfo`
+           désigne la fiche ouverte ailleurs, pas forcément le même apprenant. On reste
+           donc sur le canal du dossier, qui accompagne la ligne affichée. */
         const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const coachLabel= ["groupe","standard"].includes(a.type_coaching) ? "Coaching groupe" : a.type_coaching==="prive" ? "Coaching privé" : "-";
         const offreCatalogueFinalis = matchOffreCatalogue(catalogueOffres, a.inscription_offre);

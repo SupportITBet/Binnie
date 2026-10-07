@@ -98,7 +98,13 @@ export default function SelecteurAssistante({
     <div onClick={e => { if (e.target === e.currentTarget && !enCours) onFermer?.(); }}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", backdropFilter: "blur(3px)",
         zIndex: 9600, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 520, maxHeight: "86vh",
+      {/* AGRANDI (520 → 720 px, 86 → 92 vh). La liste des assistantes se lit en balayant trois
+          informations à la fois — le nom, la jauge de charge et le nombre de dossiers — et à
+          520 px les noms composés de ce parc (« KOFFI KADY JUDITH épouse PULBERE ») serraient la
+          jauge contre le compteur. Plus de hauteur, c'est aussi deux ou trois assistantes de
+          plus visibles sans faire défiler : le choix se fait par comparaison, et comparer
+          suppose de voir ensemble. */}
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 720, maxHeight: "92vh",
         display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,.3)", overflow: "hidden" }}>
 
         {/* ── En-tête : de QUI parle-t-on ──
