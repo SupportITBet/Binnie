@@ -3186,6 +3186,64 @@ router.patch("/mon-avatar", (req, res) => {
   });
 });
 
+/**
+ * POST /api/apprenants/notifier-message — la banderole du destinataire après un message privé.
+ *
+ * POURQUOI ELLE EXISTE. La messagerie de BET vit dans Firestore, et le client y écrit
+ * DIRECTEMENT : le serveur ne voit jamais passer le message. C'est donc à l'expéditeur de
+ * déclencher la notification persistante, et c'est exactement ce que fait l'espace web après
+ * chaque envoi — en appelant `POST /api/notifications`.
+ *
+ * Mais cette route-là est `authenticateAdmin` : un apprenant y reçoit 403. Son message partait
+ * donc bien dans Firestore, sans qu'aucune banderole n'avertisse le coach — qui ne le voyait
+ * qu'en pensant à ouvrir son onglet Messages.
+ *
+ * CE QU'ELLE N'EST PAS : un moyen d'écrire à qui l'on veut. Le destinataire est cherché dans
+ * l'équipe de CET apprenant (`contactsDeLApprenant`, la même résolution que `/contacter`) et
+ * tout identifiant absent de cette liste est refusé. Sans cette borne, une route de création de
+ * notification ouverte aux apprenants permettrait d'envoyer une alerte à n'importe quel compte
+ * de l'organisation, avec un titre et un texte libres.
+ *
+ * LE CONTENU N'EST PAS LIBRE NON PLUS : le titre est construit ici à partir du nom réel de
+ * l'expéditeur, jamais de ce qu'il envoie. Seul l'aperçu vient du client, tronqué à 120
+ * caractères — c'est le texte qu'il vient d'écrire dans la conversation, le cacher n'apporterait
+ * rien.
+ */
+router.post("/notifier-message", async (req, res) => {
+  try {
+    const bearer = req.headers.authorization?.replace("Bearer ", "").trim();
+    if (!bearer) return res.status(401).json({ error: "Non authentifié" });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(bearer);
+    if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
+
+    const { destinataire_id, apercu, conversation_id } = req.body || {};
+    if (!destinataire_id) return res.status(400).json({ error: "Destinataire manquant" });
+
+    const contacts = await contactsDeLApprenant(user);
+    const cible = contacts.find(c => String(c.id) === String(destinataire_id));
+    if (!cible) return res.status(403).json({ error: "Ce contact ne fait pas partie de votre équipe" });
+
+    const { data: profil } = await supabase
+      .from("utilisateurs").select("nom, prenom, email").eq("id", user.id).maybeSingle();
+    const expediteur = `${profil?.prenom || ""} ${profil?.nom || ""}`.trim() || "Un apprenant";
+
+    const { error } = await supabase.from("notifications").insert({
+      user_id: destinataire_id,
+      type:    "info",
+      titre:   `💬 ${expediteur}`,
+      message: String(apercu || "").trim().slice(0, 120) || "Nouveau message",
+      meta:    { chat_conv_id: conversation_id || null, de: user.id },
+      lu:      false,
+    });
+    if (error) throw error;
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[apprenants/notifier-message]", err);
+    return res.status(500).json({ error: "Notification non envoyée" });
+  }
+});
+
 // GET /api/apprenants/mes-contacts
 // Retourne le coach, le commercial et l'onboarding liés à la classe de l'apprenant
 router.get("/mes-contacts", async (req, res) => {
