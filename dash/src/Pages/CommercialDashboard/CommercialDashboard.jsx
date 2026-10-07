@@ -10349,7 +10349,10 @@ export default function CommercialDashboard() {
                   blocageStatus ? infoRow("Absences comptabilisées", `${blocageStatus.nb_absences}/4`) : "",
                 ])}
 
-                ${commAppPres.length > 0 ? `<div class="section-title">📅 Assiduité</div><div class="kpi-row">
+                ${commAppPres.length > 0 ? `<div class="section-title">📅 Assiduité${
+                  new Set(commAppPres.map(p => p.classe_nom).filter(Boolean)).size > 1
+                    ? ` <span style="font-weight:400;font-size:11px;color:#64748b">— sur l'ensemble du parcours</span>` : ""
+                }</div><div class="kpi-row">
                   <div class="kpi-card"><div class="kpi-val">${commAppPres.length}</div><div class="kpi-lbl">Séances</div></div>
                   <div class="kpi-card"><div class="kpi-val">${commAppPres.filter(p=>p.statut==="present").length}</div><div class="kpi-lbl">Présences</div></div>
                   <div class="kpi-card"><div class="kpi-val">${commAppPres.filter(p=>p.statut==="absent").length}</div><div class="kpi-lbl">Absences</div></div>
@@ -10366,7 +10369,14 @@ export default function CommercialDashboard() {
                     t.source === "oral" ? "Évalué en présentiel" : "Passé en ligne",
                   ]))}
 
-                ${subTable("📅 Détail des séances", ["Date","Statut"], commAppPres.map(p => [p.date_seance ? fmtDatePDF(p.date_seance) : "-", p.statut || "-"]))}
+                ${/* LA CLASSE DE CHAQUE SÉANCE, depuis que le détail couvre tout le parcours : sans
+       elle, un transféré présente une liste de dates dont on ne sait plus laquelle
+       appartient à quelle classe. La colonne n'apparaît que s'il y en a plusieurs. */
+   new Set(commAppPres.map(p => p.classe_nom).filter(Boolean)).size > 1
+     ? subTable("📅 Détail des séances", ["Date","Classe","Statut"],
+         commAppPres.map(p => [p.date_seance ? fmtDatePDF(p.date_seance) : "-", p.classe_nom || "-", p.statut || "-"]))
+     : subTable("📅 Détail des séances", ["Date","Statut"],
+         commAppPres.map(p => [p.date_seance ? fmtDatePDF(p.date_seance) : "-", p.statut || "-"]))}
 
                 ${subTable("📈 Progression / jalons", ["Date","Jalon","Détail"], milestones.map(m => [m.date ? fmtDatePDF(m.date) : "-", m.type || "-", `${m.valeur || ""}${m.commentaire ? " - "+m.commentaire : ""}`]))}
 
