@@ -11982,17 +11982,71 @@ export default function CommercialDashboard() {
                                       On le dit, plutôt que de laisser le lecteur arbitrer entre
                                       deux chiffres qui se contredisent. */}
                                   {(() => {
-                                    const anciens = (moisFacturables || [])
-                                      .filter(m => Number(m.montant || 0) !== Number(plan.mensualite || 0));
-                                    if (!anciens.length || !Number(plan.mensualite)) return null;
+                                    /* ── CE QUE CE MESSAGE DOIT DIRE, ET CE QU'IL DISAIT DE FAUX ──
+                                       Il comparait TOUS les mois à `plan.mensualite` et sortait un
+                                       ⚠ dès qu'un seul différait, en concluant toujours « le
+                                       nouveau montant s'applique aux mois créés ensuite ».
+
+                                       Deux mensonges pour un dossier où l'on a coché « dès le mois
+                                       en cours ». Vu le 07/10/2026 sur Doumbia seydou : tarif passé
+                                       de 10 à 5 F, octobre ET novembre bien réécrits à 5 — la
+                                       fonctionnalité avait parfaitement marché. Restait septembre,
+                                       passé et réglé 10 F. L'écran l'annonçait en ⚠ comme si
+                                       quelque chose n'avait pas pris, et affirmait que le nouveau
+                                       tarif ne vaudrait que pour la suite, alors qu'il venait
+                                       justement d'être appliqué au mois en cours.
+
+                                       UN MOIS PASSÉ OU DÉJÀ PAYÉ NE SE RÉÉCRIT PAS — c'est la règle
+                                       du serveur, et elle est juste : on ne refacture pas ce qui est
+                                       encaissé. Le signaler comme une anomalie apprend à ignorer
+                                       l'avertissement, qui ne sert alors plus à rien le jour où il
+                                       dit vrai.
+
+                                       On sépare donc les deux populations :
+                                         · à venir, impayés, encore à l'ancien prix → ACTIONNABLE,
+                                           le tarif ne leur a pas été appliqué, ⚠ ;
+                                         · passés ou déjà réglés → le passé garde son prix, simple
+                                           note, sans alarme. */
+                                    const mois = (moisFacturables || []);
+                                    const nouvelle = Number(plan.mensualite || 0);
+                                    if (!nouvelle || !mois.length) return null;
+
+                                    const periodeCourante = todayStr.slice(0, 7);
+                                    const regle = (m) => (m.tranches || [])
+                                      .reduce((t, x) => t + (Number(x.montant) || 0), 0) > 0;
+
+                                    const aRevoir = mois.filter(m =>
+                                      Number(m.montant || 0) !== nouvelle
+                                      && String(m.periode || "") >= periodeCourante
+                                      && !regle(m));
+                                    const acquis = mois.filter(m =>
+                                      Number(m.montant || 0) !== nouvelle
+                                      && !(String(m.periode || "") >= periodeCourante && !regle(m)));
+
+                                    if (!aRevoir.length && !acquis.length) return null;
+
                                     const chg = Array.isArray(plan.changements_tarif) && plan.changements_tarif.length
                                       ? plan.changements_tarif[plan.changements_tarif.length - 1] : null;
+                                    const leChangement = chg?.le
+                                      ? ` le ${new Date(chg.le).toLocaleDateString("fr-FR")}` : "";
+                                    const f = (n) => Number(n || 0).toLocaleString("fr-FR");
+
+                                    /* Le cas qui APPELLE UNE ACTION passe en premier et seul : s'il
+                                       y a quelque chose à corriger, c'est cela qu'on doit lire. */
+                                    if (aRevoir.length) {
+                                      return (
+                                        <div style={{ fontSize:10.5, color:"#fde68a", marginTop:4, lineHeight:1.45 }}>
+                                          ⚠ {aRevoir.length} mois à venir {aRevoir.length > 1 ? "sont encore" : "est encore"} à{" "}
+                                          {f(aRevoir[0].montant)} F au lieu de {f(nouvelle)} F. Pour les aligner, refaites le
+                                          changement de tarif en cochant « appliquer dès le mois en cours ».
+                                        </div>
+                                      );
+                                    }
+
                                     return (
-                                      <div style={{ fontSize:10.5, color:"#fde68a", marginTop:4, lineHeight:1.45 }}>
-                                        ⚠ {anciens.length} mois déjà écrit{anciens.length > 1 ? "s" : ""} rest{anciens.length > 1 ? "ent" : "e"} à{" "}
-                                        {Number(anciens[0].montant || 0).toLocaleString("fr-FR")} F
-                                        {chg?.le && ` — tarif changé le ${new Date(chg.le).toLocaleDateString("fr-FR")}`}.
-                                        {" "}Le nouveau montant s'applique aux mois créés ensuite.
+                                      <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.72)", marginTop:4, lineHeight:1.45 }}>
+                                        Tarif passé à {f(nouvelle)} F{leChangement}. {acquis.length} mois déjà réglé
+                                        {acquis.length > 1 ? "s restent" : " reste"} à {f(acquis[0].montant)} F : le passé garde son prix.
                                       </div>
                                     );
                                   })()}
