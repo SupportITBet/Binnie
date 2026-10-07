@@ -39,3 +39,10 @@ Backend/docs/
 
 # Note de travail déposée par erreur dans un dossier de code source.
 Le rôle de l'Assistante Onboarding est e
+
+# Application mobile BinnieApp — tenue hors du dépôt le temps de sa mise au point.
+# Exclusion TEMPORAIRE et volontaire, demandée le 07/10/2026 : le code existe bien
+# sur les postes, il n'est simplement pas encore prêt à voyager avec le reste.
+# Pour la réintégrer, retirer cette ligne puis `git add BinnieApp/` — rien d'autre
+# n'est à défaire, aucun de ses fichiers n'a jamais été suivi.
+BinnieApp/

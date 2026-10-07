@@ -268,7 +268,17 @@ router.get("/presences", authenticateUser, async (req, res) => {
   const email = await emailAutorise(req.user, req.query.email);
   if (!email) return res.status(403).json({ error: "Accès refusé à ces données" });
   try {
-    const { assignation_id, ga } = await getIds(email);
+    /* `parcours` MANQUAIT DANS CETTE DÉSTRUCTURATION, et c'était un 500 systématique : le bloc 2
+       ci-dessous teste `parcours?.length` sur une variable jamais déclarée, ce qui lève un
+       `ReferenceError` attrapé par le `catch` et renvoyé en « parcours is not defined ». Toute
+       demande de présences échouait donc — dans l'espace apprenant web comme dans le dashboard
+       parent — alors que `getIds()` rend bien cette valeur. Vérifié le 07/10/2026 sur un
+       apprenant réel : 500 avant, 7 présences après.
+
+       L'optionnel `parcours?.length` est précisément ce qui a caché l'erreur à la relecture : il
+       donne au lecteur l'impression que le cas « absent » est géré. Sur une variable non
+       déclarée, `?.` ne protège de rien — seul `typeof` le ferait. */
+    const { assignation_id, ga, parcours } = await getIds(email);
     let presences = [];
 
     // 1. Presences privées (coaching privé - séances régulières)

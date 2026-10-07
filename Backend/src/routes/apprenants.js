@@ -14,6 +14,7 @@ import { enrichirPaiementsAvecTouchPoint } from "../utils/enrichirPaiementsTouch
 import { notifyRole, notifyUser, notifyOnboarding, ROLES_SUPERVISION_GLOBALE } from "../services/notifyRole.js";
 import { contexteMarquage, noterLectureEnCache, MOTIF } from "../services/lectureSequentielle.js";
 import { utilisateurDuJeton } from "../services/cacheAuth.js";
+import { photoValide } from "../utils/photoUrl.js";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -186,6 +187,49 @@ router.get("/check-eligibilite", async (req, res) => {
     if (classeAppSusp) {
       const definitif = (classeAppSusp.notes || '').includes('[SUSPENSION DÉFINITIVE]');
       return res.json({ eligible: false, raison: definitif ? 'acces_suspendu_definitif' : 'acces_suspendu_momentane', motif: null });
+    }
+
+    /* ── 2c. LES APPRENANTS BET LANGUAGES, SUR DEMANDE EXPLICITE ──────────────────────────
+       Tout ce qui précède interroge le monde E-LEARNING : `inscriptions_elearning` et
+       `classes_elearning_apprenants`. Les apprenants du coaching BET - présentiel comme en
+       ligne - n'y figurent pas : ils vivent dans `groupes_apprenants`. Mesuré le 07/10/2026 :
+       les 85 apprenants actifs étaient TOUS refusés en « test_manquant », les deux tables
+       e-learning étant vides. L'application mobile, qui les sert, ne pouvait laisser entrer
+       personne.
+
+       POURQUOI UN PARAMÈTRE PLUTÔT QU'UN ÉLARGISSEMENT POUR TOUS. Cette route a un appelant
+       existant - l'espace e-learning - et y ajouter un chemin d'éligibilité ferait entrer dans
+       SON application des apprenants qui n'y ont aucun contenu. Ils y trouveraient un espace
+       vide, ce qui est pire qu'un refus expliqué. Le périmètre est donc demandé par
+       l'appelant : chacun pose la question qui le concerne, et la règle reste écrite ici, à un
+       seul endroit, plutôt que recopiée dans une seconde route pour l'application mobile.
+
+       LA SUSPENSION RESTE PRIORITAIRE : elle est vérifiée tout en haut, avant ce bloc, et
+       aucun chemin ci-dessous ne peut la contourner. */
+    if (req.query.perimetre === "coaching") {
+      const { data: inscription } = await supabase
+        .from("groupes_apprenants")
+        .select("id, statut, groupe_id, niveau")
+        .ilike("email_apprenant", email)
+        .eq("statut", "actif")
+        .limit(1)
+        .maybeSingle();
+
+      if (inscription) return res.json({ eligible: true, raison: null, perimetre: "coaching" });
+
+      /* Inscrit mais plus actif : il a été transféré - auquel cas une autre ligne « actif »
+         existe et on ne serait pas ici - ou il a arrêté sa formation. Le dire précisément
+         évite de lui annoncer un test de niveau qu'il a déjà passé. */
+      const { data: ancienne } = await supabase
+        .from("groupes_apprenants")
+        .select("id, statut")
+        .ilike("email_apprenant", email)
+        .limit(1)
+        .maybeSingle();
+      if (ancienne) {
+        return res.json({ eligible: false, raison: "formation_terminee", perimetre: "coaching" });
+      }
+      return res.json({ eligible: false, raison: "classe_manquante", perimetre: "coaching" });
     }
 
     // 3. Vérifier si test fait mais pas encore de classe
@@ -1680,7 +1724,7 @@ router.get("/parent/enfant/:id/paiements", async (req, res) => {
  * Ne lève jamais : un contact absent dégrade l'affichage, il ne doit pas casser l'espace.
  */
 async function resoudreContactAssistance(assistanteId) {
-  const central = { type: "central", nom: null, email: null, telephone: null };
+  const central = { type: "central", nom: null, email: null, telephone: null, photo_url: null };
   try {
     const { data: cfg } = await supabase
       .from("config_contact")
@@ -1693,9 +1737,12 @@ async function resoudreContactAssistance(assistanteId) {
 
   if (!assistanteId) return central;
   try {
+    /* `photo_url` et non `avatar_url` : la table `assistantes` nomme sa colonne autrement que
+       `utilisateurs`. Les deux noms coexistent dans ce schéma, et demander le mauvais fait
+       échouer la requête entière - donc perdre le contact, pas seulement sa photo. */
     const { data: a } = await supabase
       .from("assistantes")
-      .select("nom, prenom, email, telephone")
+      .select("nom, prenom, email, telephone, photo_url")
       .eq("id", assistanteId)
       .maybeSingle();
     // Une assistante sans e-mail NI téléphone ne rend pas service : on garde le central.
@@ -1705,6 +1752,7 @@ async function resoudreContactAssistance(assistanteId) {
         nom:       `${a.prenom || ""} ${a.nom || ""}`.trim() || null,
         email:     a.email     || central.email,
         telephone: a.telephone || central.telephone,
+        photo_url: photoValide(a.photo_url) || null,
       };
     }
   } catch { /* idem */ }
@@ -1899,12 +1947,16 @@ router.get("/mon-espace", async (req, res) => {
       }
       const coachId = bonneEntree.groupes?.coach_id || null;
 
-      // Fetch coach name from utilisateurs
+      /* Fetch coach name from utilisateurs.
+         `avatar_url` : l'apprenant doit pouvoir mettre un visage sur son coach. La colonne
+         existe et est remplie pour une partie du personnel ; l'omettre de ce SELECT la faisait
+         disparaître de l'écran même quand la photo était là - c'est la dérive de projection qui
+         a déjà coûté plusieurs champs dans ce projet. */
       let coachInfo = null;
       if (coachId) {
         const { data: coachRow } = await supabase
           .from("utilisateurs")
-          .select("id, nom, prenom, email")
+          .select("id, nom, prenom, email, telephone, avatar_url")
           .eq("id", coachId)
           .maybeSingle();
         coachInfo = coachRow || null;
@@ -2570,6 +2622,22 @@ router.get("/mes-presences", async (req, res) => {
   }
 });
 
+/* ── `GET /api/apprenants/mes-seances` A ÉTÉ SUPPRIMÉE ────────────────────────────────────
+   Je l'avais écrite en croyant qu'aucune route de planning n'existait côté apprenant. C'était
+   faux : `GET /api/mon-espace/seances` (voir `routes/monEspace.js`) rend déjà cette donnée, et
+   c'est elle que l'espace apprenant web utilise.
+
+   Elle fait d'ailleurs STRICTEMENT PLUS que ce que j'avais écrit :
+     · elle lit sur TOUT LE PARCOURS — les séances suivies dans une classe précédente sont
+       celles de l'apprenant, il les a faites ; ma version ne voyait que la classe du moment ;
+     · elle borne chaque classe à la fenêtre de l'inscription correspondante ;
+     · elle couvre le coaching privé via `seances_privees` ;
+     · elle calcule `heure_fin` depuis `duree_h` et rend `classe_nom` / `classe_passee`.
+
+   Deux routes répondant à la même question est précisément la panne récurrente de ce projet :
+   elles divergent, et personne ne sait laquelle fait foi. L'application mobile appelle donc la
+   même que le web. ── */
+
 // ══════════════════════════════════════════════════════════════
 // ÉVALUATIONS GROUPES - côté apprenant
 // ══════════════════════════════════════════════════════════════
@@ -2956,11 +3024,12 @@ async function contactsDeLApprenant(user) {
     const coachId = ga?.groupes?.coach_id;
     if (coachId) {
       const { data: coach } = await supabase.from("utilisateurs")
-        .select("id, nom, prenom, email, telephone, role")
+        .select("id, nom, prenom, email, telephone, role, avatar_url")
         .eq("id", coachId).maybeSingle();
       if (coach) contacts.push({
         id: coach.id, role: "Coach", nom: `${coach.prenom || ""} ${coach.nom || ""}`.trim(),
         email: coach.email || null, telephone: coach.telephone || null,
+        photo_url: photoValide(coach.avatar_url) || null,
         disponible: "Selon planning de cours",
       });
     }
@@ -2983,7 +3052,7 @@ async function contactsDeLApprenant(user) {
         let staffInfo = null;
         if (asst.email) {
           const { data: u } = await supabase.from("utilisateurs")
-            .select("id, nom, prenom, email, telephone, role").ilike("email", asst.email).maybeSingle();
+            .select("id, nom, prenom, email, telephone, role, avatar_url").ilike("email", asst.email).maybeSingle();
           staffInfo = u;
         }
         if (staffInfo) {
@@ -2995,6 +3064,7 @@ async function contactsDeLApprenant(user) {
             id: staffInfo.id, role: roleLabel,
             nom: `${staffInfo.prenom || ""} ${staffInfo.nom || ""}`.trim(),
             email: staffInfo.email || null, telephone: staffInfo.telephone || null,
+            photo_url: photoValide(staffInfo.avatar_url) || null,
             disponible: "Lun-Ven 8h-18h",
           });
         }
@@ -3003,7 +3073,7 @@ async function contactsDeLApprenant(user) {
       // 3. PA Advisor lié à la classe (via created_by du groupe ou assignation)
       if (ga?.groupes) {
         const { data: paAdvisors } = await supabase.from("utilisateurs")
-          .select("id, nom, prenom, email, telephone, role")
+          .select("id, nom, prenom, email, telephone, role, avatar_url")
           .eq("role", "pedagogical_advisor")
           .eq("actif", true)
           .limit(1);
@@ -3013,6 +3083,7 @@ async function contactsDeLApprenant(user) {
             id: pa.id, role: "PA Advisor",
             nom: `${pa.prenom || ""} ${pa.nom || ""}`.trim(),
             email: pa.email || null, telephone: pa.telephone || null,
+            photo_url: photoValide(pa.avatar_url) || null,
             disponible: "Sur rendez-vous",
           });
         }
@@ -3021,6 +3092,99 @@ async function contactsDeLApprenant(user) {
 
   return contacts;
 }
+
+/**
+ * PATCH /api/apprenants/mon-avatar — l'apprenant met SA photo de profil.
+ *
+ * POURQUOI UNE ROUTE DE PLUS alors que `entreprise.js` en a déjà une
+ * (`/elearning/update-avatar`) : celle-là est fermée aux rôles entreprise et administratifs
+ * (`rolesAutorises` y liste huit rôles, dont aucun n'est « apprenant »). Un apprenant appelant
+ * cette route reçoit 403. Elle n'est donc pas réutilisable telle quelle, et l'ÉLARGIR aurait
+ * ouvert l'espace entreprise à tout le monde pour gagner un envoi d'image.
+ *
+ * CE QUI EST VÉRIFIÉ, et pourquoi chaque contrôle est là :
+ *   · LE TYPE EST LU SUR LE CONTENU, pas sur le nom du fichier ni sur le `mimetype` annoncé par
+ *     le client — les deux sont déclaratifs et falsifiables. Cloudinary refuse d'ailleurs ce qui
+ *     n'est pas une image en `resource_type: "image"`, mais on ne lui délègue pas la décision :
+ *     un envoi refusé doit produire un message compréhensible, pas une erreur de bibliothèque.
+ *   · LA TAILLE EST PLAFONNÉE À 6 Mo. `uploadRendu` tolère 50 Mo parce qu'il sert aux copies
+ *     audio ; une photo de profil recadrée en 300×300 n'a aucune raison d'être aussi lourde, et
+ *     le plafond large n'existait que pour un autre usage.
+ *   · L'IDENTITÉ VIENT DU JETON, jamais du corps de la requête. Accepter un `apprenant_id`
+ *     laisserait n'importe qui changer la photo de n'importe qui.
+ *
+ * Le recadrage `gravity: "face"` est celui déjà employé ailleurs dans le projet : même rendu
+ * d'un espace à l'autre, et une image carrée garantie — sans quoi l'avatar rond déforme les
+ * photos en portrait.
+ */
+const uploadAvatar = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 6 * 1024 * 1024 },
+});
+
+/* Les signatures binaires des formats acceptés. Un fichier `.jpg` renommé depuis un exécutable
+   ne commence pas par ces octets. */
+const SIGNATURES_IMAGE = [
+  { nom: "JPEG", octets: [0xff, 0xd8, 0xff] },
+  { nom: "PNG",  octets: [0x89, 0x50, 0x4e, 0x47] },
+  { nom: "WebP", octets: [0x52, 0x49, 0x46, 0x46] },   // « RIFF », puis « WEBP » en 8..11
+  { nom: "HEIC", octets: [0x00, 0x00, 0x00] },          // boîte ftyp : vérifiée ci-dessous
+];
+
+const estUneImage = (buf) => {
+  if (!buf || buf.length < 12) return false;
+  const debutEst = (octets) => octets.every((o, i) => buf[i] === o);
+  if (debutEst(SIGNATURES_IMAGE[0].octets)) return true;                       // JPEG
+  if (debutEst(SIGNATURES_IMAGE[1].octets)) return true;                       // PNG
+  if (debutEst(SIGNATURES_IMAGE[2].octets) && buf.slice(8, 12).toString("ascii") === "WEBP") return true;
+  // HEIC/HEIF : le type de boîte « ftyp » se trouve en 4..7, la marque en 8..11.
+  if (buf.slice(4, 8).toString("ascii") === "ftyp"
+      && /^(heic|heix|hevc|mif1|msf1)/.test(buf.slice(8, 12).toString("ascii"))) return true;
+  return false;
+};
+
+router.patch("/mon-avatar", (req, res) => {
+  uploadAvatar.single("photo")(req, res, async (multerErr) => {
+    if (multerErr) {
+      const trop = multerErr.code === "LIMIT_FILE_SIZE";
+      return res.status(400).json({
+        error: trop ? "La photo dépasse 6 Mo. Choisissez-en une plus légère." : multerErr.message,
+      });
+    }
+    try {
+      const bearer = req.headers.authorization?.replace("Bearer ", "").trim();
+      if (!bearer) return res.status(401).json({ error: "Non authentifié" });
+      const { data: { user }, error: authErr } = await supabase.auth.getUser(bearer);
+      if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
+
+      if (!req.file?.buffer) return res.status(400).json({ error: "Aucune photo reçue." });
+      if (!estUneImage(req.file.buffer)) {
+        return res.status(400).json({ error: "Ce fichier n'est pas une image (JPEG, PNG, WebP ou HEIC attendus)." });
+      }
+
+      const url = await new Promise((resolve, reject) => {
+        const flux = cloudinary.uploader.upload_stream(
+          {
+            folder: "bet/avatars-utilisateurs",
+            resource_type: "image",
+            transformation: [{ width: 300, height: 300, crop: "fill", gravity: "face" }],
+          },
+          (err, resultat) => (err ? reject(err) : resolve(resultat.secure_url)),
+        );
+        flux.end(req.file.buffer);
+      });
+
+      const { error: majErr } = await supabase
+        .from("utilisateurs").update({ avatar_url: url }).eq("id", user.id);
+      if (majErr) throw majErr;
+
+      return res.json({ avatar_url: url });
+    } catch (err) {
+      console.error("[apprenants/mon-avatar]", err);
+      return res.status(500).json({ error: "L'envoi de la photo a échoué. Réessayez." });
+    }
+  });
+});
 
 // GET /api/apprenants/mes-contacts
 // Retourne le coach, le commercial et l'onboarding liés à la classe de l'apprenant
