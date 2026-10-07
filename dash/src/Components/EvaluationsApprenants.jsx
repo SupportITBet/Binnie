@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { NIVEAUX_APPRECIATION } from "./AppreciationSeance";
 import { exporterClassementCoachs, exporterEvaluationsDetail } from "../utils/exporterClassementCoachs";
+import { libelleCanalSeul } from "../utils/canal";
 
 /**
  * Ce que les apprenants disent des cours - vu par le superviseur et le conseiller
@@ -482,7 +483,7 @@ export default function EvaluationsApprenants({ apiUrl, authHeaders, accent = "#
                             {a.seance?.titre || "Séance"}
                             {a.seance?.type_cours && (
                               <div style={{ fontSize:10.5, color:"#94a3b8", fontWeight:400 }}>
-                                {a.seance.type_cours === "en_ligne" ? "En ligne" : a.seance.type_cours}
+                                {libelleCanalSeul(a.seance.type_cours)}
                               </div>
                             )}
                           </td>

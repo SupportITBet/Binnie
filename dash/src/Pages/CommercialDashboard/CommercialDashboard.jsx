@@ -57,6 +57,7 @@ import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Compone
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
 import ArchiveApprenantsCommerciale from "../../Components/ArchiveApprenantsCommerciale";
+import { libelleCanal } from "../../utils/canal";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("admin_token")}` });
@@ -6521,7 +6522,7 @@ export default function CommercialDashboard() {
                                       title={!peut("finances","create") ? permBtnTitle("Ajouter un versement",false) : full ? "Paiement à jour" : "Ajouter le reste du paiement pour cet apprenant"}
                                       onClick={() => {
                                         if (!aLie || full || !peut("finances","create")) return;
-                                        const ml = aLie.type_cours==="en_ligne"?"En ligne":`Présentiel${aLie.centre_nom?" · "+aLie.centre_nom:""}`;
+                                        const ml = libelleCanal(aLie.type_cours, aLie.centre_nom);
                                         const tl = ["groupe","standard"].includes(aLie.type_coaching)?"Coaching groupe":aLie.type_coaching==="prive"?"Coaching privé":"Formation";
                                         setEditingItem({ client:aLie.prospect_nom||"", email:aLie.prospect_email||"", telephone:aLie.prospect_telephone||"", inscription:`Parcours BET · ${ml} · ${tl}`, montantDu:g.montantDu||0, montantReçu:0, dejaReçu:g.montantReçu||0, date:new Date().toISOString().slice(0,10), mode:"Mobile Money", statut:"en_attente", notes:"", refTransaction:"", assignationId:aLie.id, _isApprenant: true, packCoachingLabel: aLie.type_coaching === "prive" ? `${aLie.suivi_demarrage?.type_coaching === "intensive" ? "Intensive - 5 séances/sem" : "Classique - 3 séances × 2h/sem"}${aLie.suivi_demarrage?.lieu_coaching ? " · " + (aLie.suivi_demarrage.lieu_coaching === "domicile" ? "À domicile" : aLie.suivi_demarrage.lieu_coaching === "en_ligne" ? "En ligne" : "Au cabinet") : ""}` : null, formuleGroupe: aLie.suivi_demarrage?.formule_groupe || null });
                                         setShowPaiementModal(true);
@@ -9513,7 +9514,7 @@ export default function CommercialDashboard() {
                                 // doit jamais empêcher de ressaisir/relancer le paiement.
                                 const btnDisabled = paiementEnLigneReussi || paiementAutreReussi || a.hors_canal_en_attente || !peut("finances","create") || dossierPasValide;
                                 const typeLabel = ["groupe","standard"].includes(a.type_coaching) ? "Coaching groupe" : a.type_coaching === "prive" ? "Coaching privé" : "Formation";
-                                const modeLabel = a.type_cours === "en_ligne" ? "En ligne" : `Présentiel${a.centre_nom ? " - " + a.centre_nom : ""}`;
+                                const modeLabel = libelleCanal(a.type_cours, a.centre_nom, " - ");
                                 // Fallback pour prospects web sans inscription_offre : chercher dans les paiements CinetPay par email
                                 const pmtByEmail = !a.inscription_offre
                                   ? paiements.find(p => p.email && a.prospect_email && p.email.toLowerCase() === a.prospect_email.toLowerCase() && p.offre)
@@ -9984,7 +9985,7 @@ export default function CommercialDashboard() {
                                 const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
                                 const reste     = totalDu - totalReçu;
                                 const niveauColor = NIVEAU_COLOR[testProspect?.niveau] || "#6b7280";
-                                const modeLabel = a.type_cours === "en_ligne" ? "En ligne" : `Présentiel${a.centre_nom ? " · "+a.centre_nom : ""}`;
+                                const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
                                 const coachLabel = ["groupe","standard"].includes(a.type_coaching) ? "Groupe" : a.type_coaching === "prive" ? "Privé" : "-";
 
                                 const plan = a.plan_paiement || {};
@@ -10240,7 +10241,7 @@ export default function CommercialDashboard() {
         const plan = a.plan_paiement || {};
         const tranches = plan.tranches || [];
         const accesBloque = a.acces_bloque || false;
-        const modeLabel = a.type_cours === "en_ligne" ? "En ligne" : `Présentiel${a.centre_nom ? " · "+a.centre_nom : ""}`;
+        const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const coachLabel = ["groupe","standard"].includes(a.type_coaching) ? "Groupe" : a.type_coaching === "prive" ? "Privé" : "-";
         const today = new Date(); today.setHours(0,0,0,0);
         const sp = a.suivi_presences || {};
@@ -11896,7 +11897,7 @@ export default function CommercialDashboard() {
                     const tDejaPaye = (mois.tranches||[]).filter(t=>t.statut==="paye").reduce((s,t)=>s+(t.montant||0),0);
                     const tranche   = trancheId ? (mois.tranches||[]).find(t=>t.id===trancheId) : null;
                     const montantCe = tranche ? tranche.montant : Math.max(0, mois.montant - tDejaPaye);
-                    const ml = a.type_cours==="en_ligne"?"En ligne":`Présentiel${a.centre_nom?" · "+a.centre_nom:""}`;
+                    const ml = libelleCanal(a.type_cours, a.centre_nom);
                     setMoisPayTarget({ assignationId:a.id, moisId:mois.id, trancheId, plan });
                     setEditingItem({
                       client: a.prospect_nom||"", email: a.prospect_email||"", telephone: a.prospect_telephone||"",
@@ -12490,7 +12491,7 @@ export default function CommercialDashboard() {
                           onClick={() => {
                             if (isSolde || !peut("finances","create") || dossierPasValide) return;
                             const typeLabel = ["groupe","standard"].includes(a.type_coaching)?"Coaching groupe":a.type_coaching==="prive"?"Coaching privé":"Formation";
-                            const ml = a.type_cours==="en_ligne"?"En ligne":`Présentiel${a.centre_nom?" · "+a.centre_nom:""}`;
+                            const ml = libelleCanal(a.type_cours, a.centre_nom);
                             const offreLabel = offreEffective || `Parcours BET · ${ml} · ${typeLabel}`;
                             const offreCat = matchOffreCatalogue(catalogueOffres, offreEffective);
                             // Priorité au prix réellement choisi par le client (pack Classique/
@@ -12683,7 +12684,7 @@ export default function CommercialDashboard() {
         const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
         const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
         const reste     = totalDu - totalReçu;
-        const modeLabel = a.type_cours==="en_ligne" ? "En ligne" : `Présentiel${a.centre_nom?" · "+a.centre_nom:""}`;
+        const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const PSTAT = { en_attente:{label:"En attente",color:"#d97706",bg:"#fef3c7",icon:"⏳"}, partiel:{label:"Partiel",color:"#0891b2",bg:"#e0f2fe",icon:"🔄"}, reçu:{label:"Effectué",color:"#16a34a",bg:"#dcfce7",icon:"✅"}, confirme:{label:"Effectué",color:"#16a34a",bg:"#dcfce7",icon:"✅"}, paye:{label:"Effectué",color:"#16a34a",bg:"#dcfce7",icon:"✅"}, remboursé:{label:"Remboursé",color:"#7c3aed",bg:"#ede9fe",icon:"↩️"} };
 
         return (
@@ -12937,7 +12938,7 @@ export default function CommercialDashboard() {
         const totalDu   = pmts.length > 0 ? Math.max(...pmts.map(p => p.montantDu || 0)) : 0;
         const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
         const testLie   = tests.find(t => t.email && a.prospect_email && t.email.toLowerCase()===a.prospect_email.toLowerCase());
-        const modeLabel = a.type_cours==="en_ligne"?"En ligne":`Présentiel${a.centre_nom?" · "+a.centre_nom:""}`;
+        const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const coachLabel= ["groupe","standard"].includes(a.type_coaching)?"Coaching groupe":a.type_coaching==="prive"?"Coaching privé":"-";
         const inscLie   = inscriptions.find(i => i.email && a.prospect_email && i.email.toLowerCase()===a.prospect_email.toLowerCase());
         const NIVEAU_COLOR = { A1:"#6b7280",A2:"#0891b2",B1:"#16a34a",B2:"#7c3aed",C1:"#d97706",C2:"#dc2626" };
@@ -14832,7 +14833,7 @@ export default function CommercialDashboard() {
         const totalReçu = pmts.reduce((s,p)=>s+(p.montantReçu||0),0);
         const reste     = totalDu - totalReçu;
         const testLie   = tests.find(t => t.email && a.prospect_email && t.email.toLowerCase()===a.prospect_email.toLowerCase());
-        const modeLabel = a.type_cours==="en_ligne" ? "En ligne" : `Présentiel${a.centre_nom?" · "+a.centre_nom:""}`;
+        const modeLabel = libelleCanal(a.type_cours, a.centre_nom);
         const coachLabel= ["groupe","standard"].includes(a.type_coaching) ? "Coaching groupe" : a.type_coaching==="prive" ? "Coaching privé" : "-";
         const offreCatalogueFinalis = matchOffreCatalogue(catalogueOffres, a.inscription_offre);
 
@@ -17117,7 +17118,7 @@ const PaiementForm = ({ initialData, onSave, onCancel, apprenants = [], catalogu
     if (!id) { setForm(prev => ({ ...prev, assignationId:null, client:"", email:"", telephone:"", inscription:"", offre:"", montantDu:0 })); return; }
     const a = apprenants.find(x => x.id === id);
     if (!a) return;
-    const ml = a.type_cours==="en_ligne"?"En ligne":`Présentiel${a.centre_nom?" · "+a.centre_nom:""}`;
+    const ml = libelleCanal(a.type_cours, a.centre_nom);
     const tl = ["groupe","standard"].includes(a.type_coaching)?"Coaching groupe":a.type_coaching==="prive"?"Coaching privé":"Formation";
     // Reprend l'offre déjà connue du dossier - sinon la sélection d'apprenant ne remplissait
     // jamais la Formation, obligeant à la re-choisir manuellement alors qu'elle était déjà là.

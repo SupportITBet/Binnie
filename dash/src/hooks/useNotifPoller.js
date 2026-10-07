@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { libelleCanal } from "../utils/canal";
 
 const API_URL  = process.env.REACT_APP_API_URL || "http://localhost:5001";
 const authHdrs = () => ({
@@ -173,7 +174,7 @@ async function pollAssignations(userId) {
     addSeenId(userId, "assignations", id);
     if (seen.size === 0) continue;
 
-    const typeCours = a.type_cours === "en_ligne" ? "En ligne" : "Présentiel";
+    const typeCours = libelleCanal(a.type_cours);
     const coaching  = a.type_coaching ? ` · ${a.type_coaching}` : "";
     const payload = {
       type:  "assignation",

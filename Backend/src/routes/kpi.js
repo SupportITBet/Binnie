@@ -188,7 +188,14 @@ router.get("/cockpit", authenticateAdmin, requirePermission("rapports", "read"),
     // Répartition par modalité : une part, pas un total - l'indicateur EST la distribution.
     const modalites = {};
     dossiers.forEach((a) => {
-      const canal = a.type_cours === "en_ligne" ? "En ligne" : a.type_cours === "domicile" ? "À domicile" : "Présentiel";
+      /* LE CANAL, SANS RANGER L'INCONNU DANS « PRÉSENTIEL ». La chaîne se terminait par un
+         repli qui absorbait TOUT le reste : un dossier `hybride` était compté comme présentiel,
+         et la répartition — dont c'est l'unique objet — s'en trouvait faussée sans que rien ne
+         le signale. Une modalité non prévue apparaît désormais sous son propre nom : moins
+         joli, mais c'est un indicateur, et un indicateur qui arrondit ne sert à rien. */
+      const CANAUX = { en_ligne: "En ligne", presentiel: "Présentiel", hybride: "Hybride",
+                       les_deux: "Hybride", domicile: "À domicile" };
+      const canal = CANAUX[a.type_cours] || a.type_cours || "Non renseigné";
       const type = a.type_coaching === "prive" ? "privé" : "groupe";
       const cle = `${canal} · ${type}`;
       modalites[cle] = (modalites[cle] || 0) + 1;

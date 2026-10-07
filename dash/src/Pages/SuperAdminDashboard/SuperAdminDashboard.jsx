@@ -43,6 +43,7 @@ import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
 import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
 import { exporterFicheApprenantPDF, ligneInfo, fmtDatePDF } from "../../utils/fichePdfApprenant";
+import { libelleCanal } from "../../utils/canal";
 
 const API_URL        = process.env.REACT_APP_API_URL        || "http://localhost:5001";
 const FRONTEND_URL   = process.env.REACT_APP_FRONTEND_URL   || "http://localhost:3000";
@@ -21401,7 +21402,7 @@ export default function SuperAdminDashboard() {
                         ]},
                         { titre: "🎓 Formation", lignes: [
                           ligneInfo("Niveau", sa.niveau),
-                          ligneInfo("Type de cours", sa.type_cours === "en_ligne" ? "En ligne" : "Présentiel"),
+                          ligneInfo("Type de cours", libelleCanal(sa.type_cours)),
                           ligneInfo("Type de coaching", sa.type_coaching === "prive" ? "Privé" : "Groupe"),
                           ligneInfo("Centre", sa.centre_nom),
                           ligneInfo("Coach", sa.coach),
