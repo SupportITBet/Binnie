@@ -808,8 +808,68 @@ router.get("/", authenticateAdmin, async (req, res) => {
       throw error;
     }
 
+    /* ══ À QUI CE DOSSIER DEMANDE-T-IL QUELQUE CHOSE ? ══════════════════════════════════
+       Chaque demande part avec un drapeau `a_traiter_par_moi`, et c'est lui qui alimente le
+       badge de l'onglet « Dossiers à réaffecter ».
+
+       POURQUOI ICI ET NON DANS L'ÉCRAN. Les règles d'autorité sont déjà toutes sur le serveur
+       (`je_peux_reaffecter`, `je_peux_executer_vers`, `mon_centre`). Les recopier dans le hook
+       du badge aurait fait une deuxième version de la même règle, à tenir à jour en double —
+       et c'est exactement par là que le badge a commencé à mentir : il ne comptait que
+       `test_fait`, donc un transfert de centre, qui attend en `en_attente_accord`, n'y
+       apparaissait jamais. L'assistante du centre d'accueil recevait le dossier sans aucun
+       compteur pour le lui dire.
+
+       VOIR N'EST PAS AGIR, et le drapeau porte cette différence. Un dossier
+       `en_attente_accord` est visible des DEUX côtés : celle qui l'émet en suit l'avancement,
+       celle qui reçoit doit l'accepter. Badger les deux rendrait le compteur inutile pour
+       l'émettrice — « il y a quelque chose » au lieu de « à vous de jouer ».
+
+       LES TROIS CAS, dans le même ordre que les boutons de l'écran :
+         · `en_attente_test`   → le placement test, et lui seul ;
+         · `test_fait`         → celui qui réaffecte, selon le canal d'arrivée ;
+         · `en_attente_accord` → le centre d'ACCUEIL pour un transfert de centre, le canal
+                                 d'arrivée pour une migration.
+       Tout le reste (traitée, refusée) n'attend plus personne. */
+    const peutVers = {
+      en_ligne:   await peutExecuterVers("en_ligne", req),
+      presentiel: await peutExecuterVers("presentiel", req),
+    };
+    const monCentreId = estCommerciale(req.role)
+      ? ((await assistanteDe(req.profil))?.centre_id || null) : null;
+    const suisOnboarding = estOnboarding(req.role) && !estCommerciale(req.role);
+
+    const aTraiter = (d) => {
+      if (d.statut === "en_attente_test") return estPlacement(req.role);
+
+      if (d.statut === "test_fait") {
+        // Changement de classe ou de coaching : on reste dans le canal de la classe.
+        return !!peutVers[estCanal(d.type_cours) ? d.type_cours : "presentiel"];
+      }
+
+      if (d.statut === "en_attente_accord") {
+        if (d.type_demande === "changement_centre") {
+          // L'autorité est au centre d'ACCUEIL. L'onboarding garde la main pour arbitrer
+          // quand un centre ne répond pas — même règle que le bouton.
+          return suisOnboarding
+            || (!!monCentreId && String(d.centre_cible_id || "") === String(monCentreId));
+        }
+        // Migration de canal : c'est le canal d'ARRIVÉE qui tranche, jamais celui de départ.
+        return !!peutVers[canalCibleDe(d.type_cours)];
+      }
+
+      return false;
+    };
+
+    const demandes = (data || []).map(d => ({ ...d, a_traiter_par_moi: aTraiter(d) }));
+
     res.json({
-      demandes: data || [],
+      demandes,
+      /* Le compte des dossiers qui attendent VRAIMENT une action de cette personne. Rendu par
+         le serveur plutôt que recalculé : le badge et la liste disent alors forcément la même
+         chose, et un dossier traité disparaît du compteur au même instant qu'il quitte la
+         file. */
+      a_traiter: demandes.filter(d => d.a_traiter_par_moi).length,
       motifs: MOTIFS_TRANSFERT,
       /* L'écran sait ainsi quels boutons présenter, sans dupliquer la matrice des rôles - et
          sans se tromper : une assistante EN LIGNE voit la file mais ne réaffecte pas, ce que
@@ -823,18 +883,15 @@ router.get("/", authenticateAdmin, async (req, res) => {
          peut réaffecter « en général » et lui proposerait un bouton que le serveur refuserait
          - côté en ligne, l'affectation revient toujours à l'onboarding. On répond donc
          explicitement, canal par canal. */
-      je_peux_executer_vers: {
-        en_ligne:   await peutExecuterVers("en_ligne", req),
-        presentiel: await peutExecuterVers("presentiel", req),
-      },
+      je_peux_executer_vers: peutVers,
       /* MON CENTRE, pour les transferts de centre à centre. L'autorité n'y dépend ni du rôle
          ni du canal mais du CENTRE D'ACCUEIL : seule l'assistante qui va recevoir l'apprenant
          peut accepter. L'écran ne pouvait pas le savoir - il n'avait que les canaux - et
          n'affichait donc aucun bouton sur ces dossiers, pas même à celle qui devait trancher.
          `null` pour l'onboarding et les rôles d'administration, qui n'appartiennent à aucun
          centre et gardent la main sur tout. */
-      mon_centre: estCommerciale(req.role) ? ((await assistanteDe(req.profil))?.centre_id || null) : null,
-      je_suis_onboarding: estOnboarding(req.role) && !estCommerciale(req.role),
+      mon_centre: monCentreId,
+      je_suis_onboarding: suisOnboarding,
     });
   } catch (err) {
     console.error("[demandes-transfert GET]", err.message || err);

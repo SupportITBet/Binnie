@@ -86,23 +86,46 @@ const champ = { padding: "9px 12px", border: "1.5px solid #e5e7eb", borderRadius
  * la notification passait, et le transfert attendait qu'on y repense. Un badge rend l'attente
  * visible depuis n'importe quel écran du tableau de bord.
  *
- * CHACUN SON COMPTE. Le placement test attend les dossiers `en_attente_test` - ceux où il doit
- * agir ; l'onboarding et la commerciale attendent les `test_fait` - ceux qu'ils peuvent enfin
- * réaffecter. Compter les mêmes dossiers pour les deux afficherait à chacun le travail de
- * l'autre, et le badge cesserait de vouloir dire « à vous de jouer ».
+ * ──────────────────────────────────────────────────────────────────────────────────────────
+ * LE COMPTE VIENT DU SERVEUR (`a_traiter`), ET C'EST LE POINT.
+ *
+ * Ce hook interrogeait `?statut=test_fait` et comptait les lignes. C'était juste tant qu'il
+ * n'existait que deux circuits. Le transfert DE CENTRE À CENTRE, lui, n'attend pas un test :
+ * il attend l'accord du centre d'accueil, et reste donc en `en_attente_accord` — un statut que
+ * ce filtre ne voyait pas. Résultat constaté le 07/10/2026 : l'assistante recevait le dossier,
+ * le dossier s'affichait dans sa file, et l'onglet ne portait AUCUN badge.
+ *
+ * Élargir le filtre à deux statuts n'aurait pas suffi : `en_attente_accord` est visible des
+ * DEUX côtés — celle qui émet suit l'avancement, celle qui reçoit doit accepter. Compter les
+ * deux aurait badgé l'émettrice pour un travail qui n'est pas le sien, et le badge aurait
+ * cessé de vouloir dire « à vous de jouer ».
+ *
+ * Les règles d'autorité vivent toutes sur le serveur (`je_peux_executer_vers`, `mon_centre`,
+ * le rôle). C'est donc LUI qui marque chaque demande d'un `a_traiter_par_moi` et en rend le
+ * total. Les recopier ici en aurait fait une seconde version à tenir à jour en double — la
+ * façon la plus sûre de voir le badge et la liste se contredire au prochain circuit ajouté.
+ * ──────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * `mode` n'est plus utilisé pour filtrer : le serveur connaît le rôle de l'appelant et sait
+ * donc déjà ce qui l'attend. Il est conservé pour ne pas casser les appels existants.
  */
-export function useCompteDemandesTransfert(authHdrs, mode = "onboarding") {
+export function useCompteDemandesTransfert(authHdrs, mode = "onboarding") {   // eslint-disable-line no-unused-vars
   const [compte, setCompte] = useState(0);
-  const statut = mode === "placement" ? "en_attente_test" : "test_fait";
 
   const relire = useCallback(async () => {
     try {
-      const r = await fetch(`${API_URL}/api/demandes-transfert?statut=${statut}`, { headers: authHdrs() });
+      const r = await fetch(`${API_URL}/api/demandes-transfert`, { headers: authHdrs() });
       if (!r.ok) return;
       const d = await r.json();
-      setCompte((d.demandes || []).length);
+      /* Repli sur le comptage local si le serveur n'est pas encore à jour : sans lui, le badge
+         tomberait à zéro entre le déploiement du dash et celui de l'API. */
+      setCompte(
+        typeof d.a_traiter === "number"
+          ? d.a_traiter
+          : (d.demandes || []).filter(x => x.statut === "test_fait").length,
+      );
     } catch { /* un badge absent ne doit jamais casser l'écran qui le porte */ }
-  }, [authHdrs, statut]);
+  }, [authHdrs]);
 
   useEffect(() => {
     relire();
@@ -112,8 +135,23 @@ export function useCompteDemandesTransfert(authHdrs, mode = "onboarding") {
     return () => clearInterval(t);
   }, [relire]);
 
+  /* LE BADGE DOIT DISPARAÎTRE DÈS QUE LE DOSSIER EST TRAITÉ, pas à la minute suivante.
+     Accepter un transfert se fait dans la file, qui émet alors cet événement ; sans lui, le
+     compteur gardait son chiffre jusqu'au prochain battement de la minuterie — l'assistante
+     voyait « 1 » sur un onglet qu'elle venait de vider. */
+  useEffect(() => {
+    const surMaj = () => relire();
+    window.addEventListener("bet:demandes-transfert-maj", surMaj);
+    return () => window.removeEventListener("bet:demandes-transfert-maj", surMaj);
+  }, [relire]);
+
   return compte;
 }
+
+/** Prévenir les badges qu'un dossier vient de changer d'état. Appelé par la file. */
+export const signalerMajDemandes = () => {
+  try { window.dispatchEvent(new Event("bet:demandes-transfert-maj")); } catch { /* SSR */ }
+};
 
 /* ══════════════════════════════════════════════════════════════
    LE BOUTON DU COACH
@@ -584,6 +622,14 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
       setCanauxExecutables(d.je_peux_executer_vers || {});
       setMonCentre(d.mon_centre || null);
       setJeSuisOnboarding(!!d.je_suis_onboarding);
+
+      /* PRÉVENIR LE BADGE DE L'ONGLET. `charger()` est le seul point par lequel cette file se
+         relit — après une acceptation, un refus, une réaffectation ou l'arrivée d'un niveau.
+         Signaler ICI couvre donc toutes les actions d'un coup, sans risquer d'en oublier une
+         en ajoutant un bouton plus tard. Sans ce signal, le compteur gardait son chiffre
+         jusqu'au battement de minuterie suivant : l'assistante lisait « 1 » sur un onglet
+         qu'elle venait de vider. */
+      signalerMajDemandes();
     } catch (e) {
       toast.error(e.message || "Chargement impossible");
     } finally { setChargement(false); }

@@ -5903,9 +5903,24 @@ export default function SuperAdminDashboard() {
   const tabs = [
     { key: "taches",        label: "Mes tâches",     icon: "✅", badge: tachesTotal||null, danger: tachesTotal>0 },
     { key: "overview",      label: "Vue d'ensemble", icon: "🏠" },
-    { key: "tdb_marketing", label: "Tableau de bord",         icon: "📊" },
-    // Le cockpit du référentiel KPI : les seuls indicateurs dont la source est alimentée.
-    { key: "cockpit_kpi",   label: "Cockpit KPI",             icon: "🎯" },
+    /* ══ « TABLEAU DE BORD » ET « COCKPIT KPI » — MIS EN SOMMEIL le 07/10/2026 ══════════
+       Retirés de la barre d'onglets à la demande, en attendant d'être repris.
+
+       POUR LES RÉACTIVER : décommenter les deux lignes ci-dessous. Rien d'autre n'est à
+       défaire — les panneaux eux-mêmes (`activeTab === "tdb_marketing"` et `"cockpit_kpi"`,
+       plus bas) sont intacts, ils sont simplement devenus inatteignables.
+
+           { key: "tdb_marketing", label: "Tableau de bord",         icon: "📊" },
+           // Le cockpit du référentiel KPI : les seuls indicateurs dont la source est alimentée.
+           { key: "cockpit_kpi",   label: "Cockpit KPI",             icon: "🎯" },
+
+       LE RÔLE MARKETING GARDE SON TABLEAU DE BORD, et ce n'est pas une exception de confort :
+       `tdb_marketing` est son onglet d'ATTERRISSAGE (ligne ~3781), et il y est ramené de force
+       dès qu'il ouvre un onglet hors de son périmètre (`MARKETING_TABS`, juste en dessous).
+       Le retirer pour tout le monde aurait posé ces quatre comptes sur un onglet absent de leur
+       barre : un écran sans onglet actif, sans moyen d'en changer. Le sommeil demandé porte sur
+       le SuperAdmin, il s'arrête donc là. */
+    ...(isMarketing ? [{ key: "tdb_marketing", label: "Tableau de bord", icon: "📊" }] : []),
     { key: "platform",      label: "Plateforme",     icon: "🏢" },
     { key: "boutique",      label: "Boutique",               icon: "🛍️", badge: commandes.filter(c=>c.statut==="en_attente").length||null, danger: commandes.filter(c=>c.statut==="en_attente").length>0 },
     { key: "media",         label: "Média",                   icon: "🖼️" },
