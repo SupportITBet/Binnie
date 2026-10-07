@@ -150,6 +150,49 @@ if [ "$FIREBASE" != "$FIREBASE_ATTENDU" ]; then
 fi
 echo "  projet Firebase : $FIREBASE ✓"
 
+# SUPABASE, SANS QUOI LE DASH NE S'AFFICHE PAS DU TOUT. `createClient` lève
+# « supabaseUrl is required » au CHARGEMENT du module, avant le premier rendu : il n'y a
+# ni message, ni écran de connexion, ni erreur visible côté serveur — une page blanche.
+# Ces deux valeurs ne vivaient que dans `.env`, qui n'est pas versionné et n'existe donc
+# pas ici : le build ne les voyait pas, et ce script publiait quand même. Constaté en
+# production le 04/10/2026 sur app.binniesenglish.net.
+for VAR in REACT_APP_SUPABASE_URL REACT_APP_SUPABASE_ANON_KEY; do
+  VAL=$(lire_env "$VAR")
+  if [ -z "$VAL" ]; then
+    rouge "✗ $VAR n'est pas renseignée dans .env.production"
+    echo   "  Sans elle, le tableau de bord s'ouvre sur une PAGE BLANCHE : Supabase refuse"
+    echo   "  de se construire et l'application ne rend rien du tout."
+    echo   "  Ajoutez les deux lignes dans $DASH/.env.production :"
+    echo   "      REACT_APP_SUPABASE_URL=https://<projet>.supabase.co"
+    echo   "      REACT_APP_SUPABASE_ANON_KEY=<clé anon>"
+    exit 1
+  fi
+done
+SUPA_URL=$(lire_env REACT_APP_SUPABASE_URL)
+case "$SUPA_URL" in
+  https://*.supabase.co) : ;;
+  *)
+    rouge "✗ REACT_APP_SUPABASE_URL vaut « $SUPA_URL »."
+    echo   "  Une URL de projet Supabase ressemble à https://<projet>.supabase.co."
+    exit 1 ;;
+esac
+
+# LA CLÉ DOIT ÊTRE UNE CLÉ, PAS UN GABARIT. « non vide » ne suffisait pas : une ligne
+# collée telle quelle depuis une consigne — `REACT_APP_SUPABASE_ANON_KEY=<la clé anon>` —
+# passe ce test, part dans le build, et Supabase rejette alors chaque requête. L'écran
+# s'affiche mais rien ne se charge, ce qui est plus long à diagnostiquer qu'une page
+# blanche. Une clé anon est un JWT : elle commence par `eyJ`. Arrivé le 04/10/2026.
+SUPA_KEY=$(lire_env REACT_APP_SUPABASE_ANON_KEY)
+case "$SUPA_KEY" in
+  eyJ*) echo "  Supabase : $SUPA_URL ✓" ;;
+  *)
+    rouge "✗ REACT_APP_SUPABASE_ANON_KEY ne ressemble pas à une clé : « $SUPA_KEY »."
+    echo   "  Une clé anon Supabase est un JWT et commence par « eyJ »."
+    echo   "  Si vous lisez des chevrons ci-dessus, le gabarit a été collé à la place de"
+    echo   "  la valeur. Copiez la vraie clé (Supabase › Settings › API › anon public)."
+    exit 1 ;;
+esac
+
 # ── 3. Les dépendances ───────────────────────────────────────────────────────
 etape "Installation des dépendances"
 cd "$DASH"
@@ -188,7 +231,17 @@ if ! grep -qs "$FIREBASE_ATTENDU" build/static/js/*.js; then
   echo   "  La configuration n'a pas été intégrée. Rien n'a été publié."
   exit 1
 fi
-echo "  index.html ✓   .htaccess ✓   API intégrée ✓   Firebase intégré ✓"
+# L'URL Supabase DANS LE BUNDLE, et pas seulement dans le fichier de configuration.
+# Vérifier `.env.production` dit ce qu'on a écrit ; vérifier le bundle dit ce que
+# react-scripts a réellement lu. C'est l'écart entre les deux qui a produit la page
+# blanche, et c'est donc ici qu'il faut regarder.
+if ! grep -qs "$SUPA_URL" build/static/js/*.js; then
+  rouge "✗ L'URL Supabase n'apparaît pas dans le build."
+  echo   "  react-scripts n'a pas lu .env.production : le dash s'ouvrirait sur une page"
+  echo   "  blanche. Rien n'a été publié."
+  exit 1
+fi
+echo "  index.html ✓   .htaccess ✓   API intégrée ✓   Firebase intégré ✓   Supabase intégré ✓"
 echo "  poids : $(du -sh build | cut -f1)"
 
 # ── 6. La publication ────────────────────────────────────────────────────────

@@ -52,10 +52,11 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { estClassePrivee } from "../../utils/classePrivee";
 import { libelleTypeCours } from "../../utils/typeCours";
-import { BoutonMigrationCanal } from "../../Components/DemandeTransfert";
+import { BoutonMigrationCanal, BoutonDemandeTransfert } from "../../Components/DemandeTransfert";
 import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 import EvolutionNiveauTests, { texteEvolutionNiveau } from "../../Components/EvolutionNiveauTests";
+import ArchiveApprenantsCommerciale from "../../Components/ArchiveApprenantsCommerciale";
 const API_URL      = process.env.REACT_APP_API_URL      || "http://localhost:5001";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("admin_token")}` });
@@ -1058,6 +1059,7 @@ export default function CommercialDashboard() {
   useEffect(() => {
     if (activeTab === "classes") { fetchClasses(); fetchCoachs(); }
   }, [activeTab]); // eslint-disable-line
+
 
   // Les classes sont chargées dès que le profil est connu, sans attendre l'onglet « Mes
   // classes ».
@@ -2931,6 +2933,7 @@ export default function CommercialDashboard() {
   const [assignFiltreStatut,  setAssignFiltreStatut]  = useState("tous");
   const [chatAssignation,     setChatAssignation]     = useState(null); // assignation ouverte en chat
   const [apprenantModal,      setApprenantModal]      = useState(null); // assignation ouverte dans la modale apprenant
+  const [showArchiveApprenants, setShowArchiveApprenants] = useState(false); // archive : qui j'ai eu, et qui est parti
 
   // ── Coaching privé : "Besoin du client" - l'assistante reçoit le dossier en
   // premier désormais (workflow "Cours Privé"), elle doit donc pouvoir le
@@ -3135,6 +3138,10 @@ export default function CommercialDashboard() {
      autre : décider d'un tarif sans voir celui en cours, c'est décider à l'aveugle. */
   const [planMigration, setPlanMigration] = useState(null);
   const [nouvelleMensualite, setNouvelleMensualite] = useState("");
+  /* Appliquer le nouveau tarif dès le mois EN COURS, et pas seulement aux mois créés ensuite.
+     Décidé dossier par dossier : un transfert en début de mois et un transfert en fin de mois
+     n'appellent pas la même réponse, et seule celle qui traite le dossier le sait. */
+  const [tarifDesLeMoisEnCours, setTarifDesLeMoisEnCours] = useState(false);
 
   /* LE SERVEUR RÉSOUT LE DOSSIER, pas l'écran. Le rapprochement n'a rien d'évident :
      l'e-mail de l'inscription est parfois un identifiant technique fabriqué à partir du
@@ -3153,9 +3160,14 @@ export default function CommercialDashboard() {
 
   const ouvrirTransfertDepuisDemande = (d) => {
     setDemandeEnCours(d);
-    setNouvelleMensualite("");
-    if (d.type_demande === "changement_coaching") chargerPlanDeLApprenant(d.id);
-    else setPlanMigration(null);
+    setNouvelleMensualite(""); setTarifDesLeMoisEnCours(false);
+    /* Le plan de paiement pour les deux circuits SANS TEST : la migration de canal et le
+       transfert de centre ajustent tous deux le tarif, et sans ce chargement le champ
+       s'ouvrirait vide sur « Aucun plan mensuel » pour un dossier qui en a un. */
+    /* Le plan pour TOUS les types : les trois circuits peuvent ajuster le tarif. Le charger
+       pour deux seulement laissait le troisième devant « Aucun plan mensuel » sur un dossier
+       qui en a un. */
+    chargerPlanDeLApprenant(d.id);
     ouvrirTransfert({
       ga_id: d.ga_id,
       // Le niveau rendu par le test d'abord : c'est lui qui désigne la classe d'arrivée.
@@ -3200,7 +3212,7 @@ export default function CommercialDashboard() {
 
   // Appelé en tant que onSave d'AssignationCentreModal - { classeId } est la classe choisie
   // (ou fraîchement créée) dans ce même composant que celui de l'affectation initiale.
-  const finaliserTransfert = async ({ classeId }) => {
+  const finaliserTransfert = async ({ classeId, cloturerSource }) => {
     if (transfertSaving) return;
     if (!transfertForm.ga_id) { toast.error("Impossible d'identifier l'apprenant à transférer"); return; }
     if (!classeId) { toast.error("Sélectionnez un groupe cible"); return; }
@@ -3215,12 +3227,25 @@ export default function CommercialDashboard() {
           initiateur:        "assistant",
           /* Sans lui, la route refuse de sortir l'apprenant d'une classe en ligne : c'est la
              demande acceptée qui autorise ce mouvement, et le serveur la relit. */
-          ...(demandeEnCours?.type_demande === "changement_coaching" ? { demande_id: demandeEnCours.id } : {}),
+          ...(demandeEnCours?.type_demande === "changement_coaching"
+              || demandeEnCours?.type_demande === "changement_centre"
+              ? { demande_id: demandeEnCours.id } : {}),
+          ...(cloturerSource ? { cloturer_groupe_source: true } : {}),
         }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Erreur transfert");
       toast.success(d.message || "Transfert effectué ✓");
+
+      /* La clôture est annoncée à PART du transfert, et son refus aussi : elle a ses propres
+         conséquences (plans gelés, évaluations closes) et se tait trop facilement dans le
+         message du transfert. Le serveur recompte les apprenants restants — si l'écran
+         proposait la case sur un compteur périmé, c'est ici qu'on l'apprend. */
+      if (d.cloture_source?.fait) {
+        toast.success(`Classe « ${d.cloture_source.nom || "privée"} » clôturée — elle n'avait plus d'apprenant.`);
+      } else if (d.cloture_source?.raison === "apprenants_restants") {
+        toast(`Classe non clôturée : ${d.cloture_source.restants} apprenant(s) y suivent encore leurs cours.`, { icon: "ℹ️" });
+      }
 
       /* Le dossier ne se referme qu'ICI, le déplacement ayant réussi. L'inverse le ferait
          disparaître de la file même quand le transfert échoue, l'apprenant restant dans la
@@ -3231,7 +3256,7 @@ export default function CommercialDashboard() {
             method: "PATCH", headers: authHeaders(),
             body: JSON.stringify({
               statut: "traitee", groupe_cible_id: classeId,
-              ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite) } : {}),
+              ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite), appliquer_mois_en_cours: tarifDesLeMoisEnCours } : {}),
             }),
           });
           if (!rd.ok) {
@@ -4105,6 +4130,20 @@ export default function CommercialDashboard() {
   const [suiviTarget,         setSuiviTarget]              = useState(null);  // assignation dont on gère le suivi démarrage
   const [showAssignCentreModal,  setShowAssignCentreModal]  = useState(false);
   const [assignCentreTarget,     setAssignCentreTarget]      = useState(null); // assignation présentiel à assigner classe/coach
+
+  /* LES COACHS DÈS QU'UN MODAL D'ASSIGNATION S'OUVRE, et pas seulement depuis l'onglet
+     « Mes classes ». `fetchCoachs` n'était appelé qu'à l'arrivée sur cet onglet et dans
+     « + Créer une classe » : ouvert depuis « Dossiers à réaffecter » ou « Prospects »,
+     `AssignationCentreModal` recevait une liste VIDE et annonçait « 0 coach disponible »
+     sur une classe qui a pourtant un coach.
+     Placé ICI et non près des autres effets du haut : `assignCentreTarget` et
+     `showTransfert` sont déclarés plus bas dans le composant, et un tableau de dépendances
+     qui les cite avant leur déclaration est évalué AU RENDU — ReferenceError, écran blanc.
+     On ne recharge pas si la liste est déjà là : ce serait un appel par ouverture pour rien. */
+  useEffect(() => {
+    if ((assignCentreTarget || showTransfert) && coachsList.length === 0) fetchCoachs();
+  }, [assignCentreTarget, showTransfert]); // eslint-disable-line
+
   // Planification
   const [planifConfig, setPlanifConfig] = useState({ frequence:"hebdomadaire", emails:"", format:"pdf" });
 
@@ -9781,9 +9820,21 @@ export default function CommercialDashboard() {
                       <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:"#0f172a" }}>🎓 Mes apprenants</h2>
                       <p style={{ margin:"4px 0 0", fontSize:12, color:"#9ca3af" }}>Tous les prospects que vous avez convertis en apprenants BET Languages</p>
                     </div>
-                    <button onClick={() => { setActiveTab("assignations"); }} style={{ ...btnSecondary, fontSize:11, padding:"7px 14px" }}>
-                      ← Retour aux prospects
-                    </button>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      {/* L'ARCHIVE EST À CÔTÉ DE LA LISTE, pas dans un autre onglet. Cette liste
+                          montre les dossiers `converti`, c'est-à-dire l'instantané du jour : un
+                          apprenant qui arrête n'en disparaît pas, son départ n'est simplement
+                          écrit nulle part ici. La question « combien j'en ai eu, et qui est
+                          parti » se pose en regardant cet écran - la réponse doit s'ouvrir
+                          depuis lui. */}
+                      <button onClick={() => setShowArchiveApprenants(true)}
+                        style={{ ...btnSecondary, fontSize:11, padding:"7px 14px", fontWeight:700 }}>
+                        📒 Archive
+                      </button>
+                      <button onClick={() => { setActiveTab("assignations"); }} style={{ ...btnSecondary, fontSize:11, padding:"7px 14px" }}>
+                        ← Retour aux prospects
+                      </button>
+                    </div>
                   </div>
 
                   {/* ── KPI ── */}
@@ -10336,7 +10387,41 @@ export default function CommercialDashboard() {
                 {/* LA MIGRATION EST UNE ACTION SUR LA FICHE, pas une information dans son corps.
                     Elle etait perdue en bas du contenu, sous un pave de texte ; a cote d'« Export
                     PDF » elle se trouve la ou l'on cherche les gestes possibles. */}
-                {a.type_coaching !== "prive" && commClasseInfo?.ga_id && (
+                {/* DEMANDER UN TRANSFERT DE CLASSE. Jusqu'ici réservé au coach, alors que
+                    l'apprenant dit tout aussi souvent à son assistante — au comptoir ou au
+                    téléphone — que la classe ne lui convient plus. Elle n'avait alors qu'un
+                    message informel à envoyer à l'onboarding : hors circuit, sans trace, et
+                    sans déclencher le test de niveau qui conditionne la nouvelle classe.
+                    Elle ouvre le dossier, elle ne l'exécute pas : le test passe d'abord. */}
+                {/* LE COACHING PRIVÉ N'EST PLUS EXCLU. Ces deux gestes valent pour TOUS les
+                    apprenants : un apprenant en privé change de classe comme un autre, et il
+                    peut tout autant passer du en ligne au présentiel - sa formule ne change
+                    pas, c'est l'endroit où il la suit qui change.
+                    Le canal vient de `a.type_cours`, le DOSSIER. Sa classe, elle, porte
+                    `prive` (10 classes sur 12) : ce n'est pas un canal mais un type de
+                    coaching, et le lire là donnerait toujours la même destination. */}
+                {commClasseInfo?.ga_id && commClasseInfo.statut_ga === "actif" && (
+                  <BoutonDemandeTransfert
+                    gaId={commClasseInfo.ga_id}
+                    nomApprenant={a.prospect_nom || "cet apprenant"}
+                    demandeur="commerciale"
+                    /* Le centre actuel ouvre le second choix du bouton — « changer de centre » —
+                       et sert à retirer ce centre de la liste des destinations : s'y transférer
+                       n'aurait aucun sens. Un dossier sans centre (en ligne, ou présentiel dont
+                       le centre n'a jamais été renseigné) n'a que le changement de classe. */
+                    centreActuel={a.centre_id || commClasseInfo?.centre_id || null}
+                    /* L'assistante PRÉSENTIEL affecte elle-même la classe de ses apprenants —
+                       elle est son propre onboarding. Lui dire le contraire la faisait attendre
+                       une étape qui n'arrivait jamais. */
+                    affecteElleMeme={isCommercialeCentre}
+                    authHdrs={authHeaders}
+                    onEmise={() => toast("Le placement test va faire passer le niveau.", { icon: "🧪" })}
+                    styleBouton={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+                      background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.25)",
+                      borderRadius:8, color:"#fff", fontSize:12.5, fontWeight:700, cursor:"pointer",
+                      fontFamily:"inherit", whiteSpace:"nowrap" }} />
+                )}
+                {commClasseInfo?.ga_id && commClasseInfo.statut_ga === "actif" && (
                   <BoutonMigrationCanal
                     gaId={commClasseInfo.ga_id}
                     nomApprenant={a.prospect_nom || "cet apprenant"}
@@ -11886,6 +11971,31 @@ export default function CommercialDashboard() {
                                     {plan.date_fin_formation   && ` · Fin : ${new Date(plan.date_fin_formation).toLocaleDateString("fr-FR")}`}
                                     {isOuvert && " · Durée ouverte"}
                                   </div>
+                                  {/* ── QUAND L'EN-TÊTE ET LES LIGNES NE DISENT PAS LA MÊME CHOSE ──
+                                      L'en-tête affiche `plan.mensualite`, c'est-à-dire le prix des
+                                      PROCHAINS mois ; les lignes affichent le montant propre à
+                                      chaque mois, figé à sa création. Après un changement de
+                                      tarif, l'écran annonçait donc « 5 F/mois » au-dessus de deux
+                                      mois à 10 F et d'un total de 20 F, sans un mot d'explication :
+                                      l'assistante en concluait que son nouveau montant n'avait pas
+                                      été pris en compte. Il l'était — mais seulement pour la suite.
+                                      On le dit, plutôt que de laisser le lecteur arbitrer entre
+                                      deux chiffres qui se contredisent. */}
+                                  {(() => {
+                                    const anciens = (moisFacturables || [])
+                                      .filter(m => Number(m.montant || 0) !== Number(plan.mensualite || 0));
+                                    if (!anciens.length || !Number(plan.mensualite)) return null;
+                                    const chg = Array.isArray(plan.changements_tarif) && plan.changements_tarif.length
+                                      ? plan.changements_tarif[plan.changements_tarif.length - 1] : null;
+                                    return (
+                                      <div style={{ fontSize:10.5, color:"#fde68a", marginTop:4, lineHeight:1.45 }}>
+                                        ⚠ {anciens.length} mois déjà écrit{anciens.length > 1 ? "s" : ""} rest{anciens.length > 1 ? "ent" : "e"} à{" "}
+                                        {Number(anciens[0].montant || 0).toLocaleString("fr-FR")} F
+                                        {chg?.le && ` — tarif changé le ${new Date(chg.le).toLocaleDateString("fr-FR")}`}.
+                                        {" "}Le nouveau montant s'applique aux mois créés ensuite.
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 <div style={{ textAlign:"right" }}>
                                   <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)" }}>{moisPayésCount}/{moisFacturables.length} mois</div>
@@ -12937,6 +13047,42 @@ export default function CommercialDashboard() {
           onSave={(suivi) => handleSaveSuivi(suiviTarget.id, suivi)}
           onClose={() => { setShowSuiviModal(false); setSuiviTarget(null); }}
         />
+      )}
+
+      {/* ── Archive des apprenants ──
+          Plein écran plutôt qu'un panneau : le parcours d'un apprenant se déplie sous sa ligne,
+          et un modal étroit obligerait à choisir entre voir la liste et voir l'histoire. */}
+      {showArchiveApprenants && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:9500, display:"flex",
+          alignItems:"center", justifyContent:"center", backdropFilter:"blur(3px)" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowArchiveApprenants(false); }}>
+          <div style={{ background:"#fff", borderRadius:18, width:"92vw", height:"90vh", display:"flex",
+            flexDirection:"column", boxShadow:"0 24px 64px rgba(0,0,0,0.28)", overflow:"hidden" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
+              padding:"18px 24px", borderBottom:"1px solid #e5e7eb" }}>
+              <div>
+                <div style={{ fontSize:17, fontWeight:900, color:"#0f172a" }}>📒 Archive de mes apprenants</div>
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>
+                  Qui j'ai accompagné, qui est parti, et tout ce qui leur est arrivé
+                </div>
+              </div>
+              <button onClick={() => setShowArchiveApprenants(false)}
+                style={{ background:"#f1f5f9", border:"none", borderRadius:10, width:34, height:34, fontSize:17,
+                  cursor:"pointer", color:"#475569", lineHeight:1, flexShrink:0 }}>
+                ✕
+              </button>
+            </div>
+            {/* `flex:1` + `minHeight:0` : sans eux, un tableau long dépasse la hauteur fixe du
+                modal au lieu de défiler à l'intérieur. */}
+            <div style={{ padding:"18px 24px 24px", overflowY:"auto", flex:1, minHeight:0 }}>
+              <ArchiveApprenantsCommerciale
+                commercialeNom={`${profilInitial?.prenom || ""} ${profilInitial?.nom || ""}`.trim()}
+                accent={BET_COLOR}
+                authHdrs={authHeaders}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal confirmation "Transmettre au PA" (dossier coaching privé) ── */}
@@ -14448,6 +14594,9 @@ export default function CommercialDashboard() {
              bon niveau - filtrer ici rendait ces repères inutiles et, surtout, empêchait
              toute réaffectation vers un autre niveau. */
           classes={classes.filter(cl => cl.id !== transfertForm.source_groupe_id)}
+          /* La classe QUITTÉE, pour savoir si elle se videra — elle est justement exclue de
+             la liste ci-dessus, d'où ce passage à part. */
+          classeSource={classes.find(cl => cl.id === transfertForm.source_groupe_id) || null}
           coachs={coachsList}
           coachDispoMap={coachDispoMap}
           onSave={finaliserTransfert}
@@ -14456,19 +14605,51 @@ export default function CommercialDashboard() {
              qui accepte ne connaît pas forcément le dossier - lui dire d'où part l'apprenant
              lui évite de le chercher ailleurs - et le tarif doit se décider ici, sans quoi il
              se perd : personne ne revient sur un écran qu'il a quitté. */
-          enTete={demandeEnCours?.type_demande === "changement_coaching" ? (
-            <>
-              <div style={{ background:"#f2edfb", border:"1px solid #ddd0f5", borderRadius:10, padding:"11px 14px", marginBottom:14, fontSize:12.5, color:"#5b3a94", lineHeight:1.6 }}>
-                🔀 <strong>Migration de canal</strong> — aucun test de niveau requis.
-                L'apprenant garde son niveau, son historique et toutes ses données :
-                seules sa classe et son canal changent.
-              </div>
-              <ChampTarifMigration
-                plan={planMigration}
-                valeur={nouvelleMensualite}
-                onChange={setNouvelleMensualite} />
-            </>
-          ) : null}
+          /* LE TARIF VAUT POUR LES DEUX CIRCUITS SANS TEST, et pas seulement pour la migration
+             de canal : deux CENTRES ne pratiquent pas le même prix non plus. Le champ était
+             conditionné au seul `changement_coaching`, si bien qu'un transfert d'Angré à
+             Yopougon partait toujours à l'ancien tarif - le serveur l'acceptait pourtant, il
+             ne recevait simplement jamais la valeur.
+             Le champ est FACULTATIF des deux côtés : laissé vide, la mensualité ne bouge pas. */
+          enTete={(() => {
+            /* LE TARIF VAUT POUR LES TROIS CIRCUITS. Il n'était proposé que sur deux - la
+               migration de canal et le transfert de centre - alors qu'un changement de CLASSE
+               peut lui aussi changer le prix : passer d'un groupe à un rythme plus soutenu ne
+               coûte pas la même chose. Il fallait alors ressortir sur la fiche paiement après
+               coup, et c'est exactement ce qu'on oublie de faire. */
+            const t = demandeEnCours?.type_demande;
+            if (!t) return null;
+            const centre = t === "changement_centre";
+            const migration = t === "changement_coaching";
+            return (
+              <>
+                <div style={{ background: centre ? "#e0f2fe" : migration ? "#f2edfb" : "#f0fdf4",
+                  border: `1px solid ${centre ? "#bae6fd" : migration ? "#ddd0f5" : "#bbf7d0"}`, borderRadius:10,
+                  padding:"11px 14px", marginBottom:14, fontSize:12.5,
+                  color: centre ? "#075985" : migration ? "#5b3a94" : "#15803d", lineHeight:1.6 }}>
+                  {centre ? (
+                    <>🏢 <strong>Transfert de centre</strong> — aucun test de niveau requis.
+                    L'apprenant garde son niveau, son historique et toutes ses données :
+                    seuls sa classe et son centre changent.</>
+                  ) : migration ? (
+                    <>🔀 <strong>Migration de canal</strong> — aucun test de niveau requis.
+                    L'apprenant garde son niveau, son historique et toutes ses données :
+                    seules sa classe et son canal changent.</>
+                  ) : (
+                    <>🔄 <strong>Changement de classe</strong> — le niveau est revenu du test.
+                    L'apprenant garde son historique et toutes ses données ; ajustez la
+                    mensualité ci-dessous si la nouvelle classe n'a pas le même tarif.</>
+                  )}
+                </div>
+                <ChampTarifMigration
+                  plan={planMigration}
+                  valeur={nouvelleMensualite}
+                  onChange={setNouvelleMensualite}
+                  desLeMoisEnCours={tarifDesLeMoisEnCours}
+                  onChangeDesLeMoisEnCours={setTarifDesLeMoisEnCours} />
+              </>
+            );
+          })()}
           onCreateClasse={(niveauSuggere) => {
             fetchCoachs();
             setClasseForm({ nom:"", niveau: niveauSuggere||transfertForm.niveau||"", filiere:"", type_cours:"", coach_id:"", centre_id:"", date_debut:"", date_fin:"", capacite_max:20, horaire:[], photo_url:null });
@@ -17402,7 +17583,7 @@ const DocDossierModal = ({ assignation: a, onSave, onClose }) => {
 /* `enTete` : du contenu que l'appelant insère en haut du corps. Sert à la migration de
    canal, qui emprunte CE modal - celui de l'affectation initiale - plutôt que d'en
    imposer un autre pour le même geste, et qui doit y ajouter son contexte et son tarif. */
-const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap, onSave, onClose, onCreateClasse, enTete }) => {
+const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap, onSave, onClose, onCreateClasse, enTete, classeSource }) => {
   const alerte = useAlerte();
   const confirm = useConfirm();
   const [classeId, setClasseId] = useState(a.suivi_demarrage?.classe_id || "");
@@ -17410,6 +17591,20 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
   const [saving,   setSaving]   = useState(false);
   const [step,     setStep]     = useState("classe"); // "classe" | "coach"
   const [coachDispoMois, setCoachDispoMois] = useState("courant"); // "courant" | "suivant"
+
+  /* ── CLÔTURER LA CLASSE QUITTÉE SI ELLE SE VIDE ──
+     Une classe de coaching privé n'existe que pour ses apprenants : le dernier parti, elle
+     n'a plus d'objet. Rien ne la fermait, et elle restait « active » indéfiniment — comptée
+     dans la charge de son coach et proposée dans les sélecteurs de classe.
+     LE CRITÈRE EST LE VIDE, PAS LE PRIVÉ : une classe privée peut accueillir une FAMILLE, et
+     tant qu'un frère ou une sœur y suit ses cours elle doit vivre. La case n'est donc cochée
+     d'avance que si cet apprenant est le dernier. Le serveur recompte de son côté et refuse
+     de clôturer s'il reste quelqu'un : l'écran propose, il ne décide pas. */
+  const sourcePrivee  = !!classeSource && (classeSource.is_prive === true
+    || classeSource.type_cours === "prive" || Number(classeSource.capacite_max) === 1);
+  const resteApres    = Math.max(0, (Number(classeSource?.nb_apprenants) || 0) - 1);
+  const [cloturerSource, setCloturerSource] = useState(false);
+  useEffect(() => { setCloturerSource(sourcePrivee && resteApres === 0); }, [sourcePrivee, resteApres]);
 
   const classeChoisie = classes.find(cl => cl.id === classeId);
   const coachChoisi   = coachs.find(c  => c.id  === coachId);
@@ -17423,15 +17618,22 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
   const handleSave = async () => {
     if (saving) return;
     if (!classeId) { await alerte("Veuillez sélectionner une classe.", { titre: "Classe requise", danger: true }); return; }
+    /* LE NOM DU COACH, SANS DÉPENDRE DE LA LISTE. `coachs` n'est chargé que depuis l'onglet
+       « Mes classes » : ouvert depuis « Dossiers à réaffecter », ce modal le reçoit vide, et
+       cette recherche ne rendait rien. La confirmation annonçait alors « (sans coach assigné) »
+       sur une classe qui en a un — l'assistante annulait, croyant à une erreur, alors que
+       `coachId` portait bien le bon identifiant et que l'enregistrement aurait été correct.
+       La classe choisie porte déjà `coach_nom` : c'est lui qu'affiche l'étape précédente. */
     const coachTrouve = coachs.find(c => c.id === coachId);
-    const coachNom = coachTrouve ? `${coachTrouve.prenom || ""} ${coachTrouve.nom || ""}`.trim() : "";
+    const coachNom = (coachTrouve ? `${coachTrouve.prenom || ""} ${coachTrouve.nom || ""}`.trim() : "")
+      || (coachId && coachId === classeChoisie?.coach_id ? (classeChoisie.coach_nom || "") : "");
     const veut = await confirm(
       `Assigner ${a.prospect_nom || "cet apprenant"} à la classe "${classeChoisie?.nom || "-"}"${coachNom ? ` avec ${coachNom} comme coach` : " (sans coach assigné)"} ?`,
       { titre: "Confirmer l'assignation", confirmLabel: "✅ Confirmer", danger: false }
     );
     if (!veut) return;
     setSaving(true);
-    await onSave({ classeId, classeNom: classeChoisie?.nom || "", coachId, coachNom });
+    await onSave({ classeId, classeNom: classeChoisie?.nom || "", coachId, coachNom, cloturerSource });
     setSaving(false);
   };
 
@@ -17639,24 +17841,56 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
           {/* ── ÉTAPE 2 : COACH ── */}
           {step === "coach" && (
             <div>
+              {/* QUAND LA CLASSE A SON COACH, ON LE MONTRE — on ne renvoie pas à une liste.
+                  Cette étape affichait « Le coach attitré est automatiquement assigné », puis
+                  juste en dessous « 0 coach disponible · Ajoutez des coachs depuis la gestion
+                  des utilisateurs ». Deux phrases qui se contredisent sur un écran de
+                  confirmation : l'assistante croit la classe sans coach et renonce.
+                  Le nom vient de `classeChoisie`, qui le porte déjà (c'est lui qu'affiche le
+                  tableau de l'étape précédente) — et non de `coachs`, dont cette étape n'a
+                  aucun besoin puisque le choix est verrouillé. */}
               {classeChoisie?.coach_id ? (
-                <div style={{ background:"#f5f3ff", border:"1.5px solid #ddd6fe", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7c3aed", fontWeight:600 }}>
-                  🔒 Le coach attitré de la classe <strong>{classeChoisie.nom}</strong> est automatiquement assigné. Les autres coachs ne sont pas disponibles pour cette classe.
-                </div>
+                <>
+                  <div style={{ background:"#f5f3ff", border:"1.5px solid #ddd6fe", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7c3aed", fontWeight:600 }}>
+                    🔒 Le coach attitré de la classe <strong>{classeChoisie.nom}</strong> est automatiquement assigné. Les autres coachs ne sont pas disponibles pour cette classe.
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 16px", borderRadius:12,
+                    border:"2px solid #7c3aed", background:"#faf5ff", boxShadow:"0 0 0 3px #ddd6fe" }}>
+                    <div style={{ width:46, height:46, borderRadius:"50%", flexShrink:0, overflow:"hidden",
+                      background:`linear-gradient(135deg,${BET_COLOR},#7c3aed)`, color:"#fff", display:"flex",
+                      alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:800 }}>
+                      {classeChoisie.coach_photo_url
+                        ? <img src={classeChoisie.coach_photo_url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                        : (classeChoisie.coach_nom || "?").split(" ").map(p=>p[0]).slice(0,2).join("").toUpperCase()}
+                    </div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:10, fontWeight:800, color:"#7c3aed", textTransform:"uppercase", letterSpacing:".06em" }}>Coach de la classe</div>
+                      <div style={{ fontSize:15, fontWeight:800, color:"#0f172a", marginTop:2 }}>
+                        {classeChoisie.coach_nom || "Coach attitré"}
+                      </div>
+                      <div style={{ fontSize:11.5, color:"#64748b", marginTop:2 }}>
+                        Rien à choisir ici — passez à la confirmation.
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : coachs.length === 0 ? (
+                <>
+                  <div style={{ background:"#fffbeb", border:"1.5px solid #fde68a", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#92400e", fontWeight:600 }}>
+                    ⚠️ Aucun coach attitré sur cette classe - sélectionnez-en un manuellement.
+                  </div>
+                  <div style={{ textAlign:"center", padding:"24px", background:"#f8fafc", borderRadius:10, color:"#94a3b8", fontSize:12 }}>
+                    Aucun coach disponible. Ajoutez des coachs depuis la gestion des utilisateurs.
+                  </div>
+                </>
               ) : (
+                <>
                 <div style={{ background:"#fffbeb", border:"1.5px solid #fde68a", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#92400e", fontWeight:600 }}>
                   ⚠️ Aucun coach attitré sur cette classe - sélectionnez-en un manuellement.
                 </div>
-              )}
-              <div style={{ fontSize:13, fontWeight:700, color:"#374151", marginBottom:12 }}>
-                {coachs.length} coach{coachs.length > 1 ? "s" : ""} disponible{coachs.length > 1 ? "s" : ""}
-              </div>
-              {coachs.length === 0 ? (
-                <div style={{ textAlign:"center", padding:"24px", background:"#f8fafc", borderRadius:10, color:"#94a3b8", fontSize:12 }}>
-                  Aucun coach disponible. Ajoutez des coachs depuis la gestion des utilisateurs.
+                <div style={{ fontSize:13, fontWeight:700, color:"#374151", marginBottom:12 }}>
+                  {coachs.length} coach{coachs.length > 1 ? "s" : ""} disponible{coachs.length > 1 ? "s" : ""}
                 </div>
-              ) : (
-                <>
                 <DispoMoisToggle moisSel={coachDispoMois} setMoisSel={setCoachDispoMois} periodes={getPeriodesDispo()} />
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                   {coachs.map(c => {
@@ -17719,6 +17953,28 @@ const AssignationCentreModal = ({ assignation: a, classes, coachs, coachDispoMap
             {classeChoisie ? <span>📚 <strong>{classeChoisie.nom}</strong></span> : <span style={{ color:"#d97706" }}>⚠️ Classe non sélectionnée</span>}
             {coachChoisi && <span style={{ marginLeft:10 }}>👩‍🏫 <strong>{coachChoisi.prenom} {coachChoisi.nom}</strong></span>}
           </div>
+          {/* La case vit dans le PIED, à côté du bouton qui déclenche tout : c'est le dernier
+              endroit que l'on regarde avant de valider. Plus haut, elle se perdrait sous le
+              tableau des classes. Affichée seulement pour une classe privée — pour un groupe,
+              se vider est normal entre deux cohortes et ne doit rien déclencher. */}
+          {sourcePrivee && step === "coach" && (
+            <label style={{ display:"flex", alignItems:"flex-start", gap:9, flex:1, cursor: resteApres === 0 ? "pointer" : "not-allowed",
+              padding:"9px 12px", background: resteApres === 0 ? "#fffbeb" : "#f8fafc",
+              border:`1px solid ${resteApres === 0 ? "#fde68a" : "#e2e8f0"}`, borderRadius:9, marginRight:10 }}>
+              <input type="checkbox" checked={cloturerSource} disabled={resteApres > 0}
+                onChange={e => setCloturerSource(e.target.checked)} style={{ marginTop:2, cursor:"inherit" }} />
+              <span style={{ fontSize:11.5, lineHeight:1.5, color: resteApres === 0 ? "#92400e" : "#94a3b8" }}>
+                {resteApres === 0 ? (
+                  <>Clôturer <strong>{classeSource.nom}</strong>, qui n'aura plus aucun apprenant.
+                    <span style={{ color:"#b45309" }}> Les plans de paiement sont gelés et la classe
+                    quitte la charge de son coach.</span></>
+                ) : (
+                  <>Clôture impossible : <strong>{resteApres} apprenant{resteApres > 1 ? "s" : ""}</strong>{" "}
+                    rest{resteApres > 1 ? "ent" : "e"} dans {classeSource.nom}.</>
+                )}
+              </span>
+            </label>
+          )}
           <div style={{ display:"flex", gap:10 }}>
             <button onClick={onClose} style={{ ...btnSecondary, padding:"10px 18px" }}>Annuler</button>
             {step === "classe" && classeChoisie && (

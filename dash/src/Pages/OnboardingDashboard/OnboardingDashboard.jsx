@@ -42,10 +42,11 @@ import { uploadFichier, libelleLimite } from "../../utils/uploadFichier";
 import VisionneuseImage from "../../Components/VisionneuseImage";
 import { genererPDF, fmtDatePDF } from "../../utils/genererPDF";
 import { estClassePrivee } from "../../utils/classePrivee";
-import FileDemandesTransfert, { useCompteDemandesTransfert } from "../../Components/DemandeTransfert";
+import FileDemandesTransfert, { useCompteDemandesTransfert, BoutonDemandeTransfert, BoutonMigrationCanal } from "../../Components/DemandeTransfert";
 import { AncienNiveau } from "../../Components/NiveauApprenant";
 import EvolutionNiveauTests from "../../Components/EvolutionNiveauTests";
 import HistoriqueTestsNiveau from "../../Components/HistoriqueTestsNiveau";
+import SelecteurAssistante from "../../Components/SelecteurAssistante";
 import { exporterFicheApprenantPDF, ligneInfo } from "../../utils/fichePdfApprenant";
 const ELEARNING_URL = process.env.REACT_APP_ELEARNING_URL || "http://localhost:3002";
 
@@ -772,6 +773,19 @@ export default function OnboardingDashboard() {
   // A2→B1, etc.), initialisé sur le niveau actuel de l'apprenant mais pas figé dessus.
   const [transfertNiveauCible, setTransfertNiveauCible] = useState("");
   const [transfertSaving,      setTransfertSaving]      = useState(false);
+  // Clôturer la classe quittée si le transfert la laisse sans aucun apprenant.
+  const [cloturerSourceTransfert, setCloturerSourceTransfert] = useState(false);
+  /* Pré-cochée à l'ouverture seulement quand la classe est privée ET que l'apprenant déplacé
+     est le dernier. Recalculée à chaque ouverture : entre deux transferts, un frère ou une
+     sœur a pu rejoindre la classe de famille. */
+  useEffect(() => {
+    if (!showTransfert) { setCloturerSourceTransfert(false); return; }
+    const src = selectedGroupe
+      || (groupes || []).find(g => g.id === selectedApprenantGroupe?.groupe_id) || null;
+    const privee = !!src && (src.is_prive === true || src.type_cours === "prive"
+      || Number(src.capacite_max) === 1);
+    setCloturerSourceTransfert(privee && Math.max(0, (Number(src.nb_apprenants) || 0) - 1) === 0);
+  }, [showTransfert]); // eslint-disable-line
 
   const [filtreTypeGroupes, setFiltreTypeGroupes] = useState("tous");
   const [filtreStatutGroupes, setFiltreStatutGroupes] = useState("tous"); // tous | actif | cloture
@@ -993,6 +1007,15 @@ export default function OnboardingDashboard() {
     setApprenantPmts([]);
     setOnbApprenantAcces(null);
     const token = localStorage.getItem("admin_token");
+
+    /* LE DOSSIER DÈS L'OUVERTURE, et non plus seulement au clic sur « Paiements » ou « Test
+       de niveau ». C'est lui qui porte le CANAL de l'apprenant (`type_cours` : en ligne ou
+       présentiel), et pour un apprenant en coaching privé c'est le SEUL endroit où il
+       figure - sa classe porte `prive`, qui est un type de coaching, pas un endroit.
+       Sans ce chargement, le bouton « Migrer » ne pouvait pas nommer sa destination et
+       restait invisible sur l'onglet d'accueil de la fiche, c'est-à-dire presque toujours. */
+    fetchApprenantAssignation(a.email_apprenant, a.email_parent, a.assignation_id);
+
     if (a.email_apprenant) {
       /* L'HISTORIQUE COMPLET, par `/historique` et non plus par `/result`.
          `/result` rendait le dernier test et une liste réduite (ni l'origine du test, ni le
@@ -1111,12 +1134,25 @@ export default function OnboardingDashboard() {
           /* Sans lui, la route refuserait de sortir l'apprenant d'une classe en ligne : c'est
              la demande acceptée qui autorise ce mouvement, et le serveur la relit pour s'en
              assurer. */
-          ...(demandeEnCours?.type_demande === "changement_coaching" ? { demande_id: demandeEnCours.id } : {}),
+          ...(demandeEnCours?.type_demande === "changement_coaching"
+              || demandeEnCours?.type_demande === "changement_centre"
+              ? { demande_id: demandeEnCours.id } : {}),
+          ...(cloturerSourceTransfert ? { cloturer_groupe_source: true } : {}),
         }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Erreur");
       toast.success(d.message || "Transfert effectué ✓");
+
+      /* La clôture de la classe quittée est annoncée À PART, et son refus aussi : elle a ses
+         propres conséquences (plans gelés, évaluations closes) et se tairait dans le message
+         du transfert. Le serveur recompte les apprenants restants — si l'écran a proposé la
+         case sur un compteur périmé, c'est ici qu'on l'apprend. */
+      if (d.cloture_source?.fait) {
+        toast.success(`Classe « ${d.cloture_source.nom || "privée"} » clôturée — elle n'avait plus d'apprenant.`);
+      } else if (d.cloture_source?.raison === "apprenants_restants") {
+        toast(`Classe non clôturée : ${d.cloture_source.restants} apprenant(s) y suivent encore leurs cours.`, { icon: "ℹ️" });
+      }
 
       /* LE DOSSIER NE SE REFERME QU'ICI, après que le déplacement a réussi. L'inverse - clore
          puis transférer - faisait disparaître le dossier de la file même quand le transfert
@@ -1130,7 +1166,7 @@ export default function OnboardingDashboard() {
             headers: { Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
             body: JSON.stringify({
               statut: "traitee", groupe_cible_id: transfertForm.nouveau_groupe_id,
-              ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite) } : {}),
+              ...(Number(nouvelleMensualite) > 0 ? { nouvelle_mensualite: Number(nouvelleMensualite), appliquer_mois_en_cours: tarifDesLeMoisEnCours } : {}),
             }),
           });
           if (!rd.ok) {
@@ -3658,6 +3694,8 @@ export default function OnboardingDashboard() {
      pouvoir l'attribuer, et l'onboarding n'avait aucun écran pour le faire. */
   const [assistantesLigne, setAssistantesLigne] = useState([]);
   const [attributionEnCours, setAttributionEnCours] = useState(false);
+  // Le dossier en cours d'attribution, ou null. Porte aussi de quoi titrer le modal.
+  const [selecteurAssistante, setSelecteurAssistante] = useState(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/parcours/assistantes-ligne`)
@@ -3665,6 +3703,20 @@ export default function OnboardingDashboard() {
       .then(d => setAssistantesLigne(d.assistantes || []))
       .catch(() => {});
   }, []);
+
+  /* LES DOSSIERS QUI N'APPARTIENNENT À PERSONNE, réclamés dans « Mes tâches ».
+     Ils ne viennent PAS de `assignations` : la vue onboarding y est bornée par un
+     `.in("assistante_id", ...)` qui écarte les NULL, donc exactement ces dossiers-là. D'où
+     une route dédiée. Sans elle, l'attribution n'existait qu'au fond d'une fiche - ouvrir le
+     groupe, ouvrir l'apprenant, faire défiler - et rien ne la réclamait. */
+  const [dossiersAAttribuer, setDossiersAAttribuer] = useState([]);
+  const chargerDossiersAAttribuer = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_URL}/api/parcours/dossiers-a-attribuer`, { headers: authHeaders() });
+      setDossiersAAttribuer(r.ok ? (await r.json()).dossiers || [] : []);
+    } catch { setDossiersAAttribuer([]); }
+  }, []);
+  useEffect(() => { chargerDossiersAAttribuer(); }, [chargerDossiersAAttribuer]);
 
   const attribuerAssistante = async (assignationId, assistanteId) => {
     if (!assignationId || !assistanteId) return;
@@ -3678,6 +3730,11 @@ export default function OnboardingDashboard() {
       if (!r.ok) throw new Error(d.error || "Attribution impossible");
       const choisie = assistantesLigne.find(a => String(a.id) === String(assistanteId));
       setSelectedApprenantGroupe(prev => prev ? { ...prev, assistante_commerciale: choisie || prev.assistante_commerciale } : prev);
+      /* La tâche disparaît de « Mes tâches » dans le même geste. Retirer la ligne localement
+         plutôt que recharger : la liste est courte, et voir la ligne s'en aller confirme que
+         l'attribution a pris - un rechargement silencieux laisse douter. */
+      setDossiersAAttribuer(prev => prev.filter(d => String(d.id) !== String(assignationId)));
+      setSelecteurAssistante(null);
       toast.success(`Dossier confié à ${choisie ? `${choisie.prenom || ""} ${choisie.nom || ""}`.trim() : "l'assistante"} ✓`);
     } catch (e) {
       toast.error(e.message || "Attribution impossible");
@@ -3686,6 +3743,10 @@ export default function OnboardingDashboard() {
 
   const [planMigration, setPlanMigration] = useState(null);      // null = non chargé
   const [nouvelleMensualite, setNouvelleMensualite] = useState("");
+  /* Appliquer le nouveau tarif dès le mois EN COURS, et pas seulement aux mois créés ensuite.
+     Décidé dossier par dossier : un transfert en début de mois et un transfert en fin de mois
+     n'appellent pas la même réponse, et seule celle qui traite le dossier le sait. */
+  const [tarifDesLeMoisEnCours, setTarifDesLeMoisEnCours] = useState(false);
 
   /* LE SERVEUR RÉSOUT LE DOSSIER, pas l'écran. Le rapprochement n'a rien d'évident :
      l'e-mail de l'inscription est parfois un identifiant technique fabriqué à partir du
@@ -3714,9 +3775,13 @@ export default function OnboardingDashboard() {
       groupes: { nom: d.groupe_nom },
     });
     setTransfertForm({ nouveau_groupe_id:"", motif: d.detail || "", initiateur:"coach", jours:[] });
-    setNouvelleMensualite("");
-    if (d.type_demande === "changement_coaching") chargerPlanDeLApprenant(d.id);
-    else setPlanMigration(null);
+    setNouvelleMensualite(""); setTarifDesLeMoisEnCours(false);
+    /* Les deux circuits sans test ajustent le tarif : la migration de canal et le transfert
+       de centre. Charger le plan pour l'un seulement laissait l'autre devant un champ vide. */
+    /* Le plan pour TOUS les types : les trois circuits peuvent ajuster le tarif. Le charger
+       pour deux seulement laissait le troisième devant « Aucun plan mensuel » sur un dossier
+       qui en a un. */
+    chargerPlanDeLApprenant(d.id);
     setGroupesCibles([]);
     const niv = d.niveau_obtenu || "tous";
     setTransfertNiveauCible(niv);
@@ -3738,7 +3803,10 @@ export default function OnboardingDashboard() {
   const tachesApprenants = enAttente;
   const tachesSuivi      = mesApprenants.filter(a=>!Object.values(a.suivi_checklist||{}).every(Boolean)).length;
   const tachesGroupes    = groupesSansCoach;
-  const tachesTotal = tachesApprenants + tachesSuivi + tachesGroupes + dossiersAReaffecter;
+  // Les dossiers sans assistante entrent dans le total : sans ça, la pastille de l'onglet reste
+  // éteinte et la tâche n'existe que pour qui pense déjà à la chercher.
+  const tachesAttribuer  = dossiersAAttribuer.length;
+  const tachesTotal = tachesApprenants + tachesSuivi + tachesGroupes + dossiersAReaffecter + tachesAttribuer;
 
   // Le même planning que la commerciale : l'onboarding suit elle aussi les cours en ligne,
   // avec les liens Zoom/Teams, pour vérifier qu'ils ont bien eu lieu.
@@ -3934,20 +4002,87 @@ export default function OnboardingDashboard() {
                 { icon:"🔄", label:"Transferts prêts à réaffecter",      n:dossiersAReaffecter, tab:"reaffecter" },
               ];
               const enCours = taches.filter(t => t.n > 0);
+              /* Les dossiers à attribuer comptent comme du travail en attente, même quand
+                 aucune des quatre autres tâches n'est ouverte. Sans ce `||`, le bloc d'alerte
+                 s'affichait sous un « 🎉 Aucune tâche en attente » qui le contredisait. */
+              const riemAFaire = enCours.length === 0 && tachesAttribuer === 0;
               return (
                 <div>
                   <div style={{ fontSize:15, fontWeight:800, color:"#0f172a", marginBottom:4 }}>✅ Mes tâches</div>
                   <div style={{ fontSize:12, color:"#64748b", marginBottom:18 }}>
-                    {enCours.length > 0
+                    {!riemAFaire
                       ? `${tachesTotal} élément${tachesTotal>1?"s":""} à traiter au total.`
                       : "Rien à traiter pour le moment - tout est à jour."}
                   </div>
-                  {enCours.length === 0 ? (
+                  {/* ── LES DOSSIERS SANS ASSISTANTE, DÉPLIÉS ET NON RÉSUMÉS ──
+                      Les autres tâches sont des compteurs qui renvoient vers leur onglet. Pas
+                      celle-ci : l'attribution n'existait qu'au fond d'une fiche - ouvrir le
+                      groupe, ouvrir l'apprenant, faire défiler - et c'est exactement là qu'elle
+                      s'oubliait. Une carte de plus à cliquer aurait reproduit l'oubli d'un cran
+                      plus loin. Le geste se fait donc ici, en deux clics, sans quitter l'écran.
+
+                      ET C'EST URGENT SANS ÊTRE VISIBLE : tant que personne n'est désigné,
+                      AUCUNE assistante en ligne ne voit cet apprenant - leur liste est filtrée
+                      sur ce champ. Le dossier n'est pas en retard, il est invisible. */}
+                  {dossiersAAttribuer.length > 0 && (
+                    <div style={{ border:"1.5px solid #fbbf24", background:"#fffbeb", borderRadius:14, padding:"14px 16px", marginBottom:16 }}>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginBottom:3 }}>
+                        <span style={{ fontSize:13.5, fontWeight:800, color:"#92400e" }}>
+                          ⚠ {dossiersAAttribuer.length} apprenant{dossiersAAttribuer.length>1?"s":""} sans assistante en ligne
+                        </span>
+                      </div>
+                      <div style={{ fontSize:11.5, color:"#b45309", marginBottom:12, lineHeight:1.5 }}>
+                        Tant qu'ils ne sont pas confiés, aucune assistante en ligne ne les voit.
+                        À faire juste après l'affectation à la classe.
+                      </div>
+
+                      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                        {dossiersAAttribuer.map(d => (
+                          <div key={d.id} style={{ background:"#fff", border:"1px solid #fde68a", borderRadius:10,
+                            padding:"11px 13px", display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+                            <div style={{ flex:"1 1 220px", minWidth:0 }}>
+                              <div style={{ fontSize:13, fontWeight:700, color:"#0f172a" }}>{d.nom}</div>
+                              <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>
+                                {d.telephone || d.email || "—"}
+                                {d.canal_libelle && <> · {d.canal_libelle}</>}
+                                {d.mensualite ? <> · {Number(d.mensualite).toLocaleString("fr-FR")} F/mois</> : null}
+                              </div>
+                              <div style={{ fontSize:11, marginTop:3, color: d.sans_classe ? "#b91c1c" : "#64748b" }}>
+                                {/* Un dossier sans classe se dit : c'est une anomalie d'un autre
+                                    ordre, et choisir une assistante ne la réglera pas. */}
+                                {d.sans_classe
+                                  ? "⚠ pas encore inscrit dans une classe"
+                                  : <>📚 {d.classe}{d.niveau ? ` · ${d.niveau}` : ""}
+                                      {d.coach_nom
+                                        ? <span style={{ color:"#94a3b8" }}> · coach {d.coach_nom}</span>
+                                        : <span style={{ color:"#b45309" }}> · sans coach</span>}
+                                    </>}
+                              </div>
+                            </div>
+
+                            {/* Le même sélecteur que dans la fiche : la question posée est la
+                                même, elle doit se poser pareil. Deux écrans différents pour un
+                                seul geste, c'est deux occasions de se tromper. */}
+                            <button onClick={() => setSelecteurAssistante({ ...d, assignation_id: d.id })}
+                              disabled={attributionEnCours}
+                              style={{ flex:"0 1 240px", padding:"9px 13px", borderRadius:8, border:"none",
+                                background: attributionEnCours ? "#cbd5e1" : "#d97706", color:"#fff",
+                                fontSize:12.5, fontWeight:700, fontFamily:"inherit",
+                                cursor: attributionEnCours ? "not-allowed" : "pointer" }}>
+                              Confier à une assistante →
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {riemAFaire ? (
                     <div style={{ textAlign:"center", padding:"50px 0", color:"#94a3b8" }}>
                       <div style={{ fontSize:"2.4rem", marginBottom:8 }}>🎉</div>
                       Aucune tâche en attente.
                     </div>
-                  ) : (
+                  ) : enCours.length === 0 ? null : (
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
                       {enCours.map((t,i) => (
                         <div key={i} onClick={() => setActiveTab(t.tab)}
@@ -5382,6 +5517,72 @@ export default function OnboardingDashboard() {
                           </div>
                           <div style={{ display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end",flexShrink:0 }}>
                             <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                              {/* DEMANDER UN TRANSFERT. L'onboarding est souvent le premier
+                                  averti qu'une classe ne convient plus — l'assistante lui
+                                  écrit, ou l'apprenant l'appelle — mais seul le coach pouvait
+                                  ouvrir le dossier. Elle devait donc attendre que le coach le
+                                  fasse, ou déplacer l'apprenant sans test de niveau.
+                                  Réservé aux inscriptions ACTIVES : un apprenant retiré ou déjà
+                                  transféré n'a plus de classe à quitter, et le serveur refuse. */}
+                              {selectedApprenantGroupe.statut === "actif" && (
+                                <BoutonDemandeTransfert
+                                  gaId={selectedApprenantGroupe.id}
+                                  nomApprenant={`${selectedApprenantGroupe.prenom_apprenant||""} ${selectedApprenantGroupe.nom_apprenant||""}`.trim() || "cet apprenant"}
+                                  demandeur="onboarding"
+                                  affecteElleMeme
+                                  authHdrs={authHeaders}
+                                  onEmise={() => toast("Suivez l'avancement dans « Dossiers à réaffecter ».", { icon: "🔄" })}
+                                  styleBouton={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",
+                                    background:"rgba(255,255,255,0.18)",color:"#fff",border:"none",borderRadius:7,
+                                    cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap",fontFamily:"inherit" }} />
+                              )}
+                              {/* MIGRER DE CANAL, comme chez la commerciale. L'onboarding est
+                                  le seul à pouvoir EXÉCUTER une migration vers le en ligne ;
+                                  ne pas lui donner le bouton pour en OUVRIR une l'obligeait à
+                                  attendre qu'une assistante le fasse, alors que l'apprenant
+                                  l'appelle tout aussi souvent pour demander à passer en centre.
+                                  Deux gestes distincts, volontairement côte à côte : le
+                                  transfert interroge le NIVEAU et passe par un test, la
+                                  migration change l'ENDROIT et n'en demande aucun.
+                                  Coaching privé exclu, comme chez la commerciale. */}
+                              {/* LA CONDITION NE REGARDE PAS LE DOSSIER COMMERCIAL, et c'est
+                                  délibéré : `apprenantAssignation` n'est chargé QUE si l'on
+                                  clique sur l'onglet « Paiements » ou « Test de niveau »
+                                  (fetchApprenantAssignation, plus haut). Le tester ici faisait
+                                  disparaître le bouton sur l'onglet d'accueil de la fiche —
+                                  c'est-à-dire presque toujours.
+                                  Tout ce dont la migration a besoin est là sans lui : le
+                                  serveur retrouve le dossier seul, et le canal de départ se
+                                  lit sur la CLASSE — ce qui est d'ailleurs ce que la demande
+                                  enregistre réellement dans `type_cours`. */}
+                              {(() => {
+                                /* LE CANAL VIENT DU DOSSIER EN PREMIER. Une classe de coaching
+                                   privé porte `type_cours = "prive"` : un type de coaching, pas
+                                   un endroit. Le lire là donnerait toujours la même destination
+                                   — on proposerait « migrer vers le en ligne » à quelqu'un qui y
+                                   est déjà. Le dossier, lui, dit toujours `en_ligne` ou
+                                   `presentiel`, y compris pour les 13 dossiers en privé.
+                                   La classe ne sert que de repli, pour les écrans où le dossier
+                                   n'a pas encore répondu. Le coaching privé n'est PAS exclu :
+                                   l'apprenant garde sa formule, il change d'endroit. */
+                                const cl = selectedGroupe || selectedApprenantGroupe.groupes || null;
+                                const canal = [apprenantAssignation?.type_cours, cl?.type_cours,
+                                               selectedApprenantGroupe.type_cours]
+                                  .find(v => v === "en_ligne" || v === "presentiel" || v === "hybride") || null;
+                                if (selectedApprenantGroupe.statut !== "actif") return null;
+                                if (!canal) return null;
+                                return (
+                                <BoutonMigrationCanal
+                                  gaId={selectedApprenantGroupe.id}
+                                  nomApprenant={`${selectedApprenantGroupe.prenom_apprenant||""} ${selectedApprenantGroupe.nom_apprenant||""}`.trim() || "cet apprenant"}
+                                  canalActuel={canal}
+                                  authHdrs={authHeaders}
+                                  onEmise={() => toast("Suivez l'avancement dans « Dossiers à réaffecter ».", { icon: "🔀" })}
+                                  styleBouton={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",
+                                    background:"rgba(255,255,255,0.18)",color:"#fff",border:"none",borderRadius:7,
+                                    cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap",fontFamily:"inherit" }} />
+                                );
+                              })()}
                               <button onClick={exporterFichePDF}
                                 style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.18)",color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap" }}>
                                 📄 Export PDF
@@ -5696,15 +5897,24 @@ export default function OnboardingDashboard() {
                                     <div style={{ fontSize:11.5, color:"#92400e", marginBottom:8, lineHeight:1.5 }}>
                                       Tant qu'il n'est pas confié, aucune assistante en ligne ne voit cet apprenant.
                                     </div>
-                                    <select disabled={attributionEnCours}
-                                      onChange={e => attribuerAssistante(selectedApprenantGroupe.assignation_id, e.target.value)}
-                                      defaultValue=""
-                                      style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px solid #fde68a", fontSize:13, fontFamily:"inherit", background:"#fff", boxSizing:"border-box" }}>
-                                      <option value="">— Confier à une assistante en ligne —</option>
-                                      {assistantesLigne.map(a => (
-                                        <option key={a.id} value={a.id}>{`${a.prenom || ""} ${a.nom || ""}`.trim()}</option>
-                                      ))}
-                                    </select>
+                                    {/* UN BOUTON, PAS UNE LISTE DÉROULANTE. Le `<select>` natif
+                                        attribuait au `onChange` : le choix ÉTAIT l'action, et un
+                                        clic de travers confiait l'apprenant sans retour possible.
+                                        Il n'affichait par ailleurs que quatorze noms nus, sans
+                                        dire laquelle est déjà surchargée - de quoi donner tout
+                                        à la première de la liste. */}
+                                    <button onClick={() => setSelecteurAssistante({
+                                      assignation_id: selectedApprenantGroupe.assignation_id,
+                                      nom: `${selectedApprenantGroupe.prenom_apprenant||""} ${selectedApprenantGroupe.nom_apprenant||""}`.trim(),
+                                      classe: selectedGroupe?.nom || null,
+                                      niveau: selectedApprenantGroupe.niveau || null,
+                                      canal: selectedGroupe?.type_cours || null,
+                                    })}
+                                      style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"none",
+                                        background:"#d97706", color:"#fff", fontSize:12.5, fontWeight:700,
+                                        fontFamily:"inherit", cursor:"pointer" }}>
+                                      Confier à une assistante en ligne →
+                                    </button>
                                   </div>
                                 )}
                                 <div style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#fff",borderRadius:8,border:"1px solid #d1fae5" }}>
@@ -9636,19 +9846,48 @@ export default function OnboardingDashboard() {
                       {/* MIGRATION DE CANAL — le contexte, puis le tarif. L'assistante qui
                           accepte ne connaît pas forcément le dossier : lui dire d'où part
                           l'apprenant et où il va évite qu'elle le cherche ailleurs. */}
-                      {demandeEnCours?.type_demande === "changement_coaching" && (
-                        <>
-                          <div style={{ background:"#f2edfb", border:"1px solid #ddd0f5", borderRadius:10, padding:"11px 14px", marginBottom:14, fontSize:12.5, color:"#5b3a94", lineHeight:1.6 }}>
-                            🔀 <strong>Migration de canal</strong> — aucun test de niveau requis.
-                            L'apprenant garde son niveau, son historique et toutes ses données :
-                            seules sa classe et son canal changent.
-                          </div>
-                          <ChampTarifMigration
-                            plan={planMigration}
-                            valeur={nouvelleMensualite}
-                            onChange={setNouvelleMensualite} />
-                        </>
-                      )}
+                      {/* LES DEUX CIRCUITS SANS TEST, chacun annoncé pour ce qu'il est. Le
+                          bandeau disait « Migration de canal » quel que soit le type : sur un
+                          transfert d'Angré à Yopougon, il annonçait un changement de canal qui
+                          n'a pas lieu, et taisait le seul qui compte. Le champ de tarif, lui,
+                          vaut pour les deux - deux centres ne pratiquent pas le même prix,
+                          comme deux canaux. */}
+                      {(() => {
+                        /* Le tarif vaut pour les TROIS circuits : un changement de classe
+                           peut lui aussi changer le prix. Même bloc que chez la commerciale. */
+                        const t = demandeEnCours?.type_demande;
+                        if (!t) return null;
+                        const centre = t === "changement_centre";
+                        const migration = t === "changement_coaching";
+                        return (
+                          <>
+                            <div style={{ background: centre ? "#e0f2fe" : migration ? "#f2edfb" : "#f0fdf4",
+                              border: `1px solid ${centre ? "#bae6fd" : migration ? "#ddd0f5" : "#bbf7d0"}`, borderRadius:10,
+                              padding:"11px 14px", marginBottom:14, fontSize:12.5,
+                              color: centre ? "#075985" : migration ? "#5b3a94" : "#15803d", lineHeight:1.6 }}>
+                              {centre ? (
+                                <>🏢 <strong>Transfert de centre</strong> — aucun test de niveau requis.
+                                L'apprenant garde son niveau, son historique et toutes ses données :
+                                seuls sa classe et son centre changent.</>
+                              ) : migration ? (
+                                <>🔀 <strong>Migration de canal</strong> — aucun test de niveau requis.
+                                L'apprenant garde son niveau, son historique et toutes ses données :
+                                seules sa classe et son canal changent.</>
+                              ) : (
+                                <>🔄 <strong>Changement de classe</strong> — le niveau est revenu du test.
+                                L'apprenant garde son historique et toutes ses données ; ajustez la
+                                mensualité ci-dessous si la nouvelle classe n'a pas le même tarif.</>
+                              )}
+                            </div>
+                            <ChampTarifMigration
+                              plan={planMigration}
+                              valeur={nouvelleMensualite}
+                              onChange={setNouvelleMensualite}
+                              desLeMoisEnCours={tarifDesLeMoisEnCours}
+                              onChangeDesLeMoisEnCours={setTarifDesLeMoisEnCours} />
+                          </>
+                        );
+                      })()}
 
                       {/* Motif */}
                       <div style={{ marginBottom:20 }}>
@@ -9778,6 +10017,43 @@ export default function OnboardingDashboard() {
                         style={{ padding:"10px 20px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:13 }}>
                         Annuler
                       </button>
+
+                      {/* CLÔTURER LA CLASSE QUITTÉE SI ELLE SE VIDE. Une classe de coaching
+                          privé n'existe que pour ses apprenants : le dernier parti, elle n'a
+                          plus d'objet, mais rien ne la fermait — elle restait « active »,
+                          comptée dans la charge de son coach et proposée dans les sélecteurs.
+                          LE CRITÈRE EST LE VIDE, PAS LE PRIVÉ : une classe privée peut
+                          accueillir une FAMILLE, et tant qu'un frère ou une sœur y suit ses
+                          cours elle doit vivre. Le serveur recompte et refuse s'il reste
+                          quelqu'un : cet écran propose, il ne décide pas. */}
+                      {(() => {
+                        const src = selectedGroupe
+                          || (groupes || []).find(g => g.id === selectedApprenantGroupe?.groupe_id)
+                          || null;
+                        const privee = !!src && (src.is_prive === true || src.type_cours === "prive"
+                          || Number(src.capacite_max) === 1);
+                        if (!privee) return null;
+                        const reste = Math.max(0, (Number(src.nb_apprenants) || 0) - 1);
+                        return (
+                          <label style={{ display:"flex",alignItems:"flex-start",gap:9,flex:1,margin:"0 12px",
+                            padding:"9px 12px",borderRadius:9,cursor: reste === 0 ? "pointer" : "not-allowed",
+                            background: reste === 0 ? "#fffbeb" : "#f8fafc",
+                            border:`1px solid ${reste === 0 ? "#fde68a" : "#e2e8f0"}` }}>
+                            <input type="checkbox" checked={cloturerSourceTransfert} disabled={reste > 0}
+                              onChange={e=>setCloturerSourceTransfert(e.target.checked)}
+                              style={{ marginTop:2,cursor:"inherit" }} />
+                            <span style={{ fontSize:11.5,lineHeight:1.5,color: reste === 0 ? "#92400e" : "#94a3b8" }}>
+                              {reste === 0 ? (
+                                <>Clôturer <strong>{src.nom}</strong>, qui n'aura plus aucun apprenant.
+                                  <span style={{ color:"#b45309" }}> Les plans de paiement sont gelés.</span></>
+                              ) : (
+                                <>Clôture impossible : <strong>{reste}</strong> apprenant{reste>1?"s":""} y rest{reste>1?"ent":"e"}.</>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })()}
+
                       <button onClick={executerTransfert} disabled={!transfertForm.nouveau_groupe_id||transfertSaving||!peut("classes","update")} title={permBtnTitle("Confirmer le transfert",peut("classes","update"))}
                         style={{ padding:"10px 24px",background:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?C_GRAD:"#e5e7eb",
                           color:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?"#fff":"#9ca3af",border:"none",borderRadius:9,cursor:(transfertForm.nouveau_groupe_id&&peut("classes","update"))?"pointer":"default",
@@ -11129,6 +11405,17 @@ export default function OnboardingDashboard() {
           </Modal>
         );
       })()}
+      {/* À qui confier ce dossier. Monté à la racine, au-dessus de la fiche apprenant qui
+          reste ouverte derrière : c'est de là qu'on l'ouvre le plus souvent. */}
+      <SelecteurAssistante
+        ouvert={!!selecteurAssistante}
+        apprenant={selecteurAssistante}
+        enCours={attributionEnCours}
+        accent={PA_COLOR}
+        onFermer={() => setSelecteurAssistante(null)}
+        onConfirmer={(a) => attribuerAssistante(selecteurAssistante?.assignation_id, a.id)}
+      />
+
       <FooterSaaS couleurTheme={PA_COLOR} />
     </div>
   );

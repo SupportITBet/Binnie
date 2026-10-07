@@ -3,6 +3,7 @@ import supabase from "../config/supabase.js";
 import { authenticateAdmin } from "../middlewares/requireAdmin.js";
 import { notifyUsers } from "../services/notifyRole.js";
 import { logAudit } from "../middlewares/logAudit.js";
+import { libelleCanalPhrase, estCanal } from "../utils/canal.js";
 
 const router = express.Router();
 
@@ -53,9 +54,41 @@ export const MOTIFS_MIGRATION_CANAL = {
   autre:               "Autre (précisé en commentaire)",
 };
 
+/* TRANSFERT DE CENTRE À CENTRE — Angré → Yopougon. Troisième circuit, et troisième question :
+   ni le NIVEAU (changement_groupe) ni le CANAL (changement_coaching) ne changent, seul le LIEU.
+   Un apprenant déménage, change de travail, ou trouve les horaires d'un autre centre plus
+   commodes. Aucun des motifs des deux autres listes ne décrit cela - « déménagement » existe
+   bien côté canal, mais il y désigne un départ vers le en ligne, pas vers un autre centre. */
+export const MOTIFS_CHANGEMENT_CENTRE = {
+  demenagement:        "Déménagement",
+  rapprochement:       "Rapprochement du domicile ou du lieu de travail",
+  horaires_centre:     "Horaires de l'autre centre plus adaptés",
+  preference_client:   "Préférence de l'apprenant ou de sa famille",
+  places_disponibles:  "Pas de classe à son niveau dans ce centre",
+  decision_commerciale:"Décision commerciale",
+  autre:               "Autre (précisé en commentaire)",
+};
+
+/* Les trois types, nommés une fois. `changement_groupe` reste le défaut : c'est le circuit
+   d'origine, et toute valeur inconnue doit y retomber plutôt que d'ouvrir un circuit que
+   l'appelant n'a pas demandé. */
+const TYPES_DEMANDE = ["changement_groupe", "changement_coaching", "changement_centre"];
+const typeDemandeDe = (v) => (TYPES_DEMANDE.includes(v) ? v : "changement_groupe");
+
 /** Les motifs valables pour un type de demande donné. */
 const motifsDe = (typeDemande) =>
-  typeDemande === "changement_coaching" ? MOTIFS_MIGRATION_CANAL : MOTIFS_TRANSFERT;
+  typeDemande === "changement_coaching" ? MOTIFS_MIGRATION_CANAL
+  : typeDemande === "changement_centre" ? MOTIFS_CHANGEMENT_CENTRE
+  : MOTIFS_TRANSFERT;
+
+/* LES DEUX CIRCUITS SANS TEST DE NIVEAU. Changer de canal ou changer de centre ne pose aucune
+   question sur ce que l'apprenant sait faire : il garde son niveau, c'est l'endroit où il
+   suit ses cours qui change. Les deux attendent donc l'ACCORD d'une équipe, pas le retour
+   d'une information - d'où `en_attente_accord` et non `en_attente_test`.
+   Nommé une fois : la distinction se décide à six endroits (statut initial, clôture,
+   notifications, file, écrans), et la recopier à chaque fois garantissait l'oubli. */
+const sansTestDeNiveau = (typeDemande) =>
+  typeDemande === "changement_coaching" || typeDemande === "changement_centre";
 
 /* `en_attente_accord` est le pendant de `en_attente_test` pour une migration de canal : le
    dossier attend qu'une PERSONNE accepte, et non qu'une information revienne. */
@@ -125,7 +158,8 @@ async function canalDeLAssistante(profil) {
 async function assistanteDe(profil) {
   if (!profil?.email) return null;
   const { data } = await supabase
-    .from("assistantes").select("id, type_cours").ilike("email", profil.email).maybeSingle();
+    // `centre_id` : c'est lui qui dit quels transferts de centre la concernent.
+    .from("assistantes").select("id, type_cours, centre_id").ilike("email", profil.email).maybeSingle();
   return data || null;
 }
 
@@ -141,6 +175,48 @@ const estCoach      = (r) => ROLES_COACH.includes(r);
 const tableAbsente = (e) => e?.code === "42P01" || /demandes_transfert/i.test(e?.message || "") && /does not exist/i.test(e?.message || "");
 
 const nomDe = (p) => `${p?.prenom || ""} ${p?.nom || ""}`.trim() || "Un membre de l'équipe";
+
+/**
+ * APPLIQUER UN NOUVEAU TARIF AUX MOIS DÉJÀ ÉCRITS, quand on le demande explicitement.
+ *
+ * LA RÈGLE PAR DÉFAUT NE CHANGE PAS : `plan.mensualite` commande les mois À VENIR, et les mois
+ * déjà dans le tableau gardent le montant figé à leur création. C'est ce qui protège le passé.
+ * Mais elle laissait un angle mort : un apprenant transféré le 6 octobre gardait un mois
+ * d'octobre NON PAYÉ au prix de son ancien centre. Ni tout à fait le passé, ni la suite.
+ *
+ * D'où cette option, décidée transfert par transfert plutôt que posée en règle générale - les
+ * deux situations existent, et seule l'assistante qui traite le dossier sait laquelle elle a
+ * sous les yeux.
+ *
+ * CE QU'ELLE NE TOUCHE JAMAIS, et c'est ce qui la rend sûre :
+ *   · un mois ANTÉRIEUR au mois courant - c'est le passé, il est clos ;
+ *   · un mois sur lequel UN VERSEMENT a déjà été reçu - il a commencé à être réglé à
+ *     l'ancien prix, et le baisser créerait un trop-perçu fantôme, le monter une dette
+ *     que le client n'a pas contractée ;
+ *   · un mois NEUTRALISÉ par une pause - son montant à zéro est voulu, le réécrire
+ *     ressusciterait une dette que la suspension avait justement effacée.
+ *
+ * @returns {{plan: object, reprices: number}} le plan modifié et le nombre de mois touchés.
+ */
+function appliquerTarifAuxMoisEcrits(plan, nouveauMontant) {
+  const mois = Array.isArray(plan?.mois_paiements) ? plan.mois_paiements : [];
+  if (!mois.length) return { plan, reprices: 0 };
+
+  const d = new Date();
+  const periodeCourante = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const totalPaye = (m) => (m.tranches || []).reduce((t, x) => t + (Number(x.montant) || 0), 0);
+
+  let reprices = 0;
+  const majs = mois.map(m => {
+    if (!m?.periode || m.periode < periodeCourante) return m;
+    if (m.neutralise) return m;
+    if (totalPaye(m) > 0) return m;
+    if (Number(m.montant) === Number(nouveauMontant)) return m;
+    reprices++;
+    return { ...m, montant: nouveauMontant };
+  });
+  return { plan: { ...plan, mois_paiements: majs }, reprices };
+}
 
 /**
  * LE DOSSIER COMMERCIAL D'UN APPRENANT, à partir de sa demande de transfert.
@@ -237,22 +313,56 @@ router.post("/", authenticateAdmin, async (req, res) => {
     /* Le type fixe la liste de motifs recevable : une migration de canal ne se justifie pas
        par « niveau trop bas », et un changement de groupe pas par « déménagement ». Valider
        contre une seule liste laissait passer n'importe quel motif de l'autre circuit. */
-    const typeDemande = type_demande === "changement_coaching" ? "changement_coaching" : "changement_groupe";
+    const typeDemande = typeDemandeDe(type_demande);
     if (!motif || !motifsDe(typeDemande)[motif]) {
       return res.status(400).json({ error: "Choisissez un motif dans la liste." });
     }
 
+    /* UN TRANSFERT DE CENTRE SANS CENTRE D'ARRIVÉE N'EST PAS UNE DEMANDE. Contrairement au
+       canal - qui n'a que deux valeurs, donc « l'autre » suffit à le désigner - il y a six
+       centres : la destination est un CHOIX, et sans elle personne ne sait à qui montrer le
+       dossier. On refuse donc ici, plutôt que de laisser une demande que la file n'adressera
+       à aucune équipe et qui dormira indéfiniment. */
+    let centreCible = null;
+    if (req.body.centre_cible_id) {
+      const { data: c } = await supabase
+        .from("centres").select("id, nom").eq("id", req.body.centre_cible_id).maybeSingle();
+      if (!c) return res.status(404).json({ error: "Centre d'arrivée introuvable." });
+      centreCible = c;
+    }
+    if (typeDemande === "changement_centre" && !centreCible) {
+      return res.status(400).json({ error: "Indiquez le centre d'arrivée." });
+    }
+
+    /* `note` EST DANS LE SELECT, et son absence n'était pas anodine : le bloc plus bas fait
+       `JSON.parse(ga.note)` pour retrouver le dossier commercial par `assignation_id` - la
+       seule clé fiable. Sans la colonne, la lecture rendait toujours `{}`, la résolution par
+       dossier ne s'exécutait JAMAIS, et on retombait systématiquement sur le rapprochement par
+       e-mail - celui-là même qui échoue quand l'inscription porte un identifiant technique
+       (`tel.0789800862.nom@betacademy.app`). Résultat : `profil_type` n'était pas transmis, et
+       le formulaire de test s'ouvrait sur « Particulier » pour un enfant. */
     const { data: ga } = await supabase
       .from("groupes_apprenants")
-      .select("id, groupe_id, apprenant_id, nom_apprenant, prenom_apprenant, email_apprenant, niveau, statut")
+      .select("id, groupe_id, apprenant_id, nom_apprenant, prenom_apprenant, email_apprenant, niveau, statut, note")
       .eq("id", ga_id).maybeSingle();
     if (!ga) return res.status(404).json({ error: "Inscription introuvable." });
+    /* L'INSCRIPTION DOIT ÊTRE VIVANTE. `transfere` était déjà refusé - l'apprenant a quitté
+       cette classe pour une autre. `retire` ne l'était pas, et c'est pire : il a quitté BET,
+       il n'y a aucune classe à lui faire quitter, et la demande aurait réveillé le placement
+       test pour un test que personne ne ferait passer. Le cas devient atteignable maintenant
+       que la commerciale et l'onboarding peuvent demander depuis une fiche, qui reste
+       consultable après un arrêt de formation. */
     if (ga.statut === "transfere") {
       return res.status(409).json({ error: "Cet apprenant a déjà quitté cette classe." });
     }
+    if (ga.statut === "retire") {
+      return res.status(409).json({
+        error: "Cet apprenant a arrêté sa formation : reprenez-la avant de demander un transfert.",
+      });
+    }
 
     const { data: groupe } = await supabase
-      .from("groupes").select("id, nom, niveau, coach_id, type_cours").eq("id", ga.groupe_id).maybeSingle();
+      .from("groupes").select("id, nom, niveau, coach_id, type_cours, centre_id").eq("id", ga.groupe_id).maybeSingle();
 
     /* UN COACH NE DEMANDE QUE POUR SES PROPRES APPRENANTS. L'onboarding et le placement
        peuvent en émettre une aussi - ils voient des cas que le coach ne voit pas - mais
@@ -289,6 +399,13 @@ router.post("/", authenticateAdmin, async (req, res) => {
       // Le canal décide de l'équipe qui traitera : en ligne → onboarding, présentiel →
       // assistante du centre. Copié ici car la classe peut changer d'ici le traitement.
       type_cours:       groupe?.type_cours || null,
+      /* LE TRAJET ENTRE CENTRES, FIGÉ ICI. La classe peut changer de centre ou être clôturée
+         d'ici le traitement : recopiés à la création, le départ et l'arrivée restent lisibles
+         des mois plus tard, dans la file comme dans l'archive. Le centre de départ est
+         enregistré pour TOUTE demande présentiel, pas seulement pour un changement de centre :
+         il coûte une colonne et répond à « d'où venait-il ? », qu'aucune trace ne disait. */
+      centre_source_id: groupe?.centre_id || null,
+      centre_cible_id:  centreCible?.id || null,
       coach_id:         groupe?.coach_id || null,
       coach_nom:        null,   // renseigné juste après
       type_demande:     typeDemande,
@@ -300,7 +417,7 @@ router.post("/", authenticateAdmin, async (req, res) => {
          information. La valeur `changement_coaching` était acceptée ici depuis le début mais
          ne commandait rien : le dossier partait quand même en attente de test, et la clôture
          le réclamait. */
-      statut:           typeDemande === "changement_coaching" ? "en_attente_accord" : "en_attente_test",
+      statut:           sansTestDeNiveau(typeDemande) ? "en_attente_accord" : "en_attente_test",
       cree_par:         req.profil.id,
     };
 
@@ -322,29 +439,101 @@ router.post("/", authenticateAdmin, async (req, res) => {
       let dossier = null;
       if (assignationId) {
         ({ data: dossier } = await supabase
-          .from("assignations_parcours").select("profil_type").eq("id", assignationId).maybeSingle());
+          .from("assignations_parcours").select("profil_type, type_cours, assistante_id").eq("id", assignationId).maybeSingle());
       }
-      if (!dossier?.profil_type && ligne.email_apprenant) {
+      if (!dossier && ligne.email_apprenant) {
         ({ data: dossier } = await supabase
-          .from("assignations_parcours").select("profil_type")
+          .from("assignations_parcours").select("profil_type, type_cours, assistante_id")
           .ilike("prospect_email", ligne.email_apprenant)
           .order("created_at", { ascending: false }).limit(1).maybeSingle());
       }
       if (dossier?.profil_type) ligne.profil_type = dossier.profil_type;
+
+      /* LE CANAL, QUAND LA CLASSE NE LE DIT PAS. `ligne.type_cours` vient du groupe, et un
+         groupe de coaching PRIVÉ porte `prive` - un type de coaching, pas un endroit. Trois
+         choses s'en déduisaient alors de travers : l'équipe à qui la demande est adressée,
+         le canal d'arrivée annoncé (`canalCibleDe("prive")` rend « en ligne » quoi qu'il
+         arrive, même pour quelqu'un qui y est déjà), et le canal réécrit sur le dossier à la
+         clôture. Le dossier, lui, porte toujours un vrai canal : c'est lui qui tranche. */
+      if (!estCanal(ligne.type_cours) && estCanal(dossier?.type_cours)) {
+        ligne.type_cours = dossier.type_cours;
+      }
+
+      /* QUI LE SUIVAIT AVANT. `assignations_parcours.assistante_id` est VIVANT : une migration
+         de canal comme un transfert de centre le remplacent à l'exécution, et la précédente ne
+         survit alors nulle part. Elle ne se devinait qu'indirectement, par le crédit figé des
+         paiements déjà encaissés - ce qui laisse sans mémoire les dossiers qui n'ont encore
+         rien payé. Figée ici, sur TOUTE demande et pas seulement sur celles qui changent de
+         propriétaire : elle ne coûte rien, et c'est précisément le genre de trace dont on
+         découvre le besoin une fois qu'elle manque. */
+      if (dossier?.assistante_id) ligne.assistante_source_id = dossier.assistante_id;
     } catch (e) {
       console.warn("[demandes-transfert POST] profil non résolu:", e.message);
+    }
+
+    /* UNE MIGRATION VERS LE PRÉSENTIEL DOIT DIRE DANS QUEL CENTRE. Elle part d'une classe en
+       ligne, qui n'a pas de centre : sans destination, elle s'adressait à « l'équipe
+       présentiel » en bloc, c'est-à-dire aux onze assistantes des six centres - dont dix que le
+       dossier ne concerne pas. Avec le centre, elle est adressée comme un transfert de centre :
+       à celles qui vont réellement accueillir l'apprenant.
+       Exigé seulement DANS CE SENS : vers le en ligne, il n'y a pas de centre à choisir, c'est
+       l'onboarding qui place l'apprenant.
+       PLACÉ HORS DU `try` ci-dessus, dont le `catch` avale les erreurs : à l'intérieur, un
+       échec de résolution du dossier aurait sauté la validation et laissé passer une demande
+       sans destination - exactement ce qu'elle existe pour empêcher. Et après lui, car
+       `ligne.type_cours` peut y être corrigé depuis le dossier. */
+    if (typeDemande === "changement_coaching"
+        && canalCibleDe(ligne.type_cours) === "presentiel" && !centreCible) {
+      return res.status(400).json({
+        error: "Indiquez le centre qui accueillera l'apprenant : sans lui, la demande "
+             + "s'adresserait à tous les centres à la fois.",
+      });
     }
 
     let { data: demande, error } = await supabase
       .from("demandes_transfert").insert(ligne).select().single();
 
-    // `profil_type` a été ajouté après coup : sur une base où l'ALTER n'a pas encore été
-    // joué, on crée la demande sans lui plutôt que de la refuser. Le formulaire de test
-    // restera simplement modifiable, ce qui est l'ancien comportement.
-    if (error && /profil_type|type_cours/.test(error.message || "")) {
-      const { profil_type: _absent, type_cours: _absent2, ...sansProfil } = ligne;
+    /* ── UNE BASE QUI N'A PAS TOUTES LES COLONNES ────────────────────────────────────────
+       Cinq colonnes ont été ajoutées après coup, par trois migrations successives. Sur une
+       base où l'une d'elles manque, on crée la demande sans elle plutôt que de la refuser :
+       le formulaire de test reste modifiable, la file n'est pas cloisonnée - l'ancien
+       comportement, dégradé mais vivant.
+
+       ON NE RETIRE QUE CELLE QUI MANQUE, UNE PAR UNE. Le repli les enlevait TOUTES d'un coup,
+       et c'est ce qui a cassé le premier transfert de centre réel le 06/10/2026 : la base
+       n'avait pas encore `assistante_source_id`, le repli a donc aussi effacé
+       `centre_cible_id` - la destination - et la demande est partie sans adresse. Elle n'est
+       apparue dans la file de personne, alors que la notification, elle, était bien partie.
+       Le garde-fou 503 ci-dessous n'avait rien vu : il ne surveillait que les deux colonnes
+       de centre, et l'erreur portait sur une troisième.
+
+       PostgREST nomme la colonne fautive dans son message ; on la retire et on retente. */
+    const COLONNES_RECENTES = ["profil_type", "type_cours", "centre_cible_id",
+                               "centre_source_id", "assistante_source_id"];
+    const retirees = [];
+    let essais = 0;
+    while (error && essais < COLONNES_RECENTES.length) {
+      const manquante = COLONNES_RECENTES.find(
+        c => !retirees.includes(c) && new RegExp(c).test(error.message || ""));
+      if (!manquante) break;
+      retirees.push(manquante);
+      const reste = { ...ligne };
+      retirees.forEach(c => delete reste[c]);
       ({ data: demande, error } = await supabase
-        .from("demandes_transfert").insert(sansProfil).select().single());
+        .from("demandes_transfert").insert(reste).select().single());
+      essais++;
+    }
+
+    /* UN CHANGEMENT DE CENTRE SANS SA DESTINATION N'EST PAS UNE DEMANDE : la file ne
+       l'adresserait à personne et il dormirait indéfiniment. On refuse donc, en nommant le
+       fichier SQL à jouer - et on le vérifie APRÈS les tentatives, sur ce qui a réellement
+       été retiré, et non sur le texte d'une erreur qui peut porter sur une autre colonne. */
+    if (typeDemande === "changement_centre" && retirees.includes("centre_cible_id")) {
+      if (demande?.id) await supabase.from("demandes_transfert").delete().eq("id", demande.id);
+      return res.status(503).json({
+        error: "Le transfert de centre à centre n'est pas encore activé sur cette base : "
+             + "rejouez Backend/sql/demandes_transfert_centre_cible.sql (il ajoute trois colonnes).",
+      });
     }
 
     if (error) {
@@ -364,19 +553,25 @@ router.post("/", authenticateAdmin, async (req, res) => {
           .in("role", [...new Set([...ROLES_ONBOARDING, ...ROLES_PLACEMENT])].filter(r => r !== "super_admin" && r !== "admin"))
           .eq("actif", true);
         const apprenant = `${ligne.prenom_apprenant || ""} ${ligne.nom_apprenant || ""}`.trim() || "Un apprenant";
-        const pourPlacement = (destinataires || []).filter(u => estPlacement(u.role)).map(u => u.id);
-        const pourOnboarding = (destinataires || []).filter(u => estOnboarding(u.role)).map(u => u.id);
+        /* ON NE SE NOTIFIE PAS SOI-MÊME. La demande peut désormais être émise par l'onboarding
+           ou par une commerciale, qui sont tous deux dans la liste des destinataires : sans ce
+           filtre, celle qui vient de cliquer reçoit une cloche lui annonçant sa propre
+           demande - du bruit qui apprend à ignorer les vraies. */
+        const sauf = (ids) => ids.filter(id => String(id) !== String(req.profil.id));
+        const pourPlacement = sauf((destinataires || []).filter(u => estPlacement(u.role)).map(u => u.id));
+        const pourOnboarding = sauf((destinataires || []).filter(u => estOnboarding(u.role)).map(u => u.id));
 
         /* LE LIBELLÉ VIENT DE LA BONNE LISTE. `MOTIFS_TRANSFERT[motif]` rendait `undefined`
            sur une migration, dont les motifs vivent dans leur propre liste : les cloches
            annonçaient « Motif : undefined ». */
         const motifLisible = motifsDe(typeDemande)[motif] || motif;
         const migration = typeDemande === "changement_coaching";
+        const changementCentre = typeDemande === "changement_centre";
 
-        /* ON NE RÉVEILLE PAS LE PLACEMENT TEST POUR UNE MIGRATION. Elle ne demande aucun test,
-           et l'annoncer comme tel lui créait du travail inexistant - puis l'aurait laissé
-           attendre un dossier qui ne lui serait jamais revenu. */
-        if (pourPlacement.length && !migration) {
+        /* ON NE RÉVEILLE PAS LE PLACEMENT TEST POUR UNE MIGRATION NI POUR UN CHANGEMENT DE
+           CENTRE. Ni l'un ni l'autre ne demande de test : l'annoncer lui créerait du travail
+           inexistant, puis le laisserait attendre un dossier qui ne lui reviendrait jamais. */
+        if (pourPlacement.length && !sansTestDeNiveau(typeDemande)) {
           await notifyUsers(pourPlacement, {
             type:  "demande_transfert",
             titre: `🧪 Test de niveau à faire passer — ${apprenant}`,
@@ -385,7 +580,46 @@ router.post("/", authenticateAdmin, async (req, res) => {
             meta: { demande_id: demande.id, ga_id },
           });
         }
-        if (pourOnboarding.length) {
+        /* ── LE CENTRE D'ARRIVÉE, ET LUI SEUL ──────────────────────────────────────────────
+           Un transfert de centre n'intéresse pas les six centres : il intéresse celui qui va
+           recevoir l'apprenant, parce que c'est lui qui doit accepter et lui trouver une
+           classe. Prévenir les onze assistantes présentiel noierait la vraie destinataire
+           parmi dix personnes que le dossier ne concerne pas - et c'est précisément ce que
+           ferait le bloc générique ci-dessous, dont la file ne connaît que le canal.
+           On adresse donc nommément les assistantes du centre cible, et on ajoute le
+           pilotage, qui suit tous les mouvements d'apprenants. */
+        if (changementCentre && centreCible) {
+          const { data: assCible } = await supabase
+            .from("assistantes").select("email").eq("centre_id", centreCible.id).eq("actif", true);
+          const emails = (assCible || []).map(a => a.email).filter(Boolean);
+          const dest = new Set();
+          if (emails.length) {
+            const { data: us } = await supabase
+              .from("utilisateurs").select("id, email").in("email", emails).eq("actif", true);
+            (us || []).forEach(u => { if (String(u.id) !== String(req.profil.id)) dest.add(u.id); });
+          }
+          const { data: pilotes } = await supabase
+            .from("utilisateurs").select("id")
+            .in("role", ["pedagogical_advisor", "admin", "super_admin"]).eq("actif", true);
+          (pilotes || []).forEach(u => { if (String(u.id) !== String(req.profil.id)) dest.add(u.id); });
+
+          if (dest.size) {
+            await notifyUsers([...dest], {
+              type:  "demande_transfert",
+              titre: `🏢 Transfert de centre à valider — ${apprenant}`,
+              message: `${nomDe(req.profil)} demande le transfert de ${apprenant} `
+                     + `(${ligne.groupe_nom || "classe"}) vers ${centreCible.nom}. Motif : ${motifLisible}. `
+                     + `Aucun test de niveau n'est requis : le dossier attend l'accord de votre centre, `
+                     + `puis l'affectation à une classe.`,
+              meta: { demande_id: demande.id, ga_id, centre_cible_id: centreCible.id },
+            });
+          }
+        }
+
+        /* Le bloc générique ne concerne PAS le changement de centre : il s'adresse à
+           l'onboarding et aux commerciales sans distinction de centre, alors que la demande
+           vient d'être adressée nommément au centre d'arrivée juste au-dessus. */
+        if (pourOnboarding.length && !changementCentre) {
           /* Et le message dit la vérité du circuit emprunté : une migration attend un ACCORD,
              pas un test. Annoncer « dès que le test sera passé » aurait fait attendre une
              étape qui n'arrive jamais. */
@@ -472,6 +706,71 @@ router.get("/", authenticateAdmin, async (req, res) => {
 
     let { data, error } = await q;
 
+    /* ── CHACUNE SES APPRENANTS ────────────────────────────────────────────────────────────
+       La requête ci-dessus ne filtre que par CANAL. Conséquence constatée en production le
+       06/10/2026 : l'assistante de BET II Plateaux voyait les deux dossiers d'Angré, une
+       classe qui n'est pas la sienne, dans une ville où elle n'a aucun apprenant. Onze
+       assistantes lisaient la même liste, et chacune pouvait traiter le dossier d'une autre.
+
+       LE PÉRIMÈTRE EST CELUI DU DOSSIER, et c'est déjà la règle partout ailleurs : ses
+       prospects, ses apprenants, ses paiements et son archive sont bornés par
+       `assignations_parcours.assistante_id`, ses classes par celles qu'elle a créées ou qui
+       contiennent ses apprenants. La file de transfert était la seule à l'ignorer, et c'est
+       pour cela qu'elle fuyait. Borner au CENTRE aurait déjà réduit de onze à deux, mais deux
+       reste une de trop : une collègue du même centre qui ne suit pas cet apprenant n'a pas à
+       arbitrer son transfert.
+
+       LE TRI SE FAIT ICI et non dans la requête : il demande de remonter de la demande à
+       l'inscription puis au dossier, ce que les `or()` de PostgREST ne savent pas exprimer.
+
+       LE PILOTAGE VOIT TOUT : PA, admin et super admin ne suivent aucun apprenant en propre et
+       doivent suivre tous les mouvements. */
+    if (!error && Array.isArray(data) && estCommerciale(req.role)) {
+      const monAssistante = await assistanteDe(req.profil);
+      const monCentre = monAssistante?.centre_id || null;
+
+      if (monAssistante?.id) {
+        /* À QUI APPARTIENT CHAQUE DOSSIER. Le lien passe par `note.assignation_id` de
+           l'inscription - renseigné sur 91/91 - et jamais par l'e-mail, qui peut être un
+           identifiant technique sans correspondance. Deux lectures groupées plutôt qu'une par
+           demande : la file en contient peu, mais elle se recharge toutes les minutes. */
+        const idsGa = [...new Set(data.map(d => d.ga_id).filter(Boolean))];
+        const { data: gaRows } = idsGa.length
+          ? await supabase.from("groupes_apprenants").select("id, note").in("id", idsGa)
+          : { data: [] };
+        const assignationDuGa = {};
+        for (const g of (gaRows || [])) {
+          try { assignationDuGa[g.id] = JSON.parse(g.note || "{}").assignation_id || null; }
+          catch { assignationDuGa[g.id] = null; }
+        }
+        const idsDossiers = [...new Set(Object.values(assignationDuGa).filter(Boolean))];
+        const { data: dossiers } = idsDossiers.length
+          ? await supabase.from("assignations_parcours").select("id, assistante_id").in("id", idsDossiers)
+          : { data: [] };
+        const proprietaire = Object.fromEntries((dossiers || []).map(d => [d.id, d.assistante_id]));
+
+        data = data.filter(d => {
+          const aid = assignationDuGa[d.ga_id] || null;
+          const proprio = aid ? proprietaire[aid] : null;
+
+          // Son apprenant : elle le suit, elle le voit.
+          if (proprio && String(proprio) === String(monAssistante.id)) return true;
+
+          /* L'EXCEPTION, ET LA SEULE : un transfert qui ARRIVE dans son centre. L'apprenant
+             appartient encore à l'assistante du centre de départ - c'est tout l'objet du
+             circuit, elle doit l'accepter avant qu'il devienne le sien. Sans cette ligne, une
+             demande Angré → Yopougon ne serait visible de personne à Yopougon. */
+          if (monCentre && d.centre_cible_id && String(d.centre_cible_id) === String(monCentre)) return true;
+
+          /* DOSSIER NON RÉSOLU = VISIBLE. Une inscription sans `assignation_id` exploitable
+             n'appartient à personne de façon lisible : la cacher à tous la ferait attendre
+             indéfiniment, alors qu'un dossier vu par quelqu'un qui n'en fera rien se corrige
+             d'un coup d'œil. */
+          return !proprio;
+        });
+      }
+    }
+
     /* La colonne `type_cours` est livrée à part : sur une base non migrée, la filtrer ferait
        échouer la requête et viderait l'onglet ENTIER - pas seulement le cloisonnement. On
        rejoue alors sans le partage par canal : chacun revoit tous les dossiers, comme avant.
@@ -507,6 +806,14 @@ router.get("/", authenticateAdmin, async (req, res) => {
         en_ligne:   await peutExecuterVers("en_ligne", req),
         presentiel: await peutExecuterVers("presentiel", req),
       },
+      /* MON CENTRE, pour les transferts de centre à centre. L'autorité n'y dépend ni du rôle
+         ni du canal mais du CENTRE D'ACCUEIL : seule l'assistante qui va recevoir l'apprenant
+         peut accepter. L'écran ne pouvait pas le savoir - il n'avait que les canaux - et
+         n'affichait donc aucun bouton sur ces dossiers, pas même à celle qui devait trancher.
+         `null` pour l'onboarding et les rôles d'administration, qui n'appartiennent à aucun
+         centre et gardent la main sur tout. */
+      mon_centre: estCommerciale(req.role) ? ((await assistanteDe(req.profil))?.centre_id || null) : null,
+      je_suis_onboarding: estOnboarding(req.role) && !estCommerciale(req.role),
     });
   } catch (err) {
     console.error("[demandes-transfert GET]", err.message || err);
@@ -620,10 +927,15 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
 
     /* ── L'onboarding referme le dossier ──────────────────────────────────────── */
     if (req.body.statut === "traitee") {
-      const estMigration = demande.type_demande === "changement_coaching";
-      const canalCible   = canalCibleDe(demande.type_cours);
+      const estMigration       = demande.type_demande === "changement_coaching";
+      const estChangementCentre = demande.type_demande === "changement_centre";
+      const canalCible         = canalCibleDe(demande.type_cours);
 
-      if (!estOnboarding(req.role)) {
+      /* Le garde générique ne vaut pas pour un transfert de CENTRE : celui-ci est exécuté par
+         l'assistante du centre d'accueil, qui est une commerciale - `estOnboarding` la couvre
+         déjà par sa liste de rôles, mais le contrôle précis se fait quelques lignes plus bas,
+         sur son centre. */
+      if (!estOnboarding(req.role) && !estChangementCentre) {
         return res.status(403).json({ error: "Seule l'équipe onboarding peut réaffecter un apprenant." });
       }
 
@@ -643,6 +955,29 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
         }
         if (demande.statut !== "en_attente_accord") {
           return res.status(409).json({ error: "Cette migration n'est plus en attente d'accord." });
+        }
+      } else if (estChangementCentre) {
+        /* ── QUI EXÉCUTE UN TRANSFERT DE CENTRE ───────────────────────────────────────────
+           L'ASSISTANTE DU CENTRE D'ARRIVÉE, et personne d'autre : c'est elle qui gère les
+           classes où l'apprenant atterrit, donc elle seule peut lui en désigner une. Celle du
+           centre de départ voit le dossier avancer, mais ne choisit pas la classe d'un centre
+           qui n'est pas le sien - c'est exactement le partage déjà appliqué entre le en ligne
+           et le présentiel, transposé entre deux centres.
+           L'onboarding et les rôles d'administration gardent la main : ils arbitrent quand un
+           centre ne répond pas, et sans eux un dossier pourrait rester bloqué. */
+        if (estCommerciale(req.role)) {
+          const moi = await assistanteDe(req.profil);
+          if (!demande.centre_cible_id || String(moi?.centre_id || "") !== String(demande.centre_cible_id)) {
+            return res.status(403).json({
+              error: "Ce transfert revient à l'assistante du centre d'accueil. "
+                   + "Vous suivez le dossier, mais le choix de la classe ne vous revient pas.",
+            });
+          }
+        } else if (!estOnboarding(req.role)) {
+          return res.status(403).json({ error: "Seule l'assistante du centre d'accueil peut traiter ce transfert." });
+        }
+        if (demande.statut !== "en_attente_accord") {
+          return res.status(409).json({ error: "Ce transfert n'est plus en attente d'accord." });
         }
       } else {
         if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
@@ -693,6 +1028,46 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
          NON BLOQUANT : le changement de classe est l'acte principal, et un échec ici ne doit
          pas l'annuler. Mais il est tracé, parce qu'un dossier à moitié migré est précisément
          ce que ce circuit existe pour éviter. */
+      /* ── LE TRANSFERT DE CENTRE SUIT SON PROPRE CHEMIN ────────────────────────────────
+         Le canal ne bouge pas - un apprenant d'Angré transféré à Yopougon reste en présentiel -
+         donc rien de ce que fait le bloc de migration ne s'applique : ni la réécriture du
+         canal, ni le changement de propriétaire par canal. Deux choses changent, et deux
+         seulement : le CENTRE du dossier, et son assistante, qui devient celle du centre
+         d'accueil - sans quoi l'apprenant resterait dans la liste d'une assistante qui ne le
+         voit plus passer, et serait invisible de celle qui le reçoit. */
+      if (estChangementCentre) {
+        const dossierCentre = await resoudreDossierDepuisDemande(demande);
+        if (!dossierCentre) resultatMigration.dossier_introuvable = true;
+        try {
+          const { data: classeArrivee } = await supabase
+            .from("groupes").select("centre_id").eq("id", req.body.groupe_cible_id).maybeSingle();
+
+          /* Le centre de la classe réellement choisie fait foi, et non celui annoncé à
+             l'ouverture : l'assistante peut accepter dans une classe d'un centre voisin. Le
+             centre demandé ne sert que de repli si la classe n'en porte pas. */
+          const centreArrivee = classeArrivee?.centre_id || demande.centre_cible_id || null;
+          const majDossier = {};
+          if (centreArrivee) majDossier.centre_id = centreArrivee;
+
+          const moi = await assistanteDe(req.profil);
+          if (moi?.id) {
+            majDossier.assistante_id = moi.id;
+            resultatMigration.assistante_id = moi.id;   // pour la prévenir plus bas
+          }
+
+          if (Object.keys(majDossier).length && dossierCentre) {
+            const { error: eD } = await supabase
+              .from("assignations_parcours").update(majDossier).eq("id", dossierCentre.id);
+            if (eD) throw eD;
+          }
+          resultatMigration.centre = { vers: centreArrivee };
+        } catch (e) {
+          console.warn("[changement centre] dossier non mis à jour:", e.message);
+          resultatMigration.dossier_non_maj = e.message;
+        }
+
+      }
+
       if (estMigration) {
         /* Résolu UNE FOIS pour les deux écritures qui suivent. Le rapprochement par e-mail
            seul tombait à côté quand l'inscription porte un identifiant technique. */
@@ -703,8 +1078,16 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
             .from("groupes").select("type_cours, centre_id")
             .eq("id", req.body.groupe_cible_id).maybeSingle();
 
+          /* LE CANAL D'ARRIVÉE, ET JAMAIS UN TYPE DE COACHING À SA PLACE. On recopiait le
+             `type_cours` de la classe d'arrivée sans regarder sa valeur. Pour un apprenant en
+             coaching PRIVÉ, cette classe porte `prive` : le dossier aurait reçu `prive` et
+             perdu son canal - la migration aurait effacé exactement l'information qu'elle
+             venait de changer, et le dossier serait devenu introuvable dans les deux files.
+             Quand la classe d'arrivée ne dit pas de canal, on écrit celui que la migration
+             visait : c'est la seule valeur juste dont on dispose. */
           const majDossier = {};
-          if (classeArrivee?.type_cours) majDossier.type_cours = classeArrivee.type_cours;
+          const canalArrivee = estCanal(classeArrivee?.type_cours) ? classeArrivee.type_cours : canalCible;
+          if (canalArrivee) majDossier.type_cours = canalArrivee;
 
           /* ── À QUI EST L'APPRENANT APRÈS LA MIGRATION ─────────────────────────────────
              `assistante_id` n'était pas touché : le dossier restait la propriété de
@@ -719,7 +1102,15 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
              n'est pas une assistante, et c'est lui qui désignera laquelle des quatorze suivra
              l'apprenant. Tant qu'il ne l'a pas fait, aucune assistante en ligne ne voit le
              dossier - c'est voulu : mieux vaut un dossier visiblement sans propriétaire qu'un
-             dossier attribué au hasard. L'onboarding, lui, le voit : son périmètre est global. */
+             dossier attribué au hasard.
+
+             CORRECTION D'UNE AFFIRMATION FAUSSE écrite ici : « l'onboarding, lui, le voit, son
+             périmètre est global ». Il ne le voyait PAS. Sa vue globale est bornée par
+             `.in("assistante_id", [...])` (parcours.js), qui écarte les NULL par construction -
+             donc exactement les dossiers que cette ligne vient de créer. Ils sont désormais
+             servis par `GET /parcours/dossiers-a-attribuer` et réclamés dans son onglet
+             « Mes tâches », parce qu'un dossier sans propriétaire que personne ne voit n'est
+             pas « visiblement sans propriétaire » : il est perdu. */
           if (canalCible === "en_ligne") {
             majDossier.assistante_id = null;
             resultatMigration.a_attribuer = true;
@@ -746,43 +1137,67 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
           resultatMigration.dossier_non_maj = e.message;
         }
 
-        /* ── LE TARIF, DANS LE MÊME GESTE ─────────────────────────────────────────────
-           C'est la raison d'être de cette migration pour la comptabilité : en ligne et
-           présentiel ne coûtent pas la même chose. Le sortir du geste, c'est le perdre -
-           personne ne revient sur un écran qu'il a quitté.
-           On n'écrit QUE `plan.mensualite` : les trois générateurs de mois (cron, webhook
-           TouchPoint, reprise après pause) le lisent au moment de créer un mois, et aucun ne
-           recalcule les mois déjà écrits. Le passé garde donc son prix, la suite prend le
-           nouveau - exactement la règle voulue, sans toucher à un seul mois existant. */
-        const nouvelleMensualite = Number(req.body.nouvelle_mensualite);
-        if (nouvelleMensualite > 0 && dossierMigration) {
-          try {
-            const dossier = dossierMigration;
-            const plan = dossier?.plan_paiement;
-            if (dossier && plan && typeof plan === "object" && plan.type === "mensuel") {
-              const ancienne = Number(plan.mensualite) || 0;
-              if (ancienne !== nouvelleMensualite) {
-                const planMaj = {
-                  ...plan,
-                  mensualite: nouvelleMensualite,
-                  /* La trace, sans laquelle personne ne saura expliquer l'écart dans six mois.
-                     On empile plutôt qu'on remplace : un apprenant peut migrer deux fois. */
-                  changements_tarif: [...(plan.changements_tarif || []), {
-                    de: ancienne, vers: nouvelleMensualite,
-                    motif: "migration_canal", demande_id: demande.id,
-                    le: new Date().toISOString(), par: req.profil.id,
-                  }],
-                };
-                const { error: ePlan } = await supabase
-                  .from("assignations_parcours").update({ plan_paiement: planMaj }).eq("id", dossier.id);
-                if (ePlan) throw ePlan;
-                resultatMigration.mensualite = { de: ancienne, vers: nouvelleMensualite };
+      }
+
+      /* ══ LE TARIF, DANS LE MÊME GESTE — POUR LES TROIS CIRCUITS ══════════════════════
+         C'est la raison d'être de ce réglage ici plutôt qu'ailleurs : sorti du geste, il se
+         perd - personne ne revient sur un écran qu'il a quitté. Un changement de canal, de
+         centre ou de CLASSE peut chacun s'accompagner d'un prix différent : passer d'un
+         groupe A1 à un coaching plus intensif ne coûte pas la même chose.
+
+         UN SEUL BLOC, ET C'EST VOLONTAIRE. Il était écrit DEUX FOIS - une par circuit - et le
+         troisième, le changement de classe, n'en avait aucune : le champ n'y était même pas
+         proposé. C'est exactement ainsi que ce projet fabrique ses divergences, et la seule
+         parade est de n'avoir qu'un endroit où la règle vit.
+
+         CE QU'ON ÉCRIT : `plan.mensualite`, que les trois générateurs de mois (cron, webhook
+         TouchPoint, reprise après pause) lisent au moment de créer un mois. Le passé garde son
+         prix. Les mois DÉJÀ ÉCRITS ne bougent que si l'on a explicitement coché « dès le mois
+         en cours », et jamais ceux qui portent un versement. */
+      const nouvelleMensualite = Number(req.body.nouvelle_mensualite);
+      if (nouvelleMensualite > 0) {
+        try {
+          const dossier = await resoudreDossierDepuisDemande(demande);
+          const plan = dossier?.plan_paiement;
+          if (!dossier) {
+            resultatMigration.tarif_non_maj = "dossier introuvable";
+          } else if (!plan || typeof plan !== "object" || plan.type !== "mensuel") {
+            // Pas de plan mensuel : il n'y a pas de mensualité à ajuster, et ce n'est pas une
+            // erreur - l'écran l'annonce déjà, on ne crée pas un plan par surprise.
+            resultatMigration.tarif_non_maj = "aucun plan mensuel";
+          } else {
+            const ancienne = Number(plan.mensualite) || 0;
+            if (ancienne !== nouvelleMensualite) {
+              /* Le MOTIF dit lequel des trois circuits a changé le prix : dans six mois, c'est
+                 la seule chose qui expliquera l'écart. */
+              const motifTarif = estMigration ? "migration_canal"
+                : estChangementCentre ? "changement_centre" : "changement_classe";
+              let planMaj = {
+                ...plan,
+                mensualite: nouvelleMensualite,
+                // On empile plutôt qu'on remplace : un apprenant peut être transféré deux fois.
+                changements_tarif: [...(Array.isArray(plan.changements_tarif) ? plan.changements_tarif : []), {
+                  de: ancienne, vers: nouvelleMensualite,
+                  motif: motifTarif, demande_id: demande.id,
+                  le: new Date().toISOString(), par: req.profil.id,
+                  des_le_mois_en_cours: !!req.body.appliquer_mois_en_cours,
+                }],
+              };
+              let reprices = 0;
+              if (req.body.appliquer_mois_en_cours) {
+                ({ plan: planMaj, reprices } = appliquerTarifAuxMoisEcrits(planMaj, nouvelleMensualite));
               }
+              const { error: ePlan } = await supabase
+                .from("assignations_parcours").update({ plan_paiement: planMaj }).eq("id", dossier.id);
+              if (ePlan) throw ePlan;
+              resultatMigration.mensualite = { de: ancienne, vers: nouvelleMensualite, mois_reprices: reprices };
             }
-          } catch (e) {
-            console.warn("[migration canal] mensualité non mise à jour:", e.message);
-            resultatMigration.mensualite_non_maj = e.message;
           }
+        } catch (e) {
+          // Non bloquant : le changement de classe est l'acte principal, et un tarif non
+          // appliqué ne doit pas l'annuler. Mais il est tracé.
+          console.warn("[demandes-transfert] tarif non appliqué:", e.message);
+          resultatMigration.tarif_non_maj = e.message;
         }
       }
 
@@ -871,6 +1286,18 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
           return res.status(403).json({
             error: "Vous suivez cette migration, mais la décision revient à l'équipe qui reçoit l'apprenant.",
           });
+        }
+      } else if (demande.type_demande === "changement_centre") {
+        /* MÊME RÈGLE QUE POUR ACCEPTER : le centre d'ACCUEIL décide. Sans cette symétrie,
+           l'assistante du centre de départ pourrait refuser sa propre demande, et celle d'un
+           troisième centre trancher un dossier qui ne la concerne pas. */
+        if (estCommerciale(req.role)) {
+          const moi = await assistanteDe(req.profil);
+          if (!demande.centre_cible_id || String(moi?.centre_id || "") !== String(demande.centre_cible_id)) {
+            return res.status(403).json({
+              error: "Vous suivez ce transfert, mais la décision revient à l'assistante du centre d'accueil.",
+            });
+          }
         }
       } else if (estCommerciale(req.role) && !(await commercialePeutReaffecter(req.profil))) {
         return res.status(403).json({
@@ -967,12 +1394,11 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
             (onb || []).forEach(u => ajouter(u.id));
           }
 
-          const libelleCanal = (c) => (c === "en_ligne" ? "en ligne" : c === "hybride" ? "hybride" : "présentiel");
           if (dest.size) {
             await notifyUsers([...dest], {
               type:  "demande_transfert",
               titre: `🔀 Migration effectuée — ${apprenant}`,
-              message: `${apprenant} passe du ${libelleCanal(demande.type_cours)} au ${libelleCanal(canalArr)}`
+              message: `${apprenant} passe du ${libelleCanalPhrase(demande.type_cours)} au ${libelleCanalPhrase(canalArr)}`
                      + `${demande.groupe_nom ? `, en quittant ${demande.groupe_nom}` : ""}`
                      + `${nomClasseArr ? ` pour ${nomClasseArr}` : ""}. `
                      + `Son niveau, son historique et ses données le suivent.`
@@ -983,6 +1409,71 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
           }
         } catch (e) {
           console.warn("[demandes-transfert PATCH] notification migration:", e.message);
+        }
+      }
+
+      /* ── UN TRANSFERT DE CENTRE PRÉVIENT LES DEUX CENTRES ────────────────────────────
+         Le dossier change de maison : le centre de départ le perd, celui d'arrivée l'accueille.
+         Les deux doivent l'apprendre, et pas en s'en apercevant. On prévient donc, en plus du
+         coach qui le reçoit et du pilotage, les assistantes du centre QUITTÉ - elles ne sont
+         dans aucune des listes précédentes, et c'est pourtant leur apprenant qui s'en va.
+         Non bloquant : le transfert est fait, une notification perdue ne le remet pas en cause. */
+      if (action === "traitee" && demande.type_demande === "changement_centre") {
+        try {
+          const dest = new Set();
+          const ajouter = (x) => { if (x && !ids.includes(x)) dest.add(x); };
+
+          let nomClasseArr = null;
+          if (maj.groupe_cible_id) {
+            const { data: g } = await supabase
+              .from("groupes").select("nom, coach_id").eq("id", maj.groupe_cible_id).maybeSingle();
+            nomClasseArr = g?.nom || null;
+            ajouter(g?.coach_id);   // le coach qui va le voir arriver
+          }
+
+          /* Les assistantes du centre de DÉPART : leur apprenant part ailleurs, et rien ne le
+             leur disait. Celle qui a émis la demande est déjà dans `ids`, mais sa collègue du
+             même centre ne l'est pas. */
+          const centresConcernes = [demande.centre_source_id, demande.centre_cible_id].filter(Boolean);
+          if (centresConcernes.length) {
+            const { data: assCentres } = await supabase
+              .from("assistantes").select("email").in("centre_id", centresConcernes).eq("actif", true);
+            const emails = (assCentres || []).map(a => a.email).filter(Boolean);
+            if (emails.length) {
+              const { data: us } = await supabase
+                .from("utilisateurs").select("id").in("email", emails).eq("actif", true);
+              (us || []).forEach(u => ajouter(u.id));
+            }
+          }
+
+          const { data: pilotes } = await supabase
+            .from("utilisateurs").select("id")
+            .in("role", ["pedagogical_advisor", "admin", "super_admin"]).eq("actif", true);
+          (pilotes || []).forEach(u => ajouter(u.id));
+
+          // Les noms des centres plutôt que leurs identifiants : « angre » ne se lit pas.
+          const { data: cs } = centresConcernes.length
+            ? await supabase.from("centres").select("id, nom").in("id", centresConcernes)
+            : { data: [] };
+          const nomCentre = (id) => (cs || []).find(c => c.id === id)?.nom || id || "—";
+
+          if (dest.size) {
+            await notifyUsers([...dest], {
+              type:  "demande_transfert",
+              titre: `🏢 Transfert de centre effectué — ${apprenant}`,
+              message: `${apprenant} passe de ${nomCentre(demande.centre_source_id)} `
+                     + `à ${nomCentre(resultatMigration.centre?.vers || demande.centre_cible_id)}`
+                     + `${demande.groupe_nom ? `, en quittant ${demande.groupe_nom}` : ""}`
+                     + `${nomClasseArr ? ` pour ${nomClasseArr}` : ""}. `
+                     + `Son niveau, son historique et ses données le suivent.`
+                     + `${resultatMigration.mensualite ? ` Mensualité : ${resultatMigration.mensualite.de} → ${resultatMigration.mensualite.vers} F.` : ""}`,
+              meta: { demande_id: demande.id, groupe_cible_id: maj.groupe_cible_id || null,
+                      centre_source_id: demande.centre_source_id || null,
+                      centre_cible_id: demande.centre_cible_id || null },
+            });
+          }
+        } catch (e) {
+          console.warn("[demandes-transfert PATCH] notification centre:", e.message);
         }
       }
 

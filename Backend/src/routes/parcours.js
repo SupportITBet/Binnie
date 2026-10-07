@@ -5,6 +5,10 @@ import { authenticateAdmin, requirePermission } from "../middlewares/requireAdmi
 import { logAudit } from "../middlewares/logAudit.js";
 import { notifyUser, notifyRole, notifyOnboarding } from "../services/notifyRole.js";
 import { suspendrePlan, reprendrePlan, periodeDe } from "../services/planPaiement.js";
+import {
+  assignationIdDe, lireNote, construireParcours, synthetiserDossier, totauxArchive,
+} from "../services/archiveApprenants.js";
+import { libelleCanal, libelleCanalPhrase, canauxCompatibles } from "../utils/canal.js";
 
 const router = express.Router();
 console.log("✅ Route parcours chargée");
@@ -1487,16 +1491,25 @@ router.patch("/assignations/:id", authenticateAdmin, requirePermission("inscript
         .eq("actif", true)
         .maybeSingle();
       if (cibleErr || !cible) return res.status(404).json({ error: "Assistante cible introuvable ou inactive" });
-      // Garde-fou serveur : une assistante n'est qualifiée que pour SON canal - quel que
-      // soit ce que le frontend envoie (ex: sélection restée périmée après un changement
-      // de dossier ciblé côté PA), on refuse tout transfert vers un canal incompatible.
-      // Exception : un PA Advisor (profil "pa") gère le coaching PRIVÉ sur tous les
-      // canaux (en_ligne/présentiel/domicile) - c'est précisément sa raison d'être,
-      // le champ type_cours de sa fiche assistante n'a pas de sens comme restriction ici.
+      /* Garde-fou serveur : une assistante n'est qualifiée que pour SON canal - quel que soit
+         ce que le frontend envoie (ex: sélection restée périmée après un changement de dossier
+         ciblé côté PA), on refuse tout transfert vers un canal incompatible.
+
+         CE CONTRÔLE ÉTAIT UNE ÉGALITÉ STRICTE, et elle refusait des attributions légitimes :
+         un dossier `hybride` n'était attribuable à PERSONNE - aucune assistante ne porte ce
+         canal - alors qu'une migration vers le en ligne en produit un dès que la classe
+         d'arrivée est hybride ; et une assistante `les_deux` était refusée partout, alors que
+         `/assistantes-ligne` la propose explicitement dans la liste de choix. L'écran offrait
+         donc un choix que le serveur rejetait. `canauxCompatibles` dit la vraie règle.
+
+         Exception conservée : un PA Advisor (profil "pa") gère le coaching PRIVÉ sur tous les
+         canaux (en_ligne/présentiel/domicile) - c'est précisément sa raison d'être, le champ
+         type_cours de sa fiche assistante n'a pas de sens comme restriction ici. */
       const estClaimPA = cible.profil === "pa" && existing.type_coaching === "prive";
-      if (!estClaimPA && cible.type_cours && existing.type_cours && cible.type_cours !== existing.type_cours) {
+      if (!estClaimPA && !canauxCompatibles(cible.type_cours, existing.type_cours)) {
         return res.status(409).json({
-          error: `Cette assistante gère le canal "${cible.type_cours}", incompatible avec ce dossier ("${existing.type_cours}").`,
+          error: `Cette assistante gère le ${libelleCanalPhrase(cible.type_cours) || cible.type_cours}, `
+               + `incompatible avec ce dossier (${libelleCanalPhrase(existing.type_cours) || existing.type_cours}).`,
         });
       }
       updates.assistante_id = req.body.assistante_id;
@@ -1548,6 +1561,32 @@ router.patch("/assignations/:id", authenticateAdmin, requirePermission("inscript
     // ── Notification de transfert vers la nouvelle assistante ──
     if (transfertVersAssistanteId) {
       const prospectNomTransfert = data.prospect_nom || existing.prospect_nom || "un prospect";
+
+      /* QUI A TRANSFÉRÉ. Le message disait « Un PA Advisor vous a transféré le dossier », mais
+         ce transfert est ouvert à TOUT rôle ayant `inscriptions.update` - onboarding, admin,
+         gestionnaire, commercial, manager, responsable. Celle qui recevait la notification
+         lisait donc le nom d'un métier qui n'avait rien fait, et ne pouvait pas savoir à qui
+         s'adresser pour comprendre la décision. On nomme la personne réelle. */
+      const ROLE_COURT = {
+        pedagogical_advisor: "PA Advisor", onboarding: "onboarding", admin: "administrateur",
+        super_admin: "super administrateur", gestionnaire: "gestionnaire", manager: "manager",
+        responsable: "responsable", commercial: "commerciale",
+      };
+      const nomActeur = `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim();
+      const roleCourt = ROLE_COURT[req.role] || null;
+      /* Le rôle seul fait sujet quand le nom manque - ce qui n'arrive que sur un compte sans
+         état civil. Dériver le libellé d'une forme longue par expression régulière donnait
+         « pa advisor » : une table courte, écrite une fois, vaut mieux qu'une transformation. */
+      const acteur = nomActeur
+        ? `${nomActeur}${roleCourt ? ` (${roleCourt})` : ""}`
+        : (roleCourt ? roleCourt.charAt(0).toUpperCase() + roleCourt.slice(1) : "Un membre de l'équipe");
+
+      /* LE CANAL EN TOUTES LETTRES. Le message affichait le code brut - « (en_ligne) » - et,
+         quand le dossier n'avait pas de canal, une parenthèse vide « () ». On ne montre la
+         parenthèse que s'il y a quelque chose à y mettre. */
+      const canalLisible = libelleCanalPhrase(data.type_cours || existing.type_cours);
+      const precisionCanal = canalLisible ? ` (${canalLisible})` : "";
+
       if (transfertVersAssistanteId.email) {
         const { data: u } = await supabase
           .from("utilisateurs")
@@ -1558,7 +1597,7 @@ router.patch("/assignations/:id", authenticateAdmin, requirePermission("inscript
           await notifyUser(u.id, {
             type:    "assignation",
             titre:   `📋 Dossier transféré - ${prospectNomTransfert}`,
-            message: `Un PA Advisor vous a transféré le dossier de ${prospectNomTransfert} (${data.type_cours || ""}).`,
+            message: `${acteur} vous a transféré le dossier de ${prospectNomTransfert}${precisionCanal}.`,
             meta:    { assignation_id: req.params.id, prospect_nom: prospectNomTransfert },
             source:  "dash",
           }).catch(() => {});
@@ -1567,7 +1606,8 @@ router.patch("/assignations/:id", authenticateAdmin, requirePermission("inscript
       await notifyRole(["super_admin"], {
         type:    "assignation",
         titre:   `📋 Dossier réaffecté - ${prospectNomTransfert}`,
-        message: `Un PA Advisor a réaffecté le dossier de ${prospectNomTransfert} (${data.type_cours || ""}) à une autre commerciale.`,
+        message: `${acteur} a réaffecté le dossier de ${prospectNomTransfert}${precisionCanal} `
+               + `à ${`${transfertVersAssistanteId.prenom || ""} ${transfertVersAssistanteId.nom || ""}`.trim() || "une autre commerciale"}.`,
         meta:    { assignation_id: req.params.id, prospect_nom: prospectNomTransfert },
         source:  "dash",
       }).catch(() => {});
@@ -2104,6 +2144,345 @@ router.get("/pa-advisors", authenticateAdmin, async (req, res) => {
     res.json({ pa_advisors: data || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Combien de dossiers chaque assistante suit déjà.
+ *
+ * POURQUOI CETTE ROUTE EXISTE À PART. Choisir à qui confier un apprenant entre quatorze noms
+ * nus, c'est choisir au hasard - et au hasard, c'est toujours la première de la liste qui
+ * reçoit tout. La seule information qui rende ce choix possible est la charge de chacune.
+ *
+ * ET POURQUOI PAS DANS `/assistantes-ligne` : cette route-là est PUBLIQUE, appelée par le
+ * formulaire du site. Y greffer le portefeuille de chaque assistante publierait sur internet
+ * la répartition commerciale de BET. Ici, l'accès est authentifié et réservé à ceux qui
+ * attribuent.
+ */
+router.get("/assistantes-ligne/charge", authenticateAdmin, async (req, res) => {
+  try {
+    /* Les dossiers VIVANTS seulement : un dossier annulé ne pèse plus sur personne, et le
+       compter ferait passer pour chargée une assistante qui ne l'est pas. */
+    const { data, error } = await supabase
+      .from("assignations_parcours")
+      .select("assistante_id")
+      .not("assistante_id", "is", null)
+      .neq("statut", "annule");
+    if (error) throw error;
+
+    const charge = {};
+    for (const d of (data || [])) charge[d.assistante_id] = (charge[d.assistante_id] || 0) + 1;
+    res.json({ charge });
+  } catch (err) {
+    console.error("[parcours/assistantes-ligne/charge]", err.message || err);
+    // Une charge indisponible ne doit pas empêcher d'attribuer : l'écran s'en passe.
+    res.json({ charge: {} });
+  }
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   LES DOSSIERS QUI N'APPARTIENNENT À PERSONNE
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Les apprenants en ligne sans assistante attitrée - ceux que l'onboarding doit attribuer.
+ *
+ * D'OÙ VIENNENT CES DOSSIERS. Une migration vers le en ligne met `assistante_id` à `null` :
+ * l'onboarding exécute la migration mais n'est pas une assistante, et c'est lui qui désignera
+ * laquelle des quatorze suivra l'apprenant. Tant qu'il ne l'a pas fait, AUCUNE assistante en
+ * ligne ne voit le dossier - leur liste est filtrée sur ce champ. C'est voulu : mieux vaut un
+ * dossier visiblement sans propriétaire qu'un dossier attribué au hasard.
+ *
+ * MAIS « VISIBLEMENT » SUPPOSE QU'ON LE VOIE QUELQUE PART, et c'est ce qui manquait.
+ * L'attribution n'existait qu'au fond d'une fiche : ouvrir le groupe, ouvrir l'apprenant,
+ * faire défiler. Rien ne la réclamait, et un dossier oublié là reste invisible de tous.
+ *
+ * POURQUOI UNE ROUTE DÉDIÉE plutôt qu'un filtre sur `GET /assignations`. Cette dernière borne
+ * la vue onboarding par `.in("assistante_id", [...])`, ce qui écarte les NULL par construction
+ * - les dossiers à attribuer y sont donc invisibles. C'est délibéré pour le circuit privé du
+ * PA, qui vit sans assistante, et cette requête sert six écrans : l'élargir pour un besoin
+ * ferait bouger les cinq autres.
+ *
+ * CE QUI EST EXCLU, ET POURQUOI :
+ *   · le coaching PRIVÉ (13 dossiers) - il est pris en charge par le PA Advisor et n'a pas
+ *     vocation à avoir une assistante. L'afficher ici créerait une tâche qui ne se termine
+ *     jamais.
+ *   · le présentiel - une migration vers le présentiel donne le dossier à celle qui l'accepte,
+ *     il n'y a jamais rien à attribuer. Et un dossier présentiel sans assistante ne relève pas
+ *     de l'onboarding.
+ */
+router.get("/dossiers-a-attribuer", authenticateAdmin, async (req, res) => {
+  try {
+    const ROLES_AUTORISES = ["onboarding", "super_admin", "admin", "responsable", "gestionnaire", "manager"];
+    if (!ROLES_AUTORISES.includes(req.role)) {
+      return res.status(403).json({ error: "Seul l'onboarding ou un rôle d'administration peut attribuer un dossier." });
+    }
+
+    const { data: dossiers, error } = await supabase
+      .from("assignations_parcours")
+      .select("id, prospect_nom, prospect_email, prospect_telephone, type_cours, type_coaching, "
+            + "statut, plan_paiement, centre_id, converti_at, created_at, updated_at")
+      .is("assistante_id", null)
+      .in("type_cours", ["en_ligne", "hybride"])
+      .order("updated_at", { ascending: true });   // le plus ancien oubli en premier
+    if (error) throw error;
+
+    const aAttribuer = (dossiers || []).filter(d => d.type_coaching !== "prive");
+    if (!aAttribuer.length) return res.json({ dossiers: [] });
+
+    /* LA CLASSE OÙ IL EST DÉJÀ. Sans elle, l'onboarding choisit une assistante à l'aveugle
+       alors que la classe d'arrivée est précisément ce qui vient d'être décidé. Le lien passe
+       par `note.assignation_id`, renseigné sur toutes les inscriptions - jamais par l'e-mail,
+       qui peut être un identifiant technique sans correspondance. */
+    const ids = new Set(aAttribuer.map(d => d.id));
+    const { data: inscriptions } = await supabase
+      .from("groupes_apprenants")
+      .select("id, groupe_id, statut, date_ajout, note")
+      .eq("statut", "actif");
+
+    const parDossier = {};
+    for (const ins of (inscriptions || [])) {
+      const aid = assignationIdDe(ins);
+      if (aid && ids.has(aid)) (parDossier[aid] ||= []).push(ins);
+    }
+
+    const idsGroupes = [...new Set(Object.values(parDossier).flat().map(i => i.groupe_id).filter(Boolean))];
+    const { data: groupesRows } = idsGroupes.length
+      ? await supabase.from("groupes").select("id, nom, niveau, type_cours, coach_id").in("id", idsGroupes)
+      : { data: [] };
+    const groupes = Object.fromEntries((groupesRows || []).map(g => [g.id, g]));
+
+    const idsCoachs = [...new Set((groupesRows || []).map(g => g.coach_id).filter(Boolean))];
+    const coachs = {};
+    if (idsCoachs.length) {
+      const { data: cu } = await supabase.from("utilisateurs").select("id, nom, prenom").in("id", idsCoachs);
+      (cu || []).forEach(c => { coachs[c.id] = `${c.prenom || ""} ${c.nom || ""}`.trim(); });
+    }
+
+    res.json({
+      dossiers: aAttribuer.map(d => {
+        const ins = (parDossier[d.id] || []).sort(
+          (a, b) => new Date(b.date_ajout || 0) - new Date(a.date_ajout || 0))[0] || null;
+        const g = ins ? groupes[ins.groupe_id] : null;
+        return {
+          id: d.id,
+          nom: d.prospect_nom || "-",
+          email: d.prospect_email || null,
+          telephone: d.prospect_telephone || null,
+          canal: d.type_cours,
+          canal_libelle: libelleCanal(d.type_cours),
+          mensualite: Number(d.plan_paiement?.mensualite) || null,
+          classe: g?.nom || null,
+          classe_id: g?.id || null,
+          niveau: g?.niveau || null,
+          /* La classe a-t-elle un coach ? Une classe créée à la volée pour accueillir une
+             migration n'en a parfois pas encore, et l'onboarding doit le voir ici plutôt que
+             de le découvrir après coup. */
+          coach_nom: g?.coach_id ? (coachs[g.coach_id] || null) : null,
+          sans_classe: !ins,
+          depuis: d.updated_at || d.converti_at || d.created_at || null,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error("[parcours/dossiers-a-attribuer]", err.message || err);
+    res.status(500).json({ error: "Lecture des dossiers à attribuer impossible" });
+  }
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   L'ARCHIVE DES APPRENANTS D'UNE COMMERCIALE
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Tous les apprenants d'une commerciale - présents, partis, et tout ce qui leur est arrivé.
+ *
+ * CE QUE L'ONGLET « MES APPRENANTS » NE DIT PAS. Il fait `statut === "converti"`, ce qui donne
+ * l'instantané du jour. Or `assignations_parcours.statut` vaut `converti` sur 85 dossiers sur
+ * 88 et ne redescend JAMAIS : aucun dossier n'est marqué « arrêté » en base, et
+ * `dossier_statut` est nul partout. Un apprenant qui part ne disparaît donc pas de la liste
+ * parce qu'il a changé de statut - il n'en disparaît pas du tout, et son départ n'est écrit
+ * nulle part côté dossier. La vérité est uniquement dans ses inscriptions.
+ *
+ * RIEN NE DOIT ÉCHAPPER À L'ARCHIVE, et c'est pour ça qu'elle ne se contente pas de compter.
+ * Un apprenant peut avoir : changé de classe plusieurs fois, migré du présentiel au en ligne,
+ * fait une pause et être revenu, vu sa mensualité changer, et avoir une demande encore en
+ * attente. Ces cinq choses sont écrites à cinq endroits différents - `note.depart`,
+ * `demandes_transfert`, `note.periodes`, `plan_paiement.changements_tarif`, et le statut de la
+ * demande ouverte - et seule leur mise en ordre raconte ce qui s'est passé. Le service
+ * `archiveApprenants` les réunit ; cette route ne fait que charger ce qu'il lui faut.
+ *
+ * UNE LIGNE PAR DOSSIER, PAS PAR INSCRIPTION : un apprenant transféré deux fois reste un
+ * apprenant qu'elle a vendu une fois. Avec 7 transferts en base, compter par inscription
+ * gonflerait son total de 8 %.
+ *
+ * LE RATTACHEMENT inscription → dossier passe par `note.assignation_id`, renseigné sur 91/91.
+ * Jamais par l'e-mail : `groupes_apprenants.email_apprenant` peut porter un identifiant
+ * technique (`tel.0789800862.nom@betacademy.app`) qui ne correspond à aucun
+ * `prospect_email` - c'est ce rapprochement qui avait fait échouer silencieusement les
+ * écritures de la migration de canal.
+ */
+router.get("/mes-apprenants/archive", authenticateAdmin, async (req, res) => {
+  try {
+    const ROLES_GLOBAUX = ["super_admin", "admin", "responsable", "gestionnaire", "manager", "pedagogical_advisor"];
+    const isGlobal = ROLES_GLOBAUX.includes(req.role);
+
+    /* PÉRIMÈTRE : exactement celui de GET /assignations, pour qu'une commerciale ne voie pas
+       dans son archive des apprenants absents de son onglet - ou l'inverse. Les rôles globaux
+       peuvent viser une commerciale précise ; sans paramètre, ils voient tout. */
+    let assistanteId = req.query.assistante_id || null;
+    if (!isGlobal) {
+      const { data: ass } = await supabase
+        .from("assistantes").select("id").eq("email", req.profil.email).maybeSingle();
+      // Aucune fiche assistante pour ce compte : archive vide, pas une erreur.
+      if (!ass) return res.json({ apprenants: [], classes: [], totaux: totauxArchive([]) });
+      assistanteId = ass.id;
+    }
+
+    let qDossiers = supabase.from("assignations_parcours")
+      .select("id, prospect_nom, prospect_email, prospect_telephone, type_cours, centre_id, "
+            + "statut, profil_type, plan_paiement, converti_at, created_at, assistante_id");
+    if (assistanteId) qDossiers = qDossiers.eq("assistante_id", assistanteId);
+    const { data: dossiers, error: eD } = await qDossiers;
+    if (eD) throw eD;
+    if (!dossiers?.length) return res.json({ apprenants: [], classes: [], totaux: totauxArchive([]) });
+
+    const idsDossiers = new Set(dossiers.map(d => d.id));
+
+    /* LES INSCRIPTIONS SONT CHARGÉES EN ENTIER PUIS FILTRÉES ICI. `note` est une colonne texte :
+       filtrer `note.assignation_id` côté serveur demanderait un `like` par dossier, soit
+       quatre-vingts motifs dans un `or()`. À l'échelle actuelle (91 lignes) la lecture complète
+       coûte moins qu'une requête malformée ; si cette table grossit de deux ordres de grandeur,
+       c'est ici qu'il faudra une vraie colonne `assignation_id` indexée. */
+    const { data: toutesInscriptions, error: eI } = await supabase
+      .from("groupes_apprenants")
+      .select("id, groupe_id, apprenant_id, nom_apprenant, prenom_apprenant, email_apprenant, "
+            + "telephone, niveau, statut, date_ajout, date_retrait, note, added_by, "
+            + "motif_pause, detail_motif");
+    if (eI) throw eI;
+
+    const parDossier = {};
+    for (const ins of (toutesInscriptions || [])) {
+      const aid = assignationIdDe(ins);
+      if (aid && idsDossiers.has(aid)) (parDossier[aid] ||= []).push(ins);
+    }
+
+    const idsInscriptions = Object.values(parDossier).flat().map(i => i.id);
+
+    /* LES DEMANDES DE TRANSFERT portent le motif précis d'un départ - « niveau trop élevé »
+       là où la note ne dit que « Changement de classe » - et elles sont le SEUL endroit où une
+       migration de canal soit nommée comme telle. Sans elles, une migration s'afficherait
+       comme un banal changement de classe. */
+    const { data: demandes } = idsInscriptions.length
+      ? await supabase.from("demandes_transfert")
+          .select("id, ga_id, groupe_id, groupe_cible_id, type_demande, motif, statut, "
+                + "traite_le, traite_par, cree_par, created_at")
+          .in("ga_id", idsInscriptions)
+      : { data: [] };
+
+    const { data: paiements } = await supabase
+      .from("paiements_parcours").select("assignation_id, montant_du, montant_recu")
+      .in("assignation_id", [...idsDossiers]);
+    const paiementsPar = {};
+    for (const p of (paiements || [])) (paiementsPar[p.assignation_id] ||= []).push(p);
+
+    /* LES CLASSES : celles traversées, mais AUSSI les classes cibles des demandes - c'est là
+       que se lit le canal d'arrivée d'une migration, et une demande encore ouverte n'a pas
+       d'inscription correspondante. */
+    const idsGroupes = [...new Set([
+      ...Object.values(parDossier).flat().map(i => i.groupe_id),
+      ...(demandes || []).flatMap(d => [d.groupe_id, d.groupe_cible_id]),
+    ].filter(Boolean))];
+    const { data: groupesRows } = idsGroupes.length
+      ? await supabase.from("groupes").select("id, nom, niveau, type_cours, coach_id, centre_id").in("id", idsGroupes)
+      : { data: [] };
+    const groupes = Object.fromEntries((groupesRows || []).map(g => [g.id, g]));
+
+    /* Les coachs : `utilisateurs` d'abord (compte réel), puis `coachs` pour les fiches sans
+       compte - même ordre que partout ailleurs, sinon un coach apparaît ici et pas là. */
+    const idsCoachs = [...new Set((groupesRows || []).map(g => g.coach_id).filter(Boolean))];
+    const coachs = {};
+    if (idsCoachs.length) {
+      const { data: cu } = await supabase.from("utilisateurs").select("id, nom, prenom").in("id", idsCoachs);
+      (cu || []).forEach(c => { coachs[c.id] = `${c.prenom || ""} ${c.nom || ""}`.trim(); });
+      const manquants = idsCoachs.filter(i => !coachs[i]);
+      if (manquants.length) {
+        const { data: cd } = await supabase.from("coachs").select("id, nom, prenom").in("id", manquants);
+        (cd || []).forEach(c => { coachs[c.id] = `${c.prenom || ""} ${c.nom || ""}`.trim(); });
+      }
+    }
+
+    const idsCentres = [...new Set((groupesRows || []).map(g => g.centre_id).filter(Boolean))];
+    const { data: centresRows } = idsCentres.length
+      ? await supabase.from("centres").select("id, nom").in("id", idsCentres)
+      : { data: [] };
+    const centres = Object.fromEntries((centresRows || []).map(c => [c.id, c.nom]));
+
+    /* QUI A FAIT QUOI. `added_by`, `traite_par`, `cree_par` et le `par` des changements de
+       tarif sont des `utilisateurs.id` - jamais des `assistantes.id`. Les deux tables ont des
+       identifiants distincts pour la même personne, reliés par l'e-mail ; les confondre fait
+       afficher « ? » là où il y a un nom. */
+    const idsPersonnes = [...new Set([
+      ...Object.values(parDossier).flat().map(i => i.added_by),
+      ...(demandes || []).flatMap(d => [d.traite_par, d.cree_par]),
+      ...dossiers.flatMap(d => (d.plan_paiement?.changements_tarif || []).map(c => c.par)),
+      ...Object.values(parDossier).flat().flatMap(i => {
+        const n = lireNote(i);
+        return [n.depart?.par, n.arret_formation?.par];
+      }),
+    ].filter(Boolean))];
+    const personnes = {};
+    if (idsPersonnes.length) {
+      const { data: pu } = await supabase.from("utilisateurs").select("id, nom, prenom, role").in("id", idsPersonnes);
+      (pu || []).forEach(u => { personnes[u.id] = { nom: `${u.prenom || ""} ${u.nom || ""}`.trim(), role: u.role }; });
+    }
+
+    const demandesPar = {};
+    for (const d of (demandes || [])) {
+      const ins = (toutesInscriptions || []).find(i => i.id === d.ga_id);
+      const aid = ins ? assignationIdDe(ins) : null;
+      if (aid && idsDossiers.has(aid)) (demandesPar[aid] ||= []).push(d);
+    }
+
+    let apprenants = dossiers.map(dossier => {
+      const inscriptions = parDossier[dossier.id] || [];
+      const evenements = construireParcours({
+        dossier, inscriptions, groupes, coachs, centres, personnes,
+        demandes: demandesPar[dossier.id] || [],
+      });
+      return synthetiserDossier({
+        dossier, inscriptions, groupes, evenements,
+        paiements: paiementsPar[dossier.id] || [],
+      });
+    });
+
+    /* FILTRE PAR ANNÉE : présent dans l'année si sa période la CROISE, pas seulement s'il est
+       arrivé dedans. Quelqu'un inscrit en décembre et parti en mars appartient aux deux. */
+    const annee = req.query.annee ? Number(req.query.annee) : null;
+    if (annee) {
+      apprenants = apprenants.filter(a => {
+        const debut = a.date_entree ? new Date(a.date_entree).getFullYear() : null;
+        const fin = a.date_sortie ? new Date(a.date_sortie).getFullYear() : new Date().getFullYear();
+        return debut !== null && debut <= annee && fin >= annee;
+      });
+    }
+
+    apprenants.sort((a, b) => new Date(b.date_entree || 0) - new Date(a.date_entree || 0));
+
+    res.json({
+      apprenants,
+      // Seules les classes réellement traversées : proposer un filtre vide fait cliquer pour rien.
+      classes: [...new Map(Object.values(parDossier).flat()
+        .map(i => groupes[i.groupe_id]).filter(Boolean)
+        .map(g => [g.id, { id: g.id, nom: g.nom, niveau: g.niveau }])).values()]
+        .sort((a, b) => (a.nom || "").localeCompare(b.nom || "")),
+      totaux: totauxArchive(apprenants),
+    });
+  } catch (err) {
+    console.error("[parcours/mes-apprenants/archive]", err.message || err);
+    res.status(500).json({ error: "Lecture de l'archive impossible" });
   }
 });
 

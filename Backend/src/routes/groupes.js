@@ -1648,6 +1648,13 @@ router.get("/apprenant-by-email", authenticateAdmin, async (req, res) => {
         type_cours:      groupe.type_cours,
         horaire:         groupe.horaire || [],
         centre_nom,
+        /* L'IDENTIFIANT DU CENTRE, ET PAS SEULEMENT SON NOM. Les écrans n'avaient que
+           `centre_nom`, bon à afficher mais inutilisable pour décider : le bouton de transfert
+           de centre à centre ne pouvait ni s'activer, ni retirer le centre actuel de la liste
+           des destinations. Et il en a d'autant plus besoin que le dossier, lui, ne porte pas
+           toujours le centre - 3 dossiers présentiel sur 10 l'ont à NULL, alors que leur
+           classe le sait. C'est donc la classe qui comble le trou. */
+        centre_id:       groupe.centre_id || null,
         statut_ga:       ga.statut,
         date_ajout:      ga.date_ajout,
         // La date d'arrêt de formation, seule source fiable de cet état : l'écran qui ouvre
@@ -1970,10 +1977,62 @@ router.post("/transfert", authenticateAdmin, requirePermission("classes", "updat
       meta: metaNotif,
     }, acteurId);   // ne pas se notifier soi-même
 
+    /* ── LA CLASSE QUITTÉE, QUAND ELLE SE RETROUVE VIDE ──────────────────────────────────
+       Une classe de coaching PRIVÉ n'existe que pour ses apprenants : le dernier parti, elle
+       n'a plus d'objet. Rien ne la fermait pourtant - le transfert ne touche qu'à
+       `groupes_apprenants` - et elle restait `actif` indéfiniment. « Coaching privé - Jojol
+       Arnaud » est dans cet état depuis le 28/09/2026 : zéro apprenant, coach toujours
+       attaché, comptée dans sa charge et proposée dans les sélecteurs de classe.
+
+       LE CRITÈRE EST « PLUS AUCUN APPRENANT ACTIF », PAS « CLASSE PRIVÉE ». Une classe privée
+       peut accueillir une famille : tant qu'un frère ou une sœur y suit ses cours, elle vit.
+       C'est pourquoi le compte est refait ICI, après le déplacement, plutôt que de faire
+       confiance à l'écran - lui ne voyait que l'apprenant qu'il déplaçait.
+
+       DEMANDÉ, JAMAIS IMPOSÉ : la clôture notifie, gèle les plans de paiement et clôt les
+       évaluations publiées. On ne déclenche cela que si l'appelant l'a explicitement coché, et
+       on refuse silencieusement si la condition n'est pas remplie - un refus bruyant ferait
+       échouer un transfert pourtant réussi. */
+    let clotureSource = null;
+    if (req.body.cloturer_groupe_source) {
+      try {
+        const { data: restants } = await supabase
+          .from("groupes_apprenants").select("id")
+          .eq("groupe_id", ga.groupe_id).eq("statut", "actif");
+        const nbRestants = (restants || []).length;
+
+        if (nbRestants > 0) {
+          clotureSource = { fait: false, raison: "apprenants_restants", restants: nbRestants };
+        } else if (ancienGroupe?.statut === "cloture") {
+          clotureSource = { fait: false, raison: "deja_cloturee" };
+        } else {
+          const { error: eClot } = await supabase.from("groupes")
+            .update({ statut: "cloture", date_fin: ancienGroupe?.date_fin || new Date().toISOString().slice(0, 10) })
+            .eq("id", ga.groupe_id);
+          if (eClot) throw eClot;
+          clotureSource = { fait: true, groupe_id: ga.groupe_id, nom: ancienGroupe?.nom || null };
+
+          logAudit({
+            acteur_id: req.profil?.id,
+            acteur_nom: `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim() || null,
+            acteur_email: req.profil?.email || null,
+            acteur_role: req.role, action_type: "modification", module: "classes",
+            cible_id: ga.groupe_id, cible_nom: ancienGroupe?.nom || null,
+            description: `Classe clôturée : dernier apprenant transféré (${nomComplet})`,
+          });
+        }
+      } catch (e) {
+        // La clôture est un à-côté : son échec ne doit pas faire croire que le transfert a raté.
+        console.warn("[transfert] clôture de la classe source impossible:", e.message);
+        clotureSource = { fait: false, raison: "erreur", detail: e.message };
+      }
+    }
+
     res.json({
       success: true,
       message: `${nomComplet} transféré avec succès vers "${nouveauGroupe.nom || nouveau_groupe_id}".`,
       ga: newGa,
+      cloture_source: clotureSource,
     });
   } catch (err) {
     console.error("[transfert]", err);

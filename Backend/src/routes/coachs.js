@@ -11,6 +11,9 @@ import { resolveParentUserId } from "./groupes.js";
 import { clotureSeance } from "./seances.js";
 
 import { staffDesClasses } from "../services/staffDesClasses.js";
+import {
+  motifDe, periodesDe, pausesDe, joursSuivis, dureeDepuisJours, dureeLisible,
+} from "../services/archiveApprenants.js";
 
 const router = express.Router();
 
@@ -1871,97 +1874,9 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
     const parId = Object.fromEntries((comptes || []).map(u => [u.id, u]));
     const parGroupe = Object.fromEntries(groupes.map(g => [g.id, g]));
 
-    /** Le motif du départ, déplié depuis le JSON de `note`. */
-    const motifDe = (r) => {
-      try {
-        const n = typeof r.note === "string" ? JSON.parse(r.note) : r.note;
-        const a = n?.arret_formation;
-        if (a?.motif) return { motif: a.motif, detail: a.detail || null, par: a.par || null };
-        /* UN TRANSFERT N'EST PAS UN ARRÊT. L'apprenant n'a pas quitté BET : il a changé de
-           classe, souvent parce que le niveau ne lui convenait pas. Le classeur affichait
-           « A arrêté · motif non renseigné », ce qui dit exactement le contraire de ce qui
-           s'est passé et fausse le taux de rétention du coach. */
-        const d = n?.depart;
-        if (d?.motif) {
-          /* LE CHANGEMENT DE NIVEAU DANS LE DÉTAIL. « Transféré vers Anglais B2 » laisse croire
-             à un simple changement d'horaire ; « C1 → B2 » dit que le niveau ne convenait pas,
-             ce qui est presque toujours la vraie raison du départ. On ne l'affiche que s'il a
-             réellement changé - « C1 → C1 » serait du bruit. */
-          const bougé = d.niveau_avant && d.niveau_apres
-            && String(d.niveau_avant).toUpperCase() !== String(d.niveau_apres).toUpperCase();
-          const morceaux = [
-            d.vers ? `Transféré vers « ${d.vers} »` : null,
-            bougé ? `niveau ${String(d.niveau_avant).toUpperCase()} → ${String(d.niveau_apres).toUpperCase()}` : null,
-          ].filter(Boolean);
-          return {
-            motif:  d.motif,
-            detail: morceaux.length ? morceaux.join(" · ") : null,
-            par:    d.par || null,
-            transfert: d.type === "transfert",
-            niveau_avant: d.niveau_avant || null,
-            niveau_apres: d.niveau_apres || null,
-          };
-        }
-      } catch { /* `note` peut contenir du texte libre : ce n'est pas une erreur */ }
-      // Repli sur les colonnes de pause, renseignées par l'onglet Archive.
-      return { motif: r.motif_pause || null, detail: r.detail_motif || null, par: null };
-    };
-
-    /**
-     * Les périodes de présence d'un rattachement, et ce qu'elles racontent.
-     *
-     * Un apprenant peut arrêter puis revenir. Sans cette lecture, la reprise remettait
-     * `statut = actif` et `date_retrait = null`, et il ressortait de l'archive comme
-     * quelqu'un qui n'était jamais parti - avec une ancienneté gonflée de tous les mois
-     * où il n'était pas là. La feuille ON BREAK perdait justement la pause qu'elle existe
-     * pour consigner.
-     *
-     * `periodes` est écrit par la route d'arrêt/reprise. Les rattachements antérieurs à ce
-     * mécanisme n'en ont pas : on retombe alors sur l'unique fenêtre des colonnes, ce qui
-     * reproduit exactement l'ancien calcul.
-     */
-    const periodesDe = (r) => {
-      let p = null;
-      try {
-        const n = typeof r.note === "string" ? JSON.parse(r.note) : r.note;
-        if (Array.isArray(n?.periodes) && n.periodes.length) p = n.periodes;
-      } catch { /* `note` peut contenir du texte libre */ }
-      const brut = p || [{ debut: r.date_ajout, fin: r.date_retrait }];
-      return brut
-        .filter(x => x?.debut)
-        .sort((a, b) => new Date(a.debut) - new Date(b.debut));
-    };
-
-    /** Le nombre de jours réellement suivis, trous d'absence exclus. */
-    const joursSuivis = (periodes) => {
-      const now = Date.now();
-      return periodes.reduce((total, p) => {
-        const d = new Date(p.debut).getTime();
-        const f = p.fin ? new Date(p.fin).getTime() : now;
-        if (Number.isNaN(d) || Number.isNaN(f) || f < d) return total;
-        return total + (f - d);
-      }, 0) / 86400000;
-    };
-
-    /** « 5 mois et 17 jours » à partir d'un nombre de jours. */
-    const dureeDepuisJours = (jours) => {
-      if (jours == null || jours < 0) return null;
-      const mois = Math.floor(jours / 30.44);
-      const reste = Math.round(jours - mois * 30.44);
-      return { mois, jours: reste, texte: `${mois} mois et ${reste} jour${reste > 1 ? "s" : ""}` };
-    };
-
-    /** « 5 mois et 17 jours » - la forme exacte du classeur des coachs. */
-    const dureeLisible = (debut, fin) => {
-      if (!debut) return null;
-      const d = new Date(debut), f = fin ? new Date(fin) : new Date();
-      if (Number.isNaN(d.getTime()) || Number.isNaN(f.getTime()) || f < d) return null;
-      let mois = (f.getFullYear() - d.getFullYear()) * 12 + (f.getMonth() - d.getMonth());
-      let jours = f.getDate() - d.getDate();
-      if (jours < 0) { mois -= 1; const prec = new Date(f.getFullYear(), f.getMonth(), 0).getDate(); jours += prec; }
-      return { mois: Math.max(0, mois), jours: Math.max(0, jours),
-        texte: `${Math.max(0, mois)} mois et ${Math.max(0, jours)} jour${jours > 1 ? "s" : ""}` };
-    };
+    /* Les lectures de `note` - motifs, périodes, durées - vivent dans
+       `services/archiveApprenants.js` : l'archive de la commerciale a besoin des mêmes, et
+       deux copies auraient fini par expliquer un départ différemment. */
 
     const apprenants = (rattachements || [])
       .filter(r => {
@@ -1979,11 +1894,7 @@ router.get("/:id/archive-apprenants", authenticateAdmin, async (req, res) => {
         const parti = r.statut !== "actif";
 
         const periodes = periodesDe(r);
-        /* Les pauses = les périodes FERMÉES suivies d'une autre. Une période fermée en
-           dernier n'est pas une pause : c'est un départ, et il est déjà porté par `parti`. */
-        const pauses = periodes.slice(0, -1).filter(p => p.fin).map((p, i) => ({
-          du: p.fin, au: periodes[i + 1]?.debut || null, motif: p.motif || null, par: p.par || null,
-        }));
+        const pauses = pausesDe(periodes);
         const revenu = !parti && pauses.length > 0;
         const derniere = pauses[pauses.length - 1] || null;
 

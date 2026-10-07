@@ -22,7 +22,10 @@ import React from "react";
  * @param {Function} onChange
  * @param {string} accent
  */
-export default function ChampTarifMigration({ plan, valeur, onChange, accent = "#7A4BC4" }) {
+export default function ChampTarifMigration({
+  plan, valeur, onChange, accent = "#7A4BC4",
+  desLeMoisEnCours = false, onChangeDesLeMoisEnCours,
+}) {
   const chargement = plan === null;
   const mensuelle  = Number(plan?.mensualite) || 0;
   const mois       = Array.isArray(plan?.mois_paiements) ? plan.mois_paiements : [];
@@ -34,10 +37,23 @@ export default function ChampTarifMigration({ plan, valeur, onChange, accent = "
   const estPaye = (m) =>
     (m.tranches || []).reduce((t, x) => t + Number(x.montant || 0), 0) >= Number(m.montant || 0)
     && Number(m.montant || 0) > 0;
+  const totalPaye = (m) => (m.tranches || []).reduce((t, x) => t + Number(x.montant || 0), 0);
 
   const futursNonPayes = mois.filter(m => m.periode > periodeCourante && !estPaye(m)).length;
   const futursPayes    = mois.filter(m => m.periode > periodeCourante && estPaye(m)).length;
   const planOuvert     = !plan?.date_fin_formation;
+
+  /* ── LES MOIS QUE LA CASE TOUCHERAIT ──
+     Le texte annonçait « s'applique aux mois à venir », en comptant « à venir » au sens strict :
+     POSTÉRIEURS au mois courant. Le mois EN COURS n'entrait donc dans aucun avertissement, et
+     restait silencieusement à l'ancien prix - un apprenant transféré le 6 octobre gardait un
+     octobre non payé au tarif du centre qu'il venait de quitter, sans qu'un mot le signale.
+     On compte ici exactement ce que le serveur réécrira : à partir du mois courant, non payés,
+     non neutralisés. Annoncer un nombre que l'écriture ne tiendrait pas serait pire que de se
+     taire. */
+  const moisReprisables = mois.filter(m =>
+    m.periode >= periodeCourante && !m.neutralise && totalPaye(m) === 0);
+  const moisEnCours = mois.find(m => m.periode === periodeCourante && !m.neutralise && totalPaye(m) === 0);
 
   const fmt = (n) => `${Number(n || 0).toLocaleString("fr-FR").replace(/ | /g, " ")} F`;
 
@@ -74,9 +90,41 @@ export default function ChampTarifMigration({ plan, valeur, onChange, accent = "
             style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1.5px solid ${accent}33`,
               fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
 
+          {/* ── LA CASE, DÉCIDÉE DOSSIER PAR DOSSIER ──
+              Par défaut, un nouveau tarif ne vaut que pour les mois CRÉÉS ENSUITE : c'est ce
+              qui protège le passé. Mais le mois EN COURS, lui, existe déjà et n'est pas payé —
+              un apprenant transféré le 6 octobre se voyait encore réclamer le prix du centre
+              qu'il quittait. Ni le passé, ni la suite.
+              Décochée par défaut, et la question n'est posée QUE s'il y a réellement quelque
+              chose à reprixer : une case sur un plan sans mois intact n'aurait rien à faire. */}
+          {moisReprisables.length > 0 && onChangeDesLeMoisEnCours && Number(valeur) > 0
+            && Number(valeur) !== mensuelle && (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10,
+              padding: "9px 11px", borderRadius: 9, cursor: "pointer",
+              background: desLeMoisEnCours ? "#fffbeb" : "#f8fafc",
+              border: `1px solid ${desLeMoisEnCours ? "#fde68a" : "#e5e7eb"}` }}>
+              <input type="checkbox" checked={desLeMoisEnCours}
+                onChange={e => onChangeDesLeMoisEnCours(e.target.checked)}
+                style={{ marginTop: 2, cursor: "pointer" }} />
+              <span style={{ fontSize: 11.5, lineHeight: 1.55, color: desLeMoisEnCours ? "#92400e" : "#475569" }}>
+                Appliquer <strong>dès le mois en cours</strong>
+                {moisEnCours && <> ({moisEnCours.label || moisEnCours.periode})</>} —{" "}
+                {moisReprisables.length} mois non payé{moisReprisables.length > 1 ? "s" : ""} pass
+                {moisReprisables.length > 1 ? "eront" : "era"} à {fmt(valeur)}.
+                <span style={{ color: "#94a3b8" }}> Les mois déjà réglés, même partiellement,
+                ne sont jamais touchés.</span>
+              </span>
+            </label>
+          )}
+
           <div style={{ fontSize: 11.5, color: "#6b5a8a", marginTop: 7, lineHeight: 1.55 }}>
-            S'applique aux mois <strong>à venir</strong> : les mois déjà écrits gardent leur
-            montant, et aucun mois payé n'est touché.
+            {desLeMoisEnCours ? (
+              <>S'applique <strong>dès le mois en cours</strong> et aux mois suivants. Les mois
+              déjà réglés, même partiellement, gardent leur montant.</>
+            ) : (
+              <>S'applique aux mois <strong>créés ensuite</strong> : les mois déjà écrits — y
+              compris celui en cours — gardent leur montant, et aucun mois payé n'est touché.</>
+            )}
             {!planOuvert && (
               <><br />⚠ Plan <strong>borné</strong> : ses mois sont déjà écrits, le nouveau
               montant ne s'appliquera qu'aux mois créés ensuite.</>

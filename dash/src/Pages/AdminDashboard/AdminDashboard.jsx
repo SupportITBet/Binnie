@@ -19786,10 +19786,32 @@ export default function AdminDashboard() {
                               })}
                             </div>
                           </div>
-                          {/* Assignation onboarding - visible pour en_ligne seulement */}
-                          {a.type_cours !== "presentiel" && (
-                          <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #f1f5f9" }}>
-                            <div style={{ fontSize:10, color:"#9ca3af", marginBottom:6, fontWeight:600 }}>🎯 Onboarding assignée</div>
+                          {/* Assignation onboarding - visible pour en_ligne seulement.
+                              GRISÉE POUR LE CORPORATE : une assistante B2B travaille seule, sans
+                              onboarding. Grisée plutôt que masquée, pour que l'absence se lise
+                              comme voulue et non comme un oubli d'affichage.
+                              Identique au même bloc du SuperAdmin : les deux écrans montrent la
+                              même fiche, et une seule des deux corrigée serait un piège. */}
+                          {a.type_cours !== "presentiel" && (() => {
+                          /* NI LE CORPORATE NI LE PA n'ont d'onboarding : la première
+                             travaille seule sur ses comptes entreprises, le second gère le
+                             coaching privé de bout en bout. Les huit comptes concernés sont
+                             d'ailleurs exactement les huit sans onboarding rattaché - la case
+                             n'a jamais été remplie parce qu'elle n'a pas de sens pour eux. */
+                          const estCorporate = a.profil === "b2b" || a.profil === "pa";
+                          const libelleProfil = a.profil === "pa" ? "PA Advisor" : "assistante Corporate";
+                          return (
+                          <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #f1f5f9",
+                            opacity: estCorporate ? 0.45 : 1, pointerEvents: estCorporate ? "none" : "auto" }}
+                            title={estCorporate ? `${libelleProfil === "PA Advisor" ? "Les PA Advisors travaillent" : "Les assistantes Corporate travaillent"} sans onboarding.` : undefined}>
+                            <div style={{ fontSize:10, color:"#9ca3af", marginBottom:6, fontWeight:600 }}>
+                              🎯 Onboarding assignée
+                              {estCorporate && (
+                                <span style={{ marginLeft:6, fontWeight:700, color:"#64748b" }}>
+                                  — sans objet pour {libelleProfil === "PA Advisor" ? "un" : "une"} {libelleProfil}, qui travaille seul{libelleProfil === "PA Advisor" ? "" : "e"}
+                                </span>
+                              )}
+                            </div>
                             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:6 }}>
                               <button type="button" onClick={() => setDraft(a.id, { onboarding_id: null })}
                                 style={{ textAlign:"left", padding:"7px 9px", borderRadius:8, cursor:"pointer",
@@ -19820,7 +19842,8 @@ export default function AdminDashboard() {
                               })}
                             </div>
                           </div>
-                          )}
+                          );
+                          })()}
                           <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:6 }}>
                             <span style={{ fontSize:11, color: hasDraft ? "#d97706" : "#94a3b8", fontWeight: hasDraft ? 700 : 400 }}>
                               {hasDraft ? "⚠ Modifications non enregistrées" : "✓ À jour"}

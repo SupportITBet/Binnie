@@ -9938,6 +9938,26 @@ export default function PedagogicalAdvisorDashboard() {
                                   {plan.date_fin_formation&&` · Fin : ${new Date(plan.date_fin_formation).toLocaleDateString("fr-FR")}`}
                                   {isOuvert&&" · Durée ouverte"}
                                 </div>
+                                {/* L'en-tête donne le prix des PROCHAINS mois, les lignes celui
+                                    de chaque mois, figé à sa création. Après un changement de
+                                    tarif les deux divergent, et l'écran affichait « 5 F/mois »
+                                    au-dessus de mois à 10 F sans l'expliquer. Même correctif que
+                                    dans le tableau de bord commercial, qui porte le même bloc. */}
+                                {(() => {
+                                  const anciens = (moisPaiements || [])
+                                    .filter(m => Number(m.montant || 0) !== Number(plan.mensualite || 0));
+                                  if (!anciens.length || !Number(plan.mensualite)) return null;
+                                  const chg = Array.isArray(plan.changements_tarif) && plan.changements_tarif.length
+                                    ? plan.changements_tarif[plan.changements_tarif.length - 1] : null;
+                                  return (
+                                    <div style={{ fontSize:10.5, color:"#fde68a", marginTop:4, lineHeight:1.45 }}>
+                                      ⚠ {anciens.length} mois déjà écrit{anciens.length > 1 ? "s" : ""} rest{anciens.length > 1 ? "ent" : "e"} à{" "}
+                                      {Number(anciens[0].montant || 0).toLocaleString("fr-FR")} F
+                                      {chg?.le && ` — tarif changé le ${new Date(chg.le).toLocaleDateString("fr-FR")}`}.
+                                      {" "}Le nouveau montant s'applique aux mois créés ensuite.
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <div style={{ textAlign:"right" }}>
                                 <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)" }}>{moisPayésCount}/{moisPaiements.length} mois</div>

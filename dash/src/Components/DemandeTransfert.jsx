@@ -26,6 +26,21 @@ const MOTIFS = {
   autre:             "Autre",
 };
 
+/* TRANSFERT DE CENTRE À CENTRE — troisième liste, parce que la question posée est encore
+   différente : ni le niveau ni le canal ne changent, seul le LIEU. « Déménagement » existe
+   bien dans la liste du canal, mais il y désigne un départ vers le en ligne ; ici, il désigne
+   un changement de quartier. Doit rester identique à MOTIFS_CHANGEMENT_CENTRE côté serveur,
+   qui valide. */
+const MOTIFS_CENTRE = {
+  demenagement:        "Déménagement",
+  rapprochement:       "Rapprochement du domicile ou du lieu de travail",
+  horaires_centre:     "Horaires de l'autre centre plus adaptés",
+  preference_client:   "Préférence de l'apprenant ou de sa famille",
+  places_disponibles:  "Pas de classe à son niveau dans ce centre",
+  decision_commerciale:"Décision commerciale",
+  autre:               "Autre",
+};
+
 /* MIGRATION DE CANAL — liste propre, parce que les motifs ci-dessus parlent tous de niveau,
    de rythme ou de groupe, et qu'aucun ne décrit un déménagement. Doit rester identique à
    MOTIFS_MIGRATION_CANAL dans Backend/src/routes/demandesTransfert.js : le serveur valide
@@ -41,8 +56,13 @@ const MOTIFS_MIGRATION = {
 
 /** Une demande est-elle une migration de canal ? */
 const estMigration = (d) => d?.type_demande === "changement_coaching";
-/** Le libellé du motif, dans la bonne liste. */
-const libelleMotif = (d) => (estMigration(d) ? MOTIFS_MIGRATION : MOTIFS)[d?.motif] || d?.motif;
+/** Un transfert d'un centre à un autre ? */
+const estChangementCentre = (d) => d?.type_demande === "changement_centre";
+/* Le libellé du motif, dans la bonne liste — il y en a trois désormais, et piocher dans la
+   mauvaise rendait `undefined` : les cloches ont déjà annoncé « Motif : undefined » une fois,
+   le jour où la migration a été ajoutée sans toucher à cette ligne. */
+const libelleMotif = (d) =>
+  (estMigration(d) ? MOTIFS_MIGRATION : estChangementCentre(d) ? MOTIFS_CENTRE : MOTIFS)[d?.motif] || d?.motif;
 /** Le canal visé : l'opposé de celui d'où l'on part. Même règle que le serveur. */
 const canalCibleDe = (src) => (src === "en_ligne" ? "presentiel" : "en_ligne");
 const libelleCanal = (c) => (c === "en_ligne" ? "💻 En ligne" : c === "hybride" ? "⚡ Hybride" : "🏢 Présentiel");
@@ -98,24 +118,81 @@ export function useCompteDemandesTransfert(authHdrs, mode = "onboarding") {
 /* ══════════════════════════════════════════════════════════════
    LE BOUTON DU COACH
 ══════════════════════════════════════════════════════════════ */
-export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309", authHdrs, onEmise }) {
+/**
+ * Demander le transfert d'un apprenant vers une autre classe.
+ *
+ * PAS SEULEMENT LE COACH, et c'est le point. Le coach voit l'apprenant en séance, mais il
+ * n'est pas le seul à qui l'on dit qu'une classe ne convient plus : l'apprenant passe au
+ * centre et le dit à l'assistante présentiel, ou il appelle son assistante en ligne. Tant que
+ * ce bouton n'existait que chez le coach, ces deux-là n'avaient qu'un message informel à
+ * envoyer à l'onboarding - hors circuit, sans trace, sans test de niveau déclenché.
+ *
+ * LE CIRCUIT NE CHANGE PAS pour autant : la demande part au placement test, le niveau revient,
+ * et c'est l'onboarding (en ligne) ou l'assistante du centre (présentiel) qui affecte la
+ * nouvelle classe. Celui qui demande n'exécute jamais - d'où la phrase du modal, qui doit
+ * rester vraie quel que soit le métier qui l'ouvre.
+ *
+ * @param {string} demandeur  "coach" | "commerciale" | "onboarding" — n'ajuste QUE le texte,
+ *                            jamais les droits : ceux-là sont vérifiés par le serveur.
+ */
+export function BoutonDemandeTransfert({
+  gaId, nomApprenant, accent = "#b45309", authHdrs, onEmise, demandeur = "coach", styleBouton,
+  centreActuel = null, affecteElleMeme = false,
+}) {
   const [ouvert, setOuvert] = useState(false);
   const [motif, setMotif] = useState("");
   const [detail, setDetail] = useState("");
   const [envoi, setEnvoi] = useState(false);
 
+  /* ── DEUX TRANSFERTS SOUS UN SEUL BOUTON ──
+     L'assistante présentiel fait face à deux demandes différentes, et un seul bouton ne
+     pouvait en exprimer qu'une : « cette classe ne lui convient plus » (question de NIVEAU,
+     tranchée par un test) et « il déménage à Yopougon » (question de LIEU, qui n'appelle
+     aucun test). Elle n'avait jusqu'ici que la première, et devait faire passer la seconde
+     pour l'une d'elles - ou l'envoyer hors circuit.
+     Le choix ne s'affiche QUE pour elle : le coach ne gère pas les centres, et l'onboarding
+     s'occupe du en ligne, où la question ne se pose pas. */
+  const avecChoixCentre = demandeur === "commerciale" && !!centreActuel;
+  const [typeDemande, setTypeDemande] = useState("changement_groupe");
+  const [centres, setCentres] = useState([]);
+  const [centreCible, setCentreCible] = useState("");
+  const estCentre = typeDemande === "changement_centre";
+  const motifsAffiches = estCentre ? MOTIFS_CENTRE : MOTIFS;
+
+  /* Les centres sont chargés à l'ouverture, et le centre ACTUEL en est retiré : se transférer
+     là où l'on est déjà n'a pas de sens, et le proposer invite à l'erreur. */
+  useEffect(() => {
+    if (!ouvert || !avecChoixCentre || centres.length) return;
+    fetch(`${API_URL}/api/parcours/centres`)
+      .then(r => r.ok ? r.json() : { centres: [] })
+      .then(d => setCentres((d.centres || []).filter(c => String(c.id) !== String(centreActuel))))
+      .catch(() => {});
+  }, [ouvert, avecChoixCentre, centreActuel, centres.length]);
+
+  // Changer de type invalide le motif : les deux listes n'ont presque aucun code en commun,
+  // et un motif resté de l'autre liste serait refusé par le serveur sans que l'écran le dise.
+  useEffect(() => { setMotif(""); }, [typeDemande]);
+
   const envoyer = async () => {
     if (!motif) return;
+    if (estCentre && !centreCible) return;
     setEnvoi(true);
     try {
       const r = await fetch(`${API_URL}/api/demandes-transfert`, {
         method: "POST", headers: authHdrs(),
-        body: JSON.stringify({ ga_id: gaId, motif, detail: detail.trim() || null }),
+        body: JSON.stringify({
+          ga_id: gaId, motif, detail: detail.trim() || null,
+          ...(estCentre ? { type_demande: "changement_centre", centre_cible_id: centreCible } : {}),
+        }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Demande impossible");
-      toast.success("Demande transmise à l'onboarding et au placement test ✓");
-      setOuvert(false); setMotif(""); setDetail("");
+      toast.success(estCentre
+        ? `Demande transmise à ${centres.find(c => String(c.id) === String(centreCible))?.nom || "l'autre centre"} ✓`
+        : affecteElleMeme
+          ? "Demande ouverte — le placement test est prévenu ✓"
+          : "Demande transmise à l'onboarding et au placement test ✓");
+      setOuvert(false); setMotif(""); setDetail(""); setCentreCible(""); setTypeDemande("changement_groupe");
       onEmise?.(d.demande);
     } catch (e) {
       toast.error(e.message || "Demande impossible");
@@ -124,9 +201,12 @@ export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309",
 
   return (
     <>
+      {/* `styleBouton` permet à l'écran hôte d'imposer l'apparence : ce bouton vit tantôt dans
+          le corps d'une fiche sur fond clair, tantôt dans un bandeau sombre à côté
+          d'« Export PDF ». Le style par défaut couvre le premier cas. */}
       <button type="button" onClick={() => setOuvert(true)}
-        style={{ padding: "8px 16px", background: "#fff", border: `1.5px solid ${accent}55`, borderRadius: 8,
-          color: accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        style={styleBouton || { padding: "8px 16px", background: "#fff", border: `1.5px solid ${accent}55`,
+          borderRadius: 8, color: accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
         🔄 Demande de transfert
       </button>
 
@@ -134,32 +214,114 @@ export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309",
         <div onClick={e => { if (e.target === e.currentTarget && !envoi) setOuvert(false); }}
           style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 10000,
             display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%", maxWidth: 480 }}>
+          {/* Un peu plus large qu'avant : le modal porte désormais deux cartes de choix côte à
+              côte, et la seconde — « Changer de centre · Même niveau, sans test de niveau » —
+              coupait ses mots à 480 px. `maxHeight` + défilement parce que la hauteur, elle,
+              dépend du choix fait : le transfert de centre ajoute un sélecteur. */}
+          <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%",
+            maxWidth: 560, maxHeight: "88vh", overflowY: "auto", boxSizing: "border-box" }}>
             <div style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
-              Demander le transfert de {nomApprenant}
+              {estCentre ? `Transférer ${nomApprenant} vers un autre centre` : `Demander le transfert de ${nomApprenant}`}
             </div>
-            {/* DIRE CE QUI VA SE PASSER. Le coach n'exécute pas le changement : il ouvre un
-                dossier que deux autres métiers vont faire avancer. Sans cette phrase, il
-                attend un déplacement immédiat et croit à une panne quand rien ne bouge. */}
+            {/* DIRE CE QUI VA SE PASSER, ET À QUI. Celui qui demande n'exécute pas le
+                changement : il ouvre un dossier que d'autres font avancer. Sans cette phrase,
+                il attend un déplacement immédiat et croit à une panne quand rien ne bouge.
+                Le texte suit le métier : annoncer à l'onboarding que sa demande « part à
+                l'équipe onboarding » lui ferait attendre une réponse d'elle-même. */}
+            {/* LE TYPE D'ABORD : il commande la liste de motifs, le circuit et le destinataire.
+                Deux cartes plutôt qu'une liste déroulante — ce ne sont pas deux variantes d'une
+                même chose mais deux gestes distincts, et la différence qui compte (test de
+                niveau ou non) doit se lire sans ouvrir quoi que ce soit. */}
+            {avecChoixCentre && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, margin: "0 0 16px" }}>
+                {[
+                  { k: "changement_groupe", t: "Changer de classe", s: "Dans ce centre · test de niveau requis" },
+                  { k: "changement_centre", t: "Changer de centre",  s: "Même niveau · sans test de niveau" },
+                ].map(o => {
+                  const sel = typeDemande === o.k;
+                  return (
+                    <button key={o.k} type="button" onClick={() => setTypeDemande(o.k)}
+                      style={{ textAlign: "left", padding: "11px 13px", borderRadius: 11, cursor: "pointer",
+                        fontFamily: "inherit", background: sel ? "#faf5ff" : "#fff",
+                        border: `2px solid ${sel ? "#7c3aed" : "#e5e7eb"}`,
+                        boxShadow: sel ? "0 0 0 3px #ddd6fe" : "none" }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: sel ? "#5b21b6" : "#0f172a" }}>{o.t}</div>
+                      <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 3, lineHeight: 1.4 }}>{o.s}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <p style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.6, margin: "0 0 16px" }}>
-              Votre demande part à l'<strong>équipe onboarding</strong> et à l'<strong>agent placement test</strong>.
-              Le test de niveau sera passé d'abord ; c'est son résultat qui déterminera la nouvelle classe.
-              Vous serez prévenu à chaque étape.
+              {/* CE QUI DÉCIDE DU TEXTE N'EST PAS LE MÉTIER, MAIS QUI AFFECTERA LA CLASSE.
+                  On disait « commerciale → vous n'avez pas à affecter la classe vous-même » ;
+                  c'est faux pour l'assistante PRÉSENTIEL, qui est son propre onboarding et
+                  affecte bel et bien la classe de ses apprenants. Elle lisait donc qu'on allait
+                  le faire à sa place, et attendait une suite qui ne venait jamais.
+                  `affecteElleMeme` porte la vraie distinction : présentiel et onboarding
+                  affectent, le coach et l'assistante en ligne attendent qu'on le fasse. */}
+              {estCentre ? (
+                <>Votre demande part à l'<strong>assistante du centre d'arrivée</strong> : c'est elle
+                qui accepte et qui lui trouvera une classe. <strong>Aucun test de niveau</strong> —
+                l'apprenant garde son niveau, son historique et ses paiements, seul le lieu change.</>
+              ) : affecteElleMeme ? (
+                <>Le dossier part à l'<strong>agent placement test</strong>. Le test de niveau sera
+                passé d'abord ; c'est son résultat qui déterminera la nouvelle classe, que{" "}
+                <strong>vous affecterez</strong> ensuite depuis « Dossiers à réaffecter ».</>
+              ) : (
+                <>Votre demande part à l'<strong>équipe onboarding</strong> et à l'<strong>agent placement
+                test</strong>. Le test de niveau sera passé d'abord ; c'est son résultat qui déterminera
+                la nouvelle classe. Vous n'avez pas à l'affecter vous-même — vous serez prévenu
+                à chaque étape.</>
+              )}
             </p>
+
+            {/* LE CENTRE AVANT LE MOTIF : c'est la destination qui donne son sens au motif.
+                Le centre actuel est absent de la liste — s'y transférer n'aurait aucun sens. */}
+            {estCentre && (
+              <>
+                <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
+                  Centre d'arrivée <span style={{ color: "#dc2626" }}>*</span>
+                </label>
+                <select value={centreCible} onChange={e => setCentreCible(e.target.value)} style={{ ...champ, marginBottom: 12 }}>
+                  <option value="">— Choisir un centre —</option>
+                  {centres.map(c => (
+                    <option key={c.id} value={c.id}>{c.nom}{c.ville ? ` — ${c.ville}` : ""}</option>
+                  ))}
+                </select>
+                {centres.length === 0 && (
+                  <div style={{ fontSize: 11.5, color: "#b45309", margin: "-6px 0 12px" }}>
+                    Aucun autre centre disponible.
+                  </div>
+                )}
+              </>
+            )}
 
             <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
               Motif <span style={{ color: "#dc2626" }}>*</span>
             </label>
             <select value={motif} onChange={e => setMotif(e.target.value)} style={{ ...champ, marginBottom: 12 }}>
               <option value="">— Choisir un motif —</option>
-              {Object.entries(MOTIFS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              {Object.entries(motifsAffiches).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
 
             <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
               Précisions <span style={{ fontWeight: 400, color: "#94a3b8" }}>(facultatif)</span>
             </label>
+            {/* Le coach observe en séance ; l'assistante, elle, recueille au comptoir ou au
+                téléphone. Lui demander ce qu'elle a « observé en classe » la laisse sans
+                réponse à donner, et le champ reste vide. */}
             <textarea rows={3} value={detail} onChange={e => setDetail(e.target.value)}
-              placeholder="Ce que vous avez observé en classe — c'est ce que liront l'onboarding et le placement test."
+              /* LE TEXTE NOMME CEUX QUI LIRONT RÉELLEMENT. Sur un transfert de centre, il
+                 annonçait le placement test - qui n'intervient jamais dans ce circuit, puisqu'il
+                 n'y a pas de test de niveau. L'émettrice croyait donc déclencher une étape qui
+                 n'existe pas, et celle qui reçoit se demandait ce qu'elle attendait. */
+              placeholder={estCentre
+                ? "Ce que l'apprenant vous a dit — c'est ce que lira l'assistante du centre d'accueil."
+                : demandeur === "coach"
+                  ? "Ce que vous avez observé en classe — c'est ce que liront l'onboarding et le placement test."
+                  : "Ce que l'apprenant vous a dit — c'est ce que liront le placement test et celui qui affectera la classe."}
               style={{ ...champ, marginBottom: 18, resize: "vertical" }} />
 
             <div style={{ display: "flex", gap: 10 }}>
@@ -167,9 +329,9 @@ export function BoutonDemandeTransfert({ gaId, nomApprenant, accent = "#b45309",
                 style={{ flex: 1, padding: 12, borderRadius: 9, border: "none", background: "#f1f5f9", color: "#374151", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
                 Annuler
               </button>
-              <button type="button" onClick={envoyer} disabled={!motif || envoi}
+              <button type="button" onClick={envoyer} disabled={!motif || envoi || (estCentre && !centreCible)}
                 style={{ flex: 1.4, padding: 12, borderRadius: 9, border: "none", fontFamily: "inherit",
-                  background: motif ? accent : "#cbd5e1", color: "#fff", fontWeight: 700, fontSize: 13,
+                  background: (motif && !(estCentre && !centreCible)) ? accent : "#cbd5e1", color: "#fff", fontWeight: 700, fontSize: 13,
                   cursor: motif && !envoi ? "pointer" : "not-allowed" }}>
                 {envoi ? "Envoi…" : "Envoyer la demande"}
               </button>
@@ -210,18 +372,40 @@ export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent =
   const cible = canalCibleDe(canalActuel);
   const versPresentiel = cible === "presentiel";
 
+  /* ── VERS LE PRÉSENTIEL, IL FAUT DIRE QUEL CENTRE ──
+     Une migration part d'une classe EN LIGNE, qui n'a pas de centre. Sans destination, elle
+     s'adressait donc à « l'équipe présentiel » en bloc : les onze assistantes des six centres
+     la voyaient, dont dix que le dossier ne concerne pas. En nommant le centre d'accueil, elle
+     est routée comme un transfert de centre - à celles qui vont réellement recevoir
+     l'apprenant, et qui seules peuvent l'accepter.
+     Dans l'autre sens, rien à demander : c'est l'onboarding qui place en ligne. */
+  const [centres, setCentres] = useState([]);
+  const [centreCible, setCentreCible] = useState("");
+  useEffect(() => {
+    if (!ouvert || !versPresentiel || centres.length) return;
+    fetch(`${API_URL}/api/parcours/centres`)
+      .then(r => r.ok ? r.json() : { centres: [] })
+      .then(d => setCentres(d.centres || []))
+      .catch(() => {});
+  }, [ouvert, versPresentiel, centres.length]);
+
   const envoyer = async () => {
     if (!motif) return;
+    if (versPresentiel && !centreCible) return;
     setEnvoi(true);
     try {
       const r = await fetch(`${API_URL}/api/demandes-transfert`, {
         method: "POST", headers: authHdrs(),
-        body: JSON.stringify({ ga_id: gaId, motif, detail: detail.trim() || null, type_demande: "changement_coaching" }),
+        body: JSON.stringify({ ga_id: gaId, motif, detail: detail.trim() || null,
+          type_demande: "changement_coaching",
+          ...(versPresentiel && centreCible ? { centre_cible_id: centreCible } : {}) }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Demande impossible");
-      toast.success(`Migration transmise à l'équipe ${versPresentiel ? "du centre" : "onboarding"} ✓`);
-      setOuvert(false); setMotif(""); setDetail("");
+      toast.success(versPresentiel
+        ? `Migration transmise à ${centres.find(c => String(c.id) === String(centreCible))?.nom || "l'équipe du centre"} ✓`
+        : "Migration transmise à l'équipe onboarding ✓");
+      setOuvert(false); setMotif(""); setDetail(""); setCentreCible("");
       onEmise?.(d.demande);
     } catch (e) {
       toast.error(e.message || "Demande impossible");
@@ -241,7 +425,11 @@ export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent =
         <div onClick={e => { if (e.target === e.currentTarget && !envoi) setOuvert(false); }}
           style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 10000,
             display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%", maxWidth: 480 }}>
+          {/* Même largeur que le modal de demande de transfert : ces deux fenêtres s'ouvrent
+              depuis des boutons voisins, sur la même fiche, et deux tailles différentes pour
+              un geste de même nature se lisent comme une inattention. */}
+          <div style={{ background: "#fff", borderRadius: 16, padding: "24px 26px", width: "100%",
+            maxWidth: 560, maxHeight: "88vh", overflowY: "auto", boxSizing: "border-box" }}>
             <div style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
               Migrer {nomApprenant} {versPresentiel ? "vers le présentiel" : "vers le en ligne"}
             </div>
@@ -255,6 +443,28 @@ export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent =
               qui choisira la classe d'arrivée{versPresentiel ? "" : " — l'affectation en ligne lui revient toujours"}.
               Le tarif pourra être ajusté au même moment.
             </p>
+
+            {/* LE CENTRE AVANT LE MOTIF : c'est la destination qui donne son sens au geste, et
+                c'est elle qui décide à qui la demande sera adressée. Demandé seulement vers le
+                présentiel — en ligne, c'est l'onboarding qui place l'apprenant, il n'y a pas de
+                centre à choisir. */}
+            {versPresentiel && (
+              <>
+                <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
+                  Centre d'accueil <span style={{ color: "#dc2626" }}>*</span>
+                </label>
+                <select value={centreCible} onChange={e => setCentreCible(e.target.value)}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", marginBottom: 6, boxSizing: "border-box" }}>
+                  <option value="">— Choisir un centre —</option>
+                  {centres.map(c => (
+                    <option key={c.id} value={c.id}>{c.nom}{c.ville ? ` — ${c.ville}` : ""}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11.5, color: "#94a3b8", marginBottom: 12, lineHeight: 1.5 }}>
+                  Seules les assistantes de ce centre verront la demande et pourront l'accepter.
+                </div>
+              </>
+            )}
 
             <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
               Motif <span style={{ color: "#dc2626" }}>*</span>
@@ -277,8 +487,10 @@ export function BoutonMigrationCanal({ gaId, nomApprenant, canalActuel, accent =
                 style={{ padding: "9px 18px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                 Annuler
               </button>
-              <button onClick={envoyer} disabled={!motif || envoi}
-                style={{ padding: "9px 20px", background: !motif || envoi ? "#cbd5e1" : accent, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: !motif || envoi ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+              {/* Un centre non choisi bloque au même titre qu'un motif manquant : vers le
+                  présentiel, le serveur refuse la demande sans destination. */}
+              <button onClick={envoyer} disabled={!motif || envoi || (versPresentiel && !centreCible)}
+                style={{ padding: "9px 20px", background: (!motif || envoi || (versPresentiel && !centreCible)) ? "#cbd5e1" : accent, border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: (!motif || envoi || (versPresentiel && !centreCible)) ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
                 {envoi ? "Envoi…" : "Transmettre la migration"}
               </button>
             </div>
@@ -324,11 +536,21 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
      à « Réaffecté » sans que personne ne bouge, et il quittait la file en laissant l'apprenant
      dans sa classe d'origine - une disparition silencieuse, pire que l'absence de bouton. */
   const [canauxExecutables, setCanauxExecutables] = useState({});
+  /* Mon centre, et si je suis l'onboarding. Pour un TRANSFERT DE CENTRE, l'autorité ne dépend
+     ni du rôle ni du canal mais du centre d'ACCUEIL : seule l'assistante qui reçoit accepte.
+     L'écran n'avait que les canaux, et n'affichait donc aucun bouton sur ces dossiers - pas
+     même à celle qui devait trancher. */
+  const [monCentre, setMonCentre] = useState(null);
+  const [jeSuisOnboarding, setJeSuisOnboarding] = useState(false);
   const [detailDemande, setDetailDemande] = useState(null);   // { demande }
   const [parcours, setParcours] = useState(null);             // null = en cours de chargement
   /** Cette personne peut-elle ACCEPTER cette migration ? La question porte sur le canal
       d'arrivée, jamais sur celui de départ. */
   const peutExecuterMigration = (d) => !!canauxExecutables[canalCibleDe(d?.type_cours)];
+  /** Et pour un transfert de centre : seule l'assistante du centre d'ACCUEIL peut accepter.
+      L'onboarding garde la main, pour arbitrer quand un centre ne répond pas. */
+  const peutExecuterCentre = (d) =>
+    jeSuisOnboarding || (!!monCentre && String(d?.centre_cible_id || "") === String(monCentre));
 
   /* LE DÉTAIL AVANT LA DÉCISION. Accepter une migration, c'est engager une classe, un centre
      et un tarif : la carte ne porte que le strict nécessaire pour trier la file. On va donc
@@ -360,6 +582,8 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
       /* L'autorité par canal d'ARRIVÉE, que le serveur seul connaît : une assistante peut
          réaffecter « en général » sans pouvoir accepter une arrivée en ligne. */
       setCanauxExecutables(d.je_peux_executer_vers || {});
+      setMonCentre(d.mon_centre || null);
+      setJeSuisOnboarding(!!d.je_suis_onboarding);
     } catch (e) {
       toast.error(e.message || "Chargement impossible");
     } finally { setChargement(false); }
@@ -607,7 +831,44 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                     </>
                   )}
 
-                  {mode === "onboarding" && onReaffecter && !estMigration(d) && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
+                  {/* ── TRANSFERT DE CENTRE À CENTRE ──
+                      Troisième cas, et il ne tombait dans aucune des deux branches ci-dessus :
+                      son statut est `en_attente_accord` comme une migration, mais ce n'en est
+                      pas une, et la branche du changement de classe exige `test_fait`. Résultat
+                      constaté le 06/10/2026 : l'assistante du centre d'accueil recevait bien la
+                      notification, voyait bien le dossier, et n'avait que « Détails » - aucun
+                      moyen d'accepter ce qu'on lui demandait d'accepter.
+                      L'AUTORITÉ EST CELLE DU CENTRE D'ACCUEIL, pas du canal : celle du centre de
+                      départ suit son dossier sans trancher. Le serveur applique la même règle ;
+                      ici on évite de proposer un geste qu'il refuserait. */}
+                  {mode === "onboarding" && onReaffecter && estChangementCentre(d) && d.statut === "en_attente_accord" && (
+                    <>
+                      {peutExecuterCentre(d) ? (
+                        <button disabled={occupe}
+                          title={`Accepter le transfert de ${nom} dans votre centre et choisir sa classe d'arrivée`}
+                          onClick={() => onReaffecter?.(d)}
+                          style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, fontFamily: "inherit", background: "#0369a1", color: "#fff", cursor: "pointer" }}>
+                          ✅ Accepter le transfert
+                        </button>
+                      ) : (
+                        <span title="Ce transfert revient à l'assistante du centre d'accueil — vous suivez le dossier."
+                          style={{ padding: "7px 14px", borderRadius: 8, background: "#f1f5f9", color: "#94a3b8", fontSize: 12, fontWeight: 700, cursor: "not-allowed" }}>
+                          👁 Suivi — le centre d'accueil accepte
+                        </span>
+                      )}
+                      {/* Refuser suit la même règle que l'acceptation : seul le centre d'accueil
+                          tranche. Sans cette symétrie, le centre de départ pourrait refuser sa
+                          propre demande. */}
+                      {peutExecuterCentre(d) && (
+                        <button onClick={() => { setAction({ demande: d, type: "refus" }); setValeur(""); }}
+                          style={{ padding: "7px 14px", background: "#fff", border: "1.5px solid #fecaca", borderRadius: 8, color: "#b91c1c", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                          Refuser
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {mode === "onboarding" && onReaffecter && !estMigration(d) && !estChangementCentre(d) && peutReaffecter && ["en_attente_test", "test_fait"].includes(d.statut) && (
                     <>
                       {/* GRISÉ TANT QUE LE TEST N'EST PAS REVENU, et l'infobulle dit pourquoi :
                           un bouton inerte sans explication passe pour une panne. */}

@@ -161,6 +161,40 @@ case "$API" in
 esac
 echo "  API visée : $API"
 
+# SUPABASE, SANS QUOI LE SITE NE S'AFFICHE PAS DU TOUT. `src/config/supabase.js` appelle
+# `createClient` sans protection : sans URL, il lève « supabaseUrl is required » au
+# CHARGEMENT du module, avant le premier rendu — page blanche, sans message ni erreur
+# serveur. Ces valeurs ne vivaient que dans `.env`, non versionné, donc absent d'un
+# serveur : le build ne les voyait pas. C'est ce qui est arrivé au dash le 04/10/2026,
+# dont la configuration avait exactement le même manque.
+SUPA_URL=$(grep -E "^REACT_APP_SUPABASE_URL=" "$FRONT/.env.production" | cut -d= -f2- | tr -d '[:space:]')
+SUPA_KEY=$(grep -E "^REACT_APP_SUPABASE_ANON_KEY=" "$FRONT/.env.production" | cut -d= -f2- | tr -d '[:space:]')
+if [ -z "$SUPA_URL" ] || [ -z "$SUPA_KEY" ]; then
+  rouge "✗ La configuration Supabase manque dans .env.production"
+  echo   "  Sans elle, le site s'ouvre sur une PAGE BLANCHE : le client Supabase refuse de"
+  echo   "  se construire et l'application ne rend rien."
+  echo   "  Ajoutez les deux lignes dans $FRONT/.env.production :"
+  echo   "      REACT_APP_SUPABASE_URL=https://<projet>.supabase.co"
+  echo   "      REACT_APP_SUPABASE_ANON_KEY=<clé anon>"
+  exit 1
+fi
+case "$SUPA_URL" in
+  https://*.supabase.co) : ;;
+  *)
+    rouge "✗ REACT_APP_SUPABASE_URL vaut « $SUPA_URL »."
+    echo   "  Une URL de projet Supabase ressemble à https://<projet>.supabase.co."
+    exit 1 ;;
+esac
+# La clé doit être une clé, pas un gabarit : « non vide » laissait passer une ligne collée
+# telle quelle depuis une consigne. Une clé anon est un JWT, elle commence par `eyJ`.
+case "$SUPA_KEY" in
+  eyJ*) echo "  Supabase : $SUPA_URL ✓" ;;
+  *)
+    rouge "✗ REACT_APP_SUPABASE_ANON_KEY ne ressemble pas à une clé : « $SUPA_KEY »."
+    echo   "  Une clé anon Supabase est un JWT et commence par « eyJ »."
+    exit 1 ;;
+esac
+
 # ── 3. Les dépendances ───────────────────────────────────────────────────────
 etape "Installation des dépendances"
 cd "$FRONT"
@@ -189,7 +223,16 @@ if grep -qs "localhost:5001" build/static/js/*.js; then
   echo   "  La construction n'a pas lu .env.production. Rien n'a été publié."
   exit 1
 fi
-echo "  index.html ✓   .htaccess ✓   API intégrée ✓"
+# L'URL Supabase DANS LE BUNDLE, pas seulement dans le fichier de configuration. Le
+# premier dit ce qu'on a écrit, le second ce que react-scripts a réellement lu — et c'est
+# l'écart entre les deux qui produit la page blanche.
+if ! grep -qs "$SUPA_URL" build/static/js/*.js; then
+  rouge "✗ L'URL Supabase n'apparaît pas dans le build."
+  echo   "  react-scripts n'a pas lu .env.production : le site s'ouvrirait sur une page"
+  echo   "  blanche. Rien n'a été publié."
+  exit 1
+fi
+echo "  index.html ✓   .htaccess ✓   API intégrée ✓   Supabase intégré ✓"
 echo "  poids : $(du -sh build | cut -f1)"
 
 # ── 6. La publication ────────────────────────────────────────────────────────
