@@ -1843,21 +1843,46 @@ router.post("/transfert", authenticateAdmin, requirePermission("classes", "updat
     let noteObj = {};
     try { noteObj = JSON.parse(ga.note || "{}"); } catch {}
     noteObj.dernier_transfert = { motif: motif || null, ancien_groupe: ancienGroupe?.nom || null, date: new Date().toISOString() };
-    const { data: newGa, error: insertErr } = await supabase
+    const ligneBase = {
+      groupe_id:         nouveau_groupe_id,
+      apprenant_id:      ga.apprenant_id,
+      nom_apprenant:     ga.nom_apprenant,
+      prenom_apprenant:  ga.prenom_apprenant,
+      email_apprenant:   ga.email_apprenant,
+      telephone:         ga.telephone,
+      niveau:            ga.niveau,
+      note:              JSON.stringify(noteObj),
+      statut:            "actif",
+      added_by:          req.profil.id,
+    };
+
+    /* L'HISTORIQUE DU NIVEAU SUIT L'APPRENANT, lui aussi.
+       Ces deux champs n'étaient pas recopiés : à chaque transfert, « passé de A2 à B1 le
+       28 septembre » disparaissait, et la nouvelle inscription repartait comme si l'apprenant
+       n'avait jamais été évalué. Constaté le 07/10/2026 sur un dossier qui portait bien
+       `niveau_precedent: "A2"` avant son transfert, et plus rien après. C'est la seule trace
+       de sa progression : la fiche, l'archive et la frise de niveau de l'application mobile
+       la lisent toutes ici.
+
+       LE REPLI N'EST PAS DE LA PRUDENCE DÉCORATIVE : ces deux colonnes viennent d'une
+       migration qui peut ne pas avoir été jouée partout. Sans lui, les demander ferait échouer
+       l'INSERT, et c'est le TRANSFERT ENTIER qui tomberait — l'ancienne inscription est déjà
+       fermée à ce stade, l'apprenant se retrouverait sans classe. On réessaie donc sans elles :
+       perdre l'historique est regrettable, perdre l'apprenant ne l'est pas. */
+    let { data: newGa, error: insertErr } = await supabase
       .from("groupes_apprenants")
       .insert({
-        groupe_id:         nouveau_groupe_id,
-        apprenant_id:      ga.apprenant_id,
-        nom_apprenant:     ga.nom_apprenant,
-        prenom_apprenant:  ga.prenom_apprenant,
-        email_apprenant:   ga.email_apprenant,
-        telephone:         ga.telephone,
-        niveau:            ga.niveau,
-        note:              JSON.stringify(noteObj),
-        statut:            "actif",
-        added_by:          req.profil.id,
+        ...ligneBase,
+        niveau_precedent: ga.niveau_precedent ?? null,
+        niveau_change_le: ga.niveau_change_le ?? null,
       })
       .select().single();
+
+    if (insertErr && /niveau_precedent|niveau_change_le/.test(insertErr.message || "")) {
+      console.warn("[transfert] colonnes d'historique de niveau absentes, insertion sans elles");
+      ({ data: newGa, error: insertErr } = await supabase
+        .from("groupes_apprenants").insert(ligneBase).select().single());
+    }
     if (insertErr) throw insertErr;
 
     // 5. Mettre à jour le nb_apprenants des deux groupes

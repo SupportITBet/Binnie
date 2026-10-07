@@ -1138,6 +1138,48 @@ router.patch("/:id", authenticateAdmin, async (req, res) => {
               .from("assignations_parcours").update(majDossier).eq("id", dossierCentre.id);
             if (eD) throw eD;
           }
+
+          /* ── LE TEST DE NIVEAU SUIT L'APPRENANT ──────────────────────────────────────────
+             Il ne suivait pas, et c'est ce qui le faisait DISPARAÎTRE pour l'assistante qui
+             reçoit. Le test reste bien rattaché au dossier par `assignation_id` — il n'est pas
+             perdu en base — mais `/api/level-test/all` filtre ainsi pour une commerciale :
+
+                 (centre_id ∈ mon périmètre ET commercial_id EST NULL)  OU  commercial_id = moi
+
+             Après un transfert, `commercial_id` pointe encore sur l'assistante de DÉPART et
+             `centre_id` sur l'ancien centre : celle qui reçoit ne correspond à aucune des deux
+             branches, et son onglet « Tests reçus » reste vide. Mesuré le 07/10/2026 sur les
+             trois transferts de centre déjà exécutés : 4 tests sur 4 invisibles de la nouvelle
+             assistante, et toujours visibles de l'ancienne.
+
+             `req.profil.id` ET NON `moi.id` : ce sont deux espaces d'identifiants différents.
+             `moi` vient de la table `assistantes`, alors que `commercial_id` se compare à
+             `req.profil.id`, qui est un `utilisateurs.id` — c'est ce que fait le filtre
+             ci-dessus. Écrire l'un pour l'autre ne lève aucune erreur et laisse simplement le
+             test invisible de tout le monde : la confusion entre ces deux identifiants a déjà
+             coûté cher ailleurs dans ce projet.
+
+             NON BLOQUANT : le transfert est l'acte principal. Mais c'est tracé. */
+          if (dossierCentre) {
+            /* À QUI LE TEST APPARTIENT APRÈS LE TRANSFERT, et le cas de l'onboarding.
+               Quand c'est une ASSISTANTE qui accepte, elle devient propriétaire du dossier
+               (`majDossier.assistante_id` ci-dessus) : le test la suit.
+               Quand c'est l'ONBOARDING qui arbitre — il le peut, quand un centre ne répond
+               pas — il n'est pas assistante et ne prend pas le dossier. Lui attribuer le test
+               le rendrait invisible de TOUT LE CENTRE, exactement le défaut qu'on corrige.
+               On remet alors `commercial_id` à NULL : le test retombe dans la première branche
+               du filtre (`centre_id ∈ mon périmètre ET commercial_id EST NULL`) et redevient
+               visible de toutes les assistantes du centre d'accueil, qui se l'attribueront. */
+            const majTest = { commercial_id: moi?.id ? (req.profil?.id || null) : null };
+            if (centreArrivee) majTest.centre_id = centreArrivee;
+            const { error: eT } = await supabase
+              .from("level_test_results").update(majTest).eq("assignation_id", dossierCentre.id);
+            if (eT) {
+              console.warn("[changement centre] tests de niveau non réattribués:", eT.message);
+              resultatMigration.tests_non_maj = eT.message;
+            }
+          }
+
           resultatMigration.centre = { vers: centreArrivee };
         } catch (e) {
           console.warn("[changement centre] dossier non mis à jour:", e.message);
