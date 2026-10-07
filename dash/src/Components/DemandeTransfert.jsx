@@ -945,7 +945,12 @@ export default function FileDemandesTransfert({ accent = "#b45309", authHdrs, mo
                 <Ligne l="E-mail"        v={d.email_apprenant} />
                 <Ligne l="Classe        " v={d.groupe_nom} />
                 <Ligne l="Coach"         v={d.coach_nom} />
-                <Ligne l="Niveau actuel" v={d.niveau_actuel} />
+                {/* « Non évalué » PLUTÔT QU'UN TIRET. Depuis le 07/10/2026, ce champ ne
+                    recopie plus le niveau de la CLASSE quand l'apprenant n'a pas le sien : il
+                    peut donc être vide, et un simple « - » se lit comme un oubli d'affichage.
+                    Dire que le niveau n'est pas connu est ce qui permet à l'assistante de
+                    réclamer le test avant d'affecter une classe. */}
+                <Ligne l="Niveau actuel" v={d.niveau_actuel || "Non évalué"} />
                 {d.niveau_obtenu && <Ligne l="Niveau du test" v={d.niveau_obtenu} />}
                 <Ligne l="Motif"         v={libelleMotif(d)} />
                 <Ligne l="Demandée le"   v={fmt(d.created_at)} />

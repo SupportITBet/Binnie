@@ -395,7 +395,19 @@ router.post("/", authenticateAdmin, async (req, res) => {
       email_apprenant:  ga.email_apprenant || null,
       groupe_id:        ga.groupe_id || null,
       groupe_nom:       groupe?.nom || null,
-      niveau_actuel:    ga.niveau || groupe?.niveau || null,
+      /* LE NIVEAU DE L'APPRENANT, JAMAIS CELUI DE LA CLASSE.
+         Cette ligne disait `ga.niveau || groupe?.niveau`, et c'est un faux ami : quand
+         l'inscription n'a pas de niveau propre, elle recopiait le niveau du GROUPE — une
+         propriété de la classe, pas de la personne. L'équipe qui recevait le dossier lisait
+         donc « Niveau actuel : B1 » pour un apprenant évalué A2, et pouvait l'affecter à une
+         classe trop difficile pour lui. Constaté le 07/10/2026 sur kouassi Jean : classe
+         « Angklais A2 Matin » portant le niveau B1, apprenant testé A2.
+         Le repli correct est le dossier commercial (`assignations_parcours.niveau_client`),
+         qui porte le résultat du test de niveau — il est appliqué dans le bloc `dossier`
+         plus bas, une fois le dossier résolu.
+         ET SI AUCUN DES DEUX N'EXISTE, ON LAISSE null : « non évalué » est une information
+         juste, « B1 » emprunté à la classe n'en est pas une. */
+      niveau_actuel:    ga.niveau || null,
       // Le canal décide de l'équipe qui traitera : en ligne → onboarding, présentiel →
       // assistante du centre. Copié ici car la classe peut changer d'ici le traitement.
       type_cours:       groupe?.type_cours || null,
@@ -439,15 +451,24 @@ router.post("/", authenticateAdmin, async (req, res) => {
       let dossier = null;
       if (assignationId) {
         ({ data: dossier } = await supabase
-          .from("assignations_parcours").select("profil_type, type_cours, assistante_id").eq("id", assignationId).maybeSingle());
+          .from("assignations_parcours").select("profil_type, type_cours, assistante_id, niveau_client").eq("id", assignationId).maybeSingle());
       }
       if (!dossier && ligne.email_apprenant) {
         ({ data: dossier } = await supabase
-          .from("assignations_parcours").select("profil_type, type_cours, assistante_id")
+          .from("assignations_parcours").select("profil_type, type_cours, assistante_id, niveau_client")
           .ilike("prospect_email", ligne.email_apprenant)
           .order("created_at", { ascending: false }).limit(1).maybeSingle());
       }
       if (dossier?.profil_type) ligne.profil_type = dossier.profil_type;
+
+      /* LE NIVEAU DE L'APPRENANT, SUITE — voir le commentaire sur `niveau_actuel` plus haut.
+         `niveau_client` est le résultat de son test de niveau, porté par le dossier commercial.
+         Il ne sert QUE de repli : si l'inscription a son propre niveau, c'est lui qui fait foi,
+         car il est réécrit après chaque nouveau test alors que `niveau_client` garde celui de
+         l'entrée chez BET. */
+      if (!ligne.niveau_actuel && dossier?.niveau_client) {
+        ligne.niveau_actuel = dossier.niveau_client;
+      }
 
       /* LE CANAL, QUAND LA CLASSE NE LE DIT PAS. `ligne.type_cours` vient du groupe, et un
          groupe de coaching PRIVÉ porte `prive` - un type de coaching, pas un endroit. Trois

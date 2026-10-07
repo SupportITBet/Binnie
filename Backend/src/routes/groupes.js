@@ -2134,7 +2134,15 @@ router.get("/apprenants/:gaId/historique", authenticateAdmin, async (req, res) =
         id:          l.id,
         groupe_id:   l.groupe_id,
         groupe_nom:  groupe.nom || "-",
-        niveau:      l.niveau || groupe.niveau || null,
+        /* LE NIVEAU DE L'APPRENANT, PAS CELUI DE LA CLASSE. Le repli `|| groupe.niveau` a été
+           retiré : il recopiait le niveau du GROUPE quand l'inscription n'en avait pas, et
+           cette valeur empruntée s'affichait ensuite comme le niveau de la personne. Un
+           apprenant évalué A2 dans une classe étiquetée B1 apparaissait B1 — constaté le
+           07/10/2026, et c'est sur cette base qu'on l'affectait à une classe trop difficile.
+           « Non évalué » est une information juste ; un niveau emprunté n'en est pas une.
+           Le niveau de la classe reste disponible à part, sous son vrai nom. */
+        niveau:      l.niveau || null,
+        niveau_classe: groupe.niveau || null,
         type_cours:  groupe.type_cours || null,
         statut:      l.statut,
         date_ajout:  l.date_ajout,

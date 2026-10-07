@@ -3090,7 +3090,13 @@ export default function PedagogicalAdvisorDashboard() {
               apprenant_prenom:     ga.prenom_apprenant,
               apprenant_email:      ga.email_apprenant,
               apprenant_telephone:  ga.telephone,
-              niveau:               ga.niveau || ga.groupe_niveau,
+              /* LE NIVEAU DE L'APPRENANT, PAS CELUI DE LA CLASSE. Le repli
+                 `|| ga.groupe_niveau` a été retiré : il affichait le niveau du GROUPE comme
+                 celui de la personne dès que l'inscription n'avait pas le sien. Même défaut,
+                 et même conséquence, que celui corrigé le 07/10/2026 dans la file des dossiers
+                 à réaffecter : un apprenant testé A2 s'y lisait B1. */
+              niveau:               ga.niveau || null,
+              niveau_classe:        ga.groupe_niveau || null,
               statut:               ga.statut,
               coach_id:             ga.coach_id,
               type_contrat:         ga.groupe_type_cours,
