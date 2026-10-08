@@ -755,13 +755,25 @@ router.patch("/mini-jeux/:id", authenticateAdmin, requireContenusRoleDash, requi
     if (max_tentatives !== undefined) updates.max_tentatives = max_tentatives;
     if (nb_questions !== undefined)   updates.nb_questions = nb_questions;
     if (actif !== undefined)          updates.actif = actif;
+    /* `parties_jouees` et `score_moyen` sont des COMPTEURS DÉRIVÉS de
+       `contenus_mini_jeux_resultats_dash` : la route de résultat les recalcule à chaque partie.
+       Les accepter depuis le client n'a donc qu'un usage, la remise à zéro — et `reset` le fait
+       déjà, mieux, puisqu'il supprime aussi les résultats.
+
+       L'ORDRE COMPTE, ET IL ÉTAIT FAUX. Ces deux affectations venaient APRÈS le bloc `reset` :
+       un appel portant `reset:true` ET `parties_jouees` (la valeur affichée à l'écran) effaçait
+       les résultats puis réécrivait l'ancien compteur par-dessus le zéro. La table se vidait,
+       le compteur restait — c'est l'état trouvé en production le 07/10/2026 : aucun résultat
+       enregistré, et pourtant 3 parties annoncées sur deux jeux.
+
+       `reset` a maintenant le dernier mot. */
+    if (parties_jouees !== undefined) updates.parties_jouees = parties_jouees;
+    if (score_moyen !== undefined)    updates.score_moyen = score_moyen;
     if (reset) {
       updates.parties_jouees = 0;
       updates.score_moyen = 0;
       await supabase.from("contenus_mini_jeux_resultats_dash").delete().eq("jeu_id", req.params.id);
     }
-    if (parties_jouees !== undefined) updates.parties_jouees = parties_jouees;
-    if (score_moyen !== undefined)    updates.score_moyen = score_moyen;
 
     const { data, error } = await supabase.from("contenus_mini_jeux_dash").update(updates).eq("id", req.params.id).select().single();
     if (error) throw error;
