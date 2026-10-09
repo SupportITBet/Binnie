@@ -200,6 +200,7 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Parcours',            icone: '📋', chemin: '/admin/onboarding/parcours' },
     { libelle: 'Inscriptions',        icone: '📥', chemin: '/admin/onboarding/inscriptions' },
     { libelle: 'Suivi démarrage',     icone: '🚀', chemin: '/admin/onboarding/suivi' },
+    { libelle: 'Plannings',          icone: '📅', chemin: '/admin/onboarding/plannings' },
     { libelle: 'Entreprises',         icone: '🏢', chemin: '/admin/onboarding/entreprises' },
     { libelle: 'Classes',             icone: '🏫', chemin: '/admin/onboarding/classes' },
     { libelle: 'Contenus',            icone: '📚', chemin: '/admin/onboarding/contenus' },

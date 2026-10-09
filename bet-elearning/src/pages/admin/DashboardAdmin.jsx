@@ -15,7 +15,7 @@ import { OngletComptaApercu, OngletComptaFacturation, OngletComptaPaiements, Ong
 import { OngletRHPaieBulletins, OngletRHContrats, OngletRHConges, OngletRHPaieApercu } from './DashboardRhPaie';
 import { OngletCustomerCare } from './DashboardCustomerCare';
 import { OngletRemplacements } from './DashboardAdminShared';
-import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsSuperviseur } from './DashboardSuperviseur';
+import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsElearning } from './DashboardSuperviseur';
 import { OngletCoachsPAAdvisor, OngletHonorairesPAAdvisor, OngletVueEnsemblePAAdvisor, OngletClassesPAAdvisor, DashboardPAAdvisor, OngletRapportsSuperviseurPA, OngletEvaluationsPAAdvisor, OngletSuiviApprenantsPAAdvisor } from './DashboardPaAdvisor';
 import { OngletGestionTests, OngletMesTachesPlacement, OngletRapportsPlacement } from './DashboardPlacement';
 import { OngletMesTachesSav, OngletTableauBordSav, OngletDemandesSav, OngletRemboursementsSav, OngletSatisfactionSav } from './DashboardSav';
@@ -4091,7 +4091,7 @@ export default function DashboardAdmin() {
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/classement' ? (
             <OngletClassementCoachs />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/plannings' ? (
-            <OngletPlanningsSuperviseur />
+            <OngletPlanningsElearning />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/observer' ? (
             <OngletObserverCours />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/remplacements' ? (
@@ -4108,6 +4108,10 @@ export default function DashboardAdmin() {
             <OngletMesTachesOnboarding />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/suivi' ? (
             <OngletSuiviDemarrage />
+          ) : /* Le MÊME planning e-learning que chez le superviseur et le Deputy : trois rôles
+                 regardent les mêmes séances, un seul composant les rend. */
+            profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/plannings' ? (
+            <OngletPlanningsElearning />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding' ? (
             <OngletVueEnsembleOnboarding />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/parcours' ? (

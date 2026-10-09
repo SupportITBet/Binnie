@@ -2956,7 +2956,24 @@ const _dateCourte = (v) => {
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-/** Charge les apprenants suivis par l'assistante connectée. Partagé par les deux onglets. */
+/**
+ * Les apprenants DÉJÀ PLACÉS DANS UNE CLASSE, avec leur checklist de démarrage.
+ *
+ * ⚠️ LA ROUTE A ÉTÉ CORRIGÉE. J'avais d'abord branché cet écran sur
+ * `/api/parcours/mes-apprenants-onboarding`, qui ne renvoie pas du tout la même chose : ce
+ * sont les dossiers du PIPELINE (`assignations_parcours`), nommés `prospect_nom`,
+ * `prospect_email`… et sans classe ni checklist. Les colonnes de ce tableau — prénom, groupe,
+ * coach, progression — étaient donc toutes vides, et « suivis incomplets » comptait tout le
+ * monde puisque la checklist était absente.
+ *
+ * La bonne source est `/api/groupes/apprenants` (`groupes_apprenants`), celle que dash utilise
+ * pour ces deux écrans : elle porte `prenom_apprenant`, `nom_apprenant`, `suivi_checklist`,
+ * `apprenant_id`, et la route y ajoute `groupe_nom` et `coach_nom` par jointure.
+ *
+ * CETTE TABLE EST PARTAGÉE ENTRE LES DEUX PLATEFORMES — elle n'a pas de colonne `plateforme`,
+ * parce qu'un apprenant inscrit est la même personne vue de dash ou d'ici. C'est une liste de
+ * travail personnelle, pas un agrégat : rien n'est faussé.
+ */
 function useApprenantsOnboarding() {
   const [apprenants, setApprenants] = useState([]);
   const [chargement, setChargement] = useState(true);
@@ -2964,7 +2981,7 @@ function useApprenantsOnboarding() {
   const recharger = useCallback(async () => {
     setChargement(true);
     try {
-      const r = await fetch(`${_API_URL_ADMIN}/api/parcours/mes-apprenants-onboarding`, { headers: _authHdrsAdmin() });
+      const r = await fetch(`${_API_URL_ADMIN}/api/groupes/apprenants`, { headers: _authHdrsAdmin() });
       const d = await r.json().catch(() => ({}));
       setApprenants(Array.isArray(d.apprenants) ? d.apprenants : []);
     } catch { setApprenants([]); }
@@ -2973,6 +2990,23 @@ function useApprenantsOnboarding() {
 
   useEffect(() => { recharger(); }, [recharger]);
   return { apprenants, setApprenants, chargement, recharger };
+}
+
+/** Les dossiers du pipeline encore à affecter — l'autre compteur de « Mes tâches ». */
+function useDossiersAAffecter() {
+  const [nb, setNb] = useState(null);
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/parcours/mes-apprenants-onboarding`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setNb(Array.isArray(d.apprenants) ? d.apprenants.length : 0);
+      } catch { if (vivant) setNb(0); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+  return nb;
 }
 
 const PAR_PAGE_SUIVI = 10;
@@ -3187,14 +3221,19 @@ export function OngletMesTachesOnboarding() {
   const navigate = useNavigate();
   const { couleurTheme } = useTheme();
   const { apprenants, chargement } = useApprenantsOnboarding();
+  const aAffecter = useDossiersAAffecter();
 
   const suivisIncomplets = apprenants.filter(
     a => pctDemarrage(checklistReelle(a)) < 100).length;
-  const sansGroupe = apprenants.filter(a => !a.groupe_nom).length;
 
+  /* LE SECOND COMPTEUR A ÉTÉ CORRIGÉ. Je comptais « apprenants sans groupe attribué » sur
+     `/api/groupes/apprenants` — or cette route est CONSTRUITE à partir de l'appartenance à une
+     classe : chaque ligne en a forcément une, et le compteur valait donc toujours zéro. Ce
+     sont les dossiers du pipeline qui attendent une affectation, et ils viennent d'ailleurs.
+     C'est aussi ce que compte dash. */
   const taches = [
-    { icone: '✅', label: 'Suivis de démarrage incomplets', n: suivisIncomplets, vers: '/admin/onboarding/suivi' },
-    { icone: '🏫', label: 'Apprenants sans groupe attribué', n: sansGroupe, vers: '/admin/onboarding/classes' },
+    { icone: '✅', label: 'Suivis de démarrage incomplets',       n: suivisIncomplets,  vers: '/admin/onboarding/suivi' },
+    { icone: '📥', label: "Dossiers en attente d'affectation",    n: aAffecter || 0,    vers: '/admin/onboarding/parcours' },
   ];
   const ouvertes = taches.filter(t => t.n > 0);
   const total = taches.reduce((s, t) => s + t.n, 0);
@@ -3239,9 +3278,9 @@ export function OngletMesTachesOnboarding() {
       )}
 
       <p style={{ fontSize: 11.5, color: COULEURS.gris400, marginTop: 18, lineHeight: 1.6 }}>
-        Deux compteurs présents sur dash manquent encore ici — « groupes actifs sans coach » et
-        « dossiers sans assistante » — faute des chargements correspondants sur cette page. Ils
-        seront ajoutés avec les onglets Plannings et Dossiers à réaffecter.
+        dash compte aussi « groupes actifs sans coach » et « transferts prêts à réaffecter ».
+        Ces deux lignes apparaîtront avec l'onglet Dossiers à réaffecter, qui n'est pas encore
+        porté.
       </p>
     </div>
   );

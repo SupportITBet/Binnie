@@ -1258,7 +1258,10 @@ export function OngletObserverCours({ onObserver }) {
  * sous des mois d'historique — or c'est elle que le superviseur cherche quand il ouvre cet
  * écran.
  */
-export function OngletPlanningsSuperviseur() {
+/* Utilise par le Superviseur, le Deputy ET l'Onboarding : les trois regardent le meme
+   planning e-learning, il n'y avait aucune raison d'en ecrire trois versions. D'ou le nom
+   neutre - il ne designe plus un role mais une source de donnees. */
+export function OngletPlanningsElearning() {
   const [seances, setSeances] = useState(null);
   const [filtre, setFiltre] = useState('avenir');
   const [page, setPage] = useState(1);

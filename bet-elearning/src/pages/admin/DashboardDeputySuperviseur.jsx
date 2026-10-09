@@ -6,7 +6,7 @@ import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { useTheme } from '../../contexts/ThemeContext';
 import DerouleReel, { dureeReelleMin } from '../../components/shared/DerouleReel';
-import { OngletMesTachesSuperviseur, OngletCahiersCoachs, OngletPlanningsSuperviseur } from './DashboardSuperviseur';
+import { OngletMesTachesSuperviseur, OngletCahiersCoachs, OngletPlanningsElearning } from './DashboardSuperviseur';
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const VIOLET = '#A855F7';
@@ -1079,7 +1079,7 @@ export default function DashboardDeputySuperviseur() {
       case 'taches':    return <OngletMesTachesSuperviseur general={false} />;
       // Le même écran que chez le superviseur général : le Deputy consulte les mêmes cahiers.
       case 'cahiers':   return <OngletCahiersCoachs />;
-      case 'plannings': return <OngletPlanningsSuperviseur />;
+      case 'plannings': return <OngletPlanningsElearning />;
       case 'observer':  return renderObserver();
       case 'rapports':  return renderRapports();
       case 'missions':  return renderMissions();
