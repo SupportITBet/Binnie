@@ -6,6 +6,7 @@ import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { useTheme } from '../../contexts/ThemeContext';
 import DerouleReel, { dureeReelleMin } from '../../components/shared/DerouleReel';
+import { OngletMesTachesSuperviseur, OngletCahiersCoachs, OngletPlanningsSuperviseur } from './DashboardSuperviseur';
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const VIOLET = '#A855F7';
@@ -108,7 +109,13 @@ export default function DashboardDeputySuperviseur() {
   const location = useLocation();
   const { couleurTheme } = useTheme();
 
-  const activeTab = location.pathname.includes('/observer') ? 'observer'
+  /* L'onglet se déduit du chemin. `/taches` et `/cahiers-coachs` sont testés AVANT les
+     autres : aucun ne contient `/observer`, `/rapports` ni `/missions`, mais les placer en
+     tête évite qu'un futur chemin plus long ne soit capté par une sous-chaîne. */
+  const activeTab = location.pathname.includes('/plannings') ? 'plannings'
+    : location.pathname.includes('/taches') ? 'taches'
+    : location.pathname.includes('/cahiers-coachs') ? 'cahiers'
+    : location.pathname.includes('/observer') ? 'observer'
     : location.pathname.includes('/rapports') ? 'rapports'
     : location.pathname.includes('/missions') ? 'missions'
     : 'dashboard';
@@ -1067,6 +1074,12 @@ export default function DashboardDeputySuperviseur() {
 
   function renderSection() {
     switch (activeTab) {
+      // `general={false}` : le Deputy attend qu'on lise SES rapports, le superviseur attend
+      // d'en lire. Deux files opposées, d'où le drapeau plutôt qu'un composant par rôle.
+      case 'taches':    return <OngletMesTachesSuperviseur general={false} />;
+      // Le même écran que chez le superviseur général : le Deputy consulte les mêmes cahiers.
+      case 'cahiers':   return <OngletCahiersCoachs />;
+      case 'plannings': return <OngletPlanningsSuperviseur />;
       case 'observer':  return renderObserver();
       case 'rapports':  return renderRapports();
       case 'missions':  return renderMissions();

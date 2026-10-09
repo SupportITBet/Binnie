@@ -110,7 +110,7 @@ const ROLES_ADMIN = [
   'admin_manager', 'admin_superviseur', 'admin_deputy_superviseur', 'admin_responsable', 'admin_gestionnaire',
   'admin_placement', 'admin_onboarding', 'admin_elearning', 'admin_customer_care',
   'admin_pa_advisor', 'admin_rh_paie', 'admin_comptable',
-  'admin_commercial', 'admin_observateur',
+  'admin_commercial', 'admin_observateur', 'assistant_sav',
 ];
 
 function AppRoutes() {

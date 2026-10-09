@@ -15,11 +15,13 @@ import { OngletComptaApercu, OngletComptaFacturation, OngletComptaPaiements, Ong
 import { OngletRHPaieBulletins, OngletRHContrats, OngletRHConges, OngletRHPaieApercu } from './DashboardRhPaie';
 import { OngletCustomerCare } from './DashboardCustomerCare';
 import { OngletRemplacements } from './DashboardAdminShared';
-import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies } from './DashboardSuperviseur';
+import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsSuperviseur } from './DashboardSuperviseur';
 import { OngletCoachsPAAdvisor, OngletHonorairesPAAdvisor, OngletVueEnsemblePAAdvisor, OngletClassesPAAdvisor, DashboardPAAdvisor, OngletRapportsSuperviseurPA, OngletEvaluationsPAAdvisor, OngletSuiviApprenantsPAAdvisor } from './DashboardPaAdvisor';
-import { OngletGestionTests } from './DashboardPlacement';
+import { OngletGestionTests, OngletMesTachesPlacement, OngletRapportsPlacement } from './DashboardPlacement';
+import { OngletMesTachesSav, OngletTableauBordSav, OngletDemandesSav, OngletRemboursementsSav, OngletSatisfactionSav } from './DashboardSav';
+import BetLevelTestsTab from '../../components/shared/BetLevelTestsTab';
 import { OngletEntreprises } from './DashboardAdminShared';
-import { OngletInscriptionOnboarding, OngletParcoursInscriptions, OngletClasses, OngletVueEnsembleOnboarding } from './DashboardOnboarding';
+import { OngletInscriptionOnboarding, OngletParcoursInscriptions, OngletClasses, OngletVueEnsembleOnboarding, OngletSuiviDemarrage, OngletMesTachesOnboarding } from './DashboardOnboarding';
 import { OngletELearning } from './DashboardElearning';
 import { OngletAuditLogs, EquipePedagogique, OngletAdministrationBET, OngletVueEnsembleManager } from './DashboardManager';
 
@@ -4084,6 +4086,14 @@ export default function DashboardAdmin() {
           {/* ══ AGENT ONBOARDING - vues dédiées ══ */}
           {profile?.role === 'admin_manager' && (location.pathname === '/admin/audit-logs' || location.pathname === '/admin/manager/audit') ? (
             <OngletAuditLogs />
+          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/taches' ? (
+            <OngletMesTachesSuperviseur general />
+          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/classement' ? (
+            <OngletClassementCoachs />
+          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/plannings' ? (
+            <OngletPlanningsSuperviseur />
+          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/observer' ? (
+            <OngletObserverCours />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/remplacements' ? (
             <OngletRemplacements />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/cahiers-coachs' ? (
@@ -4094,6 +4104,10 @@ export default function DashboardAdmin() {
             <OngletAnomaliesSuperviseur />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/deputies' ? (
             <OngletGestionDeputies />
+          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/taches' ? (
+            <OngletMesTachesOnboarding />
+          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/suivi' ? (
+            <OngletSuiviDemarrage />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding' ? (
             <OngletVueEnsembleOnboarding />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/parcours' ? (
@@ -4105,6 +4119,35 @@ export default function DashboardAdmin() {
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/classes' ? (
             <OngletClasses />
 
+          ) : /* ── ASSISTANTE SAV ──
+                 Le rôle n'existait pas du tout dans bet-elearning : ni menu, ni route, ni
+                 dashboard. Il garde l'identifiant `assistant_sav` de la base plutôt qu'un
+                 `admin_sav` de façade (voir `DashboardSav.jsx`). */
+            profile?.role === 'assistant_sav' && location.pathname === '/admin/sav/taches' ? (
+            <OngletMesTachesSav />
+          ) : profile?.role === 'assistant_sav' && location.pathname === '/admin/sav/demandes' ? (
+            <OngletDemandesSav />
+          ) : profile?.role === 'assistant_sav' && location.pathname === '/admin/sav/remboursements' ? (
+            <OngletRemboursementsSav />
+          ) : profile?.role === 'assistant_sav' && location.pathname === '/admin/sav/satisfaction' ? (
+            <OngletSatisfactionSav />
+          ) : profile?.role === 'assistant_sav' ? (
+            /* Tout autre chemin du rôle retombe sur son tableau de bord, y compris `/admin/sav`
+               lui-même : sans ce repli, une URL inattendue afficherait l'écran generique des
+               admins, qui n'a aucun sens pour ce métier. */
+            <OngletTableauBordSav />
+          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/taches' ? (
+            <OngletMesTachesPlacement />
+          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/rapports' ? (
+            <OngletRapportsPlacement />
+          ) : /* « À corriger » et « Résultats candidats » sont le MÊME écran que « Tests de
+                 niveau », ouvert sur sa sous-vue de résultats — l'un filtré sur la file de
+                 correction, l'autre non. Deux composants distincts auraient dupliqué 554 lignes
+                 et fait diverger les corrections. */
+            profile?.role === 'admin_placement' && location.pathname === '/admin/placement/a-corriger' ? (
+            <BetLevelTestsTab vueInitiale="resultats" filtreInitial="en_attente" />
+          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/resultats' ? (
+            <BetLevelTestsTab vueInitiale="resultats" />
           ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/tests' ? (
             <OngletGestionTests />
           ) : profile?.role === 'admin_placement' ? (

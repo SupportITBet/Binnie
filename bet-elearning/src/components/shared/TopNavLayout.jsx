@@ -152,7 +152,11 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Messages',            icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
   admin_superviseur: [
+    { libelle: 'Mes tâches',        icone: '✅', chemin: '/admin/superviseur/taches' },
     { libelle: "Vue d'ensemble",    icone: '📊', chemin: '/admin/superviseur' },
+    { libelle: 'Classement',        icone: '🏆', chemin: '/admin/superviseur/classement' },
+    { libelle: 'Plannings',         icone: '📅', chemin: '/admin/superviseur/plannings' },
+    { libelle: 'Observer un cours', icone: '👁️', chemin: '/admin/superviseur/observer' },
     { libelle: 'Cahiers coachs',    icone: '📘', chemin: '/admin/superviseur/cahiers-coachs' },
     { libelle: 'Rapports Deputy',   icone: '📋', chemin: '/admin/superviseur/rapports-deputy' },
     { libelle: 'Anomalies',         icone: '⚠️', chemin: '/admin/superviseur/anomalies' },
@@ -161,23 +165,41 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Messages',          icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
   admin_deputy_superviseur: [
+    { libelle: 'Mes tâches',       icone: '✅', chemin: '/admin/deputy-superviseur/taches' },
     { libelle: 'Tableau de bord',  icone: '🏠', chemin: '/admin/deputy-superviseur' },
+    /* Cahiers coachs : le MÊME composant que celui du superviseur général
+       (`OngletCahiersCoachs`, déjà exporté) — le Deputy consulte les mêmes cahiers, il n'y
+       avait aucune raison d'en écrire une seconde version. */
+    { libelle: 'Cahiers coachs',   icone: '📘', chemin: '/admin/deputy-superviseur/cahiers-coachs' },
+    { libelle: 'Plannings',        icone: '📅', chemin: '/admin/deputy-superviseur/plannings' },
     { libelle: 'Observer',         icone: '👁️',  chemin: '/admin/deputy-superviseur/observer' },
     { libelle: 'Mes rapports',     icone: '📋', chemin: '/admin/deputy-superviseur/rapports' },
     { libelle: 'Mes missions',     icone: '🎯', chemin: '/admin/deputy-superviseur/missions' },
     { libelle: 'Notifications',    icone: '🔔', chemin: '/admin/notifications', notifications: true },
     { libelle: 'Messages',         icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
+  /* « À corriger » et « Résultats candidats » ne sont pas de nouveaux écrans : ce sont les
+     sous-vues de `BetLevelTestsTab`, remontées au premier niveau comme sur dash. La file de
+     correction est le travail quotidien de l'agent Placement — elle était à deux clics sous
+     « Tests de niveau ». */
   admin_placement: [
-    { libelle: "Vue d'ensemble",    icone: '📊', chemin: '/admin/placement' },
-    { libelle: 'Tests de niveau',   icone: '🎯', chemin: '/admin/placement/tests' },
-    { libelle: 'Notifications',     icone: '🔔', chemin: '/admin/notifications', notifications: true },
-    { libelle: 'Messages',          icone: '💬', chemin: '/admin/messages', messagerie: true },
+    { libelle: 'Mes tâches',            icone: '✅', chemin: '/admin/placement/taches' },
+    { libelle: "Vue d'ensemble",        icone: '📊', chemin: '/admin/placement' },
+    { libelle: 'À corriger',            icone: '📥', chemin: '/admin/placement/a-corriger' },
+    { libelle: 'Rapports',              icone: '📊', chemin: '/admin/placement/rapports' },
+    { libelle: 'Tests de niveau',       icone: '🎯', chemin: '/admin/placement/tests' },
+    { libelle: 'Résultats candidats',   icone: '📋', chemin: '/admin/placement/resultats' },
+    { libelle: 'Notifications',         icone: '🔔', chemin: '/admin/notifications', notifications: true },
+    { libelle: 'Messages',              icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
+  // « Mes tâches » en tête, comme sur dash : c'est l'écran d'aiguillage, celui qui dit où aller
+  // avant d'ouvrir quoi que ce soit. Le mettre ailleurs qu'en premier le rend inutile.
   admin_onboarding: [
+    { libelle: 'Mes tâches',          icone: '✅', chemin: '/admin/onboarding/taches' },
     { libelle: "Vue d'ensemble",      icone: '📊', chemin: '/admin/onboarding' },
     { libelle: 'Parcours',            icone: '📋', chemin: '/admin/onboarding/parcours' },
     { libelle: 'Inscriptions',        icone: '📥', chemin: '/admin/onboarding/inscriptions' },
+    { libelle: 'Suivi démarrage',     icone: '🚀', chemin: '/admin/onboarding/suivi' },
     { libelle: 'Entreprises',         icone: '🏢', chemin: '/admin/onboarding/entreprises' },
     { libelle: 'Classes',             icone: '🏫', chemin: '/admin/onboarding/classes' },
     { libelle: 'Contenus',            icone: '📚', chemin: '/admin/onboarding/contenus' },
@@ -205,6 +227,18 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Blocages absences', icone: '🚫', chemin: '/admin/support/blocages' },
     { libelle: 'Notifications',     icone: '🔔', chemin: '/admin/notifications', notifications: true },
     { libelle: 'Messages',          icone: '💬', chemin: '/admin/messages',      messagerie: true },
+  ],
+  /* Assistante SAV. « Remboursements » et « Suivi satisfaction » sont des ébauches ici comme
+     sur dash : les garder visibles plutôt que les masquer évite qu'une assistante habituée à
+     dash cherche un onglet disparu, et l'écran dit franchement que le circuit reste à définir. */
+  assistant_sav: [
+    { libelle: 'Mes tâches',          icone: '✅', chemin: '/admin/sav/taches' },
+    { libelle: 'Tableau de bord',     icone: '🏠', chemin: '/admin/sav' },
+    { libelle: 'Demandes SAV',        icone: '📨', chemin: '/admin/sav/demandes' },
+    { libelle: 'Remboursements',      icone: '💳', chemin: '/admin/sav/remboursements' },
+    { libelle: 'Suivi satisfaction',  icone: '😊', chemin: '/admin/sav/satisfaction' },
+    { libelle: 'Notifications',       icone: '🔔', chemin: '/admin/notifications', notifications: true },
+    { libelle: 'Messages',            icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
   admin_pa_advisor: [
     { libelle: "Vue d'ensemble",       icone: '📊', chemin: '/admin/pa-advisor/overview' },
@@ -271,6 +305,7 @@ const DESCRIPTIONS_ROLE = {
   admin_rh_paie:             'RH / Paie · Ressources humaines',
   admin_comptable:           'Comptable Trésorier · Finance',
   admin_deputy_superviseur:  'Deputy Superviseur · Observation & rapports',
+  assistant_sav:             'Assistante SAV · Demandes après-vente',
 };
 
 function getNomEntreprise(profile) {

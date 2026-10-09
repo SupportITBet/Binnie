@@ -10,6 +10,12 @@ export const ROLES = {
   ADMIN_ONBOARDING:       'admin_onboarding',
   ADMIN_ELEARNING:        'admin_elearning',
   ADMIN_CUSTOMER_CARE:    'admin_customer_care',
+  // L'Assistante SAV garde l'identifiant de la base (`assistant_sav`) au lieu d'un
+  // `admin_sav` de façade : son rôle réel porte déjà ce nom, et en inventer un second
+  // obligerait à le tenir synchronisé dans la matrice des droits, le Backend et
+  // `app_metadata`. Les autres `admin_*` existent parce que leur rôle en base s'appelle
+  // autrement (`onboarding`, `customer_care`…), ce qui n'est pas le cas ici.
+  ASSISTANT_SAV:          'assistant_sav',
   ADMIN_PA_ADVISOR:       'admin_pa_advisor',
   ADMIN_RH_PAIE:          'admin_rh_paie',
   ADMIN_COMPTABLE:        'admin_comptable',
@@ -59,6 +65,7 @@ export const ROLE_MAP_BET = {
   admin_placement:       'admin_placement',
   admin_onboarding:      'admin_onboarding',
   admin_customer_care:   'admin_customer_care',
+  assistant_sav:         'assistant_sav',
   admin_commercial:      'admin_elearning',
   admin_pa_advisor:      'admin_pa_advisor',
   admin_rh_paie:         'admin_rh_paie',
@@ -79,6 +86,7 @@ export const ROLE_REDIRECT = {
   admin_onboarding:       '/admin/onboarding',
   admin_elearning:        '/admin/elearning',
   admin_customer_care:    '/admin/support',
+  assistant_sav:          '/admin/sav',
   admin_pa_advisor:       '/admin/pa-advisor/overview',
   admin_rh_paie:          '/admin/rh',
   admin_comptable:        '/admin/comptable',
@@ -109,6 +117,7 @@ export const LIBELLES_ROLES = {
   admin_onboarding:       'Agent Onboarding',
   admin_elearning:        'Assistant E-Learning',
   admin_customer_care:    'Customer Care',
+  assistant_sav:          'Assistante SAV',
   admin_pa_advisor:       'PA Advisor',
   admin_rh_paie:          'RH / Paie',
   admin_comptable:        'Comptable Trésorier',

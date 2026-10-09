@@ -62,10 +62,23 @@ function defaultQForm(type) {
   return { type, text:'', audio_url:'', image_url:'', passage:'', options:['','','',''], correct:'', category:'Grammaire', cefr:'A1', points:1, explanation:'', actif:true };
 }
 
-export default function BetLevelTestsTab({ peut = () => true }) {
+/**
+ * `vueInitiale` et `filtreInitial` ouvrent ce composant directement sur une de ses sous-vues.
+ *
+ * POURQUOI. « Résultats candidats » et le filtre « À corriger » existaient déjà ici, mais
+ * enfouis à deux clics sous l'onglet « Tests de niveau » : l'agent Placement devait ouvrir les
+ * tests pour atteindre la file de correction, qui est pourtant son travail quotidien. dash en
+ * fait deux onglets de premier niveau.
+ *
+ * Les promouvoir par des props plutôt que par deux nouveaux composants évite de dupliquer les
+ * 554 lignes de cet écran — et surtout évite que la correction d'un bug ne soit faite que d'un
+ * côté. Les sous-onglets internes restent affichés : on peut toujours passer de la file à la
+ * bibliothèque sans repasser par le menu.
+ */
+export default function BetLevelTestsTab({ peut = () => true, vueInitiale = 'tests', filtreInitial = 'Tous' }) {
   const confirm = useConfirm();
   const [view, setView] = useState('tests');
-  const [activeMain, setActiveMain] = useState('tests');
+  const [activeMain, setActiveMain] = useState(vueInitiale);
 
   const [tests, setTests] = useState([]);
   const [loadingTests, setLT] = useState(true);
@@ -83,7 +96,7 @@ export default function BetLevelTestsTab({ peut = () => true }) {
   const [resultats, setRes] = useState([]);
   const [loadingRes, setLR] = useState(true);
   const [selectedRes, setSelR] = useState(null);
-  const [filtreCorrection, setFiltreCorrection] = useState('Tous');
+  const [filtreCorrection, setFiltreCorrection] = useState(filtreInitial);
   const [correctionForm, setCF] = useState({ level:'A1', score:0, notes_agent:'' });
   const [saving, setSaving] = useState(false);
 

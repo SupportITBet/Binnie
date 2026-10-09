@@ -4,6 +4,8 @@ import toast from 'react-hot-toast';
 import { useTabState } from '../../hooks/useTabState';
 import { useTheme } from '../../contexts/ThemeContext';
 import { COULEURS } from '../../constants/couleurs';
+import { NIVEAUX_CECR } from '../../constants/niveauxCECR';
+import { exporterExcelStyle } from '../../utils/genererPDF';
 import { ageDepuisNaissance, ModalEnvoiGroupé, ModalResultatsTest, ModalAssignationEntreprise, PaginationSimple } from './DashboardAdminShared';
 import BetLevelTestsTab from '../../components/shared/BetLevelTestsTab';
 
@@ -1341,5 +1343,280 @@ export function OngletGestionTests() {
         </div>
       )}
     </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   MES TÂCHES & RAPPORTS — portés depuis dash (PlacementTestDashboard.jsx)
+
+   UNE DIFFÉRENCE DE FOND À CONNAÎTRE : les deux plateformes n'ont pas la même base de tests.
+   dash lit `/api/level-test/*` (table `level_test_results`), bet-elearning lit
+   `/api/bet-elearning/level-test/*` (table `bet_level_test_results`), qui a en plus une
+   gestion de questions. Ces deux écrans comptent donc les candidats de BET E-Learning, pas
+   ceux de dash. C'est voulu — mais ça veut dire que les chiffres des deux Placement ne se
+   recoupent pas, et personne ne doit s'attendre à ce qu'ils le fassent.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Les résultats de tests e-learning, partagés par les deux onglets ci-dessous. */
+function useResultatsPlacement() {
+  const [resultats, setResultats] = useState(null);   // null = pas encore chargé, ≠ []
+  const recharger = useCallback(async () => {
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/bet-elearning/level-test/all`, { headers: _authHdrsAdmin() });
+      const d = await r.json().catch(() => ({}));
+      setResultats(Array.isArray(d.results) ? d.results : []);
+    } catch { setResultats([]); }
+  }, []);
+  useEffect(() => { recharger(); }, [recharger]);
+  return { resultats, recharger };
+}
+
+/**
+ * MES TÂCHES — la file de correction, et rien d'autre tant que rien d'autre n'est mesurable.
+ *
+ * dash y ajoute « Demandes de transfert » ; ce compteur n'existe pas encore ici, faute du
+ * module de demandes de transfert côté bet-elearning. Une ligne à zéro serait pire que pas de
+ * ligne : elle affirmerait qu'il n'y a rien à traiter.
+ */
+export function OngletMesTachesPlacement() {
+  const { couleurTheme } = useTheme();
+  const { resultats } = useResultatsPlacement();
+  const [, setVersTests] = useState(null);
+
+  const chargement = resultats === null;
+  const liste = resultats || [];
+  const aCorriger = liste.filter(t => t.correction_statut === 'en_attente').length;
+  const nouveaux  = liste.filter(t => (t.statut || 'nouveau') === 'nouveau').length;
+
+  const taches = [
+    { icone: '📥', label: 'Tests en attente de correction', n: aCorriger, vers: '/admin/placement/a-corriger' },
+    { icone: '🆕', label: 'Candidats jamais contactés',      n: nouveaux,  vers: '/admin/placement/resultats' },
+  ];
+  const ouvertes = taches.filter(t => t.n > 0);
+  const total = taches.reduce((s, t) => s + t.n, 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>✅ Mes tâches</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          {chargement ? 'Calcul en cours…'
+            : total > 0 ? `${total} élément${total > 1 ? 's' : ''} à traiter au total.`
+            : 'Rien à traiter pour le moment — tout est à jour.'}
+        </p>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : ouvertes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>Aucune tâche en attente</div>
+          <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5 }}>
+            {liste.length === 0
+              ? 'Aucun test n’a encore été passé sur BET E-Learning.'
+              : `Les ${liste.length} test${liste.length > 1 ? 's' : ''} reçus sont traités.`}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {ouvertes.map(t => (
+            <a key={t.label} href={t.vers} onClick={() => setVersTests(t.vers)}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none',
+                padding: '15px 18px', borderRadius: 12, background: COULEURS.blanc,
+                border: `1.5px solid ${COULEURS.gris200}`, borderLeft: `4px solid ${couleurTheme}` }}>
+              <span style={{ fontSize: 22 }}>{t.icone}</span>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: COULEURS.navy }}>{t.label}</span>
+              <span style={{ background: couleurTheme + '18', color: couleurTheme, borderRadius: 20,
+                padding: '4px 12px', fontSize: 13, fontWeight: 800 }}>{t.n}</span>
+              <span style={{ color: COULEURS.gris400, fontSize: 16 }}>›</span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      <p style={{ fontSize: 11.5, color: COULEURS.gris400, marginTop: 18, lineHeight: 1.6 }}>
+        dash compte aussi les demandes de transfert reçues. Ce module n’existe pas encore côté
+        BET E-Learning : la ligne apparaîtra quand il sera porté.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * RAPPORTS — ce que le Placement a traité sur une période, et l'export qui va avec.
+ *
+ * LE FILTRE DE DATES PORTE SUR `submitted_at`, la date de passage du test, et non sur la date
+ * de correction : un rapport mensuel décrit les candidats arrivés dans le mois, pas le travail
+ * de l'agent. Les deux sont légitimes, celui-ci est celui de dash.
+ */
+export function OngletRapportsPlacement() {
+  const { couleurTheme } = useTheme();
+  const { resultats } = useResultatsPlacement();
+  const [du, setDu] = useState('');
+  const [au, setAu] = useState('');
+  const [exportEnCours, setExportEnCours] = useState(false);
+
+  if (resultats === null) {
+    return <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>;
+  }
+
+  const liste = resultats.filter(t => {
+    const d = (t.submitted_at || '').slice(0, 10);
+    return (!du || d >= du) && (!au || d <= au);
+  });
+
+  const kpis = {
+    total:      liste.length,
+    aCorriger:  liste.filter(t => t.correction_statut === 'en_attente').length,
+    traites:    liste.filter(t => t.correction_statut && t.correction_statut !== 'en_attente').length,
+    convertis:  liste.filter(t => t.statut === 'converti').length,
+    scoreMoyen: liste.length ? Math.round(liste.reduce((s, t) => s + (Number(t.score) || 0), 0) / liste.length) : 0,
+  };
+
+  const parNiveau = Object.keys(NIVEAUX_CECR).map(n => ({ n, nb: liste.filter(t => t.level === n).length }));
+  const parTraitement = [
+    { label: 'Notés automatiquement', nb: liste.filter(t => t.correction_statut === 'auto').length },
+    { label: 'Corrigés manuellement', nb: liste.filter(t => t.correction_statut === 'corrige').length },
+    { label: 'En attente de correction', nb: kpis.aCorriger },
+  ];
+  const parFormat = [...new Set(liste.map(t => t.format_test || 'inconnu'))]
+    .map(f => ({ f, nb: liste.filter(t => (t.format_test || 'inconnu') === f).length }));
+
+  async function exporter() {
+    if (exportEnCours) return;
+    setExportEnCours(true);
+    try {
+      await exporterExcelStyle({
+        nomFichier: `rapport_placement_${new Date().toISOString().slice(0, 10)}`,
+        couleurEntete: String(couleurTheme || '#0891B2').replace('#', ''),
+        feuilles: [
+          {
+            nom: 'Indicateurs',
+            titre: 'Rapport — Agent Placement (BET E-Learning)',
+            sousTitre: `Généré le ${new Date().toLocaleDateString('fr-FR')}`
+              + (du || au ? ` · période ${du || '…'} → ${au || '…'}` : ' · toutes périodes'),
+            colonnes: [{ label: 'Indicateur', width: 30, bold: true }, { label: 'Valeur', width: 16, align: 'right' }],
+            lignes: [
+              ['Tests reçus', kpis.total], ['À corriger', kpis.aCorriger],
+              ['Traités', kpis.traites], ['Convertis', kpis.convertis],
+              ['Score moyen (%)', kpis.scoreMoyen],
+            ],
+          },
+          {
+            nom: 'Par niveau CECR',
+            colonnes: [{ label: 'Niveau', width: 12 }, { label: 'Candidats', width: 14, align: 'right' }],
+            lignes: parNiveau.map(s => [s.n, s.nb]),
+          },
+          {
+            nom: 'Par traitement',
+            colonnes: [{ label: 'Traitement', width: 30 }, { label: 'Tests', width: 14, align: 'right' }],
+            lignes: parTraitement.map(s => [s.label, s.nb]),
+          },
+          {
+            nom: 'Par format',
+            colonnes: [{ label: 'Format', width: 22 }, { label: 'Tests', width: 14, align: 'right' }],
+            lignes: parFormat.map(s => [s.f, s.nb]),
+          },
+        ],
+      });
+    } catch { toast.error("L'export n'a pas pu être généré", { duration: 5000 }); }
+    finally { setExportEnCours(false); }
+  }
+
+  const carte = { background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, padding: '16px 18px' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>📊 Rapports</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+            Tests passés sur BET E-Learning{du || au ? ' sur la période choisie' : ' — toutes périodes'}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>Du</label>
+          <input type="date" value={du} onChange={e => setDu(e.target.value)}
+            style={{ padding: '6px 9px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>au</label>
+          <input type="date" value={au} onChange={e => setAu(e.target.value)}
+            style={{ padding: '6px 9px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          {(du || au) && (
+            <button onClick={() => { setDu(''); setAu(''); }}
+              style={{ padding: '6px 10px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, fontSize: 11, cursor: 'pointer' }}>✕</button>
+          )}
+          <button onClick={exporter} disabled={exportEnCours || liste.length === 0}
+            style={{ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: liste.length ? 'pointer' : 'not-allowed',
+              background: couleurTheme, color: '#fff', fontSize: 12, fontWeight: 700,
+              opacity: exportEnCours || liste.length === 0 ? 0.45 : 1,
+              fontFamily: '"Plus Jakarta Sans",sans-serif' }}>
+            {exportEnCours ? 'Export…' : '⬇ Exporter Excel'}
+          </button>
+        </div>
+      </div>
+
+      {liste.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}`, color: COULEURS.gris400, fontSize: 13 }}>
+          {resultats.length === 0
+            ? 'Aucun test n’a encore été passé sur BET E-Learning.'
+            : 'Aucun test sur cette période.'}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14 }}>
+            {[
+              { l: 'Tests reçus',  v: kpis.total,      c: couleurTheme,        i: '📥' },
+              { l: 'À corriger',   v: kpis.aCorriger,  c: COULEURS.attention,  i: '⏳' },
+              { l: 'Traités',      v: kpis.traites,    c: COULEURS.succes,     i: '✅' },
+              { l: 'Convertis',    v: kpis.convertis,  c: '#7C3AED',           i: '🎯' },
+              { l: 'Score moyen',  v: `${kpis.scoreMoyen}%`, c: COULEURS.cyanFonce, i: '📈' },
+            ].map(k => (
+              <div key={k.l} style={{ ...carte, borderTop: `3px solid ${k.c}` }}>
+                <div style={{ fontSize: 21, marginBottom: 5 }}>{k.i}</div>
+                <div style={{ fontSize: 21, fontWeight: 800, color: k.c }}>{k.v}</div>
+                <div style={{ fontSize: 11, color: COULEURS.gris600, marginTop: 3 }}>{k.l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16 }}>
+            <RepartitionPlacement titre="Par niveau CECR" total={liste.length}
+              lignes={parNiveau.filter(s => s.nb > 0).map(s => ({
+                label: s.n, nb: s.nb, couleur: NIVEAUX_CECR[s.n]?.couleur || couleurTheme }))} />
+            <RepartitionPlacement titre="Par traitement" total={liste.length}
+              lignes={parTraitement.map(s => ({ label: s.label, nb: s.nb, couleur: couleurTheme }))} />
+            <RepartitionPlacement titre="Par format de test" total={liste.length}
+              lignes={parFormat.map(s => ({ label: s.f, nb: s.nb, couleur: COULEURS.cyanFonce }))} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* Une répartition en barres. Chaque libellé porte son compte ET son pourcentage : un rapport
+   qui ne donne que le pourcentage cache qu'il repose parfois sur trois candidats. */
+function RepartitionPlacement({ titre, lignes, total }) {
+  return (
+    <div style={{ background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, padding: '16px 18px' }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: COULEURS.navy, marginBottom: 14 }}>{titre}</div>
+      {lignes.length === 0 ? (
+        <div style={{ fontSize: 12, color: COULEURS.gris400 }}>Aucune donnée.</div>
+      ) : lignes.map(l => {
+        const pct = total ? Math.round((l.nb / total) * 100) : 0;
+        return (
+          <div key={l.label} style={{ marginBottom: 11 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+              <span style={{ color: COULEURS.gris600 }}>{l.label}</span>
+              <span style={{ fontWeight: 700, color: COULEURS.navy }}>{l.nb} · {pct}%</span>
+            </div>
+            <div style={{ height: 6, background: COULEURS.gris100, borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: l.couleur, borderRadius: 4 }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

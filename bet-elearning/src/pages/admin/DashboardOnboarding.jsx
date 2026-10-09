@@ -2908,3 +2908,341 @@ export function OngletVueEnsembleOnboarding() {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   SUIVI DÉMARRAGE & MES TÂCHES — portés depuis dash (OnboardingDashboard.jsx)
+
+   POURQUOI CES DEUX ONGLETS ARRIVENT ICI. L'assistante Onboarding travaille sur les deux
+   plateformes, et seul dash lui disait ce qu'il restait à traiter. Côté bet-elearning elle
+   devait ouvrir chaque onglet pour le découvrir.
+
+   LA SOURCE EST LA MÊME DES DEUX CÔTÉS : `GET /api/parcours/mes-apprenants-onboarding`, du
+   Backend partagé. Aucune route n'a été ajoutée — c'est la raison pour laquelle ce portage
+   est possible sans toucher au serveur.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Les quatre étapes du démarrage d'un apprenant. Identiques à `CHECKLIST_ITEMS` de dash :
+   deux listes différentes donneraient deux pourcentages pour le même dossier. */
+const ETAPES_DEMARRAGE = [
+  { id: 'bienvenue', label: 'Email de bienvenue envoyé',      icone: '✉️' },
+  { id: 'acces',     label: 'Lien espace apprenant transmis', icone: '🔗' },
+  { id: 'kit',       label: 'Lien matériel de cours envoyé',  icone: '📚' },
+  { id: 'planning',  label: 'Planning des séances envoyé',    icone: '📅' },
+];
+
+/**
+ * La checklist RÉELLEMENT atteinte par un apprenant.
+ *
+ * `bienvenue` et `acces` ne sont pas cochés à la main : le compte apprenant est créé dès
+ * l'ajout au groupe (`creerAccesApprenantCore`, côté Backend), donc la présence d'un
+ * `apprenant_id` vaut preuve d'envoi. Les cocher manuellement laisserait croire qu'il reste
+ * un geste à faire. `kit` et `planning` restent manuels : aucun envoi automatique n'existe
+ * pour eux aujourd'hui.
+ */
+const checklistReelle = (a) => ({
+  ...(a.suivi_checklist || {}),
+  bienvenue: !!a.apprenant_id,
+  acces:     !!a.apprenant_id,
+});
+
+const pctDemarrage = (cl) => {
+  const faites = ETAPES_DEMARRAGE.filter(i => (cl || {})[i.id]).length;
+  return Math.round((faites / ETAPES_DEMARRAGE.length) * 100);
+};
+
+const _dateCourte = (v) => {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+/** Charge les apprenants suivis par l'assistante connectée. Partagé par les deux onglets. */
+function useApprenantsOnboarding() {
+  const [apprenants, setApprenants] = useState([]);
+  const [chargement, setChargement] = useState(true);
+
+  const recharger = useCallback(async () => {
+    setChargement(true);
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/parcours/mes-apprenants-onboarding`, { headers: _authHdrsAdmin() });
+      const d = await r.json().catch(() => ({}));
+      setApprenants(Array.isArray(d.apprenants) ? d.apprenants : []);
+    } catch { setApprenants([]); }
+    finally { setChargement(false); }
+  }, []);
+
+  useEffect(() => { recharger(); }, [recharger]);
+  return { apprenants, setApprenants, chargement, recharger };
+}
+
+const PAR_PAGE_SUIVI = 10;
+
+/**
+ * SUIVI DÉMARRAGE — où en est chaque apprenant dans ses quatre étapes d'accueil.
+ *
+ * Les deux étapes manuelles sont COCHABLES ICI, avec mise à jour optimiste puis
+ * `PATCH /api/groupes/apprenants/:id/suivi`. Un tableau en lecture seule aurait obligé
+ * l'assistante à repasser sur dash pour cocher ce qu'elle vient de faire.
+ */
+export function OngletSuiviDemarrage() {
+  const { couleurTheme } = useTheme();
+  const { apprenants, setApprenants, chargement } = useApprenantsOnboarding();
+  const [filtre, setFiltre] = useState('tous');
+  const [du, setDu] = useState('');
+  const [au, setAu] = useState('');
+  const [page, setPage] = useState(1);
+  const [ouvert, setOuvert] = useState(null);
+
+  const filtres = apprenants.filter(a => {
+    const pct = pctDemarrage(checklistReelle(a));
+    if (filtre === 'termine' && pct !== 100) return false;
+    if (filtre === 'non_termine' && pct === 100) return false;
+    if (du && (!a.date_ajout || a.date_ajout < du)) return false;
+    if (au && (!a.date_ajout || a.date_ajout > au)) return false;
+    return true;
+  });
+  const visibles = filtres.slice((page - 1) * PAR_PAGE_SUIVI, page * PAR_PAGE_SUIVI);
+
+  /* Coche optimiste : l'écran répond tout de suite, et on remet la valeur d'avant si le
+     serveur refuse. Attendre la réponse donnerait une case qui met une seconde à réagir. */
+  async function basculer(gaId, itemId) {
+    const cible = apprenants.find(a => a.id === gaId);
+    if (!cible) return;
+    const avant = cible.suivi_checklist || {};
+    const apres = { ...avant, [itemId]: !avant[itemId] };
+    setApprenants(prev => prev.map(a => a.id === gaId ? { ...a, suivi_checklist: apres } : a));
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/groupes/apprenants/${gaId}/suivi`, {
+        method: 'PATCH', headers: _authHdrsAdmin(),
+        body: JSON.stringify({ suivi_checklist: apres }),
+      });
+      if (!r.ok) throw new Error();
+    } catch {
+      setApprenants(prev => prev.map(a => a.id === gaId ? { ...a, suivi_checklist: avant } : a));
+      toast.error("L'étape n'a pas pu être enregistrée", { duration: 5000 });
+    }
+  }
+
+  const th = { padding: '9px 12px', fontSize: 11, color: COULEURS.gris600, textTransform: 'uppercase', textAlign: 'left', fontWeight: 700 };
+  const td = { padding: '10px 12px', color: COULEURS.gris900 };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>🚀 Suivi démarrage</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          Email de bienvenue · lien espace apprenant · lien matériel de cours · planning
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[{ v: 'tous', l: 'Tous' }, { v: 'non_termine', l: 'Non terminés' }, { v: 'termine', l: 'Terminés' }].map(s => (
+            <button key={s.v} onClick={() => { setFiltre(s.v); setPage(1); }}
+              style={{ padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                fontFamily: '"Plus Jakarta Sans",sans-serif',
+                border: `1.5px solid ${filtre === s.v ? couleurTheme : COULEURS.gris200}`,
+                background: filtre === s.v ? couleurTheme : COULEURS.blanc,
+                color: filtre === s.v ? '#fff' : COULEURS.gris600 }}>
+              {s.l}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>Du</label>
+          <input type="date" value={du} onChange={e => { setDu(e.target.value); setPage(1); }}
+            style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>au</label>
+          <input type="date" value={au} onChange={e => { setAu(e.target.value); setPage(1); }}
+            style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          {(du || au) && (
+            <button onClick={() => { setDu(''); setAu(''); setPage(1); }}
+              style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, fontSize: 11, cursor: 'pointer' }}>✕</button>
+          )}
+        </div>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : filtres.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: COULEURS.gris400, fontSize: 13, background: COULEURS.gris50, borderRadius: 12 }}>
+          {apprenants.length === 0
+            ? "Aucun apprenant ne vous est encore attribué."
+            : 'Aucun apprenant ne correspond à ces filtres.'}
+        </div>
+      ) : (
+        <div style={{ border: `1px solid ${COULEURS.gris200}`, borderRadius: 10, overflow: 'hidden', background: COULEURS.blanc }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 620 }}>
+              <thead>
+                <tr style={{ background: COULEURS.gris50, borderBottom: `1px solid ${COULEURS.gris200}` }}>
+                  <th style={th}>Apprenant</th><th style={th}>Groupe</th><th style={th}>Coach</th>
+                  <th style={th}>Inscrit le</th><th style={th}>Progression</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibles.map(a => {
+                  const cl = checklistReelle(a);
+                  const pct = pctDemarrage(cl);
+                  const nom = `${a.prenom_apprenant || ''} ${a.nom_apprenant || ''}`.trim() || '?';
+                  const teinte = pct === 100 ? COULEURS.succes : pct >= 50 ? couleurTheme : COULEURS.attention;
+                  return (
+                    <tr key={a.id} onClick={() => setOuvert(a.id === ouvert ? null : a.id)}
+                      style={{ borderBottom: `1px solid ${COULEURS.gris100}`, cursor: 'pointer' }}>
+                      <td style={td}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: couleurTheme + '20',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900,
+                            fontSize: 13, color: couleurTheme, flexShrink: 0, overflow: 'hidden' }}>
+                            {a.avatar_url
+                              ? <img src={a.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : nom[0].toUpperCase()}
+                          </div>
+                          <span style={{ fontWeight: 700, color: COULEURS.navy }}>{nom}</span>
+                        </div>
+                      </td>
+                      <td style={td}>{a.groupe_nom || '—'}</td>
+                      <td style={td}>{a.coach_nom || '—'}</td>
+                      <td style={{ ...td, fontSize: 11, color: COULEURS.gris400 }}>{_dateCourte(a.date_ajout)}</td>
+                      <td style={td}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, maxWidth: 80, height: 6, background: COULEURS.gris200, borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: teinte, borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: teinte }}>{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <PaginationSimple total={filtres.length} parPage={PAR_PAGE_SUIVI} page={page} onChange={setPage} />
+        </div>
+      )}
+
+      {/* LE DÉTAIL S'OUVRE SOUS LE TABLEAU et non dans une modale : on coche deux cases et on
+          passe au dossier suivant, une fenêtre à fermer à chaque fois serait un geste de trop. */}
+      {ouvert && (() => {
+        const a = apprenants.find(x => x.id === ouvert);
+        if (!a) return null;
+        const cl = checklistReelle(a);
+        return (
+          <div style={{ marginTop: 16, background: COULEURS.blanc, border: `1.5px solid ${couleurTheme}40`, borderRadius: 12, padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10 }}>
+              <strong style={{ fontSize: 14, color: COULEURS.navy }}>
+                {`${a.prenom_apprenant || ''} ${a.nom_apprenant || ''}`.trim()}
+              </strong>
+              <button onClick={() => setOuvert(null)}
+                style={{ border: 'none', background: 'none', color: COULEURS.gris400, fontSize: 18, cursor: 'pointer' }}>✕</button>
+            </div>
+            {ETAPES_DEMARRAGE.map(it => {
+              const fait = !!cl[it.id];
+              const auto = it.id === 'bienvenue' || it.id === 'acces';
+              return (
+                <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: `1px solid ${COULEURS.gris100}` }}>
+                  <span style={{ fontSize: 16 }}>{it.icone}</span>
+                  <span style={{ flex: 1, fontSize: 13, color: fait ? COULEURS.gris900 : COULEURS.gris600 }}>
+                    {it.label}
+                    {auto && <span style={{ fontSize: 10, color: COULEURS.gris400, marginLeft: 7 }}>automatique</span>}
+                  </span>
+                  {auto ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: fait ? COULEURS.succes : COULEURS.gris400 }}>
+                      {fait ? '✓ fait' : 'en attente'}
+                    </span>
+                  ) : (
+                    <button onClick={() => basculer(a.id, it.id)}
+                      style={{ padding: '5px 13px', borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        border: `1.5px solid ${fait ? COULEURS.succes : COULEURS.gris200}`,
+                        background: fait ? '#D1FAE5' : COULEURS.blanc,
+                        color: fait ? '#065F46' : COULEURS.gris600 }}>
+                      {fait ? '✓ fait' : 'marquer fait'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+/**
+ * MES TÂCHES — ce qu'il reste à traiter, et où aller le traiter.
+ *
+ * CE N'EST PAS UNE ROUTE SERVEUR : il n'existe aucun `/api/taches`. Chaque ligne est un
+ * compteur calculé sur des données que la plateforme sait déjà lire, et un raccourci vers
+ * l'onglet qui permet d'agir. C'est exactement ce que fait dash — un écran d'aiguillage, pas
+ * une file de travail persistée.
+ *
+ * LES COMPTEURS SONT CEUX DE DASH, moins ceux dont la donnée n'existe pas encore ici
+ * (« groupes actifs sans coach » et « dossiers sans assistante » demandent des chargements que
+ * cette page ne fait pas). Afficher une ligne à zéro faute de savoir la calculer ferait croire
+ * qu'il n'y a rien à faire : mieux vaut ne pas l'afficher du tout, et le dire.
+ */
+export function OngletMesTachesOnboarding() {
+  const navigate = useNavigate();
+  const { couleurTheme } = useTheme();
+  const { apprenants, chargement } = useApprenantsOnboarding();
+
+  const suivisIncomplets = apprenants.filter(
+    a => pctDemarrage(checklistReelle(a)) < 100).length;
+  const sansGroupe = apprenants.filter(a => !a.groupe_nom).length;
+
+  const taches = [
+    { icone: '✅', label: 'Suivis de démarrage incomplets', n: suivisIncomplets, vers: '/admin/onboarding/suivi' },
+    { icone: '🏫', label: 'Apprenants sans groupe attribué', n: sansGroupe, vers: '/admin/onboarding/classes' },
+  ];
+  const ouvertes = taches.filter(t => t.n > 0);
+  const total = taches.reduce((s, t) => s + t.n, 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>✅ Mes tâches</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          {chargement ? 'Calcul en cours…'
+            : total > 0 ? `${total} élément${total > 1 ? 's' : ''} à traiter au total.`
+            : 'Rien à traiter pour le moment — tout est à jour.'}
+        </p>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : ouvertes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>Aucune tâche en attente</div>
+          <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5 }}>
+            Vos {apprenants.length} apprenant{apprenants.length > 1 ? 's' : ''} sont à jour.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {ouvertes.map(t => (
+            <button key={t.label} onClick={() => navigate(t.vers)}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', width: '100%',
+                padding: '15px 18px', borderRadius: 12, cursor: 'pointer', background: COULEURS.blanc,
+                border: `1.5px solid ${COULEURS.gris200}`, borderLeft: `4px solid ${couleurTheme}`,
+                fontFamily: '"Plus Jakarta Sans",sans-serif' }}>
+              <span style={{ fontSize: 22 }}>{t.icone}</span>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: COULEURS.navy }}>{t.label}</span>
+              <span style={{ background: couleurTheme + '18', color: couleurTheme, borderRadius: 20,
+                padding: '4px 12px', fontSize: 13, fontWeight: 800 }}>{t.n}</span>
+              <span style={{ color: COULEURS.gris400, fontSize: 16 }}>›</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p style={{ fontSize: 11.5, color: COULEURS.gris400, marginTop: 18, lineHeight: 1.6 }}>
+        Deux compteurs présents sur dash manquent encore ici — « groupes actifs sans coach » et
+        « dossiers sans assistante » — faute des chargements correspondants sur cette page. Ils
+        seront ajoutés avec les onglets Plannings et Dossiers à réaffecter.
+      </p>
+    </div>
+  );
+}

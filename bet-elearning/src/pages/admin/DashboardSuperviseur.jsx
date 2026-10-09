@@ -757,3 +757,616 @@ export function OngletGestionDeputies() {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   MES TÂCHES & CLASSEMENT — portés depuis dash (SuperviseurDashboard.jsx)
+
+   CES DEUX ÉCRANS NE DEMANDENT AUCUNE ROUTE NOUVELLE : « Mes tâches » lit les compteurs de
+   `GET /api/superviseur/dashboard`, et « Classement » se déduit entièrement des rapports
+   d'observation que `OngletRapportsDeputySuperviseur` charge déjà. C'est ce qui les rend
+   portables tout de suite, là où Plannings et Observer un cours dépendent du modèle de cours.
+
+   ⚠️ CE QU'ILS AFFICHERONT AUJOURD'HUI. `rapports_observation` contient 7 lignes, toutes
+   taguées `plateforme = 'dash'` : côté bet-elearning il y en a zéro. Ces écrans sont donc
+   vides en production, et le resteront jusqu'à ce qu'un Deputy soumette un rapport depuis
+   cette plateforme. Ce n'est pas un bug — c'est la séparation voulue par les deux routeurs
+   serveur (`superviseurRoutesBet.js` / `superviseurRoutesDash.js`, aiguillés par l'en-tête
+   `X-Plateforme`). Les états vides le disent explicitement plutôt que de laisser croire à
+   une panne.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+const CLASSEMENT_PAR_PAGE = 10;
+
+/** Le début de la période choisie, ou `null` pour « toute période ». */
+function debutPeriodeClassement(periode) {
+  const d = new Date();
+  if (periode === 'semaine') { d.setDate(d.getDate() - 7); return d; }
+  if (periode === 'mois')    { d.setMonth(d.getMonth() - 1); return d; }
+  return null;
+}
+
+/**
+ * MES TÂCHES — ce qui attend le superviseur, et où le traiter.
+ *
+ * `general` distingue les deux métiers : le superviseur général lit des rapports qu'on lui a
+ * soumis et des anomalies à trancher ; le Deputy, lui, attend qu'on lise les SIENS et qu'on
+ * les commente. Ce sont deux files opposées, et les afficher avec les mêmes libellés aurait
+ * fait croire au Deputy qu'il avait des rapports à relire.
+ */
+export function OngletMesTachesSuperviseur({ general = true }) {
+  const [kpi, setKpi] = useState(null);
+  const [missions, setMissions] = useState([]);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/superviseur/dashboard`, { headers: supAuthHdrs() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setKpi(r.ok ? d : {});
+      } catch { if (vivant) setKpi({}); }
+      if (!general) {
+        try {
+          const r = await fetch(`${_API_URL_ADMIN}/api/superviseur/mes-missions`, { headers: supAuthHdrs() });
+          const d = await r.json().catch(() => ({}));
+          if (vivant) setMissions(Array.isArray(d.missions) ? d.missions : []);
+        } catch { /* le compteur de missions restera à zéro */ }
+      }
+    })();
+    return () => { vivant = false; };
+  }, [general]);
+
+  const chargement = kpi === null;
+  const k = kpi || {};
+
+  const taches = general ? [
+    { icone: '📋', label: 'Rapports Deputy non lus',  n: k.nb_rapports_non_lus || 0,   vers: '/admin/superviseur/rapports-deputy' },
+    { icone: '⚠️', label: 'Anomalies ouvertes',       n: k.nb_anomalies_ouvertes || 0, vers: '/admin/superviseur/anomalies' },
+  ] : [
+    { icone: '🎯', label: 'Missions assignées à traiter', n: missions.filter(m => ['assignée', 'en_cours'].includes(m.statut)).length, vers: '/admin/deputy-superviseur/missions' },
+    { icone: '📋', label: 'Mes rapports en attente de lecture', n: k.nb_rapports_non_lus || 0, vers: '/admin/deputy-superviseur/rapports' },
+  ];
+
+  const ouvertes = taches.filter(t => t.n > 0);
+  const total = taches.reduce((s, t) => s + t.n, 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>✅ Mes tâches</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          {chargement ? 'Calcul en cours…'
+            : total > 0 ? `${total} élément${total > 1 ? 's' : ''} à traiter au total.`
+            : 'Rien à traiter pour le moment — tout est à jour.'}
+        </p>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : ouvertes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>Aucune tâche en attente</div>
+          <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5, maxWidth: 420, margin: '5px auto 0', lineHeight: 1.6 }}>
+            Aucun rapport ni anomalie n'a encore été enregistré depuis BET E-Learning. Les
+            observations faites sur dash restent sur dash — les deux plateformes ont leur
+            propre file de supervision.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 12 }}>
+          {ouvertes.map(t => (
+            <a key={t.label} href={t.vers}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none',
+                background: COULEURS.blanc, border: `1.5px solid ${COULEURS.gris200}`,
+                borderLeft: `4px solid ${SUP_COLOR}`, borderRadius: 14, padding: '16px 18px' }}>
+              <span style={{ fontSize: 24 }}>{t.icone}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: COULEURS.navy }}>{t.label}</span>
+              <span style={{ background: SUP_COLOR + '18', color: SUP_COLOR, borderRadius: 99,
+                fontSize: 13, fontWeight: 800, padding: '3px 11px' }}>{t.n}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * CLASSEMENT DES COACHS — la moyenne des notes d'observation, par coach.
+ *
+ * TOUT EST CALCULÉ ICI, à partir des rapports. Le serveur ne sert pas de classement : il
+ * renvoie les rapports, et c'est le même calcul que dash — moyenne des `note_globale`, et
+ * tendance donnée par la comparaison de la dernière note à la première de la période.
+ *
+ * SOUS DEUX OBSERVATIONS, LA TENDANCE EST « STABLE » et non « hausse ». Avec une seule note
+ * il n'y a rien dont on puisse dire si ça monte : afficher une flèche serait une affirmation
+ * sans fondement sur le travail d'un coach.
+ *
+ * LA PAGE COURANTE EST BORNÉE après filtrage : un filtre qui réduit la liste ne doit pas
+ * laisser l'écran sur une page devenue inexistante, donc vide sans explication.
+ */
+export function OngletClassementCoachs() {
+  const [rapports, setRapports] = useState(null);
+  const [periode, setPeriode] = useState('mois');
+  const [du, setDu] = useState('');
+  const [au, setAu] = useState('');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/superviseur/rapports-deputy`, { headers: supAuthHdrs() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setRapports(Array.isArray(d.rapports) ? d.rapports : []);
+      } catch { if (vivant) setRapports([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const classement = (() => {
+    const tous = rapports || [];
+    /* Une plage de dates explicite l'emporte sur le raccourci de période : c'est le filtre le
+       plus précis qui gagne, sinon poser des dates n'aurait aucun effet visible. */
+    const dansPeriode = (du || au)
+      ? tous.filter(r => {
+          const d = r.date_observation || '';
+          if (du && d && d < du) return false;
+          if (au && d && d > au) return false;
+          return true;
+        })
+      : (() => {
+          const debut = debutPeriodeClassement(periode);
+          return debut ? tous.filter(r => r.date_observation && new Date(r.date_observation) >= debut) : tous;
+        })();
+
+    const parCoach = {};
+    dansPeriode.forEach(r => {
+      const c = r.coach;
+      if (!c?.id || !r.note_globale) return;
+      (parCoach[c.id] ??= { coach: c, notes: [] });
+      parCoach[c.id].notes.push(Number(r.note_globale));
+    });
+
+    return Object.values(parCoach).map(e => {
+      const moyenne = e.notes.reduce((a, b) => a + b, 0) / e.notes.length;
+      const tendance = e.notes.length >= 2
+        ? (e.notes[e.notes.length - 1] > e.notes[0] ? 'hausse'
+          : e.notes[e.notes.length - 1] < e.notes[0] ? 'baisse' : 'stable')
+        : 'stable';
+      return { ...e, moyenne, nb: e.notes.length, tendance };
+    }).sort((a, b) => b.moyenne - a.moyenne);
+  })();
+
+  const totalPages = Math.max(1, Math.ceil(classement.length / CLASSEMENT_PAR_PAGE));
+  const pageSure = Math.min(page, totalPages);
+  const visibles = classement.slice((pageSure - 1) * CLASSEMENT_PAR_PAGE, pageSure * CLASSEMENT_PAR_PAGE);
+  const moyGlobale = classement.length
+    ? classement.reduce((s, e) => s + e.moyenne, 0) / classement.length : null;
+  const sousTrois = classement.filter(e => e.moyenne < 3).length;
+
+  const medaille = i => ['🥇', '🥈', '🥉'][i] || null;
+  const tendIco = t => t === 'hausse' ? '↗' : t === 'baisse' ? '↘' : '→';
+  const tendCol = t => t === 'hausse' ? COULEURS.succes : t === 'baisse' ? COULEURS.erreur : COULEURS.gris400;
+
+  const puce = (actif) => ({
+    padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+    fontFamily: '"Plus Jakarta Sans",sans-serif',
+    border: `1.5px solid ${actif ? SUP_COLOR : COULEURS.gris200}`,
+    background: actif ? SUP_COLOR : COULEURS.blanc, color: actif ? '#fff' : COULEURS.gris600,
+  });
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>🏆 Classement des coachs</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          Moyenne des notes d'observation{du || au ? ' sur la plage choisie'
+            : periode === 'semaine' ? ' des 7 derniers jours'
+            : periode === 'mois' ? ' des 30 derniers jours' : ', toute période'}
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
+        {[{ v: 'semaine', l: 'Semaine' }, { v: 'mois', l: 'Mois' }, { v: 'tout', l: 'Tout' }].map(p => (
+          <button key={p.v} onClick={() => { setPeriode(p.v); setDu(''); setAu(''); setPage(1); }}
+            style={puce(!du && !au && periode === p.v)}>{p.l}</button>
+        ))}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>Du</label>
+          <input type="date" value={du} onChange={e => { setDu(e.target.value); setPage(1); }}
+            style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>au</label>
+          <input type="date" value={au} onChange={e => { setAu(e.target.value); setPage(1); }}
+            style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          {(du || au) && (
+            <button onClick={() => { setDu(''); setAu(''); setPage(1); }}
+              style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, fontSize: 11, cursor: 'pointer' }}>✕</button>
+          )}
+        </div>
+      </div>
+
+      {rapports === null ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : classement.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>📊</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>Aucun coach noté</div>
+          <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5, maxWidth: 440, margin: '5px auto 0', lineHeight: 1.6 }}>
+            {(rapports || []).length === 0
+              ? "Aucun rapport d'observation n'a encore été soumis depuis BET E-Learning. Le classement se construit à partir des notes globales de ces rapports."
+              : 'Aucun rapport noté sur cette période.'}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, marginBottom: 18 }}>
+            {[
+              { l: 'Coachs notés',    v: classement.length,                                         c: SUP_COLOR },
+              { l: 'Moyenne globale', v: moyGlobale != null ? `${moyGlobale.toFixed(1)}/5` : '—',   c: COULEURS.cyanFonce },
+              { l: 'Sous 3/5',        v: sousTrois,                                                 c: sousTrois ? COULEURS.erreur : COULEURS.succes },
+            ].map(c => (
+              <div key={c.l} style={{ background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`,
+                borderRadius: 12, padding: '14px 18px', borderTop: `3px solid ${c.c}` }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: c.c }}>{c.v}</div>
+                <div style={{ fontSize: 11, color: COULEURS.gris600, marginTop: 3 }}>{c.l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gap: 9 }}>
+            {visibles.map((e, i) => {
+              const rang = (pageSure - 1) * CLASSEMENT_PAR_PAGE + i;
+              const m = medaille(rang);
+              const faible = e.moyenne < 3;
+              return (
+                <div key={e.coach.id} style={{ display: 'flex', alignItems: 'center', gap: 13,
+                  background: COULEURS.blanc, border: `1px solid ${faible ? '#FECACA' : COULEURS.gris200}`,
+                  borderRadius: 12, padding: '13px 16px' }}>
+                  <div style={{ width: 30, textAlign: 'center', fontSize: m ? 19 : 13, fontWeight: 800, color: COULEURS.gris400 }}>
+                    {m || rang + 1}
+                  </div>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: SUP_COLOR + '15',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800,
+                    color: SUP_COLOR, fontSize: 13, flexShrink: 0 }}>
+                    {(e.coach.prenom?.[0] || '') + (e.coach.nom?.[0] || '')}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: COULEURS.navy }}>
+                      {e.coach.prenom} {e.coach.nom}
+                    </div>
+                    <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 2 }}>
+                      {e.nb} observation{e.nb > 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 15, color: tendCol(e.tendance), fontWeight: 700 }}>
+                    {tendIco(e.tendance)}
+                  </span>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: faible ? COULEURS.erreur : COULEURS.succes, minWidth: 54, textAlign: 'right' }}>
+                    {e.moyenne.toFixed(1)}/5
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button key={p} onClick={() => setPage(p)}
+                  style={{ minWidth: 36, height: 36, borderRadius: 9, cursor: 'pointer',
+                    border: `1.5px solid ${p === pageSure ? SUP_COLOR : COULEURS.gris200}`,
+                    background: p === pageSure ? SUP_COLOR : COULEURS.blanc,
+                    color: p === pageSure ? '#fff' : COULEURS.navy, fontSize: 13, fontWeight: 700 }}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   OBSERVER UN COURS & PLANNINGS — portés depuis dash, sur les données e-learning
+
+   LE CHOIX DE LA SOURCE EST DÉLIBÉRÉ ET IMPORTANT. dash lit `/api/groupes` et `/api/seances`
+   (37 classes, 25 séances en production) ; ces écrans-ci lisent `/api/classes-elearning` et
+   `/api/elearning/seances`, qui sont VIDES aujourd'hui. Ce n'est pas une erreur de câblage :
+   les deux plateformes doivent rester séparées, sinon les classes présentielles de dash
+   viendraient fausser ses propres calculs — taux de présence, moyennes, conformité — en se
+   mélangeant à celles de l'e-learning. L'absence de données côté bet-elearning est l'état
+   normal attendu pour l'instant.
+   Les états vides le disent donc explicitement, au lieu de laisser croire à une panne.
+
+   POURQUOI UN SEUL COMPOSANT POUR LES DEUX RÔLES. `renderObserverCours` du superviseur dash
+   et `renderObserver` du Deputy sont le même écran, jusqu'aux noms de variables
+   (`obsDateFrom`, `obsPage`, `OBS_PER_PAGE`) : ils ont été copiés l'un de l'autre. Les écrire
+   une fois évite la troisième copie.
+
+   CE QUE JE N'AI PAS FAIT, ET POURQUOI. Je n'ai pas remplacé le `renderObserver` du Deputy par
+   ce composant. Son écran fonctionne, il porte la saisie d'un rapport d'observation que le
+   superviseur n'a pas, et le réécrire aurait risqué une régression sans rien apporter à
+   l'utilisateur. `onObserver` est là pour le jour où on voudra les fusionner.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+const OBS_PAR_PAGE = 8;
+
+const STATUT_CLASSE = {
+  active:    { label: 'Active',    couleur: '#16a34a', fond: '#dcfce7' },
+  planifiee: { label: 'Planifiée', couleur: '#0891b2', fond: '#e0f2fe' },
+  terminee:  { label: 'Terminée',  couleur: '#6b7280', fond: '#f3f4f6' },
+  suspendue: { label: 'Suspendue', couleur: '#d97706', fond: '#fef3c7' },
+};
+
+/** Pagination partagée par les deux écrans ci-dessous. */
+function BarrePages({ page, total, parPage, onChange, libelle }) {
+  const nbPages = Math.max(1, Math.ceil(total / parPage));
+  if (nbPages <= 1) return null;
+  const sure = Math.min(page, nbPages);
+  const btn = (actif, off) => ({
+    minWidth: 34, height: 34, borderRadius: 8, fontSize: 12, fontWeight: actif ? 800 : 500,
+    cursor: off ? 'default' : 'pointer', border: `1.5px solid ${actif ? SUP_COLOR : COULEURS.gris200}`,
+    background: actif ? SUP_COLOR : COULEURS.blanc, color: actif ? '#fff' : off ? COULEURS.gris200 : COULEURS.navy,
+  });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', padding: '14px 0' }}>
+      <span style={{ fontSize: 11, color: COULEURS.gris400, marginRight: 6 }}>
+        Page {sure}/{nbPages} · {total} {libelle}{total !== 1 ? 's' : ''}
+      </span>
+      <button onClick={() => onChange(Math.max(1, sure - 1))} disabled={sure === 1} style={btn(false, sure === 1)}>‹</button>
+      {Array.from({ length: nbPages }, (_, i) => i + 1).map(p => (
+        <button key={p} onClick={() => onChange(p)} style={btn(p === sure, false)}>{p}</button>
+      ))}
+      <button onClick={() => onChange(Math.min(nbPages, sure + 1))} disabled={sure === nbPages} style={btn(false, sure === nbPages)}>›</button>
+    </div>
+  );
+}
+
+/** Un bandeau d'état vide qui explique POURQUOI c'est vide — la séparation des plateformes. */
+function VidePlateforme({ icone, titre, quoi }) {
+  return (
+    <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+      <div style={{ fontSize: 34, marginBottom: 10 }}>{icone}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>{titre}</div>
+      <p style={{ fontSize: 12, color: COULEURS.gris400, margin: '7px auto 0', maxWidth: 460, lineHeight: 1.65 }}>
+        {quoi} Les {quoi.includes('séance') ? 'séances' : 'classes'} créées sur dash n'apparaissent pas
+        ici : les deux plateformes sont volontairement séparées, pour qu'aucune ne fausse les
+        statistiques de l'autre.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * OBSERVER UN COURS — les classes e-learning, filtrables par date de démarrage.
+ *
+ * `onObserver`, quand il est fourni, ajoute l'action « observer » sur chaque classe (le Deputy
+ * en a besoin pour amorcer un rapport). Sans lui, l'écran reste en consultation : c'est le cas
+ * du superviseur général, qui lit les rapports des autres plutôt que d'en écrire.
+ */
+export function OngletObserverCours({ onObserver }) {
+  const [classes, setClasses] = useState(null);
+  const [du, setDu] = useState('');
+  const [au, setAu] = useState('');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning`, { headers: supAuthHdrs() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setClasses(Array.isArray(d.classes) ? d.classes : []);
+      } catch { if (vivant) setClasses([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const toutes = classes || [];
+  const filtrees = toutes.filter(cl => {
+    if (!cl.date_debut) return true;          // une classe sans date reste visible
+    if (du && cl.date_debut < du) return false;
+    if (au && cl.date_debut > au) return false;
+    return true;
+  });
+  const visibles = filtrees.slice((Math.min(page, Math.max(1, Math.ceil(filtrees.length / OBS_PAR_PAGE))) - 1) * OBS_PAR_PAGE,
+                                  Math.min(page, Math.max(1, Math.ceil(filtrees.length / OBS_PAR_PAGE))) * OBS_PAR_PAGE);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>👁️ Observer un cours</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+            Classes BET E-Learning{du || au ? ' démarrées sur la plage choisie' : ''}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>Du</label>
+          <input type="date" value={du} onChange={e => { setDu(e.target.value); setPage(1); }}
+            style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          <label style={{ fontSize: 11, color: COULEURS.gris400 }}>au</label>
+          <input type="date" value={au} onChange={e => { setAu(e.target.value); setPage(1); }}
+            style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, fontSize: 12 }} />
+          {(du || au) && (
+            <button onClick={() => { setDu(''); setAu(''); setPage(1); }}
+              style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, fontSize: 11, cursor: 'pointer' }}>✕</button>
+          )}
+        </div>
+      </div>
+
+      {classes === null ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : filtrees.length === 0 ? (
+        toutes.length === 0
+          ? <VidePlateforme icone="🏫" titre="Aucune classe e-learning"
+              quoi="Aucune classe n'a encore été créée sur BET E-Learning." />
+          : <div style={{ textAlign: 'center', padding: 40, background: COULEURS.gris50, borderRadius: 12, color: COULEURS.gris400, fontSize: 13 }}>
+              Aucune classe démarrée sur cette plage.
+            </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 13 }}>
+            {visibles.map(cl => {
+              const st = STATUT_CLASSE[cl.statut] || { label: cl.statut || '—', couleur: COULEURS.gris600, fond: COULEURS.gris100 };
+              return (
+                <div key={cl.id} style={{ background: COULEURS.blanc, border: `1.5px solid ${COULEURS.gris200}`, borderRadius: 14, padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: COULEURS.navy }}>{cl.nom || 'Classe sans nom'}</div>
+                      <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 3 }}>
+                        {cl.niveau || '—'} · {cl.type_cours || '—'}
+                      </div>
+                    </div>
+                    <span style={{ background: st.fond, color: st.couleur, borderRadius: 20, padding: '3px 10px', fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: COULEURS.gris600, marginBottom: onObserver ? 12 : 0 }}>
+                    <span>👤 {cl.coach_nom || 'sans coach'}</span>
+                    <span>🎓 {cl.nb_apprenants ?? 0} apprenant{(cl.nb_apprenants ?? 0) > 1 ? 's' : ''}</span>
+                    {cl.date_debut && <span>📅 {fmtDateSup(cl.date_debut)}</span>}
+                  </div>
+                  {onObserver && (
+                    <button onClick={() => onObserver(cl)}
+                      style={{ width: '100%', padding: '8px 0', background: SUP_COLOR, border: 'none', borderRadius: 8,
+                        color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        fontFamily: '"Plus Jakarta Sans",sans-serif' }}>
+                      👁️ Observer cette classe
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <BarrePages page={page} total={filtrees.length} parPage={OBS_PAR_PAGE} onChange={setPage} libelle="classe" />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * PLANNINGS — les séances e-learning à venir et passées.
+ *
+ * LE TRI MET LES SÉANCES À VENIR EN TÊTE, du plus proche au plus lointain, puis les passées de
+ * la plus récente à la plus ancienne. Un tri par date brute enterrerait la prochaine séance
+ * sous des mois d'historique — or c'est elle que le superviseur cherche quand il ouvre cet
+ * écran.
+ */
+export function OngletPlanningsSuperviseur() {
+  const [seances, setSeances] = useState(null);
+  const [filtre, setFiltre] = useState('avenir');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/elearning/seances`, { headers: supAuthHdrs() });
+        const d = await r.json().catch(() => ({}));
+        const l = Array.isArray(d.seances) ? d.seances : Array.isArray(d) ? d : [];
+        if (vivant) setSeances(l);
+      } catch { if (vivant) setSeances([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const toutes = seances || [];
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const estAVenir = (s) => (s.date || '') >= aujourdhui;
+
+  const filtrees = toutes.filter(s =>
+    filtre === 'toutes' ? true : filtre === 'avenir' ? estAVenir(s) : !estAVenir(s));
+
+  const triees = [...filtrees].sort((a, b) => {
+    const aA = estAVenir(a), aB = estAVenir(b);
+    if (aA !== aB) return aA ? -1 : 1;
+    const cmp = String(a.date || '').localeCompare(String(b.date || ''));
+    return aA ? cmp : -cmp;
+  });
+
+  const nbPages = Math.max(1, Math.ceil(triees.length / OBS_PAR_PAGE));
+  const sure = Math.min(page, nbPages);
+  const visibles = triees.slice((sure - 1) * OBS_PAR_PAGE, sure * OBS_PAR_PAGE);
+
+  const puce = (actif) => ({
+    padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+    fontFamily: '"Plus Jakarta Sans",sans-serif',
+    border: `1.5px solid ${actif ? SUP_COLOR : COULEURS.gris200}`,
+    background: actif ? SUP_COLOR : COULEURS.blanc, color: actif ? '#fff' : COULEURS.gris600,
+  });
+
+  const th = { padding: '9px 12px', fontSize: 11, color: COULEURS.gris600, textTransform: 'uppercase', textAlign: 'left', fontWeight: 700 };
+  const td = { padding: '11px 12px', color: COULEURS.gris900, fontSize: 13 };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>📅 Plannings</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          Séances BET E-Learning — les prochaines d'abord
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[{ v: 'avenir', l: 'À venir' }, { v: 'passees', l: 'Passées' }, { v: 'toutes', l: 'Toutes' }].map(f => (
+          <button key={f.v} onClick={() => { setFiltre(f.v); setPage(1); }} style={puce(filtre === f.v)}>
+            {f.l} · {toutes.filter(s => f.v === 'toutes' ? true : f.v === 'avenir' ? estAVenir(s) : !estAVenir(s)).length}
+          </button>
+        ))}
+      </div>
+
+      {seances === null ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : triees.length === 0 ? (
+        toutes.length === 0
+          ? <VidePlateforme icone="📅" titre="Aucune séance e-learning"
+              quoi="Aucune séance n'a encore été planifiée sur BET E-Learning." />
+          : <div style={{ textAlign: 'center', padding: 40, background: COULEURS.gris50, borderRadius: 12, color: COULEURS.gris400, fontSize: 13 }}>
+              Aucune séance {filtre === 'avenir' ? 'à venir' : 'passée'}.
+            </div>
+      ) : (
+        <div style={{ border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, overflow: 'hidden', background: COULEURS.blanc }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
+              <thead>
+                <tr style={{ background: COULEURS.gris50, borderBottom: `1px solid ${COULEURS.gris200}` }}>
+                  <th style={th}>Date</th><th style={th}>Horaire</th><th style={th}>Classe</th>
+                  <th style={th}>Coach</th><th style={th}>État</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibles.map(s => {
+                  const avenir = estAVenir(s);
+                  return (
+                    <tr key={s.id} style={{ borderBottom: `1px solid ${COULEURS.gris100}` }}>
+                      <td style={{ ...td, fontWeight: 700, color: avenir ? SUP_COLOR : COULEURS.gris600 }}>
+                        {fmtDateSup(s.date)}
+                      </td>
+                      <td style={td}>{s.heure || '—'}{s.heure_fin ? ` → ${s.heure_fin}` : ''}</td>
+                      <td style={td}>{s.classe_nom || s.groupe_nom || '—'}</td>
+                      <td style={td}>{s.coach_nom || '—'}</td>
+                      <td style={td}>
+                        <span style={{ background: avenir ? '#e0f2fe' : COULEURS.gris100,
+                          color: avenir ? '#0369a1' : COULEURS.gris600, borderRadius: 20,
+                          padding: '3px 10px', fontSize: 10.5, fontWeight: 700 }}>
+                          {s.statut || (avenir ? 'à venir' : 'passée')}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <BarrePages page={page} total={triees.length} parPage={OBS_PAR_PAGE} onChange={setPage} libelle="séance" />
+        </div>
+      )}
+    </div>
+  );
+}
