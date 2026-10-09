@@ -20,6 +20,8 @@ import LoginApprenant    from './pages/auth/LoginApprenant';
 import LoginParent       from './pages/auth/LoginParent';
 import LoginEntreprise   from './pages/auth/LoginEntreprise';
 import SSOLogin          from './pages/auth/SSOLogin';
+import AccessGate        from './pages/auth/AccessGate';
+import RequireGateAccess from './pages/auth/RequireGateAccess';
 
 // Pages Apprenant
 import DashboardApprenant from './pages/apprenant/DashboardApprenant';
@@ -120,7 +122,14 @@ function AppRoutes() {
       {/* ── Pages de connexion ── */}
       <Route path="/connexion"             element={<Login />} />
       <Route path="/connexion/portail"     element={<PortailConnexion />} />
-      <Route path="/connexion/admin"       element={<LoginAdmin />} />
+      {/* ── LA PORTE D'ACCÈS DU STAFF ──
+          Même page et même code que dash : les deux interrogent `/api/access-gate/verify`,
+          qui lit l'unique ligne de `access_gate_config`. Le Super Admin change le code une
+          fois et il vaut des deux côtés. Voir `pages/auth/AccessGate.jsx`.
+          Seules les connexions STAFF sont protégées, comme sur dash — un apprenant, un parent
+          ou un coach n'a pas à connaître le code du personnel. */}
+      <Route path="/access"                element={<AccessGate />} />
+      <Route path="/connexion/admin"       element={<RequireGateAccess><LoginAdmin /></RequireGateAccess>} />
       <Route path="/connexion/professeur"  element={<LoginProfesseur />} />
       <Route path="/connexion/apprenant"   element={<LoginApprenant />} />
       <Route path="/connexion/parent"      element={<LoginParent />} />
