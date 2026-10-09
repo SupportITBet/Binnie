@@ -18,6 +18,7 @@ import { OngletRemplacements } from './DashboardAdminShared';
 import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsElearning } from './DashboardSuperviseur';
 import { OngletCoachsPAAdvisor, OngletHonorairesPAAdvisor, OngletVueEnsemblePAAdvisor, OngletClassesPAAdvisor, DashboardPAAdvisor, OngletRapportsSuperviseurPA, OngletEvaluationsPAAdvisor, OngletSuiviApprenantsPAAdvisor } from './DashboardPaAdvisor';
 import { OngletGestionTests, OngletMesTachesPlacement, OngletRapportsPlacement } from './DashboardPlacement';
+import { OngletCommMesTaches, OngletCommTableauBord, OngletCommInscriptions, OngletCommMesClasses, OngletCommMesApprenants, OngletCommPaiements } from './DashboardCommercialElearning';
 import { OngletMesTachesSav, OngletTableauBordSav, OngletDemandesSav, OngletRemboursementsSav, OngletSatisfactionSav } from './DashboardSav';
 import BetLevelTestsTab from '../../components/shared/BetLevelTestsTab';
 import { OngletEntreprises } from './DashboardAdminShared';
@@ -4104,6 +4105,29 @@ export default function DashboardAdmin() {
             <OngletAnomaliesSuperviseur />
           ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/deputies' ? (
             <OngletGestionDeputies />
+          ) : /* ── LE VOLET COMMERCIAL, monté sur `admin_elearning` ──
+                 Aucun rôle de bet-elearning n'est « Commerciale » : `commercial`,
+                 `corporate` et `admin_commercial` se résolvent tous vers `admin_elearning`.
+                 Trois de ces écrans sont des réutilisations : Plannings vient du Superviseur,
+                 Suivi démarrage de l'Onboarding, Tests reçus du Placement. */
+            profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/taches' ? (
+            <OngletCommMesTaches />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/tableau-de-bord' ? (
+            <OngletCommTableauBord />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/tests' ? (
+            <BetLevelTestsTab vueInitiale="resultats" />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/inscriptions' ? (
+            <OngletCommInscriptions />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/classes' ? (
+            <OngletCommMesClasses />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/plannings' ? (
+            <OngletPlanningsElearning />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/apprenants' ? (
+            <OngletCommMesApprenants />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/suivi' ? (
+            <OngletSuiviDemarrage />
+          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/paiements' ? (
+            <OngletCommPaiements />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/taches' ? (
             <OngletMesTachesOnboarding />
           ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/suivi' ? (

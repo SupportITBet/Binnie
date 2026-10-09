@@ -208,6 +208,37 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Messages',            icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
   admin_elearning: [
+    /* ── LE VOLET COMMERCIAL ──
+       bet-elearning n'a aucun rôle « Commerciale » : `ROLE_MAP_BET` résout `commercial`,
+       `corporate` et même `admin_commercial` vers `admin_elearning`. Le menu
+       `admin_commercial` plus haut est donc du code mort — rien de ce qu'on y ajoute n'est
+       jamais affiché. Ces onglets vivent ici, le rôle que les comptes commerciaux reçoivent
+       réellement ; ce menu mélange de ce fait deux métiers, c'est le prix de la fusion de
+       rôles décidée côté bet-elearning.
+
+       Plannings, Suivi démarrage et Tests reçus ne sont pas de nouveaux écrans : ils
+       réutilisent ceux du Superviseur, de l'Onboarding et du Placement. Comptes entreprises
+       et Pipeline B2B renvoient sur `DashboardAssistantCommercial` et `GestionEntreprises`,
+       déjà en place et plus riches que les onglets B2B de dash. */
+    /* PRÉFIXE `/admin/vente/` ET NON `/admin/commercial/` : App.js route déjà
+       `/admin/commercial/*` vers `DashboardAssistantCommercial`, et React Router v6 classe par
+       spécificité — ce motif à deux segments bat le `/admin/*` qui mène à `DashboardAdmin`.
+       Sous `/admin/commercial/`, ces neuf écrans n'auraient jamais été atteints. */
+    { libelle: 'Mes tâches',         icone: '✅', chemin: '/admin/vente/taches' },
+    { libelle: 'Tableau de bord',    icone: '📊', chemin: '/admin/vente/tableau-de-bord' },
+    { libelle: 'Tests reçus',        icone: '📝', chemin: '/admin/vente/tests' },
+    { libelle: 'Inscriptions',       icone: '📥', chemin: '/admin/vente/inscriptions' },
+    { libelle: 'Mes classes',        icone: '🏫', chemin: '/admin/vente/classes' },
+    { libelle: 'Plannings',          icone: '📅', chemin: '/admin/vente/plannings' },
+    { libelle: 'Mes apprenants',     icone: '🎓', chemin: '/admin/vente/apprenants' },
+    { libelle: 'Suivi démarrage',    icone: '🚀', chemin: '/admin/vente/suivi' },
+    { libelle: 'Paiements',          icone: '💳', chemin: '/admin/vente/paiements' },
+    /* Les quatre onglets B2B demandés — Comptes entreprises, Pipeline B2B, Documents,
+       Facturation — ne sont PAS ajoutés ici : ils doublonneraient « Entreprises »
+       (/admin/elearning/entreprises) et « Espace Commercial » (/admin/commercial), déjà
+       présents juste en dessous et qui montent `GestionEntreprises` (5 203 l.) et
+       `DashboardAssistantCommercial` (821 l.) — plus riches que les onglets de dash. Deux
+       entrées de menu vers le même écran se lisent comme un bug, pas comme une commodité. */
     { libelle: "Vue d'ensemble",  icone: '📊', chemin: '/admin/elearning/overview'     },
     { libelle: 'Programme',       icone: '📈', chemin: '/admin/elearning/programme'    },
     { libelle: 'Reporting',       icone: '📋', chemin: '/admin/elearning/reporting'    },
