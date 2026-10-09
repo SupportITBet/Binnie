@@ -397,23 +397,45 @@ const ACTIONS_ACTIVES_PAR_MODULE = {
   contenus_minijeux:   ["create","update","delete"],
   devoirs_evaluations: ["create","update","delete"],
   examens:             ["create","update","delete"],
-  inscriptions:        ["create","update","delete","manage"],
+  // `manage` n'est garde par aucune route - seuls create/update/delete le sont.
+  inscriptions:        ["create","update","delete"],
   planning:            ["create","update"],
   finances:            ["create","update","delete"],
   crm_entreprises:     ["create","update","delete"],
-  prospects_b2b:       ["update"],
+  // Aucune route ne garde ce module : la case `update` n'avait aucun effet.
+  prospects_b2b:       [],
   contrat:             ["create","update"],
   rapports:            ["manage"],
   rh:                  [],
   support:             ["create","update","delete"],
   audit:               [],
-  configuration:       ["create","update","delete"],
+  // Aucune route `requirePermission("configuration", …)` n'existe : ces trois cases
+  // etaient cochables sans aucun effet serveur.
+  configuration:       [],
   offres_catalogue:    ["create","update","delete"],
   contenu_editorial:   ["create","update","delete"],
   boutique:            ["create","update","delete"],
   communication:       ["create","update","delete"],
   equipe_coachs:       ["create","update","delete"],
   trafic:              [],
+
+  /* ── LES SEPT MODULES QUI TOMBAIENT DANS LE REPLI ──────────────────────────────────
+     `actionsActives()` affiche les QUATRE actions quand un module n'a pas d'entree ici.
+     Ces sept-la n'en avaient pas : ils exposaient donc 28 cases, dont 24 sans aucune route
+     derriere - exactement ce que le commentaire en tete de cette table interdit.
+
+     Quatre n'ont aucune route protegee du tout (`transferts`, `observations`,
+     `evaluations_qualite`, `suivi_demarrage`) : leur acces passe par le repli de
+     MODULE_FALLBACK_PARENT cote backend, pas par une case a cocher. `leads` n'est garde
+     qu'en lecture, et la matrice n'expose pas `read`. Ils sont donc a vide, volontairement :
+     le module reste visible dans la liste - il existe - mais sans case trompeuse. */
+  suivi_prospects:     ["create","update","delete"],
+  presences:           ["create"],
+  leads:               [],
+  transferts:          [],
+  observations:        [],
+  evaluations_qualite: [],
+  suivi_demarrage:     [],
 };
 // Certains rôles partagent un module avec d'autres (ex: "inscriptions" est aussi
 // utilisé par commercial/gestionnaire/data_collector) mais n'en exploitent qu'un
