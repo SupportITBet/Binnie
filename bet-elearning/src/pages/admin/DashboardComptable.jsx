@@ -2346,3 +2346,349 @@ export function OngletComptaAnalytique() {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   MES TÂCHES · HONORAIRES COACHES · EXPORTS — portés depuis dash (ComptableDashboard.jsx)
+
+   L'ONGLET RRD · BC · BACN N'A PAS EU BESOIN D'ÊTRE ÉCRIT : `OngletComptaRrdBcBacn` existait
+   déjà dans ce fichier et sa route était déjà câblée dans `DashboardAdmin.jsx` — il manquait
+   seulement son entrée de menu. L'écran était donc inaccessible alors qu'il était terminé.
+   C'était un vrai défaut, pas un portage : une fonctionnalité livrée que personne ne pouvait
+   atteindre.
+
+   LES HONORAIRES LUS ICI SONT CEUX DE L'E-LEARNING (`/api/elearning/honoraires`, table
+   `honoraires_elearning_mois`), jamais ceux de dash (`honoraires_mois`). Deux tables jumelles,
+   parce que les montants se calculent sur des séances distinctes : les additionner ferait
+   apparaître dans un état comptable des heures faites sur l'autre plateforme.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+const _MOIS_LIB = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const _fcfa = (n) => `${Number(n || 0).toLocaleString('fr-FR')} FCFA`;
+
+/** Les honoraires e-learning, partagés par les trois écrans ci-dessous. */
+function useHonorairesElearning() {
+  const [honoraires, setHonoraires] = useState(null);
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/elearning/honoraires`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setHonoraires(Array.isArray(d.honoraires) ? d.honoraires : []);
+      } catch { if (vivant) setHonoraires([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+  return honoraires;
+}
+
+/**
+ * MES TÂCHES — la file du comptable.
+ *
+ * Les compteurs portent sur ce qui attend une ACTION de sa part : les honoraires transmis par
+ * la RH qu'il doit payer, et les factures non soldées. Les autres onglets sont de la
+ * consultation ; ceux-ci sont du travail.
+ */
+export function OngletComptaMesTaches() {
+  const { couleurTheme } = useTheme();
+  const honoraires = useHonorairesElearning();
+  const [factures, setFactures] = useState(null);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/comptabilite/factures`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setFactures(Array.isArray(d.factures) ? d.factures : []);
+      } catch { if (vivant) setFactures([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const chargement = honoraires === null || factures === null;
+  const aPayer = (honoraires || []).filter(h => h.statut === 'transmis').length;
+  const impayees = (factures || []).filter(f => f.statut && !['payee', 'annulee'].includes(f.statut)).length;
+
+  const taches = [
+    { icone: '🧾', label: 'Honoraires transmis à payer', n: aPayer,   vers: '/admin/comptable/honoraires' },
+    { icone: '📄', label: 'Factures non soldées',         n: impayees, vers: '/admin/comptable/facturation' },
+  ];
+  const ouvertes = taches.filter(t => t.n > 0);
+  const total = taches.reduce((s, t) => s + t.n, 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>✅ Mes tâches</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          {chargement ? 'Calcul en cours…'
+            : total > 0 ? `${total} élément${total > 1 ? 's' : ''} à traiter au total.`
+            : 'Rien à traiter pour le moment — tout est à jour.'}
+        </p>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : ouvertes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>Aucune tâche en attente</div>
+          <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5 }}>
+            Aucun honoraire à payer ni facture non soldée côté BET E-Learning.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {ouvertes.map(t => (
+            <a key={t.label} href={t.vers}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none',
+                background: COULEURS.blanc, border: `1.5px solid ${COULEURS.gris200}`,
+                borderLeft: `4px solid ${couleurTheme}`, borderRadius: 12, padding: '15px 18px' }}>
+              <span style={{ fontSize: 22 }}>{t.icone}</span>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: COULEURS.navy }}>{t.label}</span>
+              <span style={{ background: couleurTheme + '18', color: couleurTheme, borderRadius: 20,
+                padding: '4px 12px', fontSize: 13, fontWeight: 800 }}>{t.n}</span>
+              <span style={{ color: COULEURS.gris400, fontSize: 16 }}>›</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * HONORAIRES COACHES — l'état des fiches mensuelles, en lecture comptable.
+ *
+ * LE COMPTABLE NE VALIDE PAS, IL PAIE. La validation est le geste de la RH ; cet écran montre
+ * donc l'état et le montant, sans bouton de validation — en reproduire un ici donnerait deux
+ * services capables de valider la même fiche, sans savoir lequel l'a fait.
+ */
+export function OngletComptaHonorairesCoaches() {
+  const { couleurTheme } = useTheme();
+  const honoraires = useHonorairesElearning();
+  const [statut, setStatut] = useState('tous');
+
+  const l = honoraires || [];
+  const filtrees = statut === 'tous' ? l : l.filter(h => (h.statut || 'brouillon') === statut);
+  const totalMontant = filtrees.reduce((s, h) => s + (Number(h.montant_net ?? h.montant_total) || 0), 0);
+
+  const STATUTS = {
+    brouillon: { lib: 'Brouillon', c: '#6b7280', bg: '#f3f4f6' },
+    valide:    { lib: 'Validé',    c: '#0891b2', bg: '#e0f2fe' },
+    transmis:  { lib: 'Transmis',  c: '#d97706', bg: '#fef3c7' },
+    paye:      { lib: 'Payé',      c: '#16a34a', bg: '#dcfce7' },
+  };
+
+  const puce = (actif) => ({
+    padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+    fontFamily: '"Plus Jakarta Sans",sans-serif',
+    border: `1.5px solid ${actif ? couleurTheme : COULEURS.gris200}`,
+    background: actif ? couleurTheme : COULEURS.blanc, color: actif ? '#fff' : COULEURS.gris600,
+  });
+  const th = { padding: '10px 14px', fontSize: 11, color: COULEURS.gris600, textTransform: 'uppercase', textAlign: 'left', fontWeight: 700 };
+  const td = { padding: '11px 14px', fontSize: 13, color: COULEURS.gris900 };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>🧾 Honoraires coaches</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          Fiches mensuelles BET E-Learning — la validation reste du ressort de la RH
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <button onClick={() => setStatut('tous')} style={puce(statut === 'tous')}>Tous · {l.length}</button>
+        {Object.entries(STATUTS).map(([k, v]) => (
+          <button key={k} onClick={() => setStatut(k)} style={puce(statut === k)}>
+            {v.lib} · {l.filter(h => (h.statut || 'brouillon') === k).length}
+          </button>
+        ))}
+        {filtrees.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 800, color: couleurTheme,
+            fontVariantNumeric: 'tabular-nums' }}>
+            Total : {_fcfa(totalMontant)}
+          </span>
+        )}
+      </div>
+
+      {honoraires === null ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : filtrees.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 44, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}`, color: COULEURS.gris400, fontSize: 13, lineHeight: 1.65 }}>
+          {l.length === 0
+            ? "Aucun honoraire e-learning n'a encore été calculé. Ceux des cours dash se traitent depuis dash — les deux tables sont distinctes."
+            : 'Aucune fiche dans cet état.'}
+        </div>
+      ) : (
+        <div style={{ border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, overflow: 'hidden', background: COULEURS.blanc }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+              <thead>
+                <tr style={{ background: COULEURS.gris50, borderBottom: `1px solid ${COULEURS.gris200}` }}>
+                  <th style={th}>Période</th><th style={th}>Coach</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Heures</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Montant net</th>
+                  <th style={th}>État</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtrees.map(h => {
+                  const st = STATUTS[h.statut || 'brouillon'] || STATUTS.brouillon;
+                  return (
+                    <tr key={h.id} style={{ borderBottom: `1px solid ${COULEURS.gris100}` }}>
+                      <td style={{ ...td, fontWeight: 700 }}>
+                        {_MOIS_LIB[(Number(h.mois) || 1) - 1]} {h.annee || ''}
+                      </td>
+                      <td style={td}>{h.coach_nom || h.coach_id || '—'}</td>
+                      <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {h.total_heures ?? h.heures ?? '—'}
+                      </td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                        {_fcfa(h.montant_net ?? h.montant_total)}
+                      </td>
+                      <td style={td}>
+                        <span style={{ background: st.bg, color: st.c, borderRadius: 20,
+                          padding: '3px 10px', fontSize: 10.5, fontWeight: 700 }}>{st.lib}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * EXPORTS COMPTABLES — sortir les états en Excel.
+ *
+ * TOUT EST GÉNÉRÉ CÔTÉ CLIENT, à partir des données que les autres onglets lisent déjà : il
+ * n'existe aucune route d'export côté serveur, ni pour dash ni ici. L'écran charge donc lui-même
+ * ce qu'il exporte, pour ne pas dépendre de l'ordre dans lequel on a visité les onglets.
+ *
+ * CHAQUE BOUTON ANNONCE SON NOMBRE DE LIGNES et se désactive à zéro : un export vide
+ * téléchargé sans rien dire se lit comme une panne.
+ */
+export function OngletComptaExports() {
+  const { couleurTheme } = useTheme();
+  const honoraires = useHonorairesElearning();
+  const [factures, setFactures] = useState(null);
+  const [paiements, setPaiements] = useState(null);
+  const [enCours, setEnCours] = useState(null);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      for (const [chemin, cle, poser] of [
+        ['/api/comptabilite/factures', 'factures', setFactures],
+        ['/api/comptabilite/paiements', 'paiements', setPaiements],
+      ]) {
+        try {
+          const r = await fetch(`${_API_URL_ADMIN}${chemin}`, { headers: _authHdrsAdmin() });
+          const d = await r.json().catch(() => ({}));
+          if (vivant) poser(Array.isArray(d[cle]) ? d[cle] : []);
+        } catch { if (vivant) poser([]); }
+      }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  async function exporter(nom, titre, colonnes, lignes) {
+    if (!lignes.length || enCours) return;
+    setEnCours(nom);
+    try {
+      await exporterExcelStyle({
+        nomFichier: `${nom}_elearning_${new Date().toISOString().slice(0, 10)}`,
+        titre, sousTitre: `BET E-Learning · généré le ${new Date().toLocaleDateString('fr-FR')}`,
+        couleurEntete: String(couleurTheme || '#0891B2').replace('#', ''),
+        colonnes, lignes,
+      });
+    } catch { /* l'utilitaire affiche son propre message */ }
+    finally { setEnCours(null); }
+  }
+
+  const blocs = [
+    {
+      nom: 'honoraires', titre: 'Honoraires coaches', icone: '🧾',
+      quoi: 'Fiches mensuelles : période, coach, heures, montant net, état.',
+      donnees: honoraires,
+      lancer: () => exporter('honoraires', 'Honoraires coaches',
+        [{ label: 'Période', width: 18 }, { label: 'Coach', width: 26 },
+         { label: 'Heures', width: 10, align: 'right' }, { label: 'Montant net', width: 16, align: 'right' },
+         { label: 'État', width: 14 }],
+        (honoraires || []).map(h => [
+          `${_MOIS_LIB[(Number(h.mois) || 1) - 1]} ${h.annee || ''}`,
+          h.coach_nom || h.coach_id || '', h.total_heures ?? h.heures ?? '',
+          Number(h.montant_net ?? h.montant_total) || 0, h.statut || 'brouillon'])),
+    },
+    {
+      nom: 'factures', titre: 'Factures', icone: '📄',
+      quoi: 'Numéro, client, date, montant, état de règlement.',
+      donnees: factures,
+      lancer: () => exporter('factures', 'Factures',
+        [{ label: 'Numéro', width: 18 }, { label: 'Client', width: 28 },
+         { label: 'Date', width: 14 }, { label: 'Montant', width: 16, align: 'right' },
+         { label: 'État', width: 14 }],
+        (factures || []).map(f => [
+          f.numero || '', f.client_nom || f.client || '', (f.date || f.created_at || '').slice(0, 10),
+          Number(f.montant_total ?? f.montant) || 0, f.statut || ''])),
+    },
+    {
+      nom: 'paiements', titre: 'Encaissements', icone: '💳',
+      quoi: 'Date, origine, mode de règlement, montant.',
+      donnees: paiements,
+      lancer: () => exporter('paiements', 'Encaissements',
+        [{ label: 'Date', width: 14 }, { label: 'Origine', width: 28 },
+         { label: 'Mode', width: 16 }, { label: 'Montant', width: 16, align: 'right' }],
+        (paiements || []).map(p => [
+          (p.date || p.created_at || '').slice(0, 10), p.libelle || p.facture_numero || '',
+          p.mode || p.mode_paiement || '', Number(p.montant) || 0])),
+    },
+  ];
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>⬇ Exports comptables</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          États BET E-Learning au format Excel — les écritures dash s'exportent depuis dash
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
+        {blocs.map(b => {
+          const n = (b.donnees || []).length;
+          const charge = b.donnees === null;
+          return (
+            <div key={b.nom} style={{ background: COULEURS.blanc, border: `1.5px solid ${COULEURS.gris200}`,
+              borderRadius: 14, padding: '18px 20px' }}>
+              <div style={{ fontSize: 24, marginBottom: 9 }}>{b.icone}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: COULEURS.navy }}>{b.titre}</div>
+              <p style={{ margin: '5px 0 14px', fontSize: 12, color: COULEURS.gris400, lineHeight: 1.55 }}>
+                {b.quoi}
+              </p>
+              <button onClick={b.lancer} disabled={charge || n === 0 || !!enCours}
+                style={{ width: '100%', padding: '9px 0', borderRadius: 9, border: 'none',
+                  cursor: charge || n === 0 ? 'not-allowed' : 'pointer',
+                  background: couleurTheme, color: '#fff', fontSize: 12.5, fontWeight: 700,
+                  opacity: charge || n === 0 || enCours ? 0.45 : 1,
+                  fontFamily: '"Plus Jakarta Sans",sans-serif' }}>
+                {charge ? 'Chargement…'
+                  : enCours === b.nom ? 'Export…'
+                  : n === 0 ? 'Aucune donnée à exporter'
+                  : `Exporter ${n} ligne${n > 1 ? 's' : ''}`}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

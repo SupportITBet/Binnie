@@ -11,8 +11,8 @@ import { MOCK_SESSIONS, MOCK_GROUPES } from '../../mock/sessions';
 import { ModalRenouvellementContrat, STATUT_CONTRAT_LIB } from './GestionEntreprises';
 import { genererRecuVersement } from '../../utils/recuVersement';
 import { useTheme } from '../../contexts/ThemeContext';
-import { OngletComptaApercu, OngletComptaFacturation, OngletComptaPaiements, OngletComptaFournisseurs, OngletComptaTresorerie, OngletComptaRrdBcBacn, OngletComptaGenerale, OngletComptaTva, OngletComptaImmobilisations, OngletComptaBudgets, OngletComptaAnalytique } from './DashboardComptable';
-import { OngletRHPaieBulletins, OngletRHContrats, OngletRHConges, OngletRHPaieApercu } from './DashboardRhPaie';
+import { OngletComptaApercu, OngletComptaFacturation, OngletComptaPaiements, OngletComptaFournisseurs, OngletComptaTresorerie, OngletComptaRrdBcBacn, OngletComptaGenerale, OngletComptaTva, OngletComptaImmobilisations, OngletComptaBudgets, OngletComptaAnalytique , OngletComptaMesTaches, OngletComptaHonorairesCoaches, OngletComptaExports } from './DashboardComptable';
+import { OngletRHPaieBulletins, OngletRHContrats, OngletRHConges, OngletRHPaieApercu, OngletRHPaieMesTaches, OngletRHGrilleTarifaire } from './DashboardRhPaie';
 import { OngletCustomerCare } from './DashboardCustomerCare';
 import { OngletRemplacements } from './DashboardAdminShared';
 import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsElearning } from './DashboardSuperviseur';
@@ -4777,6 +4777,16 @@ export default function DashboardAdmin() {
           ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/tresorerie' ? (
             <OngletComptaTresorerie />
 
+          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/taches' ? (
+            <OngletComptaMesTaches />
+          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/honoraires' ? (
+            <OngletComptaHonorairesCoaches />
+          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/exports' ? (
+            <OngletComptaExports />
+          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/taches' ? (
+            <OngletRHPaieMesTaches />
+          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/grille' ? (
+            <OngletRHGrilleTarifaire />
           ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/rrd-bc-bacn' ? (
             <OngletComptaRrdBcBacn />
 

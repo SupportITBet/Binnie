@@ -791,3 +791,233 @@ export function OngletRHPaieApercu() {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   MES TÂCHES & GRILLE TARIFAIRE — portés depuis dash (RHPaieDashboard.jsx)
+
+   LES HONORAIRES SONT SÉPARÉS PAR PLATEFORME, LA GRILLE NE L'EST PAS. C'est volontaire des
+   deux côtés, et il faut comprendre pourquoi :
+
+     · les montants dus vivent dans deux tables jumelles — `honoraires_mois` pour dash,
+       `honoraires_elearning_mois` ici — parce qu'ils se calculent sur des séances distinctes.
+       Les mélanger ferait apparaître dans un bulletin des heures faites sur l'autre
+       plateforme.
+     · le BARÈME, lui, est unique : une ligne de la table `parametres`, clé
+       `grille_tarifaire`. Un coach de catégorie B est payé au même tarif horaire quelle que
+       soit la plateforme — avoir deux barèmes aurait été une source d'écart inexplicable sur
+       une fiche de paie.
+
+   D'où une seule route pour la grille (`GET /api/seances/grille-tarifaire`, sans notion de
+   plateforme) et deux pour les honoraires. L'écran ci-dessous le dit explicitement, pour que
+   personne ne cherche une « grille e-learning » qui n'existe pas.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * MES TÂCHES — ce qui attend le service RH.
+ *
+ * Les deux compteurs portent sur les honoraires e-learning : ceux en attente de validation,
+ * et ceux validés mais pas encore transmis au paiement. C'est la file réelle du métier —
+ * dash compte exactement ces deux-là sur sa propre table.
+ */
+export function OngletRHPaieMesTaches() {
+  const { couleurTheme } = useTheme();
+  const [honoraires, setHonoraires] = useState(null);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/elearning/honoraires`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setHonoraires(Array.isArray(d.honoraires) ? d.honoraires : []);
+      } catch { if (vivant) setHonoraires([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const chargement = honoraires === null;
+  const l = honoraires || [];
+  const aValider  = l.filter(h => !h.statut || h.statut === 'brouillon' || h.statut === 'en_attente').length;
+  const aTransmettre = l.filter(h => h.statut === 'valide').length;
+
+  const taches = [
+    { icone: '🧾', label: 'Honoraires en attente de validation', n: aValider,     vers: '/admin/rh/paie' },
+    { icone: '📤', label: 'Honoraires validés à transmettre',    n: aTransmettre, vers: '/admin/rh/paie' },
+  ];
+  const ouvertes = taches.filter(t => t.n > 0);
+  const total = taches.reduce((s, t) => s + t.n, 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>✅ Mes tâches</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          {chargement ? 'Calcul en cours…'
+            : total > 0 ? `${total} élément${total > 1 ? 's' : ''} à traiter au total.`
+            : 'Rien à traiter pour le moment — tout est à jour.'}
+        </p>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : ouvertes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>Aucune tâche en attente</div>
+          <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5, maxWidth: 420, margin: '5px auto 0', lineHeight: 1.6 }}>
+            {l.length === 0
+              ? "Aucun honoraire e-learning n'a encore été calculé. Les honoraires des cours dash se traitent depuis dash."
+              : `Les ${l.length} fiches d'honoraires sont traitées.`}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {ouvertes.map(t => (
+            <a key={t.label} href={t.vers}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none',
+                background: COULEURS.blanc, border: `1.5px solid ${COULEURS.gris200}`,
+                borderLeft: `4px solid ${couleurTheme}`, borderRadius: 12, padding: '15px 18px' }}>
+              <span style={{ fontSize: 22 }}>{t.icone}</span>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: COULEURS.navy }}>{t.label}</span>
+              <span style={{ background: couleurTheme + '18', color: couleurTheme, borderRadius: 20,
+                padding: '4px 12px', fontSize: 13, fontWeight: 800 }}>{t.n}</span>
+              <span style={{ color: COULEURS.gris400, fontSize: 16 }}>›</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * GRILLE TARIFAIRE — le barème horaire par catégorie de coach.
+ *
+ * EN LECTURE SEULE ICI, et c'est un choix. La grille est définie par le PA Advisor sur dash
+ * (`parametres.grille_tarifaire`) ; l'exposer en écriture des deux côtés créerait deux chemins
+ * pour modifier un barème unique, sans aucun moyen de savoir lequel a servi en dernier. Le RH
+ * a besoin de LIRE le tarif appliqué pour vérifier un bulletin — c'est ce que fait cet écran.
+ */
+export function OngletRHGrilleTarifaire() {
+  const { couleurTheme } = useTheme();
+  const [grille, setGrille] = useState(null);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/seances/grille-tarifaire`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setGrille(d.grille && typeof d.grille === 'object' ? d.grille : {});
+      } catch { if (vivant) setGrille({}); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const fmt = (n) => `${Number(n || 0).toLocaleString('fr-FR')} FCFA`;
+
+  /* LA GRILLE EST IMBRIQUÉE, PAS PLATE. Sa forme réelle en base est
+     `{ tarifs: { CDD: { domicile, en_ligne, presentiel }, … }, multiplicateurs: { "A1-A2": 1, … } }`.
+     Ma première version itérait les clés du premier niveau et affichait donc une seule ligne
+     « tarifs » contenant du JSON brut. On rend ici les deux sections telles qu'elles sont :
+     un tarif horaire par contrat et par canal, puis les coefficients de niveau. */
+  const tarifs = (grille && typeof grille.tarifs === 'object') ? grille.tarifs : {};
+  const multiplicateurs = (grille && typeof grille.multiplicateurs === 'object') ? grille.multiplicateurs : {};
+  /* Les canaux sont déduits des données, pas codés en dur : un canal ajouté par le PA
+     apparaît sans redéploiement, au lieu d'être silencieusement absent du tableau. */
+  const canaux = [...new Set(Object.values(tarifs).flatMap(v => Object.keys(v || {})))];
+  const LIB_CANAL = { en_ligne: 'En ligne', presentiel: 'Présentiel', domicile: 'À domicile' };
+  const vide = Object.keys(tarifs).length === 0 && Object.keys(multiplicateurs).length === 0;
+
+  const th = { padding: '10px 14px', fontSize: 11, color: COULEURS.gris600, textTransform: 'uppercase', textAlign: 'left', fontWeight: 700 };
+  const td = { padding: '12px 14px', fontSize: 13.5, color: COULEURS.gris900 };
+  const tdNum = { ...td, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>💰 Grille tarifaire</h2>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: COULEURS.gris400 }}>
+          Barème horaire appliqué au calcul des honoraires
+        </p>
+      </div>
+
+      <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 12,
+        padding: '13px 16px', marginBottom: 18, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>ℹ️</span>
+        <p style={{ margin: 0, fontSize: 12.5, color: '#3730A3', lineHeight: 1.65 }}>
+          <strong>Une seule grille pour les deux plateformes.</strong> Un coach est payé au même
+          tarif horaire qu'il enseigne sur dash ou sur BET E-Learning — seuls les montants dus
+          sont calculés séparément, sur les séances de chaque plateforme. La grille est définie
+          par le PA Advisor depuis dash ; elle est en lecture seule ici, pour qu'il n'existe pas
+          deux chemins pour modifier un même barème.
+        </p>
+      </div>
+
+      {grille === null ? (
+        <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
+      ) : vide ? (
+        <div style={{ textAlign: 'center', padding: 44, background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}`, color: COULEURS.gris400, fontSize: 13 }}>
+          Aucune grille tarifaire n'est définie. Le PA Advisor la renseigne depuis dash.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 20 }}>
+          {Object.keys(tarifs).length > 0 && (
+            <div>
+              <h3 style={{ fontSize: 13.5, fontWeight: 800, color: COULEURS.navy, margin: '0 0 10px' }}>
+                Tarif horaire par type de contrat
+              </h3>
+              <div style={{ border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, overflow: 'hidden', background: COULEURS.blanc }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+                    <thead>
+                      <tr style={{ background: COULEURS.gris50, borderBottom: `1px solid ${COULEURS.gris200}` }}>
+                        <th style={th}>Contrat</th>
+                        {canaux.map(c => (
+                          <th key={c} style={{ ...th, textAlign: 'right' }}>{LIB_CANAL[c] || c.replace(/_/g, ' ')}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(tarifs).map(([contrat, parCanal]) => (
+                        <tr key={contrat} style={{ borderBottom: `1px solid ${COULEURS.gris100}` }}>
+                          <td style={{ ...td, fontWeight: 700 }}>{contrat}</td>
+                          {canaux.map(c => (
+                            <td key={c} style={{ ...tdNum, color: (parCanal || {})[c] != null ? couleurTheme : COULEURS.gris200 }}>
+                              {(parCanal || {})[c] != null ? fmt(parCanal[c]) : '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {Object.keys(multiplicateurs).length > 0 && (
+            <div>
+              <h3 style={{ fontSize: 13.5, fontWeight: 800, color: COULEURS.navy, margin: '0 0 6px' }}>
+                Coefficients par niveau
+              </h3>
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: COULEURS.gris400 }}>
+                Le tarif horaire est multiplié par ce coefficient selon le niveau enseigné.
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {Object.entries(multiplicateurs).map(([niveau, coef]) => (
+                  <div key={niveau} style={{ background: COULEURS.blanc, border: `1.5px solid ${COULEURS.gris200}`,
+                    borderRadius: 12, padding: '13px 20px', minWidth: 118 }}>
+                    <div style={{ fontSize: 11, color: COULEURS.gris400, fontWeight: 700, textTransform: 'uppercase' }}>{niveau}</div>
+                    <div style={{ fontSize: 19, fontWeight: 800, color: couleurTheme, marginTop: 4,
+                      fontVariantNumeric: 'tabular-nums' }}>× {coef}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
