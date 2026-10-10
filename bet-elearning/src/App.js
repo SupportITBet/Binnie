@@ -113,6 +113,9 @@ const ROLES_ADMIN = [
   'admin_placement', 'admin_onboarding', 'admin_elearning', 'admin_customer_care',
   'admin_pa_advisor', 'admin_rh_paie', 'admin_comptable',
   'admin_commercial', 'admin_observateur', 'assistant_sav',
+  // Admis explicitement : si la façade `admin_manager` venait à changer, le super admin ne
+  // doit pas se retrouver exclu des routes d'administration.
+  'super_admin',
 ];
 
 function AppRoutes() {

@@ -162,6 +162,12 @@ export function AuthProvider({ children }) {
       // Remapper le rôle DB brut vers le rôle "façade" attendu par le frontend (même mapping
       // qu'au login, cf. LoginAdmin.jsx) - sans ça, un F5 sur un compte admin_* (onboarding,
       // superviseur, manager…) fait perdre le rôle façade et casse tout le routing basé dessus.
+      /* `role_reel` GARDE LE RÔLE DE LA BASE avant que la façade l'écrase. Sans lui, un super
+         admin devient indistinguable d'un manager : il s'affichait « Manager BET » dans
+         l'en-tête, et aucun écran ne pouvait savoir à qui il parlait. On ne s'en sert JAMAIS
+         pour router ou autoriser - c'est le rôle façade qui le fait, et le backend tranche de
+         son côté - uniquement pour dire qui est connecté. */
+      data.role_reel = data.role;
       if (data.role === 'coach') {
         data.role = data.type_coach === 'professeur_remplacant' ? 'professeur_remplacant' : 'professeur_titulaire';
       } else if (ROLE_MAP_BET[data.role]) {

@@ -188,6 +188,10 @@ export default function LoginAdmin() {
     const profilBet = {
       id:        profil.id,
       role:      roleBet,
+      // Le rôle de la base, conservé pour l'affichage. Voir ROLE_MAP_BET : un super admin
+      // porte la façade `admin_manager` parce que son dashboard est celui du manager, mais
+      // l'en-tête doit dire « Super Admin ». Jamais utilisé pour router ni autoriser.
+      role_reel: profil.role,
       prenom:    profil.prenom || '',
       nom:       profil.nom    || '',
       email:     profil.email  || email,

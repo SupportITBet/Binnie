@@ -1,4 +1,5 @@
 export const ROLES = {
+  SUPER_ADMIN:            'super_admin',
   APPRENANT:              'apprenant',
   PARENT:                 'parent',
   PROF_TITULAIRE:         'professeur_titulaire',
@@ -34,6 +35,13 @@ export const ROLES = {
 // AuthContext.jsx) - sans ce remapping au second endroit, le rôle repart en frontend
 // "brut" après un rechargement et casse tout le routing/nav basé sur `admin_xxx`.
 export const ROLE_MAP_BET = {
+  /* LE SUPER ADMIN GARDE LA FAÇADE `admin_manager`, ET C'EST DÉLIBÉRÉ.
+     Son dashboard EST celui du manager - même menu, mêmes écrans - donc la façade donne
+     exactement le bon résultat. La résoudre vers `super_admin` aurait fait échouer les
+     quatre-vingt-six contrôles `profile?.role === 'admin_manager'` répartis dans le code, et
+     lui aurait RETIRÉ des accès qu'il a aujourd'hui : l'inverse du but.
+     Son identité réelle n'est pas perdue pour autant : `role_reel` la conserve (voir
+     AuthContext.jsx et LoginAdmin.jsx), et c'est elle qui s'affiche dans l'en-tête. */
   super_admin:           'admin_manager',
   admin:                 'admin_manager',
   manager:               'admin_manager',
@@ -75,6 +83,8 @@ export const ROLE_MAP_BET = {
 };
 
 export const ROLE_REDIRECT = {
+  // Même point d'entrée que le manager : c'est le même dashboard.
+  super_admin:            '/admin/manager',
   apprenant:              '/apprenant/dashboard',
   parent:                 '/parent/dashboard',
   professeur_titulaire:   '/professeur/dashboard',
@@ -106,6 +116,7 @@ export const ROLE_LOGIN = {
 };
 
 export const LIBELLES_ROLES = {
+  super_admin:            'Super Admin',
   apprenant:              'Apprenant',
   parent:                 'Parent',
   professeur_titulaire:   'Professeur Titulaire',

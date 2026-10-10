@@ -368,7 +368,11 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
   const nbNotifs   = notifCtx?.nbNonLus || 0;
   // menuRole permet aux pages apprenant de passer leur menu adapté selon l'âge
   const menus        = MENUS_PAR_ROLE[menuRole] || MENUS_PAR_ROLE[profile?.role] || [];
-  const roleLibelle  = LIBELLES_ROLES[profile?.role] || profile?.role || '';
+  /* Le libellé vient du rôle RÉEL quand on le connaît, sinon de la façade. Un super admin
+     porte la façade `admin_manager` (son dashboard est celui du manager) et s'affichait donc
+     « Manager BET » : son identité était masquée à l'écran alors qu'elle compte pour savoir
+     qui a fait quoi. */
+  const roleLibelle  = LIBELLES_ROLES[profile?.role_reel] || LIBELLES_ROLES[profile?.role] || profile?.role || '';
   // Le surnom n'existait dans aucun des dix-sept dashboards de bet-elearning, alors que la
   // colonne vit sur `utilisateurs` - table ou figurent aussi bien le personnel que les
   // coachs, les apprenants et les parents. Le poser ici couvre d'un coup tous les ecrans

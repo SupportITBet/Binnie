@@ -95,6 +95,11 @@ export default function SSOLogin() {
       const profilBet = {
         id:         profil.id,
         role:       roleBet,
+        // C'EST LE CHEMIN QUE PREND LE SUPER ADMIN : son dashboard de dash propose un bouton
+        // SSO vers bet-elearning (SuperAdminDashboard.jsx). Sans `role_reel` ici, il arrivait
+        // etiquete « Manager BET » - la facade `admin_manager` etant correcte pour le routage,
+        // mais fausse pour dire qui est connecte.
+        role_reel:  profil.role,
         prenom:     profil.prenom  || '',
         nom:        profil.nom     || '',
         email:      profil.email   || '',
