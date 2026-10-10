@@ -19255,6 +19255,28 @@ export default function SuperAdminDashboard() {
 
                   setUsers(users.map(u=>u.id===editingUser.id?editingUser:u));
                   if(old.role!==editingUser.role) addAuditEntry("ROLE_MODIFIE",`${editingUser.nom} : ${old.role} → ${editingUser.role}`);
+
+                  /* ── PRÉVENIR LA PERSONNE QUAND ON LUI OUVRE L'E-LEARNING ──
+                     L'accès était accordé en silence : rien ne disait à l'intéressé qu'une
+                     plateforme venait de s'ouvrir pour lui, ni où aller. On ne notifie qu'à
+                     la BASCULE vers l'activation — `old.acces_elearning` contre la nouvelle
+                     valeur — pour ne pas renvoyer le même message à chaque enregistrement du
+                     profil, et jamais au retrait, qui n'appelle pas d'action de sa part.
+                     L'échec n'interrompt pas la sauvegarde : le droit, lui, est bien accordé. */
+                  if (!old.acces_elearning && editingUser.acces_elearning) {
+                    fetch(`${API_URL}/api/notifications`, {
+                      method: "POST",
+                      headers: { ...authHeaders(), "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        user_id: editingUser.id,
+                        type:    "succes",
+                        titre:   "🎓 Accès à BET E-Learning activé",
+                        message: `Votre accès à la plateforme BET E-Learning vient d'être ouvert. Connectez-vous sur ${ELEARNING_URL} avec vos identifiants habituels.`,
+                        meta:    { source: "super_admin", action: "acces_elearning_active", url: ELEARNING_URL },
+                      }),
+                    }).catch(() => {});
+                    addAuditEntry("ACCES_ELEARNING_ACCORDE", `${editingUser.prenom || ""} ${editingUser.nom || ""}`.trim());
+                  }
                   try {
                     const myProfil=JSON.parse(localStorage.getItem("admin_profil")||"null");
                     if(myProfil&&myProfil.id===editingUser.id){ localStorage.setItem("admin_profil",JSON.stringify({...myProfil,couleur:editingUser.couleur||null})); }

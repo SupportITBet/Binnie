@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLE_REDIRECT } from '../../constants/roles';
+import { ROLE_REDIRECT, ROLE_MAP_BET, roleBetDe } from '../../constants/roles';
 import { COULEURS } from '../../constants/couleurs';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
-const ROLE_MAP_BET = {
-  coach: 'professeur_titulaire',
-  super_admin: 'admin_manager', manager: 'admin_manager',
-};
+/* Table centrale, plus de copie locale : celle-ci renvoyait encore `super_admin` et `manager`
+   vers `admin_manager`, l'ancienne façade fusionnée. */
 
 export default function LoginProfesseur() {
   const { connexionReel } = useAuth();
@@ -40,7 +38,10 @@ export default function LoginProfesseur() {
         return;
       }
 
-      const roleBet = ROLE_MAP_BET[data.profil.role] || 'professeur_titulaire';
+      /* Le repli `|| 'professeur_titulaire'` promouvait n'importe quel rôle inconnu en
+         professeur titulaire. `roleBetDe` rend `null` sur un rôle vraiment inconnu ; le repli
+         ne s'applique plus qu'aux comptes coach, seuls attendus sur cette page. */
+      const roleBet = roleBetDe(data.profil.role) || 'professeur_titulaire';
       const profilBet = {
         id: data.profil.id, role: roleBet,
         prenom: data.profil.prenom || '', nom: data.profil.nom || '',

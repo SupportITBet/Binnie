@@ -4,7 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useMessagerie } from '../../contexts/MessagerieContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { COULEURS } from '../../constants/couleurs';
-import { LIBELLES_ROLES, ROLE_LOGIN } from '../../constants/roles';
+import { LIBELLES_ROLES, ROLE_LOGIN, estRole } from '../../constants/roles';
+import BandeauMaNote from './BandeauMaNote';
 import { MOCK_ENTREPRISES } from '../../mock/entreprises';
 import BoutonLangue from './BoutonLangue';
 import { useTheme, PALETTE_THEME } from '../../contexts/ThemeContext';
@@ -33,69 +34,103 @@ const eclaircirCouleur = (hex, ratio) => melangerCouleur(hex, 255, ratio);
 
 const MENUS_PAR_ROLE = {
   // ── Apprenant : menu adulte = fallback utilisé par PageMessages / PageNotifications ──
+  /* LE MENU GÉNÉRIQUE doit porter les MÊMES entrées que les trois menus par tranche d'âge.
+     Mini-jeux et Dictionnaire y manquaient : un apprenant dont le rôle est resté
+     `apprenant`, sans typage d'âge, perdait l'accès aux mini-jeux — ceux-là mêmes qui sont
+     en production. Ce menu est le repli, pas une version réduite. */
   apprenant: [
     { libelle: 'Tableau de bord',  icone: '🏠', chemin: '/apprenant/dashboard' },
+    { libelle: 'Mon profil',       icone: '👤', chemin: '/apprenant/profil' },
     { libelle: 'Onboarding',       icone: '👋', chemin: '/apprenant/onboarding' },
     { libelle: 'Mes cours',        icone: '📖', chemin: '/apprenant/cours' },
     { libelle: 'Exercices & Devoirs', icone: '✏️', chemin: '/apprenant/devoirs' },
     { libelle: 'Fichiers du cours',icone: '📂', chemin: '/apprenant/ressources' },
+    { libelle: 'Planning',         icone: '📅', chemin: '/apprenant/planning' },
     { libelle: 'Session live',     icone: '🎥', chemin: '/apprenant/session' },
     { libelle: 'Présences',        icone: '✅', chemin: '/apprenant/presences' },
+    { libelle: 'Mini-jeux',        icone: '🎮', chemin: '/apprenant/minijeux' },
+    { libelle: 'Dictionnaire',     icone: '📘', chemin: '/apprenant/dictionnaire' },
     { libelle: 'Progression',      icone: '📈', chemin: '/apprenant/progression' },
+    { libelle: 'Objectifs',        icone: '🎯', chemin: '/apprenant/objectifs' },
     { libelle: 'Résultats & Bulletins', icone: '📊', chemin: '/apprenant/resultats' },
     { libelle: 'Badges',           icone: '🌟', chemin: '/apprenant/badges' },
     { libelle: 'Classement',       icone: '🏆', chemin: '/apprenant/classement' },
+    { libelle: 'Paiement',         icone: '💳', chemin: '/apprenant/paiement' },
+    { libelle: 'Boutique',         icone: '🛒', chemin: '/apprenant/boutique' },
+    { libelle: 'Mon témoignage',   icone: '⭐', chemin: '/apprenant/temoignage' },
+    { libelle: 'Contacts & Support', icone: '📞', chemin: '/apprenant/support' },
     { libelle: 'Notifications',    icone: '🔔', chemin: '/apprenant/notifications', notifications: true },
     { libelle: 'Messages',         icone: '📩', chemin: '/apprenant/messages', messagerie: true },
   ],
   apprenant_adulte: [
     { libelle: 'Tableau de bord',  icone: '🏠', chemin: '/apprenant/dashboard' },
+    { libelle: 'Mon profil',       icone: '👤', chemin: '/apprenant/profil' },
     { libelle: 'Onboarding',       icone: '👋', chemin: '/apprenant/onboarding' },
     { libelle: 'Mes cours',        icone: '📖', chemin: '/apprenant/cours' },
     { libelle: 'Exercices & Devoirs', icone: '✏️', chemin: '/apprenant/devoirs' },
     { libelle: 'Fichiers du cours',icone: '📂', chemin: '/apprenant/ressources' },
+    { libelle: 'Planning',         icone: '📅', chemin: '/apprenant/planning' },
     { libelle: 'Session live',     icone: '🎥', chemin: '/apprenant/session' },
     { libelle: 'Présences',        icone: '✅', chemin: '/apprenant/presences' },
     { libelle: 'Mini-jeux',        icone: '🎮', chemin: '/apprenant/minijeux' },
     { libelle: 'Dictionnaire',     icone: '📘', chemin: '/apprenant/dictionnaire' },
     { libelle: 'Progression',      icone: '📈', chemin: '/apprenant/progression' },
+    { libelle: 'Objectifs & Certifications', icone: '🎯', chemin: '/apprenant/objectifs' },
     { libelle: 'Résultats & Bulletins', icone: '📊', chemin: '/apprenant/resultats' },
     { libelle: 'Badges',           icone: '🌟', chemin: '/apprenant/badges' },
     { libelle: 'Classement',       icone: '🏆', chemin: '/apprenant/classement' },
+    { libelle: 'Paiement',         icone: '💳', chemin: '/apprenant/paiement' },
+    { libelle: 'Boutique',         icone: '🛒', chemin: '/apprenant/boutique' },
+    { libelle: 'Mon témoignage',   icone: '⭐', chemin: '/apprenant/temoignage' },
+    { libelle: 'Contacts & Support', icone: '📞', chemin: '/apprenant/support' },
     { libelle: 'Notifications',    icone: '🔔', chemin: '/apprenant/notifications', notifications: true },
     { libelle: 'Messages',         icone: '📩', chemin: '/apprenant/messages', messagerie: true },
   ],
   apprenant_enfant: [
     { libelle: 'Accueil',          icone: '🏠', chemin: '/apprenant/dashboard' },
+    { libelle: 'Mon profil',       icone: '👤', chemin: '/apprenant/profil' },
     { libelle: 'Onboarding',       icone: '👋', chemin: '/apprenant/onboarding' },
     { libelle: 'Mes cours',        icone: '📚', chemin: '/apprenant/cours' },
     { libelle: 'Exercices & Devoirs', icone: '✏️', chemin: '/apprenant/devoirs' },
     { libelle: 'Mes fichiers',     icone: '📂', chemin: '/apprenant/ressources' },
+    { libelle: 'Mon planning',     icone: '📅', chemin: '/apprenant/planning' },
     { libelle: 'Mon Live',         icone: '🎥', chemin: '/apprenant/session' },
     { libelle: 'Mes présences',    icone: '✅', chemin: '/apprenant/presences' },
     { libelle: 'Dictionnaire',     icone: '📘', chemin: '/apprenant/dictionnaire' },
     { libelle: 'Progression',      icone: '🌈', chemin: '/apprenant/progression' },
+    { libelle: 'Mes objectifs',    icone: '🎯', chemin: '/apprenant/objectifs' },
     { libelle: 'Résultats & Bulletins', icone: '📊', chemin: '/apprenant/resultats' },
     { libelle: 'Mes badges',       icone: '⭐', chemin: '/apprenant/badges' },
     { libelle: 'Classement',       icone: '🏆', chemin: '/apprenant/classement' },
     { libelle: 'Mini-jeux',        icone: '🎮', chemin: '/apprenant/minijeux' },
+    { libelle: 'Boutique',         icone: '🛒', chemin: '/apprenant/boutique' },
+    /* NI PAIEMENT NI TÉMOIGNAGE POUR UN ENFANT : la facturation se traite avec le parent,
+       qui a son propre espace, et un témoignage public demande un consentement qu'un
+       mineur ne peut pas donner seul. */
+    { libelle: 'Contacts & Support', icone: '📞', chemin: '/apprenant/support' },
     { libelle: 'Notifications',    icone: '🔔', chemin: '/apprenant/notifications', notifications: true },
     { libelle: 'Messages',         icone: '📩', chemin: '/apprenant/messages', messagerie: true },
   ],
   apprenant_adolescent: [
     { libelle: 'Tableau de bord',  icone: '🏠', chemin: '/apprenant/dashboard' },
+    { libelle: 'Mon profil',       icone: '👤', chemin: '/apprenant/profil' },
     { libelle: 'Onboarding',       icone: '👋', chemin: '/apprenant/onboarding' },
     { libelle: 'Mes cours',        icone: '📖', chemin: '/apprenant/cours' },
     { libelle: 'Exercices & Devoirs', icone: '✏️', chemin: '/apprenant/devoirs' },
     { libelle: 'Fichiers',         icone: '📂', chemin: '/apprenant/ressources' },
+    { libelle: 'Planning',         icone: '📅', chemin: '/apprenant/planning' },
     { libelle: 'Session live',     icone: '🎥', chemin: '/apprenant/session' },
     { libelle: 'Présences',        icone: '✅', chemin: '/apprenant/presences' },
     { libelle: 'Dictionnaire',     icone: '📘', chemin: '/apprenant/dictionnaire' },
     { libelle: 'Progression',      icone: '📈', chemin: '/apprenant/progression' },
+    { libelle: 'Mes objectifs',    icone: '🎯', chemin: '/apprenant/objectifs' },
     { libelle: 'Résultats & Bulletins', icone: '📊', chemin: '/apprenant/resultats' },
     { libelle: 'Badges',           icone: '🌟', chemin: '/apprenant/badges' },
     { libelle: 'Classement',       icone: '🏆', chemin: '/apprenant/classement' },
     { libelle: 'Mini-jeux',        icone: '🎮', chemin: '/apprenant/minijeux' },
+    { libelle: 'Boutique',         icone: '🛒', chemin: '/apprenant/boutique' },
+    // Mineur : la facturation reste du ressort du parent, comme pour l'enfant.
+    { libelle: 'Contacts & Support', icone: '📞', chemin: '/apprenant/support' },
     { libelle: 'Notifications',    icone: '🔔', chemin: '/apprenant/notifications', notifications: true },
     { libelle: 'Messages',         icone: '📩', chemin: '/apprenant/messages', messagerie: true },
   ],
@@ -113,8 +148,14 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Messages',        icone: '💬', chemin: '/parent/messages', messagerie: true },
   ],
   professeur_titulaire: [
+    { libelle: 'Mes tâches',      icone: '✅', chemin: '/professeur/taches' },
     { libelle: 'Tableau de bord', icone: '🏠', chemin: '/professeur/dashboard' },
     { libelle: 'Planning',        icone: '📅', chemin: '/professeur/planning' },
+    /* La grille de disponibilités est PROPRE à bet-elearning : c'est elle qui alimente
+       l'onglet Disponibilités du dossier coach chez le superviseur, vide jusqu'ici faute
+       de source e-learning. */
+    { libelle: 'Disponibilités',  icone: '🗓️', chemin: '/professeur/disponibilites' },
+    { libelle: 'Mes contrats',    icone: '📋', chemin: '/professeur/contrats' },
     { libelle: 'Mes demandes',    icone: '📨', chemin: '/professeur/demandes' },
     { libelle: 'Apprenants',      icone: '👩‍🎓', chemin: '/professeur/apprenants' },
     { libelle: 'Médiathèque',     icone: '📁', chemin: '/professeur/mediatheque' },
@@ -124,20 +165,18 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Notes & Devoirs', icone: '📋', chemin: '/professeur/notes' },
     { libelle: 'Paiements',       icone: '💰', chemin: '/professeur/paiements' },
     { libelle: 'Récompenses',     icone: '🏆', chemin: '/professeur/recompenses' },
+    { libelle: 'Mon profil',      icone: '👤', chemin: '/professeur/profil' },
     { libelle: 'Notifications',   icone: '🔔', chemin: '/professeur/notifications', notifications: true },
     { libelle: 'Messages',        icone: '💬', chemin: '/professeur/messages', messagerie: true },
   ],
-  professeur_remplacant: [
-    { libelle: 'Tableau de bord', icone: '🏠', chemin: '/professeur/dashboard' },
-    { libelle: 'Planning',        icone: '📅', chemin: '/professeur/planning' },
-    { libelle: 'Apprenants',      icone: '👩‍🎓', chemin: '/professeur/apprenants' },
-    { libelle: 'Présences',       icone: '✅', chemin: '/professeur/presences' },
-    { libelle: 'Notes & Devoirs', icone: '📋', chemin: '/professeur/notes' },
-    { libelle: 'Fichiers partagés',icone:'📂', chemin: '/professeur/fichiers' },
-    { libelle: 'Paiements',       icone: '💰', chemin: '/professeur/paiements' },
-    { libelle: 'Notifications',   icone: '🔔', chemin: '/professeur/notifications', notifications: true },
-    { libelle: 'Messages',        icone: '💬', chemin: '/professeur/messages', messagerie: true },
-  ],
+  /* PAS DE MENU PROPRE AU REMPLAÇANT - voir l'alias après la table.
+     Il n'existe pas d'« espace remplaçant » : ce sont les mêmes coachs titulaires qui se
+     remplacent les uns les autres, exactement comme chez dash, dont l'Espace Professeur
+     n'a qu'une seule liste d'onglets quel que soit le rôle. « Remplaçant » qualifie une
+     DÉLÉGATION - qui remplace qui sur telle séance - pas une personne diminuée.
+     Le menu réduit qui existait ici privait le coach de Session live et de Médiathèque le
+     jour où il remplaçait : on lui demandait d'animer une séance sans accès à la salle ni
+     aux supports. */
   admin_manager: [
     { libelle: "Vue d'ensemble",      icone: '📊', chemin: '/admin/manager' },
     // Réorganisé par thème : pilotage → opérationnel (business client, le plus manipulé au
@@ -197,12 +236,23 @@ const MENUS_PAR_ROLE = {
   admin_onboarding: [
     { libelle: 'Mes tâches',          icone: '✅', chemin: '/admin/onboarding/taches' },
     { libelle: "Vue d'ensemble",      icone: '📊', chemin: '/admin/onboarding' },
+    /* « Parcours » EST l'écran d'assignation de l'Onboarding : elle y ouvre un dossier,
+       lit la fiche complète et choisit la classe. */
     { libelle: 'Parcours',            icone: '📋', chemin: '/admin/onboarding/parcours' },
-    { libelle: 'Inscriptions',        icone: '📥', chemin: '/admin/onboarding/inscriptions' },
+    /* « Inscriptions » A ÉTÉ RETIRÉ : la saisie d'un bénéficiaire revient à l'assistante
+       e-learning (onglet « Inscrire »). L'Onboarding ne crée plus de dossier, elle reçoit
+       ceux que l'assistante a saisis, vérifiés et transmis. L'écran existe toujours et
+       reste atteignable par son URL — on retire l'entrée de menu, pas la fonction, pour ne
+       pas casser un lien envoyé par notification. */
+    { libelle: 'Mes apprenants',      icone: '🎓', chemin: '/admin/onboarding/apprenants' },
     { libelle: 'Suivi démarrage',     icone: '🚀', chemin: '/admin/onboarding/suivi' },
+    // L'onboarding est le seul à pouvoir réaffecter un dossier en double : les demandes de
+    // transfert émises par les coachs lui reviennent, comme chez dash.
+    { libelle: 'Dossiers à réaffecter', icone: '🔄', chemin: '/admin/onboarding/reaffectations' },
     { libelle: 'Plannings',          icone: '📅', chemin: '/admin/onboarding/plannings' },
     { libelle: 'Entreprises',         icone: '🏢', chemin: '/admin/onboarding/entreprises' },
     { libelle: 'Classes',             icone: '🏫', chemin: '/admin/onboarding/classes' },
+    { libelle: 'Coachs',              icone: '👨‍🏫', chemin: '/admin/onboarding/coachs' },
     { libelle: 'Contenus',            icone: '📚', chemin: '/admin/onboarding/contenus' },
     { libelle: 'Notifications',       icone: '🔔', chemin: '/admin/notifications', notifications: true },
     { libelle: 'Messages',            icone: '💬', chemin: '/admin/messages', messagerie: true },
@@ -227,7 +277,12 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Mes tâches',         icone: '✅', chemin: '/admin/vente/taches' },
     { libelle: 'Tableau de bord',    icone: '📊', chemin: '/admin/vente/tableau-de-bord' },
     { libelle: 'Tests reçus',        icone: '📝', chemin: '/admin/vente/tests' },
-    { libelle: 'Inscriptions',       icone: '📥', chemin: '/admin/vente/inscriptions' },
+    /* « Inscriptions » (/admin/vente/inscriptions) A ÉTÉ RETIRÉ. Deux entrées portaient
+       presque le même nom pour deux choses sans rapport : celle-ci lisait
+       `assignations_parcours` via `/api/parcours/assignations`, c'est-à-dire le PIPELINE
+       COMMERCIAL DE DASH, tandis que « Inscrire » et « Parcours » plus bas travaillent sur
+       `inscriptions_elearning`. Un dossier saisi dans l'un n'apparaissait jamais dans
+       l'autre, et rien ne le disait. L'écran reste atteignable par son URL. */
     { libelle: 'Mes classes',        icone: '🏫', chemin: '/admin/vente/classes' },
     { libelle: 'Plannings',          icone: '📅', chemin: '/admin/vente/plannings' },
     { libelle: 'Mes apprenants',     icone: '🎓', chemin: '/admin/vente/apprenants' },
@@ -239,7 +294,16 @@ const MENUS_PAR_ROLE = {
        présents juste en dessous et qui montent `GestionEntreprises` (5 203 l.) et
        `DashboardAssistantCommercial` (821 l.) — plus riches que les onglets de dash. Deux
        entrées de menu vers le même écran se lisent comme un bug, pas comme une commodité. */
-    { libelle: "Vue d'ensemble",  icone: '📊', chemin: '/admin/elearning/overview'     },
+    /* ── LE DOSSIER, DE BOUT EN BOUT ──
+       L'assistante e-learning saisit, vérifie et transmet ; l'Onboarding ne fait plus que
+       l'assignation à la classe et les réaffectations ; le PA Advisor assigne le coach.
+       Ces deux écrans sont ceux de l'Onboarding, montés ici tels quels - une copie aurait
+       divergé, et les deux rôles ne verraient plus le même dossier.
+       « Inscrire » et « Parcours » portent des noms distincts de l'onglet « Inscriptions »
+       plus haut, qui lit le pipeline de dash (`/api/parcours/assignations`) et n'a rien à
+       voir avec `inscriptions_elearning`. */
+    { libelle: 'Inscrire',        icone: '📝', chemin: '/admin/elearning/inscrire'     },
+    { libelle: 'Parcours',        icone: '📋', chemin: '/admin/elearning/parcours'     },
     { libelle: 'Programme',       icone: '📈', chemin: '/admin/elearning/programme'    },
     { libelle: 'Reporting',       icone: '📋', chemin: '/admin/elearning/reporting'    },
     { libelle: 'Entreprises',     icone: '🏢', chemin: '/admin/elearning/entreprises'  },
@@ -273,6 +337,9 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Messages',            icone: '💬', chemin: '/admin/messages', messagerie: true },
   ],
   admin_pa_advisor: [
+    // « Mes tâches » en tête, comme pour les neuf autres rôles : c'est l'écran
+    // d'aiguillage, celui qui dit où aller avant d'ouvrir quoi que ce soit.
+    { libelle: 'Mes tâches',           icone: '✅', chemin: '/admin/pa-advisor/taches' },
     { libelle: "Vue d'ensemble",       icone: '📊', chemin: '/admin/pa-advisor/overview' },
     { libelle: 'Classes',              icone: '🏫', chemin: '/admin/pa-advisor/classes' },
     { libelle: 'Coachs',                icone: '👨‍🏫', chemin: '/admin/pa-advisor/coachs' },
@@ -281,7 +348,12 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Honoraires',            icone: '💰', chemin: '/admin/pa-advisor/honoraires' },
     { libelle: 'Suivi apprenants',      icone: '👩‍🎓', chemin: '/admin/pa-advisor/apprenants' },
     { libelle: 'Suivi programme',       icone: '📈', chemin: '/admin/pa-advisor/programme' },
-    { libelle: 'Évaluations',           icone: '⭐', chemin: '/admin/pa-advisor/evaluations' },
+    { libelle: 'Évaluations parents',   icone: '⭐', chemin: '/admin/pa-advisor/evaluations' },
+    // Les apprenants et les parents sont DEUX regards distincts : les fondre dans un seul
+    // onglet ferait dire aux familles ce qu'ont dit les apprenants. Nom de l'onglet
+    // « Évaluations » précisé en « Évaluations parents » pour la même raison.
+    { libelle: 'Évaluations apprenants', icone: '🎓', chemin: '/admin/pa-advisor/eval-apprenants' },
+    { libelle: 'Dossiers à réaffecter', icone: '🔀', chemin: '/admin/pa-advisor/reaffectations' },
     { libelle: 'Reporting',             icone: '📊', chemin: '/admin/pa-advisor/reporting' },
     { libelle: 'Notifications',         icone: '🔔', chemin: '/admin/notifications', notifications: true },
     { libelle: 'Messages',              icone: '💬', chemin: '/admin/messages', messagerie: true },
@@ -328,6 +400,134 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Messages',           icone: '💬', chemin: '/entreprise/messages', messagerie: true },
   ],
 };
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   UN MÉTIER, UN RÔLE — LES ALIAS DE MENU
+
+   Les clés ci-dessus portent les anciens noms de façade (`admin_manager`, `admin_rh_paie`…).
+   Depuis la dé-fusion des rôles, un compte arrive avec le nom de SON métier : `admin`,
+   `super_admin`, `rh`, `commercial`… Sans les correspondances ci-dessous, tous ces rôles
+   tomberaient sur le repli `|| []` de la ligne de lecture et se retrouveraient devant une
+   barre de navigation VIDE.
+
+   RIEN N'EST SUPPRIMÉ ET RIEN N'EST RECOPIÉ : chaque alias pointe sur le MÊME tableau que la
+   façade d'origine. Un onglet ajouté à `admin_manager` apparaît donc immédiatement pour
+   `admin`, `super_admin` et `manager` — jusqu'au jour où l'un d'eux recevra sa propre liste.
+   C'est ce qui permet de rendre les rôles distincts aujourd'hui sans attendre que les
+   quatre-vingt-neuf onglets encore à porter soient écrits.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ══ DIRECTION : TROIS MÉTIERS, TROIS MENUS ══════════════════════════════════════════════
+   `manager` garde son menu d'origine (neuf onglets, ci-dessus). L'Administrateur et le Super
+   Admin reçoivent le leur, bâti presque entièrement sur des écrans DÉJÀ ÉCRITS — bet-elearning
+   en exporte soixante-six.
+
+   Neuf onglets du Super Admin de dash ne sont volontairement PAS repris : Plateforme, Boutique,
+   Média, Campagnes & Newsletters, Trafic web, Sondages, Planning assistantes, Offres &
+   Formations, Clients & Prospects. Ils pilotent le SITE PUBLIC de BET et les opérations propres
+   à dash, dont il n'existe qu'un exemplaire déjà administré là-bas : les rouvrir ici créerait
+   une seconde porte sur la même chose. Voir `pages/admin/DashboardDirection.jsx`.
+
+   La différence entre les deux rôles est celle de dash : le Super Admin ajoute la GOUVERNANCE —
+   droits et configuration — que l'Administrateur n'a pas. */
+
+/* Le socle commun aux deux : superviser BET E-Learning. */
+const MENU_DIRECTION = [
+  { libelle: 'Mes tâches',         icone: '✅', chemin: '/admin/direction/taches' },
+  { libelle: "Vue d'ensemble",     icone: '📊', chemin: '/admin/manager' },
+  { libelle: 'Apprenants',         icone: '🎓', chemin: '/admin/direction/apprenants' },
+  { libelle: 'Professeurs',        icone: '👨‍🏫', chemin: '/admin/manager/professeurs' },
+  { libelle: 'Classes',            icone: '🏫', chemin: '/admin/direction/classes' },
+  { libelle: 'Plannings',          icone: '📅', chemin: '/admin/direction/plannings' },
+  { libelle: 'Entreprises',        icone: '🏢', chemin: '/admin/entreprises' },
+  { libelle: 'Paiements',          icone: '💳', chemin: '/admin/direction/paiements' },
+  { libelle: 'Chiffre d’affaires', icone: '💰', chemin: '/admin/direction/ca' },
+  { libelle: 'Reporting',          icone: '📈', chemin: '/admin/reporting' },
+  { libelle: 'Audit global',       icone: '🧾', chemin: '/admin/audit-logs' },
+  { libelle: 'Notifications',      icone: '🔔', chemin: '/admin/notifications', notifications: true },
+  { libelle: 'Messages',           icone: '💬', chemin: '/admin/messages', messagerie: true },
+];
+
+/* L'Administrateur : le socle, plus l'écran d'administration BET. */
+MENUS_PAR_ROLE.admin = [
+  ...MENU_DIRECTION.slice(0, 11),
+  { libelle: 'Administration BET', icone: '🏛️', chemin: '/admin/direction/administration' },
+  ...MENU_DIRECTION.slice(11),
+];
+
+/* Le Super Admin : le socle, plus la gouvernance. Deux onglets que l'Administrateur n'a pas —
+   c'est exactement la hiérarchie de dash. */
+MENUS_PAR_ROLE.super_admin = [
+  ...MENU_DIRECTION.slice(0, 11),
+  { libelle: 'Gestion des droits', icone: '🛡️', chemin: '/admin/droits' },
+  { libelle: 'Configuration',      icone: '⚙️', chemin: '/admin/manager/configuration' },
+  { libelle: 'Administration BET', icone: '🏛️', chemin: '/admin/direction/administration' },
+  ...MENU_DIRECTION.slice(11),
+];
+
+/* Le Manager conserve le menu existant : huit onglets sur dash, neuf ici — il n'est pas en
+   déficit, rien à lui ajouter. */
+/* ══ LE PILOTAGE APPARTIENT AU SUPER ADMIN, PAS AU MANAGER ══════════════════════════════
+   Le menu hérité donnait au manager « Gestion des droits », « Configuration » et
+   « Audit logs ». Or la base ne lui accorde NI `roles.manage` NI `configuration.gerer` :
+   `configuration.gerer` n'est détenu que par le super_admin, `roles.manage` par le super_admin
+   et l'administrateur. Ces trois onglets s'ouvraient donc pour refuser chaque écriture — une
+   porte qui mène à un mur.
+
+   Le manager garde son métier : vue d'ensemble, entreprises, professeurs, reporting. Le
+   pilotage remonte au Super Admin, qui l'a déjà dans son menu.
+
+   À noter : aucun compte ne porte le rôle `manager` aujourd'hui, donc ce retrait ne prive
+   personne — il aligne simplement le menu sur les droits réels. */
+MENUS_PAR_ROLE.manager = MENUS_PAR_ROLE.admin_manager.filter(
+  o => !['/admin/droits', '/admin/manager/configuration', '/admin/audit-logs'].includes(o.chemin));
+
+/* ── Pédagogie & supervision ── */
+MENUS_PAR_ROLE.superviseur         = MENUS_PAR_ROLE.admin_superviseur;
+MENUS_PAR_ROLE.deputy_superviseur  = MENUS_PAR_ROLE.admin_deputy_superviseur;
+/* Un coach est un coach. Le rôle `professeur_remplacant` vient de `type_coach` et sert à la
+   rémunération et aux délégations, jamais à restreindre l'écran : le même menu, donc. */
+MENUS_PAR_ROLE.professeur_remplacant = MENUS_PAR_ROLE.professeur_titulaire;
+MENUS_PAR_ROLE.coach                 = MENUS_PAR_ROLE.professeur_titulaire;
+
+MENUS_PAR_ROLE.pedagogical_advisor = MENUS_PAR_ROLE.admin_pa_advisor;
+MENUS_PAR_ROLE.onboarding          = MENUS_PAR_ROLE.admin_onboarding;
+MENUS_PAR_ROLE.placement_test      = MENUS_PAR_ROLE.admin_placement;
+
+/* `data_collector` partageait l'écran de l'agent Placement, qui est un AUTRE métier : collecte
+   de données contre correction de tests. Il garde ce menu le temps que le sien soit écrit —
+   mais son rôle, son libellé et sa redirection sont désormais les siens, donc le jour où on lui
+   donne sa liste, personne d'autre n'est touché. */
+MENUS_PAR_ROLE.data_collector      = MENUS_PAR_ROLE.admin_placement;
+
+/* ── Commerce & relation client ──
+   La Commerciale a ses propres onglets : ils ont été montés sur `admin_elearning` parce
+   qu'aucun rôle « Commerciale » n'existait alors. Elle en a un maintenant, et pointe sur la
+   même liste. */
+MENUS_PAR_ROLE.commercial          = MENUS_PAR_ROLE.admin_elearning;
+MENUS_PAR_ROLE.customer_care       = MENUS_PAR_ROLE.admin_customer_care;
+
+/* ── Administration & finances ── */
+MENUS_PAR_ROLE.rh                  = MENUS_PAR_ROLE.admin_rh_paie;
+MENUS_PAR_ROLE.comptable           = MENUS_PAR_ROLE.admin_comptable;
+
+/* ── LES QUATRE RÔLES QUI N'ABOUTISSAIENT À AUCUN ÉCRAN ──
+   `gestionnaire`, `responsable` et `observateur` avaient une redirection et figuraient dans
+   les routes admises, mais aucune entrée ici : ils entraient et tombaient sur une barre vide.
+   `marketing` était absent des deux tables — ses quatre comptes actifs n'avaient aucun accès.
+
+   Faute de menu propre à leur métier, ils reçoivent le socle commun : notifications et
+   messagerie, qui fonctionnent pour tout compte staff. C'est volontairement minimal — mieux
+   vaut deux onglets qui marchent qu'une barre vide, et cela ne préjuge pas de ce que leur
+   métier demandera. */
+const SOCLE_STAFF = [
+  { libelle: 'Notifications', icone: '🔔', chemin: '/admin/notifications', notifications: true },
+  { libelle: 'Messages',      icone: '💬', chemin: '/admin/messages',      messagerie: true },
+];
+MENUS_PAR_ROLE.marketing           = SOCLE_STAFF;
+MENUS_PAR_ROLE.gestionnaire        = SOCLE_STAFF;
+MENUS_PAR_ROLE.responsable         = SOCLE_STAFF;
+MENUS_PAR_ROLE.observateur         = SOCLE_STAFF;
+
 
 const DESCRIPTIONS_ROLE = {
   apprenant:            'Espace apprentissage · BET E-Learning',
@@ -347,6 +547,27 @@ const DESCRIPTIONS_ROLE = {
   admin_deputy_superviseur:  'Deputy Superviseur · Observation & rapports',
   assistant_sav:             'Assistante SAV · Demandes après-vente',
 };
+/* Alias de la dé-fusion des rôles : cette table est indexée par nom de FAMILLE, or un compte
+   arrive désormais avec le nom de son métier. Sans ces lignes, le sous-titre affiché dans l'en-tête
+   retombe sur le repli générique — pas de plantage, mais une perte visible. Chaque alias
+   pointe sur la même valeur, rien n'est recopié. */
+if (DESCRIPTIONS_ROLE.admin_manager !== undefined) DESCRIPTIONS_ROLE.super_admin = DESCRIPTIONS_ROLE.admin_manager;
+if (DESCRIPTIONS_ROLE.admin_manager !== undefined) DESCRIPTIONS_ROLE.admin = DESCRIPTIONS_ROLE.admin_manager;
+if (DESCRIPTIONS_ROLE.admin_manager !== undefined) DESCRIPTIONS_ROLE.manager = DESCRIPTIONS_ROLE.admin_manager;
+if (DESCRIPTIONS_ROLE.admin_superviseur !== undefined) DESCRIPTIONS_ROLE.superviseur = DESCRIPTIONS_ROLE.admin_superviseur;
+if (DESCRIPTIONS_ROLE.admin_deputy_superviseur !== undefined) DESCRIPTIONS_ROLE.deputy_superviseur = DESCRIPTIONS_ROLE.admin_deputy_superviseur;
+if (DESCRIPTIONS_ROLE.admin_placement !== undefined) DESCRIPTIONS_ROLE.placement_test = DESCRIPTIONS_ROLE.admin_placement;
+if (DESCRIPTIONS_ROLE.admin_placement !== undefined) DESCRIPTIONS_ROLE.data_collector = DESCRIPTIONS_ROLE.admin_placement;
+if (DESCRIPTIONS_ROLE.admin_onboarding !== undefined) DESCRIPTIONS_ROLE.onboarding = DESCRIPTIONS_ROLE.admin_onboarding;
+if (DESCRIPTIONS_ROLE.admin_pa_advisor !== undefined) DESCRIPTIONS_ROLE.pedagogical_advisor = DESCRIPTIONS_ROLE.admin_pa_advisor;
+if (DESCRIPTIONS_ROLE.admin_elearning !== undefined) DESCRIPTIONS_ROLE.commercial = DESCRIPTIONS_ROLE.admin_elearning;
+if (DESCRIPTIONS_ROLE.admin_customer_care !== undefined) DESCRIPTIONS_ROLE.customer_care = DESCRIPTIONS_ROLE.admin_customer_care;
+if (DESCRIPTIONS_ROLE.admin_rh_paie !== undefined) DESCRIPTIONS_ROLE.rh = DESCRIPTIONS_ROLE.admin_rh_paie;
+if (DESCRIPTIONS_ROLE.admin_comptable !== undefined) DESCRIPTIONS_ROLE.comptable = DESCRIPTIONS_ROLE.admin_comptable;
+if (DESCRIPTIONS_ROLE.admin_gestionnaire !== undefined) DESCRIPTIONS_ROLE.gestionnaire = DESCRIPTIONS_ROLE.admin_gestionnaire;
+if (DESCRIPTIONS_ROLE.admin_responsable !== undefined) DESCRIPTIONS_ROLE.responsable = DESCRIPTIONS_ROLE.admin_responsable;
+if (DESCRIPTIONS_ROLE.admin_observateur !== undefined) DESCRIPTIONS_ROLE.observateur = DESCRIPTIONS_ROLE.admin_observateur;
+
 
 function getNomEntreprise(profile) {
   if (!profile?.entreprise_id) return null;
@@ -627,9 +848,15 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
       display: 'flex',
       alignItems: 'center',
       gap: 2,
-      overflowX: 'auto',
+      /* LES ONGLETS PASSENT À LA LIGNE AU LIEU DE DISPARAÎTRE.
+         La barre défilait horizontalement avec `scrollbarWidth: 'none'` : au-delà d'une
+         douzaine d'entrées, les suivantes sortaient de l'écran SANS AUCUN INDICE qu'elles
+         existaient - ni barre, ni flèche. Des onglets ajoutés au menu restaient donc
+         introuvables, et on les croyait non livrés.
+         `wrap` coûte une ligne de hauteur sur les menus longs ; une entrée invisible coûte
+         la fonctionnalité entière. */
+      flexWrap: 'wrap',
       flexShrink: 0,
-      scrollbarWidth: 'none',
     },
     tabPrimaire: (actif) => ({
       display: 'flex',
@@ -668,9 +895,9 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
       display: 'flex',
       alignItems: 'center',
       gap: 2,
-      overflowX: 'auto',
+      // Même raison que `navPrimaire` : on ne cache jamais une entrée de menu.
+      flexWrap: 'wrap',
       flexShrink: 0,
-      scrollbarWidth: 'none',
     },
     tabSecondaire: (actif) => ({
       display: 'flex',
@@ -858,6 +1085,11 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
           </div>
         </div>
         <div style={S.headerDroite}>
+          {/* « MA NOTE » - réservée aux coachs. Le coach doit lire le même verdict que son
+              superviseur : moyenne, catégorie de contrat et trajectoire. Sans cela il
+              apprend son classement par quelqu'un d'autre. Le composant se charge seul et
+              ne s'affiche que s'il obtient une réponse. */}
+          {estRole(profile?.role, ['professeur_titulaire', 'professeur_remplacant']) && <BandeauMaNote />}
           <div
             style={{ ...S.btnNotif, position: 'relative', cursor: 'pointer' }}
             title="Notifications"

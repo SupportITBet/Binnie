@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import GroupesLibres from '../../components/shared/GroupesLibres';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
 import SelecteurEmoji, { insererAuCurseur } from '../../components/shared/SelecteurEmoji';
 import { useGroupesLibresNonLus } from '../../hooks/useGroupesLibresNonLus';
 import { useMessagerie } from '../../contexts/MessagerieContext';
@@ -87,10 +88,29 @@ function formatHeure(date) {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 
-function Avatar({ initiales, role, taille = 38, enligne = false }) {
+/**
+ * L'avatar d'une personne : sa photo de compte, ou ses initiales à défaut.
+ *
+ * LA PHOTO EST CELLE DU COMPTE - `utilisateurs.avatar_url`, la colonne qu'alimente
+ * l'administrateur BET depuis le SuperAdmin de dash. Les deux plateformes lisent la MÊME,
+ * il n'y a donc jamais deux photos pour une même personne.
+ *
+ * Elle manquait ici : la messagerie privée ne montrait que des initiales, alors que les
+ * fils de groupe affichent le visage - le même collègue avait deux apparences selon
+ * l'écran. Une URL morte retombe sur les initiales, comme si aucune photo n'existait.
+ */
+function Avatar({ initiales, role, taille = 38, enligne = false, url = null }) {
   const couleur = COULEUR_ROLE[role] || COULEURS.cyan;
+  const [casse, setCasse] = useState(false);
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
+      {url && !casse ? (
+        <img src={url} alt={initiales || ''} onError={() => setCasse(true)}
+          style={{
+            width: taille, height: taille, borderRadius: '50%', objectFit: 'cover',
+            border: `2px solid ${couleur}40`, display: 'block',
+          }} />
+      ) : (
       <div style={{
         width: taille, height: taille, borderRadius: '50%',
         background: couleur + '20', border: `2px solid ${couleur}40`,
@@ -99,6 +119,7 @@ function Avatar({ initiales, role, taille = 38, enligne = false }) {
       }}>
         {initiales}
       </div>
+      )}
       {enligne && (
         <div style={{
           position: 'absolute', bottom: 1, right: 1,
@@ -115,7 +136,7 @@ function Avatar({ initiales, role, taille = 38, enligne = false }) {
 // Backend réel (classe_messages) - PAS Firebase. La messagerie 1-à-1 de cette page dépend
 // de Firebase (jamais configuré ici, cf. useMessagerie), mais ce chat de classe utilise les
 // mêmes routes /api/classes-elearning/:id/messages que le chat de groupe du coach.
-function SectionChatClasse({ classeId, classeNom, profile, couleurTheme }) {
+function SectionChatClasse({ classeId, classeNom, classePhoto, profile, couleurTheme }) {
   const [messages, setMessages] = useState([]);
   const [texte, setTexte] = useState('');
   const [envoi, setEnvoi] = useState(false);
@@ -173,6 +194,28 @@ function SectionChatClasse({ classeId, classeNom, profile, couleurTheme }) {
   };
   const estMoi = msg => msg.envoyeurId === profile?.id;
 
+  /* La photo des auteurs, résolue depuis leur identifiant - le message ne porte que le nom
+     et le rôle. Même endpoint groupé que le fil des groupes, et même raison : l'historique
+     déjà écrit en bénéficie, et un changement de photo se propage partout. */
+  const [profilsClasse, setProfilsClasse] = useState({});
+  const idsDemandesClasse = useRef(new Set());
+  useEffect(() => {
+    const manquants = [...new Set(messages.map(m => m.envoyeurId).filter(Boolean))]
+      .filter(id => !idsDemandesClasse.current.has(id));
+    if (!manquants.length) return;
+    manquants.forEach(id => idsDemandesClasse.current.add(id));
+    (async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/admin/profils-chat?ids=${manquants.join(',')}`, {
+          headers: { Authorization: `Bearer ${authToken()}` },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.profils && Object.keys(d.profils).length) setProfilsClasse(p => ({ ...p, ...d.profils }));
+      } catch { /* les initiales et le nom seul restent un repli acceptable */ }
+    })();
+  }, [messages]);
+
   if (!classeId) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: COULEURS.gris400, padding: 32 }}>
@@ -186,10 +229,16 @@ function SectionChatClasse({ classeId, classeNom, profile, couleurTheme }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: COULEURS.gris50 }}>
-      <div style={{ padding: '14px 20px', background: COULEURS.blanc, borderBottom: `1px solid ${COULEURS.gris200}`, flexShrink: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: COULEURS.navy }}>🏫 {classeNom || 'Chat de classe'}</div>
-        <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 2 }}>Visible par le coach et tous les apprenants de la classe</div>
-        <div style={{ fontSize: 10, color: COULEURS.gris400, marginTop: 4 }}>📎 Fichiers partagés automatiquement supprimés après 30 jours</div>
+      {/* LA CLASSE EN TÊTE DE SON FIL - sa photo et son nom. La même image que sur la
+          fiche de la classe : deux visuels pour le même endroit sèmeraient le doute.
+          En lecture seule ici, un apprenant ne modifie pas la photo de sa classe. */}
+      <div style={{ padding: '14px 20px', background: COULEURS.blanc, borderBottom: `1px solid ${COULEURS.gris200}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <PastilleGroupe nom={classeNom || 'Classe'} url={classePhoto} taille={40} accent={couleurTheme} agrandissable />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: COULEURS.navy }}>🏫 {classeNom || 'Chat de classe'}</div>
+          <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 2 }}>Visible par le coach et tous les apprenants de la classe</div>
+          <div style={{ fontSize: 10, color: COULEURS.gris400, marginTop: 4 }}>📎 Fichiers partagés automatiquement supprimés après 30 jours</div>
+        </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {erreur && (
@@ -208,7 +257,19 @@ function SectionChatClasse({ classeId, classeNom, profile, couleurTheme }) {
           return (
             <div key={msg.id} style={{ display: 'flex', justifyContent: moi ? 'flex-end' : 'flex-start' }}>
               <div style={{ maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: moi ? 'flex-end' : 'flex-start' }}>
-                {!moi && <span style={{ fontSize: 10, fontWeight: 700, color: couleurTheme, marginBottom: 2, paddingLeft: 4 }}>{msg.envoyeurNom}</span>}
+                {/* QUI ÉCRIT : sa photo, son nom, son rôle - coach et apprenants partagent
+                    ce fil, et le seul nom ne disait pas lequel des deux parlait. */}
+                {!moi && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, paddingLeft: 2 }}>
+                    <PastilleGroupe nom={msg.envoyeurNom} url={profilsClasse[msg.envoyeurId]?.avatar_url} taille={20} accent={couleurTheme} />
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: couleurTheme }}>{msg.envoyeurNom}</span>
+                    {(profilsClasse[msg.envoyeurId]?.role || msg.envoyeurRole) && (
+                      <span style={{ fontSize: 9.5, fontWeight: 600, color: COULEURS.gris400 }}>
+                        · {LIBELLES_ROLES[profilsClasse[msg.envoyeurId]?.role || msg.envoyeurRole] || (profilsClasse[msg.envoyeurId]?.role || msg.envoyeurRole)}
+                      </span>
+                    )}
+                  </span>
+                )}
                 {msg.fichierUrl ? (
                   <a href={msg.fichierUrl} target="_blank" rel="noopener noreferrer" style={{ padding: '10px 14px', borderRadius: moi ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: moi ? couleurTheme : COULEURS.blanc, color: moi ? '#fff' : COULEURS.navy, fontSize: 13, lineHeight: 1.4, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: moi ? 'none' : `1px solid ${COULEURS.gris200}`, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 22 }}>{iconeFichier(msg.fichierNom)}</span>
@@ -299,12 +360,18 @@ export default function PageMessages() {
     (async () => {
       const { data: inscr } = await supabase
         .from('classes_elearning_apprenants')
-        .select('classe_id, classe:classes_elearning(nom)')
+        .select('classe_id, classe:classes_elearning(nom, photo_url)')
         .eq('apprenant_id', profile.id)
         .neq('statut', 'suspendu')
         .limit(1)
         .maybeSingle();
-      if (inscr?.classe_id) setClasseApprenant({ id: inscr.classe_id, nom: inscr.classe?.nom || null });
+      if (inscr?.classe_id) {
+        setClasseApprenant({
+          id: inscr.classe_id,
+          nom: inscr.classe?.nom || null,
+          photo_url: inscr.classe?.photo_url || null,
+        });
+      }
     })();
   }, [profile?.role, profile?.id]);
 
@@ -376,6 +443,33 @@ export default function PageMessages() {
   useEffect(() => {
     if (voirContacts && contacts.length === 0) chargerContacts();
   }, [voirContacts]);
+
+  /* LES PHOTOS DES INTERLOCUTEURS, résolues depuis leur identifiant.
+     `participantsInfo` est figé dans Firestore au moment où la conversation est créée : les
+     fils déjà ouverts n'y portent aucune photo, et ceux qui en portent une garderaient
+     l'ancienne après un changement. On interroge donc le compte, comme dans les fils de
+     groupe - l'historique entier en bénéficie, et une photo remplacée se propage partout. */
+  const [profilsPrives, setProfilsPrives] = useState({});
+  const idsDemandesPrives = useRef(new Set());
+  useEffect(() => {
+    const ids = [...new Set(conversations.flatMap(c => c.participants || []))]
+      .filter(id => id && id !== profile?.id && !idsDemandesPrives.current.has(id));
+    if (!ids.length) return;
+    ids.forEach(id => idsDemandesPrives.current.add(id));
+    (async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/admin/profils-chat?ids=${ids.join(',')}`, {
+          headers: { Authorization: `Bearer ${authToken()}` },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.profils && Object.keys(d.profils).length) setProfilsPrives(p => ({ ...p, ...d.profils }));
+      } catch { /* les initiales restent un repli acceptable */ }
+    })();
+  }, [conversations, profile?.id]);
+
+  /** La photo d'une personne : celle du compte d'abord, celle figée dans le fil ensuite. */
+  const photoDe = (id, secours = null) => profilsPrives[id]?.avatar_url || secours || null;
 
   const convsFiltrees = conversations.filter(c => {
     if (!recherche) return true;
@@ -467,7 +561,12 @@ export default function PageMessages() {
   ];
 
   const S = {
-    page:      { height: 'calc(100vh - 180px)', display: 'flex', fontFamily: '"Plus Jakarta Sans", sans-serif', overflow: 'hidden' },
+    /* `TopNavLayout` ne pose aucun padding sur son conteneur : chaque page met le sien, et
+       celle-ci n'en avait pas - le contenu touchait les deux bords de l'écran. Les 44px
+       verticaux ajoutés ici sont retirés de la hauteur de `page`, sinon la messagerie
+       déborderait de la fenêtre d'autant. */
+    enveloppe: { padding: '20px 32px 24px' },
+    page:      { height: 'calc(100vh - 224px)', display: 'flex', fontFamily: '"Plus Jakarta Sans", sans-serif', overflow: 'hidden' },
     sidebar:   { width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc },
     sideHead:  { padding: '16px 16px 12px', borderBottom: `1px solid ${COULEURS.gris200}`, flexShrink: 0 },
     sideTitre: { fontSize: 16, fontWeight: 800, color: COULEURS.navy, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
@@ -515,6 +614,7 @@ export default function PageMessages() {
 
   return (
     <TopNavLayout stats={stats} menuRole={menuRole}>
+      <div style={S.enveloppe}>
       {/* Le personnel a deux canaux : sa messagerie privée et les groupes de discussion.
           Les apprenants gardent leur propre barre juste en dessous - ils n'ont pas accès
           aux groupes, réservés au personnel BET. */}
@@ -547,7 +647,8 @@ export default function PageMessages() {
         <GroupesLibres profile={profile} couleur={couleurTheme} />
       ) : vueMessages === 'classe' && profile?.role === 'apprenant' ? (
         <div style={{ ...S.page, background: COULEURS.blanc, borderRadius: 14, border: `1px solid ${COULEURS.gris200}`, overflow: 'hidden' }}>
-          <SectionChatClasse classeId={classeApprenant?.id} classeNom={classeApprenant?.nom} profile={profile} couleurTheme={couleurTheme} />
+          <SectionChatClasse classeId={classeApprenant?.id} classeNom={classeApprenant?.nom}
+            classePhoto={classeApprenant?.photo_url} profile={profile} couleurTheme={couleurTheme} />
         </div>
       ) : (
       <div style={S.page}>
@@ -664,7 +765,7 @@ export default function PageMessages() {
                         onMouseEnter={e => e.currentTarget.style.background = couleurTheme + '08'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
-                        <Avatar initiales={c.initiales} role={c.role} taille={36} />
+                        <Avatar initiales={c.initiales} role={c.role} taille={36} url={photoDe(c.id, c.avatar_url)} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, color: COULEURS.navy }}>{c.prenom} {c.nom}</div>
                           <div style={{ fontSize: 11, color: COULEUR_ROLE[c.role] || COULEURS.gris400, fontWeight: 600 }}>
@@ -696,7 +797,8 @@ export default function PageMessages() {
                     const enligne = estEnLigne(autreId);
                     return (
                       <div key={conv.id} style={S.itemConv(actif, nonLu)} onClick={() => ouvrirConversation(conv.id)}>
-                        <Avatar initiales={inter?.initiales || '?'} role={inter?.role} taille={40} enligne={enligne} />
+                        <Avatar initiales={inter?.initiales || '?'} role={inter?.role} taille={40} enligne={enligne}
+                          url={photoDe(autreId, inter?.avatar_url)} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                             <span style={S.convNom}>{inter ? `${inter.prenom} ${inter.nom}` : 'Inconnu'}</span>
@@ -742,6 +844,7 @@ export default function PageMessages() {
                   role={interlocuteur?.role || ''}
                   taille={40}
                   enligne={estEnLigne(interlocuteurId)}
+                  url={photoDe(interlocuteurId, interlocuteur?.avatar_url)}
                 />
                 <div>
                   <div style={S.chatNom}>
@@ -785,7 +888,8 @@ export default function PageMessages() {
                         background: surligne === msg.id ? `${couleurTheme}18` : 'transparent',
                         borderRadius: 10, transition: 'background .35s ease' }}>
                         {!moi && (
-                          <Avatar initiales={interlocuteur?.initiales || msg.envoyeurNom?.[0] || '?'} role={interlocuteur?.role || ''} taille={28} />
+                          <Avatar initiales={interlocuteur?.initiales || msg.envoyeurNom?.[0] || '?'} role={interlocuteur?.role || ''} taille={28}
+                            url={photoDe(msg.envoyeurId, interlocuteur?.avatar_url)} />
                         )}
                         <div>
                           {/* LA CITATION - cliquable pour remonter au message d'origine. */}
@@ -1009,6 +1113,7 @@ export default function PageMessages() {
         </div>
       </div>
       )}
+      </div>
     </TopNavLayout>
   );
 }

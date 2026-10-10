@@ -10,6 +10,7 @@ import { genererRecuVersement } from '../../utils/recuVersement';
 import { useTheme } from '../../contexts/ThemeContext';
 
 import { fetchUpload } from "../../utils/fetchUpload";
+import { estRole } from '../../constants/roles';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 function authHeaders() {
   const t = localStorage.getItem('admin_token');
@@ -137,7 +138,7 @@ function ModalEntreprise({ entreprise, modeValidation, onFermer, onSauvegarder }
   // Seuls l'admin BET (manager/superviseur) et l'Assistant E-Learning peuvent augmenter le
   // quota de bénéficiaires ici, même hors création - les autres doivent passer par l'onglet
   // Contrats pour ne pas décaler le contrat réel.
-  const peutModifierQuota = ['admin_manager', 'admin_superviseur', 'admin_elearning'].includes(profile?.role);
+  const peutModifierQuota = estRole(profile?.role, ['admin_manager', 'admin_superviseur', 'admin_elearning']);
   const [form, setForm] = useState(() => {
     if (entreprise && modeValidation) {
       // Pré-remplissage best-effort du compte RH depuis le contact transmis à la soumission.
@@ -4297,16 +4298,21 @@ export default function GestionEntreprises() {
   // physique "commercial" (l'assistante e-learning) - la whitelister ici court-circuiterait
   // toujours la matrice de permissions pour elle. Seul "admin_manager"/"admin_superviseur"
   // sont des façades sans ambiguïté (super_admin/admin/manager/superviseur).
-  const peutModifier        = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.crm_entreprises?.update === true;
+  /* L'ADMINISTRATEUR CONSULTE, IL N'ÉCRIT PAS, sur le portefeuille entreprises. `estRole` avec
+     la famille `admin_manager` l'y autorisait — elle contient super_admin, admin ET manager.
+     On nomme donc les rôles un par un : le Super Admin garde la main (il a tout), le Manager
+     aussi, l'Administrateur passe en lecture. `lectureSeule` en découle juste en dessous et
+     ferme d'un coup tous les points d'entrée en écriture de cet écran. */
+  const peutModifier        = estRole(profile?.role, ['super_admin', 'manager', 'admin_manager', 'admin_superviseur']) || profile?.permissions?.crm_entreprises?.update === true;
   // Module dédié "contrat" (renouvellement/statut) - distinct de "crm_entreprises" (fiche entreprise).
   // L'assistante e-learning a le droit "créer" (pas "modifier") sur ce module : elle peut donc
   // proposer un renouvellement, mais seul l'admin BET (droit "modifier") peut le valider.
-  const peutGererContratModule = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.contrat?.update === true;
+  const peutGererContratModule = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.contrat?.update === true;
   const peutProposerRenouvellement = !peutGererContratModule && profile?.permissions?.contrat?.create === true;
-  const peutSaisirPaiements = profile?.role === 'admin_manager' || profile?.permissions?.finances?.create === true;
-  const peutModifierPaiements = profile?.role === 'admin_manager' || profile?.permissions?.finances?.update === true;
+  const peutSaisirPaiements = estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true;
+  const peutModifierPaiements = estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true;
   // Suppression réservée à l'admin BET - jamais à l'assistante e-learning.
-  const peutSupprimerPaiements = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.finances?.delete === true;
+  const peutSupprimerPaiements = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true;
   const lectureSeule        = !peutModifier;
 
   const [onglet, setOnglet]           = useState('overview');

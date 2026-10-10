@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
-import { LIBELLES_ROLES } from '../../constants/roles';
+import { LIBELLES_ROLES, estRole, ROLE_MAP_BET } from '../../constants/roles';
 import { useTheme, PALETTE_THEME } from '../../contexts/ThemeContext';
 import { useAlerte } from '../../contexts/ConfirmContext';
 
@@ -14,33 +14,12 @@ function authHeaders() {
 }
 
 // Mapping rôles backend → rôles bet-elearning
-const ROLE_MAP = {
-  // Admin BET core
-  super_admin:         'admin_manager',
-  admin:               'admin_manager',
-  manager:             'admin_manager',
-  superviseur:         'admin_superviseur',
-  deputy_superviseur:  'admin_deputy_superviseur',
-  responsable_centre:  'admin_superviseur',
-  data_collector:      'admin_placement',
-  placement_test:      'admin_placement',
-  onboarding:          'admin_onboarding',
-  pedagogical_advisor: 'admin_pa_advisor',
-  admin_elearning:     'admin_elearning',
-  assistant_elearning: 'admin_elearning',
-  customer_care:       'admin_customer_care',
-  // Assistante Corporate fusionnée avec Assistant E-Learning - voir constants/roles.js
-  commercial:          'admin_elearning',
-  corporate:           'admin_elearning',
-  rh:                  'admin_rh_paie',
-  rh_paie:             'admin_rh_paie',
-  comptable:           'admin_comptable',
-  coach:               'professeur_titulaire',
-  // Rôles spécifiques → nouveaux profils bet-elearning
-  responsable:         'admin_responsable',
-  gestionnaire:        'admin_gestionnaire',
-  observateur:         'admin_observateur',
-};
+/* LA TABLE CENTRALE, PLUS DE COPIE LOCALE.
+   Celle-ci portait encore `super_admin: 'admin_manager'`, `admin: 'admin_manager'` : dans la
+   liste des utilisateurs, un Super Admin s'affichait donc « Manager BET » — l'ancienne fusion
+   rejouée pour l'affichage, alors que les rôles sont désormais distincts. */
+const ROLE_MAP = ROLE_MAP_BET;
+
 
 function mapUser(u) {
   // Rôles professeurs reconnus directement (si l'API les renvoie tels quels)
@@ -576,7 +555,7 @@ function ModalDetailUtilisateur({ utilisateur, onFermer, centres = [] }) {
     { label: 'Accès e-learning', valeur: u.acces_elearning ? 'Oui' : 'Non' },
   ];
 
-  if (u.role === 'professeur_titulaire' || u.role === 'professeur_remplacant') {
+  if (estRole(u.role, 'professeur_titulaire') || estRole(u.role, 'professeur_remplacant')) {
     champs.push(
       { label: 'Certifications',    valeur: u.certifications?.length ? u.certifications.join(', ') : '-' },
       { label: "Années d'expérience", valeur: u.annees_experience ?? '-' },
@@ -928,27 +907,27 @@ function ModalUtilisateur({ utilisateur, onFermer, onSauvegarder, centres = [] }
                 <div style={S.groupe}>
                   <label style={S.label}>
                     Centre BET
-                    {form.role === 'admin_elearning' && (
+                    {estRole(form.role, 'admin_elearning') && (
                       <span style={{ color: '#EF4444', marginLeft: 4 }}>*</span>
                     )}
                   </label>
                   <select
                     style={{
                       ...S.select,
-                      borderColor: form.role === 'admin_elearning' && !form.centre_id ? '#FCA5A5' : undefined,
-                      background: form.role === 'admin_elearning' && !form.centre_id ? '#FFF5F5' : undefined,
+                      borderColor: estRole(form.role, 'admin_elearning') && !form.centre_id ? '#FCA5A5' : undefined,
+                      background: estRole(form.role, 'admin_elearning') && !form.centre_id ? '#FFF5F5' : undefined,
                     }}
                     value={form.centre_id}
                     onChange={e => ch('centre_id', e.target.value)}
                   >
                     <option value="">
-                      {form.role === 'admin_elearning' ? '- Sélectionner un centre (obligatoire) -' : '- Accès national (tous les centres) -'}
+                      {estRole(form.role, 'admin_elearning') ? '- Sélectionner un centre (obligatoire) -' : '- Accès national (tous les centres) -'}
                     </option>
                     {centres.map(c => (
                       <option key={c.id} value={c.id}>{c.nom} · {c.ville}</option>
                     ))}
                   </select>
-                  {form.role === 'admin_elearning' && !form.centre_id && (
+                  {estRole(form.role, 'admin_elearning') && !form.centre_id && (
                     <div style={{ fontSize: 11, color: '#DC2626', marginTop: 4 }}>
                       ⚠️ Un centre est requis pour le rôle Assistant E-Learning.
                     </div>
@@ -958,7 +937,7 @@ function ModalUtilisateur({ utilisateur, onFermer, onSauvegarder, centres = [] }
                       ✅ Accès limité au centre sélectionné.
                     </div>
                   )}
-                  {!form.centre_id && form.role !== 'admin_elearning' && (
+                  {!form.centre_id && !estRole(form.role, 'admin_elearning') && (
                     <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 4 }}>
                       Laissez vide pour un accès national (tous les centres).
                     </div>
@@ -1490,7 +1469,7 @@ export default function GestionDroits() {
   }
 
   async function sauvegarder(form) {
-    if (form.role === 'admin_elearning' && !form.centre_id) {
+    if (estRole(form.role, 'admin_elearning') && !form.centre_id) {
       await alerte('Veuillez sélectionner un centre pour le rôle Assistant E-Learning.', { danger: true });
       return;
     }

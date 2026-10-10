@@ -140,6 +140,23 @@ router.get("/coachs-conformite", authenticateAdmin, requireSuperviseurRole, asyn
     });
 
     const coachIds = (coachs || []).map(c => c.id);
+
+    /* LES CLASSES DU COACH, vraiment comptées. `nb_groupes` et `groupes` étaient écrits en
+       dur à 0 et [] : la colonne « Groupes » affichait zéro pour tout le monde, et serait
+       restée à zéro même une fois les classes créées. On lit `classes_elearning` - jamais
+       `groupes`, qui est la table de dash. */
+    const classesParCoach = {};
+    if (coachIds.length) {
+      const { data: sesClasses, error: errClasses } = await supabase
+        .from("classes_elearning")
+        .select("id, nom, niveau, statut, coach_id")
+        .in("coach_id", coachIds);
+      if (errClasses) console.warn("[coachs-conformite] classes_elearning:", errClasses.message);
+      (sesClasses || []).forEach(cl => {
+        (classesParCoach[cl.coach_id] = classesParCoach[cl.coach_id] || []).push(cl);
+      });
+    }
+
     const authBloqueMap = {};
     if (coachIds.length > 0) {
       const authResults = await Promise.all(
@@ -176,14 +193,14 @@ router.get("/coachs-conformite", authenticateAdmin, requireSuperviseurRole, asyn
       return {
         ...c,
         acces_bloque:         authBloqueMap[c.id] || false,
-        nb_groupes:           0,
+        nb_groupes:           (classesParCoach[c.id] || []).length,
         nb_evaluations:       nbEvals,
         nb_rapports_deputy:   nbRapportsDeputy,
         note_moyenne:         moyenneNote,
         derniere_evaluation:  derniereEval,
         nb_anomalies:         anomaliesByCoach[c.id] || 0,
         statut_conformite,
-        groupes:              [],
+        groupes:              classesParCoach[c.id] || [],
       };
     });
 
@@ -865,6 +882,150 @@ router.patch("/missions/:id", authenticateAdmin, requireSuperviseurRole, require
     res.json({ mission: data });
   } catch (err) {
     res.status(500).json({ error: "Erreur interne" });
+  }
+});
+
+/**
+ * GET /api/superviseur/coachs/:id/ressources
+ *
+ * Tout ce qu'un coach a mis à la disposition de ses apprenants SUR CETTE PLATEFORME.
+ *
+ * ⚠️ UNE SEULE SOURCE ICI, LÀ OÙ LA VERSION DASH EN A DEUX, et ce n'est pas un oubli :
+ *
+ *   · `groupes_fichiers` - les fichiers déposés dans la conversation d'une classe - est une
+ *     table de DASH. Le chat de classe de bet-elearning ne lui ressemble pas : il vit dans
+ *     Firestore (`classe_chats/{classeId}/messages`), ses pièces jointes n'ont donc aucune
+ *     ligne en base. Il n'existe pas de `classes_elearning_fichiers` (vérifié : la table est
+ *     absente). Lire `groupes_fichiers` ici afficherait les fichiers de dash dans un écran
+ *     bet-elearning - exactement la fuite corrigée ailleurs sur les apprenants, l'audit et
+ *     les messages. On ne la lit donc pas.
+ *
+ *   · Les BLOCS des modules du coach, eux, sont bien de la donnée qui lui appartient :
+ *     `modules_elearning` est indexé par `coach_id`, pas par plateforme - c'est le contenu
+ *     qu'il a rédigé, comme ses disponibilités sont les siennes.
+ *
+ * L'onglet « Modules e-learning » montre les MODULES ; celui-ci montre les FICHIERS qu'ils
+ * contiennent. Un coach peut avoir publié trois modules portant douze documents : la liste
+ * des modules ne le dit pas.
+ */
+/**
+ * Les modules d'un coach QUI APPARTIENNENT À CETTE PLATEFORME.
+ *
+ * `modules_elearning` n'a pas de colonne `plateforme` : son seul rattachement est
+ * `groupe_id` / `groupe_ids`, qui désigne soit un `groupes` (classe dash), soit un
+ * `classes_elearning`. Un module n'est donc d'ici QUE si au moins un de ses groupes existe
+ * dans `classes_elearning`.
+ *
+ * Mesuré sur cette base : les 19 modules existants pointent tous vers des classes de dash,
+ * aucun vers une classe e-learning. Les lister par `coach_id` seul - ce que faisait la
+ * première version de cet écran - affichait donc 19 modules de dash dans un dossier
+ * bet-elearning.
+ *
+ * UN MODULE SANS AUCUN GROUPE est volontairement EXCLU : rien ne permet de l'attribuer, et
+ * le montrer des deux côtés recréerait le mélange qu'on cherche à supprimer.
+ *
+ * @returns {Promise<{modules: object[], nomDe: Record<string,string>}>}
+ */
+async function modulesElearningDuCoach(coachId) {
+  const { data: tous, error } = await supabase
+    .from("modules_elearning")
+    .select("id, titre, statut, blocs, groupe_id, groupe_ids, created_at")
+    .eq("coach_id", coachId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const groupesDe = (m) => [m.groupe_id, ...(m.groupe_ids || [])].filter(Boolean);
+  const tousIds = [...new Set((tous || []).flatMap(groupesDe))];
+  const { data: classes } = tousIds.length
+    ? await supabase.from("classes_elearning").select("id, nom").in("id", tousIds)
+    : { data: [] };
+  const nomDe = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
+
+  const modules = (tous || []).filter(m => groupesDe(m).some(id => nomDe[id]));
+  return { modules, nomDe, groupesDe };
+}
+
+router.get("/coachs/:id/modules", authenticateAdmin, requireSuperviseurRole, async (req, res) => {
+  try {
+    const { modules, nomDe, groupesDe } = await modulesElearningDuCoach(req.params.id);
+    res.json({
+      modules: modules.map(m => ({
+        id: m.id,
+        titre: m.titre,
+        statut: m.statut,
+        nb_blocs: Array.isArray(m.blocs) ? m.blocs.length : 0,
+        classes: groupesDe(m).map(id => nomDe[id]).filter(Boolean),
+        created_at: m.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error("[superviseur-bet/modules]", err.message || err);
+    res.status(500).json({ error: "Lecture des modules impossible" });
+  }
+});
+
+router.get("/coachs/:id/ressources", authenticateAdmin, requireSuperviseurRole, async (req, res) => {
+  try {
+    // Mêmes modules que l'onglet « Modules e-learning », donc même filtre de plateforme :
+    // sans lui, cet onglet remontait les fichiers des modules de dash.
+    const { modules, nomDe, groupesDe } = await modulesElearningDuCoach(req.params.id);
+
+    /**
+     * La nature d'un fichier.
+     *
+     * ATTENTION AU PARAMÈTRE `type` : pour un bloc de module, c'est le type du BLOC
+     * (`document`, `video`, `lien`…), pas celui du fichier. « document » est un contenant,
+     * pas un format : le retenir tel quel ferait tomber tous les PDF dans la branche
+     * « ce format ne se prévisualise pas ». On ne fait donc confiance au `type` que
+     * lorsqu'il désigne réellement un format ; sinon on lit l'extension.
+     */
+    const TYPES_FORMAT = ["image", "audio", "video", "pdf"];
+    const natureDe = (nom = "", type = "") => {
+      if (TYPES_FORMAT.includes(type)) return type;
+      // Sans les paramètres d'URL : « …/doc.pdf?v=2 » donnerait l'extension « pdf?v=2 ».
+      const ext = String(nom).split(/[?#]/)[0].split(".").pop().toLowerCase();
+      if (["jpg", "jpeg", "png", "gif", "webp", "svg", "heic", "avif"].includes(ext)) return "image";
+      if (["mp3", "wav", "ogg", "oga", "m4a", "aac", "opus"].includes(ext)) return "audio";
+      if (["mp4", "mov", "avi", "mkv", "webm", "m4v"].includes(ext)) return "video";
+      if (ext === "pdf") return "pdf";
+      return "document";
+    };
+
+    const ressources = (modules || []).flatMap(m =>
+      (m.blocs || [])
+        .filter(b => b?.url)
+        .map((b, i) => ({
+          id: `module-${m.id}-${i}`,
+          origine: "module",
+          nom: b.titre || b.nom || `${m.titre} - partie ${i + 1}`,
+          url: b.url,
+          /* L'extension se lit sur le NOM DE FICHIER (`b.fichier`) ou sur l'URL - jamais sur
+             `b.titre`, qui est un intitulé (« Compréhension écrite ») sans extension et
+             renverrait systématiquement « document ». */
+          nature: natureDe(b.fichier || b.nom || b.url, b.type),
+          taille_ko: null,
+          classes: groupesDe(m).map(id => nomDe[id]).filter(Boolean),
+          contexte: { module_id: m.id, module_titre: m.titre, statut: m.statut },
+          created_at: m.created_at,
+          masque: m.statut !== "publie",
+        })),
+    ).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+    res.json({
+      ressources,
+      totaux: {
+        total: ressources.length,
+        chat: 0,                       // cf. l'en-tête : pas de fichiers de chat en base ici
+        modules: ressources.length,
+        poids_ko: 0,                   // les médias d'un module ne portent pas leur taille
+      },
+      // Dit franchement à l'écran pourquoi les pièces jointes du chat n'y sont pas, plutôt
+      // que de laisser croire que ce coach n'a rien partagé.
+      sans_fichiers_chat: true,
+    });
+  } catch (err) {
+    console.error("[superviseur-bet/ressources]", err.message || err);
+    res.status(500).json({ error: "Lecture des ressources impossible" });
   }
 });
 

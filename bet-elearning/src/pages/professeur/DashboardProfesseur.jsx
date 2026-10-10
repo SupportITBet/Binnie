@@ -21,6 +21,13 @@ import { fetchUpload } from "../../utils/fetchUpload";
 import { envoyerFichier, maxMoPour } from "../../utils/uploadFichier";
 import { useEnregistreurVocal, microDisponible, dureeLisible } from "../../hooks/useEnregistreurVocal";
 import SelecteurEmoji, { insererAuCurseur } from '../../components/shared/SelecteurEmoji';
+import { estRole } from '../../constants/roles';
+import PhotoClasseEntete from '../../components/shared/PhotoClasseEntete';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
+import {
+  SectionCoachMesTaches, SectionCoachDisponibilites,
+  SectionCoachContrats, SectionCoachProfil,
+} from '../../components/professeur/SectionsCoach';
 
 /* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
    Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
@@ -94,6 +101,10 @@ const CHEMIN_VERS_SECTION = {
   '/professeur/fichiers':     'fichiers',
   '/professeur/paiements':    'paiements',
   '/professeur/recompenses':  'recompenses',
+  '/professeur/taches':           'mes_taches',
+  '/professeur/disponibilites':   'disponibilites',
+  '/professeur/contrats':         'contrats',
+  '/professeur/profil':           'mon_profil',
 };
 
 const PALIER_INFO = {
@@ -719,6 +730,29 @@ function OngletChatGroupe({ classeId, couleur, profile }) {
 
   const estMoi = msg => msg.envoyeurId === profile?.id;
 
+  /* La photo des auteurs, résolue depuis leur identifiant - le message ne porte que le nom.
+     Même endpoint groupé que les autres fils, et même raison : l'historique déjà écrit en
+     bénéficie, et un changement de photo se propage partout au lieu de rester figé. */
+  const [profilsChat, setProfilsChat] = useState({});
+  const idsDemandesChat = useRef(new Set());
+  useEffect(() => {
+    const manquants = [...new Set(messages.map(m => m.envoyeurId).filter(Boolean))]
+      .filter(id => !idsDemandesChat.current.has(id));
+    if (!manquants.length) return;
+    manquants.forEach(id => idsDemandesChat.current.add(id));
+    (async () => {
+      try {
+        const jeton = localStorage.getItem('bet_access_token') || localStorage.getItem('admin_token') || '';
+        const r = await fetch(`${_PROF_API}/api/admin/profils-chat?ids=${manquants.join(',')}`, {
+          headers: { Authorization: `Bearer ${jeton}` },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.profils && Object.keys(d.profils).length) setProfilsChat(p => ({ ...p, ...d.profils }));
+      } catch { /* les initiales et le nom seul restent un repli acceptable */ }
+    })();
+  }, [messages]);
+
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', minHeight:300 }}>
       {/* Messages */}
@@ -743,7 +777,14 @@ function OngletChatGroupe({ classeId, couleur, profile }) {
                 // moyen de retrouver le message d'origine dans un fil dense.
                 background: surligne === msg.id ? `${col}18` : 'transparent',
                 borderRadius:10, padding: surligne === msg.id ? '4px 6px' : 0, transition:'background .35s ease' }}>
-              {!moi && <span style={{ fontSize:10, fontWeight:700, color:col, marginBottom:2, paddingLeft:4 }}>{msg.envoyeurNom}</span>}
+              {/* QUI ÉCRIT : sa photo et son nom. Le coach et ses apprenants partagent ce
+                  fil, et le seul nom ne disait pas lequel des deux parlait. */}
+              {!moi && (
+                <span style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, paddingLeft:2 }}>
+                  <PastilleGroupe nom={msg.envoyeurNom} url={profilsChat[msg.envoyeurId]?.avatar_url} taille={20} accent={col} />
+                  <span style={{ fontSize:10.5, fontWeight:700, color:col }}>{msg.envoyeurNom}</span>
+                </span>
+              )}
 
               {/* LA CITATION - cliquable pour remonter au message d'origine. */}
               {msg.repondA && (
@@ -2812,12 +2853,21 @@ export default function DashboardProfesseur() {
 
         {/* ══════════ PLANNING & AGENDA ══════════ */}
         {section === 'planning' && (() => {
-          // Pour un remplaçant : uniquement les sessions déléguées
-          // Pour un titulaire  : toutes ses sessions
-          const estRemplacant = profile?.role === 'professeur_remplacant' || !!delegationActive;
-          const sessionsPlanif = estRemplacant
-            ? sessionsDelegation
-            : mesSessions;
+          /* LES SIENNES, PLUS CELLES QU'IL REMPLACE - et non l'une OU l'autre.
+             Ce planning montrait uniquement les sessions déléguées dès que le rôle valait
+             `professeur_remplacant`, masquant au coach ses PROPRES classes. Or il n'existe
+             pas de coach remplaçant : ce sont les mêmes titulaires qui se remplacent entre
+             eux, comme chez dash. Un coach qui dépanne un collègue le mardi garde ses
+             cours du lundi, et doit les voir.
+             La délégation est une SITUATION, pas une identité : c'est elle qui ajoute des
+             séances, jamais le rôle qui en retire. */
+          /* `estRemplacant` décrit la SITUATION du moment - une délégation en cours -
+             et non plus le rôle du compte. C'est ce qui change le titre du planning et
+             fait apparaître le bandeau de délégation. */
+          const estRemplacant = !!delegationActive;
+          const parId = new Map((mesSessions || []).map(s => [s.id, s]));
+          (delegationActive ? (sessionsDelegation || []) : []).forEach(s => parId.set(s.id, s));
+          const sessionsPlanif = [...parId.values()];
           const sessionsFiltreesAll = sessionsPlanif
             .filter(s => {
               if (filtreStatut !== 'tous' && s.statut !== filtreStatut) return false;
@@ -2908,14 +2958,11 @@ export default function DashboardProfesseur() {
               </div>
             )}
 
-            {/* Aucune délégation active */}
-            {estRemplacant && !delegationActive && (
-              <div style={{ textAlign:'center', padding:'48px 20px', background:COULEURS.gris50, borderRadius:14, border:`1px dashed ${COULEURS.gris200}`, marginBottom:20 }}>
-                <div style={{ fontSize:40, marginBottom:12 }}>📋</div>
-                <div style={{ fontSize:15, fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucune délégation en cours</div>
-                <div style={{ fontSize:13, color:COULEURS.gris400 }}>Le PA Advisor n'a assigné aucune session de remplacement pour le moment.</div>
-              </div>
-            )}
+            {/* Le bloc « Aucune délégation en cours » a été retiré : il ne pouvait
+                s'afficher que pour un compte au rôle `professeur_remplacant` SANS
+                délégation, c'est-à-dire un coach à qui l'on cachait ses propres cours.
+                Ce cas n'existe plus - un coach sans délégation voit simplement son
+                propre planning. */}
 
             {/* Liste des sessions */}
             {sessionsFiltrees.length > 0 && (
@@ -3068,7 +3115,12 @@ export default function DashboardProfesseur() {
         })()}
 
         {/* ══════════ MES DEMANDES (remplacement) ══════════ */}
-        {section === 'mes_demandes' && !(profile?.role === 'professeur_remplacant' || !!delegationActive) && (() => {
+        {/* VISIBLE POUR TOUT COACH. L'écran était masqué dès que le rôle valait
+            `professeur_remplacant` ou qu'une délégation était en cours - un coach qui
+            dépannait un collègue perdait l'accès à ses propres demandes d'absence, pour
+            ses propres classes. Le rôle ne retire rien : ce sont les mêmes titulaires qui
+            se remplacent entre eux. */}
+        {section === 'mes_demandes' && (() => {
           const STATUT_DEMANDE = {
             a_pourvoir: { bg:'#FEE2E2', txt:'#991B1B', lib:'🔴 À pourvoir' },
             en_cours:   { bg:'#DBEAFE', txt:'#1D4ED8', lib:'🔵 En cours'  },
@@ -3476,7 +3528,11 @@ export default function DashboardProfesseur() {
                             <span style={{ color:'#fff', fontWeight:700 }}>{cl?.nom}</span>
                           </div>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                            <div style={{ flex:1, minWidth:0 }}>
+                            {/* La photo de la classe, en lecture seule : le coach la
+                                consulte, l'onboarding la pose. Même image que dans le fil
+                                de discussion de cette classe. */}
+                            <PhotoClasseEntete classe={cl} taille={48} accent="#fff" />
+                            <div style={{ flex:1, minWidth:0, marginLeft:14 }}>
                               <div style={{ fontSize:15, fontWeight:800, color:'#fff' }}>{cl?.nom}</div>
                               <div style={{ fontSize:12, color:'rgba(255,255,255,0.65)', marginTop:2 }}>
                                 Niveau {cl?.niveau || '-'}{cl?.coach_nom ? ` · 👨‍🏫 ${cl.coach_nom}` : ''}
@@ -3792,7 +3848,10 @@ export default function DashboardProfesseur() {
                           <span style={{ color:'#fff', fontWeight:700 }}>{groupe?.nom}</span>
                         </div>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                          <div style={{ flex:1, minWidth:0 }}>
+                          {/* Même photo, en lecture seule, que dans l'autre modale et dans
+                              le fil de discussion de cette classe. */}
+                          <PhotoClasseEntete classe={groupe} taille={48} accent="#fff" />
+                          <div style={{ flex:1, minWidth:0, marginLeft:14 }}>
                             <div style={{ fontSize:15, fontWeight:800, color:'#fff' }}>{groupe?.nom}</div>
                             <div style={{ fontSize:12, color:'rgba(255,255,255,0.65)', marginTop:2 }}>
                               {TRANCHES[groupe?.tranche_age] || ''}{groupe?.cecr_min ? ` · ${groupe.cecr_min} → ${groupe.cecr_max}` : ''}
@@ -9399,6 +9458,13 @@ export default function DashboardProfesseur() {
         })()}
 
         {section === 'recompenses' && <OngletRecompenses />}
+
+        {/* LES QUATRE ÉCRANS DE PARITÉ avec l'Espace Professeur de dash. Dans un fichier à
+            part : celui-ci dépasse déjà 9 000 lignes. */}
+        {section === 'mes_taches'      && <SectionCoachMesTaches      couleur={couleurTheme} profile={profile} />}
+        {section === 'disponibilites'  && <SectionCoachDisponibilites couleur={couleurTheme} />}
+        {section === 'contrats'        && <SectionCoachContrats       couleur={couleurTheme} profile={profile} />}
+        {section === 'mon_profil'      && <SectionCoachProfil         couleur={couleurTheme} />}
 
       </div>
     </TopNavLayout>

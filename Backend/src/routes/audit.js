@@ -131,9 +131,18 @@ function buildLogsQuery(req, includePlateforme) {
   }
   if (req.query.centre)      query = query.eq("centre",      req.query.centre);
   if (req.query.statut)      query = query.eq("statut",      req.query.statut);
-  // Isolation dash / bet-elearning : une plateforme ne voit que ses propres logs +
-  // les modules réellement partagés (plateforme NULL, ex: entreprise, apprenants…).
-  if (includePlateforme && req.query.plateforme) query = query.or(`plateforme.eq.${req.query.plateforme},plateforme.is.null`);
+  /* ISOLATION STRICTE DASH / BET-ELEARNING.
+     Cette ligne acceptait aussi `plateforme IS NULL`, au motif que NULL désignerait « les
+     modules réellement partagés ». La base dit le contraire : sur 192 lignes NULL écrites par
+     du staff, les modules dominants sont `apprenants`, `upload`, `imports`, `conversations`,
+     `campagnes` — et même un module `dash` — avec pour acteurs des commerciaux, du marketing,
+     des superviseurs. NULL ne signifie pas « partagé », il signifie « l'écrivain n'a pas tagué
+     la ligne », et l'écrasante majorité vient de dash.
+     Conséquence : l'onglet Audit de bet-elearning affichait dix-sept lignes de dash sur ses
+     vingt premières. Il ne montre désormais que ce qui porte explicitement sa marque.
+     Dash n'est pas affecté : il n'envoie pas `plateforme`, donc aucun filtre ne s'y applique
+     et il continue de tout voir. */
+  if (includePlateforme && req.query.plateforme) query = query.eq("plateforme", req.query.plateforme);
   if (req.query.date_debut)  query = query.gte("created_at", req.query.date_debut);
   if (req.query.date_fin) {
     // Une date seule (YYYY-MM-DD) doit inclure toute la journée, pas juste 00:00.
@@ -179,7 +188,9 @@ router.get("/logs", authenticateAdmin, async (req, res) => {
 // Isolation dash / bet-elearning, même règle que /logs : une plateforme ne voit que ses
 // propres logs + les modules réellement partagés (plateforme NULL).
 function scopePlateforme(query, plateforme) {
-  return plateforme ? query.or(`plateforme.eq.${plateforme},plateforme.is.null`) : query;
+  // Même correction que dans buildLogsQuery : `plateforme IS NULL` laissait passer l'activité
+  // de dash non taguée, ce qui faussait aussi les statistiques de l'onglet Audit.
+  return plateforme ? query.eq("plateforme", plateforme) : query;
 }
 
 router.get("/stats", authenticateAdmin, async (req, res) => {

@@ -267,17 +267,23 @@ export function MessagerieProvider({ children }) {
   async function ouvrirOuCreerConversation(contactInfo) {
     if (!userId || !contactInfo?.id) return;
 
+    /* `avatar_url` est recopiée ici pour que le visage apparaisse DÈS l'ouverture, sans
+       attendre la résolution par compte que fait l'écran. Elle reste un secours, jamais la
+       référence : c'est `utilisateurs.avatar_url` qui fait foi, et l'écran la relit - sans
+       quoi une photo changée resterait figée dans les conversations déjà ouvertes. */
     const infoExp = {
       prenom:    profile?.prenom || '',
       nom:       profile?.nom    || '',
       role:      profile?.role   || '',
       initiales: `${profile?.prenom?.[0] || '?'}${profile?.nom?.[0] || '?'}`,
+      avatar_url: profile?.avatar_url || null,
     };
     const infoRec = {
       prenom:    contactInfo.prenom    || '',
       nom:       contactInfo.nom       || '',
       role:      contactInfo.role      || '',
       initiales: contactInfo.initiales || '??',
+      avatar_url: contactInfo.avatar_url || null,
     };
 
     // ID déterministe basé sur les deux participants

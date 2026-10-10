@@ -5,6 +5,14 @@ import { authenticateAdmin, requirePermission } from "../middlewares/requireAdmi
 import { notifyUser, notifyEntreprise, notifyRole } from "../services/notifyRole.js";
 import { logAudit } from "../middlewares/logAudit.js";
 import { notifierApprenants, notifierParentsMineurs } from "./remplacements.js";
+import { photoValide } from "../utils/photoUrl.js";
+
+/* La colonne `photo_url` manque-t-elle sur cette base ? Mêmes codes que côté
+   `conversations.js` : 42703 (colonne inconnue) et PGRST204 (le cache de schéma de
+   PostgREST ne la connaît pas encore). Permet de créer une classe sans photo plutôt que
+   d'échouer entièrement tant que Backend/sql/photo_classes_elearning.sql n'est pas passé. */
+const colonneAbsente = (e) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /photo_url/.test(e.message || ""));
 
 // Rôles admin BET + PA Advisor - mêmes destinataires que pour un remplacement temporaire
 // (voir ROLES_PA dans remplacements.js), à tenir informés de toute suspension définitive.
@@ -217,6 +225,58 @@ router.get("/apprenants/tous", authenticateAdmin, async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/classes-elearning/apprenants/:id/suivi
+ *
+ * Coche ou décoche une étape de démarrage d'un apprenant E-LEARNING.
+ *
+ * Pendant de `PATCH /api/groupes/apprenants/:id/suivi`, qui agit sur `groupes_apprenants` -
+ * la table des classes de dash. L'écran « Suivi démarrage » de l'Onboarding appelait cette
+ * dernière et affichait donc les apprenants du présentiel ; cette route lui donne son
+ * équivalent sur `classes_elearning_apprenants`.
+ *
+ * ON NE STOCKE QUE CE QUI SE COCHE À LA MAIN. `bienvenue` et `acces` sont déduites côté
+ * écran de la présence d'un `apprenant_id` - le compte est créé à l'assignation, donc son
+ * existence vaut preuve d'envoi. Les accepter ici permettrait de les décocher alors que le
+ * compte existe, c'est-à-dire d'afficher une case qui ment.
+ */
+const ETAPES_SUIVI_MANUELLES = ["kit", "planning"];
+
+router.patch("/apprenants/:id/suivi", authenticateAdmin, requirePermission("classes", "update"), async (req, res) => {
+  try {
+    const recu = req.body?.suivi_checklist;
+    if (!recu || typeof recu !== "object" || Array.isArray(recu)) {
+      return res.status(400).json({ error: "suivi_checklist doit être un objet." });
+    }
+
+    const propre = {};
+    ETAPES_SUIVI_MANUELLES.forEach(k => { if (k in recu) propre[k] = !!recu[k]; });
+
+    const { data, error } = await supabase
+      .from("classes_elearning_apprenants")
+      .update({ suivi_checklist: propre })
+      .eq("id", req.params.id)
+      .select("id, suivi_checklist")
+      .single();
+
+    /* La colonne peut ne pas exister encore - le SQL est livré à part
+       (Backend/sql/suivi_demarrage_classes_elearning.sql). On le DIT plutôt que de rendre
+       une erreur 500 que l'écran afficherait comme un échec de réseau. */
+    if (error && (error.code === "42703" || error.code === "PGRST204")) {
+      return res.status(409).json({
+        error: "Le suivi de démarrage n'est pas encore installé sur cette base "
+             + "(Backend/sql/suivi_demarrage_classes_elearning.sql).",
+      });
+    }
+    if (error) return res.status(500).json({ error: error.message });
+
+    res.json({ apprenant: data });
+  } catch (err) {
+    console.error("[classes-elearning/suivi]", err.message || err);
+    res.status(500).json({ error: "Enregistrement impossible" });
+  }
+});
+
 // ── GET /api/classes-elearning/sans-coach ───────────────────────────────────
 // Classes créées sans coach assigné - file d'attente pour le PA Advisor
 router.get("/sans-coach", authenticateAdmin, async (req, res) => {
@@ -261,7 +321,49 @@ router.get("/coaches-elearning", authenticateAdmin, async (req, res) => {
       .order("nom");
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ coaches: data || [] });
+
+    /* LA NOTE MOYENNE ACCOMPAGNE CHAQUE COACH, parce que c'est elle qui détermine sa
+       catégorie de contrat (Corporate / BET Group / Needs Improvement / Needs Retraining).
+       Cette liste sert à ASSIGNER un coach à une classe : choisir sans voir sa catégorie
+       revient à décider à l'aveugle, alors que le superviseur, lui, la voit.
+       Mêmes sources et même filtre de plateforme que `coachs-conformite` du superviseur
+       bet-elearning - sinon le PA et le superviseur liraient deux moyennes différentes
+       pour la même personne. */
+    const coaches = data || [];
+    const ids = coaches.map(c => c.id);
+    const notesPar = {};
+    if (ids.length) {
+      const vide = { data: [] };
+      const sur = (p) => p.then(r => (r?.error ? vide : r), () => vide);
+      const [evalsR, rapportsR] = await Promise.all([
+        sur(supabase.from("evaluations_coachs").select("coach_id, note_finale")
+          .in("coach_id", ids).eq("plateforme", "bet-elearning")),
+        sur(supabase.from("rapports_observation").select("coach_id, note_globale")
+          .in("coach_id", ids).eq("plateforme", "bet-elearning")),
+      ]);
+      const ajouter = (id, v) => {
+        const n = parseFloat(v);
+        if (!Number.isFinite(n) || n <= 0) return;
+        (notesPar[id] = notesPar[id] || []).push(n);
+      };
+      (evalsR.data || []).forEach(e => ajouter(e.coach_id, e.note_finale));
+      (rapportsR.data || []).forEach(r => ajouter(r.coach_id, r.note_globale));
+    }
+
+    res.json({
+      coaches: coaches.map(c => {
+        const notes = notesPar[c.id] || [];
+        return {
+          ...c,
+          // `null` et non 0 : un coach jamais observé n'est pas un coach noté zéro, et
+          // l'affichage doit pouvoir le ranger dans « Non évalué ».
+          note_moyenne: notes.length
+            ? Math.round((notes.reduce((s, n) => s + n, 0) / notes.length) * 10) / 10
+            : null,
+          nb_observations: notes.length,
+        };
+      }),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -495,33 +597,51 @@ router.post("/", authenticateAdmin, requirePermission("classes","create"), async
     const {
       nom, entreprise_id, entreprise_nom,
       niveau, type_cours, coach_id, coach_nom,
-      horaire, date_debut, date_fin, capacite_max,
+      horaire, date_debut, date_fin, capacite_max, photo_url,
     } = req.body;
 
     if (!nom?.trim()) return res.status(400).json({ error: "Le nom de la classe est requis" });
 
+    /* La photo passe par la même validation que celle des groupes : elle finit dans un
+       attribut `src`, et une URL `javascript:` y serait exécutée chez chaque apprenant. */
+    const photo = photoValide(photo_url);
+    if (photo === undefined) return res.status(400).json({ error: "Photo de classe invalide." });
+
     const createdByNom = [req.profil.prenom, req.profil.nom].filter(Boolean).join(" ") || req.profil.email;
 
-    const { data, error } = await supabase
-      .from("classes_elearning")
-      .insert({
-        nom:            nom.trim(),
-        entreprise_id:  entreprise_id  || null,
-        entreprise_nom: entreprise_nom || null,
-        niveau:         niveau         || null,
-        type_cours:     type_cours     || "en_ligne",
-        coach_id:       coach_id       || null,
-        coach_nom:      coach_nom      || null,
-        horaire:        Array.isArray(horaire) ? horaire : [],
-        date_debut:     date_debut     || null,
-        date_fin:       date_fin       || null,
-        capacite_max:   Number(capacite_max) || 10,
-        statut:         "actif",
-        created_by:     req.profil.id,
-        created_by_nom: createdByNom,
-      })
-      .select()
-      .single();
+    const aInserer = {
+      nom:            nom.trim(),
+      entreprise_id:  entreprise_id  || null,
+      entreprise_nom: entreprise_nom || null,
+      niveau:         niveau         || null,
+      type_cours:     type_cours     || "en_ligne",
+      coach_id:       coach_id       || null,
+      coach_nom:      coach_nom      || null,
+      horaire:        Array.isArray(horaire) ? horaire : [],
+      date_debut:     date_debut     || null,
+      date_fin:       date_fin       || null,
+      capacite_max:   Number(capacite_max) || 10,
+      statut:         "actif",
+      created_by:     req.profil.id,
+      created_by_nom: createdByNom,
+      ...(photo ? { photo_url: photo } : {}),
+    };
+
+    let { data, error } = await supabase
+      .from("classes_elearning").insert(aInserer).select().single();
+
+    /* La colonne `photo_url` peut ne pas exister encore - le SQL est livré à part
+       (Backend/sql/photo_classes_elearning.sql) et s'exécute quand l'équipe le décide.
+       Plutôt que de faire échouer TOUTE la création d'une classe pour une image
+       facultative, on rejoue sans elle et on le dit : l'écran saura pourquoi la photo
+       n'est pas apparue. */
+    let photoNonEnregistree = false;
+    if (error && photo && colonneAbsente(error)) {
+      const { photo_url: _sansPhoto, ...sansColonne } = aInserer;
+      ({ data, error } = await supabase
+        .from("classes_elearning").insert(sansColonne).select().single());
+      if (!error) photoNonEnregistree = true;
+    }
 
     if (error) return res.status(500).json({ error: error.message });
 
@@ -545,7 +665,13 @@ router.post("/", authenticateAdmin, requirePermission("classes","create"), async
       statut:      "success",
     }).catch(() => {});
 
-    res.status(201).json({ classe: data });
+    res.status(201).json({
+      classe: data,
+      ...(photoNonEnregistree ? {
+        photo_non_enregistree: "La classe est créée, mais la photo n'a pas pu être enregistrée : "
+          + "la colonne n'existe pas encore sur cette base (Backend/sql/photo_classes_elearning.sql).",
+      } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -561,6 +687,15 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes","update"), a
     const payload = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) payload[k] = req.body[k]; });
 
+    /* `photo_url` est traitée à part de la liste blanche : elle a besoin de sa validation
+       (http(s) uniquement - cette valeur finit dans un `src`), et `null` doit passer pour
+       retirer la photo, ce qu'une simple recopie confondrait avec « champ absent ». */
+    if (req.body.photo_url !== undefined) {
+      const photo = photoValide(req.body.photo_url);
+      if (photo === undefined) return res.status(400).json({ error: "Photo de classe invalide." });
+      payload.photo_url = photo;   // `null` retire la photo, l'écran retombe sur les initiales
+    }
+
     // Récupérer l'ancien coach avant écrasement - pour ne notifier que si l'assignation change
     // réellement (évite de renotifier le même coach à chaque modification de la classe).
     let ancienCoachId = null;
@@ -569,12 +704,23 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes","update"), a
       ancienCoachId = avant?.coach_id || null;
     }
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("classes_elearning")
       .update(payload)
       .eq("id", req.params.id)
       .select()
       .single();
+
+    /* Même repli qu'à la création : si la colonne n'existe pas encore, on rejoue sans la
+       photo plutôt que de faire aussi perdre le renommage ou le changement de coach
+       demandés dans le même appel. */
+    let photoNonEnregistree = false;
+    if (error && payload.photo_url !== undefined && colonneAbsente(error)) {
+      const { photo_url: _sansPhoto, ...reste } = payload;
+      photoNonEnregistree = true;
+      ({ data, error } = await supabase
+        .from("classes_elearning").update(reste).eq("id", req.params.id).select().single());
+    }
 
     if (error) return res.status(500).json({ error: error.message });
 
@@ -624,7 +770,13 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes","update"), a
       statut:      "success",
     }).catch(() => {});
 
-    res.json({ classe: data });
+    res.json({
+      classe: data,
+      ...(photoNonEnregistree ? {
+        photo_non_enregistree: "La photo de classe n'est pas encore installée sur cette base "
+          + "(Backend/sql/photo_classes_elearning.sql).",
+      } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

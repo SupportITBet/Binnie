@@ -3,6 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { usePrompt } from '../../contexts/ConfirmContext';
 import { COULEURS } from '../../constants/couleurs';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
+import BadgeCategorieCoach, { FlecheTendance } from '../../components/shared/BadgeCategorieCoach';
+import { CATEGORIES_COACH, CATEGORIE_SANS_NOTE, categorieCoach, NOTE_COULEUR } from '../../utils/categorieCoach';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
@@ -65,12 +68,494 @@ const SUP_STATUT_RAPPORT = {
   transmis_pa: { bg: '#D1FAE5', txt: '#065F46', lib: 'Transmis PA' },
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   LE DOSSIER D'UN COACH - le modal qu'ouvre un clic sur sa ligne.
+   ═══════════════════════════════════════════════════════════════════════════
+   Pendant du modal coach du superviseur de dash, avec ses huit onglets.
+
+   ⚠️ CHAQUE ONGLET EST REBRANCHÉ SUR LA SOURCE E-LEARNING. La version dash lit
+   `/api/groupes` et `/api/seances` - les tables de dash. Les recopier ici aurait affiché
+   les classes et les séances de dash dans un écran bet-elearning, la même fuite que celle
+   corrigée sur les apprenants, l'audit, la vue d'ensemble et les messages. On lit donc
+   `/api/classes-elearning` et `/api/classes-elearning/seances`.
+
+   Trois sources sont en revanche légitimement communes, parce qu'elles décrivent LA
+   PERSONNE et non une plateforme : ses disponibilités, les modules qu'il a rédigés, et les
+   fichiers que ces modules contiennent.
+═══════════════════════════════════════════════════════════════════════════ */
+
+const COACH_TABS = [
+  { id: 'infos',         icon: '👤', label: 'Infos' },
+  { id: 'observations',  icon: '📋', label: 'Observations' },
+  { id: 'classes',       icon: '🏫', label: 'Classes' },
+  { id: 'seances',       icon: '📆', label: 'Séances' },
+  { id: 'disponibilite', icon: '📅', label: 'Disponibilités' },
+  { id: 'modules',       icon: '🧩', label: 'Modules e-learning' },
+  { id: 'ressources',    icon: '📂', label: 'Ressources partagées' },
+  { id: 'archive',       icon: '🗄️', label: 'Archive' },
+];
+
+const MOIS_FR_SUP = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+const PAR_PAGE_COACH = 10;
+
+/**
+ * Filtrage par date + pagination, pour les tableaux du dossier coach.
+ *
+ * Un seul crochet pour les six tableaux : six copies auraient divergé au premier
+ * ajustement (taille de page, bornes incluses ou non, remise à la page 1 après filtrage).
+ *
+ * LES DEUX BORNES SONT INCLUSES, et la borne haute couvre la journée entière - comparer une
+ * date seule à un horodatage exclurait tout ce qui a été créé après minuit le dernier jour.
+ */
+function useTableauCoach(lignes, champDate) {
+  const [du, setDu]     = useState('');
+  const [au, setAu]     = useState('');
+  const [page, setPage] = useState(1);
+
+  const filtrees = (lignes || []).filter(l => {
+    if (!du && !au) return true;
+    const brut = champDate ? l[champDate] : null;
+    if (!brut) return false;                       // sans date, une ligne ne peut pas être datée
+    const d = new Date(brut);
+    if (Number.isNaN(d.getTime())) return false;
+    if (du && d < new Date(`${du}T00:00:00`)) return false;
+    if (au && d > new Date(`${au}T23:59:59`)) return false;
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtrees.length / PAR_PAGE_COACH));
+  // Supprimer un filtre peut laisser la page courante au-delà du dernier écran : sans ce
+  // recadrage, le tableau paraîtrait vide alors qu'il porte des lignes.
+  const pageSure = Math.min(page, totalPages);
+  const visibles = filtrees.slice((pageSure - 1) * PAR_PAGE_COACH, pageSure * PAR_PAGE_COACH);
+
+  const reinit = () => { setDu(''); setAu(''); setPage(1); };
+  const majDu  = (v) => { setDu(v); setPage(1); };
+  const majAu  = (v) => { setAu(v); setPage(1); };
+
+  return { du, au, majDu, majAu, reinit, page: pageSure, setPage, visibles,
+           total: filtrees.length, totalBrut: (lignes || []).length, totalPages };
+}
+
+function FiltreDates({ t, libelle = 'Filtrer par date' }) {
+  const champ = { padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, fontSize: 12, fontFamily: 'inherit', color: COULEURS.navy };
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{libelle}</span>
+      <input type="date" value={t.du} onChange={e => t.majDu(e.target.value)} style={champ} aria-label="Date de début" />
+      <span style={{ color: COULEURS.gris400, fontSize: 12 }}>→</span>
+      <input type="date" value={t.au} onChange={e => t.majAu(e.target.value)} style={champ} aria-label="Date de fin" />
+      {(t.du || t.au) && (
+        <>
+          <button onClick={t.reinit}
+            style={{ padding: '6px 11px', borderRadius: 8, border: `1px solid ${COULEURS.gris200}`, background: '#fff', fontSize: 11.5, color: COULEURS.gris600, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+            ✕ Réinitialiser
+          </button>
+          {/* Dire combien de lignes le filtre écarte : un tableau qui rétrécit sans
+              explication passe pour une donnée manquante. */}
+          <span style={{ fontSize: 11.5, color: COULEURS.gris400 }}>
+            {t.total} sur {t.totalBrut}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PaginationCoach({ t }) {
+  if (t.totalPages <= 1) return null;
+  const pages = Array.from({ length: t.totalPages }, (_, i) => i + 1)
+    // Au-delà de sept écrans, on garde une fenêtre glissante autour de la page courante :
+    // aligner trente boutons rendrait la barre illisible.
+    .filter(p => t.totalPages <= 7 || p === 1 || p === t.totalPages || Math.abs(p - t.page) <= 1);
+
+  const btn = (actif) => ({
+    padding: '5px 10px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+    border: `1.5px solid ${actif ? SUP_COLOR : COULEURS.gris200}`,
+    background: actif ? SUP_COLOR : '#fff',
+    color: actif ? '#fff' : COULEURS.gris600, fontWeight: actif ? 800 : 500,
+  });
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+      <button onClick={() => t.setPage(p => Math.max(1, p - 1))} disabled={t.page === 1}
+        style={{ ...btn(false), cursor: t.page === 1 ? 'default' : 'pointer', opacity: t.page === 1 ? 0.45 : 1 }}>← Préc.</button>
+      {pages.map((p, i) => (
+        <span key={p} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {i > 0 && p - pages[i - 1] > 1 && <span style={{ color: COULEURS.gris400, fontSize: 12 }}>…</span>}
+          <button onClick={() => t.setPage(p)} style={btn(p === t.page)}>{p}</button>
+        </span>
+      ))}
+      <button onClick={() => t.setPage(p => Math.min(t.totalPages, p + 1))} disabled={t.page === t.totalPages}
+        style={{ ...btn(false), cursor: t.page === t.totalPages ? 'default' : 'pointer', opacity: t.page === t.totalPages ? 0.45 : 1 }}>Suiv. →</button>
+      <span style={{ fontSize: 11.5, color: COULEURS.gris400, marginLeft: 4 }}>{t.total} ligne{t.total > 1 ? 's' : ''}</span>
+    </div>
+  );
+}
+
+/** Un bloc vide qui DIT pourquoi il est vide, au lieu d'un écran blanc. */
+function VideSup({ icone = '📭', titre, detail }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '44px 20px', background: COULEURS.gris50, borderRadius: 12, border: `1px dashed ${COULEURS.gris200}` }}>
+      <div style={{ fontSize: 32, marginBottom: 10 }}>{icone}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: COULEURS.navy }}>{titre}</div>
+      {detail && <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: 5, lineHeight: 1.6, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>{detail}</div>}
+    </div>
+  );
+}
+
+function TableauSup({ colonnes, lignes, rendu }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, border: `1px solid ${COULEURS.gris200}`, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ background: COULEURS.gris50 }}>
+              {colonnes.map(h => (
+                <th key={h} style={{ padding: '9px 13px', textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{lignes.map(rendu)}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ModalCoachDetail({ coach, ongletInitial = 'infos', onFermer, onSignaler }) {
+  const [onglet, setOnglet] = useState(ongletInitial);
+  const [chargement, setChargement] = useState(false);
+
+  const [observations, setObservations] = useState([]);
+  const [classes,      setClasses]      = useState([]);
+  const [seances,      setSeances]      = useState([]);
+  const [dispos,       setDispos]       = useState([]);
+  const [modules,      setModules]      = useState([]);
+  const [ressources,   setRessources]   = useState([]);
+  const [sansChat,     setSansChat]     = useState(false);
+
+  const _now = new Date();
+  const [dispoMois,  setDispoMois]  = useState(_now.getMonth() + 1);
+  const [dispoAnnee, setDispoAnnee] = useState(_now.getFullYear());
+
+  // Un tableau filtrable et paginé par onglet, chacun sur SA colonne de date.
+  const tObs     = useTableauCoach(observations, 'date_observation');
+  const tClasses = useTableauCoach(classes,      'date_debut');
+  const tSeances = useTableauCoach(seances,      'date_seance');
+  const tModules = useTableauCoach(modules,      'created_at');
+  const tRess    = useTableauCoach(ressources,   'created_at');
+  const archivees = classes.filter(cl => cl.statut === 'clos' || cl.statut === 'archive');
+  const tArchive = useTableauCoach(archivees,    'date_fin');
+
+  /* Chaque onglet charge À SON OUVERTURE et non au montage : ouvrir un dossier
+     déclencherait sinon huit requêtes dont sept pour des onglets jamais regardés. */
+  useEffect(() => {
+    if (!coach?.id) return;
+    let vivant = true;
+    const lire = async (url) => {
+      const r = await fetch(`${_API_URL_ADMIN}${url}`, { headers: supAuthHdrs() });
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json();
+    };
+    (async () => {
+      setChargement(true);
+      try {
+        if (onglet === 'observations') {
+          // La route ne filtre pas par coach : on trie ici, le volume est celui d'une
+          // plateforme et non d'un annuaire.
+          const d = await lire('/api/superviseur/rapports-deputy');
+          if (vivant) setObservations((d.rapports || []).filter(r => String(r.coach_id) === String(coach.id)));
+        } else if (onglet === 'classes' || onglet === 'archive') {
+          const d = await lire(`/api/classes-elearning?coach_id=${coach.id}`);
+          if (vivant) setClasses(d.classes || []);
+        } else if (onglet === 'seances') {
+          const d = await lire(`/api/classes-elearning/seances?coach_id=${coach.id}`);
+          if (vivant) setSeances(d.seances || []);
+        } else if (onglet === 'disponibilite') {
+          const d = await lire(`/api/coachs/${coach.id}/disponibilites?mois=${dispoMois}&annee=${dispoAnnee}`);
+          if (vivant) setDispos(Array.isArray(d.disponibilites) ? d.disponibilites : []);
+        } else if (onglet === 'modules') {
+          /* Route dédiée du superviseur bet-elearning, et NON `/api/cours-elearning` :
+             cette dernière liste les modules par `coach_id` seul, donc les modules de dash.
+             Celle-ci ne garde que ceux rattachés à une classe e-learning. */
+          const d = await lire(`/api/superviseur/coachs/${coach.id}/modules`);
+          if (vivant) setModules(d.modules || []);
+        } else if (onglet === 'ressources') {
+          const d = await lire(`/api/superviseur/coachs/${coach.id}/ressources`);
+          if (vivant) { setRessources(d.ressources || []); setSansChat(!!d.sans_fichiers_chat); }
+        }
+      } catch { /* l'onglet affichera son état vide plutôt qu'une erreur brute */ }
+      finally { if (vivant) setChargement(false); }
+    })();
+    return () => { vivant = false; };
+  }, [onglet, coach?.id, dispoMois, dispoAnnee]);
+
+  const nomCoach = `${coach.prenom || ''} ${coach.nom || ''}`.trim() || 'Coach';
+  const cell = { padding: '9px 13px', verticalAlign: 'top' };
+
+  const NATURE_ICONE = { image: '🖼️', audio: '🎵', video: '🎬', pdf: '📄', document: '📎' };
+
+  return (
+    <ModalSup
+      /* LA PHOTO DU COACH, celle de son compte (`utilisateurs.avatar_url`) - la même que
+         l'administrateur BET enregistre depuis dash, et que montrent déjà les fils de
+         discussion. Repli sur les initiales quand il n'y en a pas. */
+      title={(
+        <span style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+          <PastilleGroupe nom={nomCoach} url={coach.avatar_url} taille={36} accent="#fff" agrandissable />
+          <span>{nomCoach}</span>
+          {/* La catégorie de contrat dès l'en-tête : c'est le verdict qu'on vient
+              chercher, il ne doit pas se mériter en ouvrant un onglet. */}
+          <BadgeCategorieCoach note={coach.note_moyenne} taille="sm" avecNote />
+        </span>
+      )}
+      subtitle={coach.email} onClose={onFermer}>
+      {/* ONGLETS */}
+      <div style={{ display: 'flex', borderBottom: `2px solid ${COULEURS.gris200}`, marginBottom: 18, overflowX: 'auto' }}>
+        {COACH_TABS.map(t => {
+          const actif = onglet === t.id;
+          return (
+            <button key={t.id} onClick={() => setOnglet(t.id)}
+              style={{ padding: '11px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
+                borderBottom: `3px solid ${actif ? SUP_COLOR : 'transparent'}`, marginBottom: -2,
+                fontWeight: actif ? 700 : 500, color: actif ? SUP_COLOR : COULEURS.gris600,
+                fontSize: 12, whiteSpace: 'nowrap', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
+              {t.icon} {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {chargement && <div style={{ textAlign: 'center', padding: 36, color: COULEURS.gris400, fontSize: 13 }}>Chargement…</div>}
+
+      {/* ── INFOS ── */}
+      {!chargement && onglet === 'infos' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 14 }}>
+          {[
+            ['Nom complet',        nomCoach],
+            ['Surnom',             coach.surnom || '-'],
+            ['E-mail',             coach.email || '-'],
+            ['Périmètre',          coach.scope || '-'],
+            ['Dernière connexion', fmtDateSup(coach.derniere_connexion)],
+            ['Classes e-learning', coach.nb_groupes ?? 0],
+            ['Observations',       coach.nb_rapports_deputy ?? 0],
+            ['Évaluations',        coach.nb_evaluations ?? 0],
+            ['Note moyenne',       coach.note_moyenne ? `${coach.note_moyenne}/5` : '-'],
+            ['Anomalies ouvertes', coach.nb_anomalies ?? 0],
+            ['Compte',             coach.acces_bloque ? '🔒 Bloqué' : coach.actif === false ? 'Inactif' : '✅ Actif'],
+          ].map(([l, v]) => (
+            <div key={l} style={{ background: COULEURS.gris50, borderRadius: 10, padding: '11px 14px' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{l}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: COULEURS.navy, marginTop: 3 }}>{v}</div>
+            </div>
+          ))}
+          {onSignaler && (
+            <button onClick={() => onSignaler(coach)}
+              style={{ gridColumn: '1 / -1', padding: '10px 16px', background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, color: '#B91C1C', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ⚠️ Signaler une anomalie sur ce coach
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── OBSERVATIONS ── */}
+      {!chargement && onglet === 'observations' && (
+        observations.length === 0
+          ? <VideSup icone="📋" titre="Aucun rapport d'observation"
+              detail="Les rapports déposés par les Deputy Superviseurs sur ce coach apparaîtront ici." />
+          : <>
+            <FiltreDates t={tObs} libelle="Date d'observation" />
+            <TableauSup colonnes={['Date', 'Deputy', 'Classe', 'Note', 'Statut']} lignes={tObs.visibles}
+              rendu={r => {
+                const st = SUP_STATUT_RAPPORT[r.statut] || SUP_STATUT_RAPPORT.soumis;
+                return (
+                  <tr key={r.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                    <td style={cell}>{fmtDateSup(r.date_observation)}</td>
+                    <td style={cell}>{r.deputy_nom || r.observateur_nom || '-'}</td>
+                    <td style={cell}>{r.classe || r.groupe_nom || '-'}</td>
+                    <td style={{ ...cell, fontWeight: 700, color: r.note_globale && Number(r.note_globale) < 3 ? '#DC2626' : COULEURS.navy }}>
+                      {r.note_globale ? `${r.note_globale}/5` : '-'}
+                    </td>
+                    <td style={cell}><span style={{ background: st.bg, color: st.txt, padding: '2px 9px', borderRadius: 10, fontSize: 10.5, fontWeight: 700 }}>{st.lib}</span></td>
+                  </tr>
+                );
+              }} />
+            <PaginationCoach t={tObs} />
+          </>
+      )}
+
+      {/* ── CLASSES ── */}
+      {!chargement && onglet === 'classes' && (
+        classes.length === 0
+          ? <VideSup icone="🏫" titre="Aucune classe e-learning"
+              detail="Ce coach n'est titulaire d'aucune classe sur cette plateforme. Ses éventuelles classes présentiel relèvent de dash et ne sont pas listées ici." />
+          : <>
+            <FiltreDates t={tClasses} libelle="Date de début" />
+            <TableauSup colonnes={['Classe', 'Niveau', 'Entreprise', 'Début', 'Statut']} lignes={tClasses.visibles}
+              rendu={cl => (
+                <tr key={cl.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                  <td style={{ ...cell, fontWeight: 700, color: COULEURS.navy }}>{cl.nom}</td>
+                  <td style={cell}>{cl.niveau || '-'}</td>
+                  <td style={cell}>{cl.entreprise_nom || '-'}</td>
+                  <td style={cell}>{fmtDateSup(cl.date_debut)}</td>
+                  <td style={cell}>{cl.statut || '-'}</td>
+                </tr>
+              )} />
+            <PaginationCoach t={tClasses} />
+          </>
+      )}
+
+      {/* ── SÉANCES ── */}
+      {!chargement && onglet === 'seances' && (
+        seances.length === 0
+          ? <VideSup icone="📆" titre="Aucune séance"
+              detail="Les séances e-learning de ce coach s'afficheront ici dès qu'une classe lui sera assignée." />
+          : <>
+            <FiltreDates t={tSeances} libelle="Date de séance" />
+            <TableauSup colonnes={['Date', 'Classe', 'Horaire', 'Statut']} lignes={tSeances.visibles}
+              rendu={s => (
+                <tr key={s.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                  <td style={cell}>{fmtDateSup(s.date_seance || s.date)}</td>
+                  <td style={cell}>{s.classe_nom || s.classe || '-'}</td>
+                  <td style={cell}>{s.heure_debut ? `${s.heure_debut} - ${s.heure_fin || ''}` : '-'}</td>
+                  <td style={cell}>{s.statut || '-'}</td>
+                </tr>
+              )} />
+            <PaginationCoach t={tSeances} />
+          </>
+      )}
+
+      {/* ── DISPONIBILITÉS ── */}
+      {/* ── DISPONIBILITÉS ──
+          RÉTABLI, et désormais propre à la plateforme. `coach_disponibilites` porte une
+          colonne `plateforme` (Backend/sql/coach_disponibilites_plateforme.sql) et le coach
+          déclare ses créneaux e-learning depuis son propre espace. Cet onglet montrait
+          auparavant les créneaux déclarés pour le présentiel : on l'avait vidé plutôt que
+          d'emprunter la donnée du voisin. */}
+      {!chargement && onglet === 'disponibilite' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={dispoMois} onChange={e => setDispoMois(Number(e.target.value))}
+              style={{ padding: '7px 11px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, fontSize: 12, fontFamily: 'inherit' }}>
+              {MOIS_FR_SUP.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <select value={dispoAnnee} onChange={e => setDispoAnnee(Number(e.target.value))}
+              style={{ padding: '7px 11px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, fontSize: 12, fontFamily: 'inherit' }}>
+              {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <span style={{ fontSize: 11.5, color: COULEURS.gris400 }}>
+              Créneaux déclarés pour BET E-Learning uniquement.
+            </span>
+          </div>
+          {dispos.length === 0
+            ? <VideSup icone="📅" titre="Aucune disponibilité déclarée"
+                detail={`Ce coach n'a déclaré aucun créneau e-learning pour ${MOIS_FR_SUP[dispoMois - 1]} ${dispoAnnee}. `
+                  + "Ses disponibilités présentiel relèvent de dash et ne sont pas listées ici."} />
+            : <TableauSup colonnes={['Jour', 'Créneau', 'Horaire']} lignes={dispos}
+                rendu={(d, i) => (
+                  <tr key={d.id || i} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                    <td style={cell}>{d.jour || '-'}</td>
+                    <td style={cell}>{d.creneau || '-'}</td>
+                    <td style={cell}>{d.debut ? `${String(d.debut).slice(0, 5)} – ${String(d.fin || '').slice(0, 5)}` : '-'}</td>
+                  </tr>
+                )} />}
+        </>
+      )}
+
+      {/* ── MODULES E-LEARNING ── */}
+      {!chargement && onglet === 'modules' && (
+        modules.length === 0
+          ? <VideSup icone="🧩" titre="Aucun module e-learning"
+              detail={"Seuls les modules rattachés à une classe de cette plateforme sont listés. "
+                + "Les modules que ce coach a rédigés pour ses classes présentiel relèvent de dash "
+                + "et n'apparaissent pas ici."} />
+          : <>
+            <FiltreDates t={tModules} libelle="Date de création" />
+            <TableauSup colonnes={['Module', 'Statut', 'Blocs', 'Classes', 'Créé le']} lignes={tModules.visibles}
+              rendu={m => (
+                <tr key={m.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                  <td style={{ ...cell, fontWeight: 700, color: COULEURS.navy }}>{m.titre || m.nom || '-'}</td>
+                  <td style={cell}>{m.statut || '-'}</td>
+                  <td style={cell}>{m.nb_blocs ?? (Array.isArray(m.blocs) ? m.blocs.length : '-')}</td>
+                  <td style={cell}>{m.classes?.length ? m.classes.join(', ') : '-'}</td>
+                  <td style={cell}>{fmtDateSup(m.created_at)}</td>
+                </tr>
+              )} />
+            <PaginationCoach t={tModules} />
+          </>
+      )}
+
+      {/* ── RESSOURCES PARTAGÉES ── */}
+      {!chargement && onglet === 'ressources' && (
+        <>
+          {sansChat && (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '11px 14px', marginBottom: 14, fontSize: 12, color: '#78350F', lineHeight: 1.6 }}>
+              <strong>Les pièces jointes du chat de classe ne figurent pas ici.</strong> Sur cette
+              plateforme, le chat de classe vit dans Firestore et ses fichiers n'ont pas de ligne en
+              base - contrairement à dash. Cet onglet liste donc les fichiers contenus dans les
+              modules du coach.
+            </div>
+          )}
+          {ressources.length === 0
+            ? <VideSup icone="📂" titre="Aucune ressource partagée"
+                detail="Les fichiers contenus dans les modules e-learning de ce coach apparaîtront ici." />
+            : <>
+              <FiltreDates t={tRess} libelle="Date de dépôt" />
+              <TableauSup colonnes={['Fichier', 'Nature', 'Module', 'Classes', 'Déposé le']} lignes={tRess.visibles}
+                rendu={r => (
+                  <tr key={r.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                    <td style={cell}>
+                      <a href={r.url} target="_blank" rel="noreferrer" style={{ fontWeight: 700, color: SUP_COLOR, textDecoration: 'none' }}>{r.nom}</a>
+                      {r.masque && <span style={{ marginLeft: 7, fontSize: 10, color: '#92400E', background: '#FEF3C7', padding: '1px 7px', borderRadius: 9, fontWeight: 700 }}>non publié</span>}
+                    </td>
+                    <td style={cell}>{NATURE_ICONE[r.nature] || '📎'} {r.nature}</td>
+                    <td style={cell}>{r.contexte?.module_titre || '-'}</td>
+                    <td style={cell}>{r.classes?.length ? r.classes.join(', ') : '-'}</td>
+                    <td style={cell}>{fmtDateSup(r.created_at)}</td>
+                  </tr>
+                )} />
+              <PaginationCoach t={tRess} />
+            </>}
+        </>
+      )}
+
+      {/* ── ARCHIVE ── */}
+      {!chargement && onglet === 'archive' && (
+        archivees.length === 0
+          ? <VideSup icone="🗄️" titre="Aucune classe clôturée"
+              detail="Les classes e-learning que ce coach a menées à leur terme s'archiveront ici." />
+          : <>
+            <FiltreDates t={tArchive} libelle="Date de fin" />
+            <TableauSup colonnes={['Classe', 'Niveau', 'Début', 'Fin', 'Statut']} lignes={tArchive.visibles}
+              rendu={cl => (
+                <tr key={cl.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                  <td style={{ ...cell, fontWeight: 700, color: COULEURS.navy }}>{cl.nom}</td>
+                  <td style={cell}>{cl.niveau || '-'}</td>
+                  <td style={cell}>{fmtDateSup(cl.date_debut)}</td>
+                  <td style={cell}>{fmtDateSup(cl.date_fin)}</td>
+                  <td style={cell}>{cl.statut}</td>
+                </tr>
+              )} />
+            <PaginationCoach t={tArchive} />
+          </>
+      )}
+    </ModalSup>
+  );
+}
+
 // ─────────────────────────── 1. CAHIERS COACHS ───────────────────────────
 export function OngletCahiersCoachs() {
   const [coachs,   setCoachs]   = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [recherche, setRecherche] = useState('');
   const [filtreConformite, setFiltreConformite] = useState('tous');
+  // Le coach dont on regarde le dossier. `null` = aucun modal ouvert.
+  const [coachDetail, setCoachDetail] = useState(null);
+  // Filtre par catégorie de contrat, déduite de la note. '' = toutes.
+  const [categorie, setCategorie] = useState('');
 
   const fetchCoachs = useCallback(async () => {
     setLoading(true);
@@ -85,14 +570,25 @@ export function OngletCahiersCoachs() {
 
   const filtres = coachs.filter(c => {
     if (filtreConformite !== 'tous' && c.statut_conformite !== filtreConformite) return false;
+    // La catégorie se déduit de la note ; un coach jamais observé tombe dans « Non évalué »
+    // et non dans la pire catégorie.
+    if (categorie && categorieCoach(c.note_moyenne).cle !== categorie) return false;
     if (recherche && !`${c.prenom} ${c.nom} ${c.email}`.toLowerCase().includes(recherche.toLowerCase())) return false;
     return true;
   });
 
+  /* Les trois états, avec leur RÈGLE DE CALCUL en infobulle. Le badge seul laissait la
+     question « en attente de quoi ? » sans réponse : c'est un statut calculé, pas une
+     saisie, et rien à l'écran ne disait sur quoi il repose. Règle appliquée côté serveur
+     (superviseurRoutesBet.js) : une anomalie ouverte ou une moyenne sous 3/5 → non
+     conforme ; aucune évaluation ET aucun rapport → en attente ; sinon conforme. */
   const CONF_BADGE = {
-    conforme:     { bg: '#D1FAE5', txt: '#065F46', lib: '✅ Conforme' },
-    non_conforme: { bg: '#FEE2E2', txt: '#991B1B', lib: '⚠️ Non conforme' },
-    en_attente:   { bg: '#FEF3C7', txt: '#92400E', lib: '⏳ En attente' },
+    conforme:     { bg: '#D1FAE5', txt: '#065F46', lib: '✅ Conforme',
+                    aide: 'Ce coach a été évalué ou observé, sa moyenne atteint 3/5 et aucune anomalie n\'est ouverte.' },
+    non_conforme: { bg: '#FEE2E2', txt: '#991B1B', lib: '⚠️ Non conforme',
+                    aide: 'Une anomalie est ouverte sur ce coach, ou sa note moyenne est inférieure à 3/5.' },
+    en_attente:   { bg: '#FEF3C7', txt: '#92400E', lib: '⏳ En attente',
+                    aide: "Rien à évaluer pour l'instant : ce coach n'a reçu aucune évaluation ni aucun rapport d'observation sur cette plateforme. Ce n'est pas un manquement de sa part — il n'y a simplement pas encore de quoi juger." },
   };
 
   return (
@@ -123,6 +619,32 @@ export function OngletCahiersCoachs() {
         ))}
       </div>
 
+      {/* Filtre par CATÉGORIE DE CONTRAT. Le compte est porté par chaque puce : une
+          catégorie vide se voit avant d'être cliquée, plutôt que de renvoyer un tableau
+          vide sans explication. */}
+      <div style={{ display: 'flex', gap: 7, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Catégorie</span>
+        {[{ cle: '', libelle: 'Toutes', couleur: SUP_COLOR, fond: SUP_COLOR + '15', bord: SUP_COLOR + '40' },
+          ...CATEGORIES_COACH, CATEGORIE_SANS_NOTE].map(cat => {
+          const actif = categorie === cat.cle;
+          const n = cat.cle === ''
+            ? coachs.length
+            : coachs.filter(c => categorieCoach(c.note_moyenne).cle === cat.cle).length;
+          return (
+            <button key={cat.cle || 'toutes'} onClick={() => setCategorie(actif ? '' : cat.cle)}
+              title={cat.cle === CATEGORIE_SANS_NOTE.cle ? 'Coachs jamais évalués - aucune observation à ce jour' : undefined}
+              style={{ padding: '4px 11px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6,
+                border: `1.5px solid ${actif ? cat.couleur : COULEURS.gris200}`,
+                background: actif ? (cat.fond || cat.couleur + '15') : '#fff',
+                color: actif ? cat.couleur : COULEURS.gris600 }}>
+              {cat.libelle}
+              <span style={{ fontWeight: 900, opacity: n ? 1 : 0.45 }}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
       ) : filtres.length === 0 ? (
@@ -132,7 +654,7 @@ export function OngletCahiersCoachs() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: COULEURS.gris50 }}>
-                {['Coach', 'Groupes', 'Évaluations', 'Rapports Deputy', 'Note moyenne', 'Anomalies', 'Conformité'].map(h => (
+                {['Coach', 'Catégorie', 'Groupes', 'Évaluations', 'Rapports Deputy', 'Note moyenne', 'Anomalies', 'Conformité', ''].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
@@ -141,23 +663,55 @@ export function OngletCahiersCoachs() {
               {filtres.map(c => {
                 const conf = CONF_BADGE[c.statut_conformite] || CONF_BADGE.en_attente;
                 return (
-                  <tr key={c.id} style={{ borderTop: `1px solid ${COULEURS.gris100}` }}>
+                  /* La LIGNE ENTIÈRE ouvre le dossier, comme chez dash : viser un bouton
+                     de 60 px pour consulter une fiche est une contrainte inutile. Le
+                     bouton « Détail » reste, parce que rien n'indique autrement qu'une
+                     ligne de tableau est cliquable. */
+                  <tr key={c.id} onClick={() => setCoachDetail(c)} title="Ouvrir le dossier du coach"
+                    style={{ borderTop: `1px solid ${COULEURS.gris100}`, cursor: 'pointer' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = SUP_COLOR + '08'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     <td style={{ padding: '10px 14px' }}>
-                      <div style={{ fontWeight: 700, color: COULEURS.navy }}>{c.prenom} {c.nom}</div>
-                      <div style={{ fontSize: 11, color: COULEURS.gris400 }}>{c.email}</div>
+                      {/* La PHOTO du compte, la même que partout ailleurs. */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <PastilleGroupe nom={`${c.prenom || ''} ${c.nom || ''}`} url={c.avatar_url} taille={32} accent={SUP_COLOR} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, color: COULEURS.navy }}>{c.prenom} {c.nom}</div>
+                          <div style={{ fontSize: 11, color: COULEURS.gris400 }}>{c.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <BadgeCategorieCoach note={c.note_moyenne} taille="xs" />
                     </td>
                     <td style={{ padding: '10px 14px' }}>{c.nb_groupes}</td>
                     <td style={{ padding: '10px 14px' }}>{c.nb_evaluations}</td>
                     <td style={{ padding: '10px 14px' }}>{c.nb_rapports_deputy}</td>
-                    <td style={{ padding: '10px 14px', fontWeight: 700, color: c.note_moyenne && c.note_moyenne < 3 ? '#DC2626' : COULEURS.navy }}>{c.note_moyenne ? `${c.note_moyenne}/5` : '-'}</td>
+                    {/* La note prend la COULEUR DE SA CATÉGORIE, et non un rouge/navy
+                        binaire : deux verdicts sur la même ligne devaient s'accorder. */}
+                    <td style={{ padding: '10px 14px', fontWeight: 800, color: c.note_moyenne ? NOTE_COULEUR(c.note_moyenne) : COULEURS.gris400 }}>
+                      {c.note_moyenne ? `${c.note_moyenne}/5` : '-'}
+                    </td>
                     <td style={{ padding: '10px 14px' }}>{c.nb_anomalies > 0 ? <span style={{ color: '#DC2626', fontWeight: 700 }}>{c.nb_anomalies}</span> : '0'}</td>
-                    <td style={{ padding: '10px 14px' }}><span style={{ background: conf.bg, color: conf.txt, padding: '3px 10px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{conf.lib}</span></td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <span title={conf.aide} style={{ background: conf.bg, color: conf.txt, padding: '3px 10px', borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: 'help' }}>{conf.lib}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button onClick={e => { e.stopPropagation(); setCoachDetail(c); }}
+                        style={{ padding: '4px 11px', background: SUP_COLOR + '15', border: `1px solid ${SUP_COLOR}40`, borderRadius: 6, fontSize: 11, color: SUP_COLOR, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Détail
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {coachDetail && (
+        <ModalCoachDetail coach={coachDetail} onFermer={() => setCoachDetail(null)} />
       )}
     </div>
   );
@@ -947,8 +1501,6 @@ export function OngletClassementCoachs() {
   const sousTrois = classement.filter(e => e.moyenne < 3).length;
 
   const medaille = i => ['🥇', '🥈', '🥉'][i] || null;
-  const tendIco = t => t === 'hausse' ? '↗' : t === 'baisse' ? '↘' : '→';
-  const tendCol = t => t === 'hausse' ? COULEURS.succes : t === 'baisse' ? COULEURS.erreur : COULEURS.gris400;
 
   const puce = (actif) => ({
     padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 700,
@@ -1027,23 +1579,20 @@ export function OngletClassementCoachs() {
                   <div style={{ width: 30, textAlign: 'center', fontSize: m ? 19 : 13, fontWeight: 800, color: COULEURS.gris400 }}>
                     {m || rang + 1}
                   </div>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: SUP_COLOR + '15',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800,
-                    color: SUP_COLOR, fontSize: 13, flexShrink: 0 }}>
-                    {(e.coach.prenom?.[0] || '') + (e.coach.nom?.[0] || '')}
-                  </div>
+                  <PastilleGroupe nom={`${e.coach.prenom || ''} ${e.coach.nom || ''}`} url={e.coach.avatar_url} taille={36} accent={SUP_COLOR} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: COULEURS.navy }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: COULEURS.navy, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       {e.coach.prenom} {e.coach.nom}
+                      <BadgeCategorieCoach note={e.moyenne} taille="xs" />
                     </div>
                     <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 2 }}>
                       {e.nb} observation{e.nb > 1 ? 's' : ''}
                     </div>
                   </div>
-                  <span style={{ fontSize: 15, color: tendCol(e.tendance), fontWeight: 700 }}>
-                    {tendIco(e.tendance)}
-                  </span>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: faible ? COULEURS.erreur : COULEURS.succes, minWidth: 54, textAlign: 'right' }}>
+                  <FlecheTendance tendance={e.tendance} nbNotes={e.nb} />
+                  {/* La note suit le barème, comme le badge juste à gauche : un rouge/vert
+                      binaire contredisait la catégorie sur la même ligne. */}
+                  <div style={{ fontSize: 16, fontWeight: 800, color: NOTE_COULEUR(e.moyenne), minWidth: 54, textAlign: 'right' }}>
                     {e.moyenne.toFixed(1)}/5
                   </div>
                 </div>

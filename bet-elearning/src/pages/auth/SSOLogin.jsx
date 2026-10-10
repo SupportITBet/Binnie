@@ -1,47 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLE_REDIRECT } from '../../constants/roles';
+import { ROLE_REDIRECT, ROLE_MAP_BET, roleBetDe } from '../../constants/roles';
 import { supabase } from '../../services/supabase';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
-// Mapping rôles backend BET → rôles bet-elearning
-const ROLE_MAP_BET = {
-  super_admin:         'admin_manager',
-  admin:               'admin_manager',
-  manager:             'admin_manager',
-  superviseur:         'admin_superviseur',
-  deputy_superviseur:  'admin_deputy_superviseur',
-  data_collector:      'admin_placement',
-  placement_test:      'admin_placement',
-  onboarding:          'admin_onboarding',
-  pedagogical_advisor: 'admin_pa_advisor',
-  admin_elearning:     'admin_elearning',
-  assistant_elearning: 'admin_elearning',
-  customer_care:       'admin_customer_care',
-  // Assistante Corporate fusionnée avec Assistant E-Learning - voir constants/roles.js
-  commercial:          'admin_elearning',
-  rh:                  'admin_rh_paie',
-  rh_paie:             'admin_rh_paie',
-  comptable:           'admin_comptable',
-  coach:               'professeur_titulaire',
-  responsable:         'admin_responsable',
-  gestionnaire:        'admin_gestionnaire',
-  // Rôles admin_* stockés directement en base
-  admin_placement:     'admin_placement',
-  admin_onboarding:    'admin_onboarding',
-  admin_customer_care: 'admin_customer_care',
-  admin_commercial:    'admin_elearning',
-  admin_pa_advisor:    'admin_pa_advisor',
-  admin_rh_paie:       'admin_rh_paie',
-  admin_comptable:     'admin_comptable',
-  admin_manager:       'admin_manager',
-  admin_superviseur:        'admin_superviseur',
-  admin_deputy_superviseur: 'admin_deputy_superviseur',
-  professeur_titulaire:  'professeur_titulaire',
-  professeur_remplacant: 'professeur_remplacant',
-};
+/* LA TABLE DE CORRESPONDANCE N'EST PLUS RECOPIÉE ICI.
+   Ce fichier portait sa propre copie de trente-et-une entrées, figée sur l'ancienne fusion des
+   rôles : `admin`, `super_admin` et `manager` y aboutissaient encore tous à `admin_manager`.
+   Résultat, le rôle obtenu dépendait de la page de connexion utilisée — la table centrale avait
+   dé-fusionné, celle-ci non. On importe désormais la seule qui fasse foi. */
+
 
 export default function SSOLogin() {
   const { connexionReel } = useAuth();
@@ -75,7 +45,7 @@ export default function SSOLogin() {
       // Le rôle backend doit être connu de la table de correspondance - un rôle non mappé
       // (typo, nouveau rôle jamais synchronisé ici) ne doit jamais retomber sur un rôle
       // à privilèges élevés par défaut.
-      const roleBet = ROLE_MAP_BET[profil.role];
+      const roleBet = roleBetDe(profil.role);
       if (!roleBet) {
         navigate('/connexion', { replace: true });
         return;

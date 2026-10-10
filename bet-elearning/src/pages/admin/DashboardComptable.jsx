@@ -455,7 +455,10 @@ export function OngletComptaFacturation() {
   );
 }
 
-export function OngletComptaPaiements() {
+/* `lectureSeule` : la direction consulte les encaissements, elle ne les saisit pas. La
+   comptabilité, elle, garde le bouton. Le droit réel est tranché côté serveur — ceci évite
+   surtout d'offrir une action qui serait refusée. */
+export function OngletComptaPaiements({ lectureSeule = false }) {
   const { couleurTheme } = useTheme();
   const [paiements, setPaiements] = useState([]);
   const [factures, setFactures]   = useState([]);
@@ -564,9 +567,11 @@ export function OngletComptaPaiements() {
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={exportPaiementsPDF} style={{ background:'#D97706', color:'#fff', border:'none', borderRadius:8, padding:'9px 14px', fontSize:12, fontWeight:700, cursor:'pointer' }}>📥 PDF</button>
           <button onClick={exportPaiementsExcel} style={{ background:'#217346', color:'#fff', border:'none', borderRadius:8, padding:'9px 14px', fontSize:12, fontWeight:700, cursor:'pointer' }}>📊 Excel</button>
+          {!lectureSeule && (
           <button onClick={() => setShowForm(v => !v)} style={{ background:couleurTheme, color:'#fff', border:'none', borderRadius:8, padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
             {showForm ? '✕ Annuler' : '+ Enregistrer un paiement'}
           </button>
+          )}
         </div>
       </div>
 

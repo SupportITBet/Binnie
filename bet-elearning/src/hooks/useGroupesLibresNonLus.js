@@ -28,7 +28,12 @@ export function useGroupesLibresNonLus(monId) {
     let vivant = true;
     (async () => {
       try {
-        const r = await fetch(`${API_URL}/api/conversations`, { headers: { Authorization: `Bearer ${jeton()}` } });
+        /* `X-Plateforme` comme dans GroupesLibres : sans lui le serveur répond avec les
+           groupes de dash, et la pastille compterait des non-lus que l'écran n'affiche
+           même pas - un badge qu'aucun clic ne peut éteindre. */
+        const r = await fetch(`${API_URL}/api/conversations`, {
+          headers: { Authorization: `Bearer ${jeton()}`, 'X-Plateforme': 'bet-elearning' },
+        });
         const d = await r.json();
         // Les groupes SUPERVISÉS sont exclus : la direction les lit sans en être membre,
         // et une pastille pour chaque message de chaque groupe rendrait l'onglet illisible.

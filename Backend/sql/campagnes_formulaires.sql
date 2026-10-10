@@ -357,7 +357,14 @@ LEFT JOIN public.campagne_reponses r ON r.diffusion_id = d.id
 GROUP BY d.id;
 
 -- Vue d'ensemble d'un formulaire.
-CREATE OR REPLACE VIEW public.v_campagne_formulaire_stats AS
+-- `security_invoker = true` est OBLIGATOIRE ici : sans lui, la vue s'exécute avec les droits
+-- de son propriétaire et contourne la RLS des trois tables qu'elle agrège - un visiteur muni
+-- de la clé `anon` (publique, embarquée dans le bundle du navigateur) lisait les titres et les
+-- compteurs de toutes les campagnes, que chaque table lui refusait pourtant. Signalé CRITICAL
+-- par l'Advisor Supabase ; cf. Backend/sql/fix_security_definer_v_campagne_formulaire_stats.sql
+-- pour le correctif appliqué aux bases déjà en place.
+CREATE OR REPLACE VIEW public.v_campagne_formulaire_stats
+WITH (security_invoker = true) AS
 SELECT
   f.id AS formulaire_id,
   f.titre,

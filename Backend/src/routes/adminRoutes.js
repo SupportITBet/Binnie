@@ -1135,6 +1135,12 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
       email:     u.email  || "",
       role:      u.role === "coach" ? (u.type_coach || "professeur_titulaire") : u.role,
       initiales: `${(u.prenom || "")[0] || ""}${(u.nom || "")[0] || ""}`.toUpperCase(),
+      /* LA PHOTO DU COMPTE, celle qu'enregistre l'administrateur BET depuis le SuperAdmin.
+         Elle manquait ici : la messagerie n'affichait que des initiales alors que les fils
+         de groupe montrent le visage, et la même personne apparaissait donc différemment
+         selon l'écran. Une seule colonne fait foi pour les deux plateformes,
+         `utilisateurs.avatar_url` - il n'y a pas de seconde photo à synchroniser. */
+      avatar_url: u.avatar_url || null,
     });
 
     const monRole = req.profil.role;
@@ -1152,7 +1158,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
 
       const { data: onboardingEtPA } = await supabase
         .from("utilisateurs")
-        .select("id, nom, prenom, email, role, actif")
+        .select("id, nom, prenom, email, role, actif, avatar_url")
         .in("role", ["admin_onboarding", "admin_pa_advisor"])
         .eq("actif", true);
       const onboardings = (onboardingEtPA || []).filter(u => u.role === "admin_onboarding");
@@ -1171,7 +1177,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
           const coachIds = [...new Set((classes || []).map(c => c.coach_id).filter(Boolean))];
           if (coachIds.length) {
             const { data: coachs } = await supabase
-              .from("utilisateurs").select("id, nom, prenom, email, role, actif, type_coach")
+              .from("utilisateurs").select("id, nom, prenom, email, role, actif, type_coach, avatar_url")
               .in("id", coachIds).eq("actif", true);
             (coachs || []).forEach(ajouter);
           }
@@ -1180,7 +1186,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
         const emailsParent = [...new Set((inscriptions || []).map(i => i.email_parent).filter(Boolean))];
         if (emailsParent.length) {
           const { data: parents } = await supabase
-            .from("utilisateurs").select("id, nom, prenom, email, role, actif")
+            .from("utilisateurs").select("id, nom, prenom, email, role, actif, avatar_url")
             .in("email", emailsParent).eq("role", "parent").eq("actif", true);
           (parents || []).forEach(ajouter);
         }
@@ -1201,7 +1207,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
           const coachIds = [...new Set((classes || []).map(c => c.coach_id).filter(Boolean))];
           if (coachIds.length) {
             const { data: coachs } = await supabase
-              .from("utilisateurs").select("id, nom, prenom, email, role, actif, type_coach")
+              .from("utilisateurs").select("id, nom, prenom, email, role, actif, type_coach, avatar_url")
               .in("id", coachIds).eq("actif", true);
             (coachs || []).forEach(ajouter);
           }
@@ -1210,7 +1216,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
         const apprenantIds = [...new Set((enfants || []).map(e => e.apprenant_id).filter(Boolean))];
         if (apprenantIds.length) {
           const { data: apprenants } = await supabase
-            .from("utilisateurs").select("id, nom, prenom, email, role, actif")
+            .from("utilisateurs").select("id, nom, prenom, email, role, actif, avatar_url")
             .in("id", apprenantIds).eq("actif", true);
           (apprenants || []).forEach(ajouter);
         }
@@ -1229,7 +1235,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
             .from("comptes_entreprises").select("cree_par_id").eq("id", entrepriseId).maybeSingle();
           if (entContact?.cree_par_id) {
             const { data: assistante } = await supabase
-              .from("utilisateurs").select("id, nom, prenom, email, role, actif")
+              .from("utilisateurs").select("id, nom, prenom, email, role, actif, avatar_url")
               .eq("id", entContact.cree_par_id).eq("role", "commercial").eq("actif", true).maybeSingle();
             if (assistante) ajouter(assistante);
           }
@@ -1239,7 +1245,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
           const coachIds = [...new Set((classes || []).map(c => c.coach_id).filter(Boolean))];
           if (coachIds.length) {
             const { data: coachs } = await supabase
-              .from("utilisateurs").select("id, nom, prenom, email, role, actif, type_coach")
+              .from("utilisateurs").select("id, nom, prenom, email, role, actif, type_coach, avatar_url")
               .in("id", coachIds).eq("actif", true);
             (coachs || []).forEach(ajouter);
           }
@@ -1255,7 +1261,7 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
             const apprenantIds = [...new Set((inscriptions || []).map(i => i.apprenant_id).filter(Boolean))];
             if (apprenantIds.length) {
               const { data: apprenants } = await supabase
-                .from("utilisateurs").select("id, nom, prenom, email, role, actif")
+                .from("utilisateurs").select("id, nom, prenom, email, role, actif, avatar_url")
                 .in("id", apprenantIds).eq("actif", true);
               (apprenants || []).forEach(ajouter);
             }
@@ -1272,13 +1278,13 @@ router.get("/messages/contacts", authenticateUser, async (req, res) => {
     // 1. Table `utilisateurs` (BET platform - contient coachs, admins BET, etc.)
     const { data: utilisateurs } = await supabase
       .from("utilisateurs")
-      .select("id, nom, prenom, email, role, actif, type_coach")
+      .select("id, nom, prenom, email, role, actif, type_coach, avatar_url")
       .neq("actif", false);
 
     // 2. Table `profiles` (bet-elearning portal - contient admins e-learning)
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, nom, prenom, email, role, actif")
+      .select("id, nom, prenom, email, role, actif, avatar_url")
       .neq("actif", false);
 
     // 3. Fusionner et dédupliquer par ID

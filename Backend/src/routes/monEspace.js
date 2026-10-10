@@ -485,4 +485,89 @@ router.get("/cours-groupe", authenticateUser, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/mon-espace/mon-parcours
+ *
+ * Le dossier de l'apprenant tel qu'il le concerne : son objectif, son niveau et son plan de
+ * paiement. Une seule route pour DEUX écrans - « Objectifs » et « Paiement » - parce que
+ * c'est une seule ligne en base : les séparer aurait fait deux requêtes pour le même
+ * enregistrement, et deux endroits où corriger le jour où le dossier change de forme.
+ *
+ * LE LIEN EST L'E-MAIL. `assignations_parcours` n'a pas de clé vers `utilisateurs` : le
+ * dossier est créé par la commerciale AVANT que le compte n'existe, et `prospect_email` est
+ * le seul point commun. `ilike` et non `eq` : les adresses y ont été saisies à la main, la
+ * casse varie.
+ *
+ * ON NE REND JAMAIS LE DOSSIER D'UN AUTRE : la recherche part de l'e-mail du porteur du
+ * jeton, jamais d'un paramètre de requête. Et on ne rend que les champs qui le regardent -
+ * ni notes internes, ni identité de l'assistante, ni routage commercial.
+ */
+router.get("/mon-parcours", authenticateUser, async (req, res) => {
+  try {
+    const { data: moi } = await supabase
+      .from("utilisateurs").select("email").eq("id", req.user.id).maybeSingle();
+    const email = moi?.email || req.user.email;
+    if (!email) return res.json({ parcours: null });
+
+    const { data, error } = await supabase
+      .from("assignations_parcours")
+      .select("id, niveau_client, objectif_client, type_cours, type_coaching, statut, "
+            + "statut_paiement, mode_paiement, montant_paye, plan_paiement, inscription_offre, "
+            + "date_debut_formation, created_at")
+      .ilike("prospect_email", email)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+
+    // `null` et non une erreur : un apprenant inscrit par son entreprise n'a pas forcément
+    // de dossier commercial, et ce n'est pas une anomalie. L'écran le dira.
+    res.json({ parcours: data || null });
+  } catch (err) {
+    console.error("[GET /mon-espace/mon-parcours]", err.message || err);
+    res.status(500).json({ error: "Lecture impossible" });
+  }
+});
+
+/**
+ * POST /api/mon-espace/support - l'apprenant demande de l'aide.
+ *
+ * La route `/api/plaintes` exige `authenticateAdmin` ET la permission « support.create » :
+ * un apprenant n'a ni l'un ni l'autre, et n'avait donc AUCUN moyen de signaler quoi que ce
+ * soit. Celle-ci lui ouvre le même registre, avec son identité prise du jeton plutôt que du
+ * corps de la requête - sans quoi n'importe qui pourrait déposer une demande au nom d'un
+ * autre.
+ */
+router.post("/support", authenticateUser, async (req, res) => {
+  try {
+    const { objet, description, priorite } = req.body || {};
+    if (!String(objet || "").trim()) return res.status(400).json({ error: "Un objet est requis." });
+
+    const { data: moi } = await supabase
+      .from("utilisateurs").select("id, nom, prenom, email, telephone").eq("id", req.user.id).maybeSingle();
+    const nom = `${moi?.prenom || ""} ${moi?.nom || ""}`.trim() || moi?.email || "Apprenant";
+
+    const { data, error } = await supabase.from("plaintes").insert({
+      ref_type:            "general",
+      apprenant_nom:       nom,
+      apprenant_email:     moi?.email || null,
+      apprenant_telephone: moi?.telephone || null,
+      objet:               String(objet).trim().slice(0, 200),
+      description:         description ? String(description).trim().slice(0, 4000) : null,
+      // L'apprenant ne choisit pas « urgente » : la priorité est un arbitrage interne, et
+      // la lui laisser rendrait le tri inutile dès la première demande.
+      priorite:            priorite === "haute" ? "haute" : "normale",
+      statut:              "ouverte",
+      signale_par_id:      moi?.id || null,
+      signale_par_nom:     nom,
+    }).select().single();
+    if (error) throw error;
+
+    res.status(201).json({ demande: data });
+  } catch (err) {
+    console.error("[POST /mon-espace/support]", err.message || err);
+    res.status(500).json({ error: "Envoi impossible" });
+  }
+});
+
 export default router;

@@ -9,6 +9,10 @@ import { COULEURS } from '../../constants/couleurs';
 import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererPDF';
 import { ModalDetailApprenant } from './DashboardAdminShared';
 import { dureeReelleMin } from '../../components/shared/DerouleReel';
+import { estRole } from '../../constants/roles';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
+import BadgeCategorieCoach, { FlecheTendance } from '../../components/shared/BadgeCategorieCoach';
+import { NOTE_COULEUR, NOTE_FOND } from '../../utils/categorieCoach';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
@@ -24,6 +28,96 @@ function fmtDateSup(d) {
 }
 // type_contrat réel = coach_info.type_contrat (JSON) - type_coach est le rôle, pas le grade
 function getTypeContrat(c) { return c?.coach_info?.type_contrat || c?.type_coach || 'Vacataire'; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MES TÂCHES - l'écran d'aiguillage du Conseiller pédagogique.
+   ═══════════════════════════════════════════════════════════════════════════
+   Le PA était le SEUL rôle de bet-elearning sans cet onglet - Superviseur, Deputy,
+   Placement, Onboarding, Vente, SAV, RH, Comptable et Direction l'avaient déjà.
+
+   Il ne crée aucune donnée : il compte ce que les autres onglets affichent déjà, et
+   renvoie vers eux. Un compteur qui ne mène nulle part n'est qu'un chiffre de plus.
+═══════════════════════════════════════════════════════════════════════════ */
+export function OngletMesTachesPAAdvisor() {
+  const [chargement, setChargement] = useState(true);
+  const [t, setT] = useState({ sansCoach: 0, remplacements: 0, honoraires: 0, rapports: 0, reaffectations: 0 });
+
+  useEffect(() => {
+    const now = new Date();
+    let vivant = true;
+    const lire = (url, hdrs = _authHdrsAdmin()) =>
+      fetch(`${_API_URL_ADMIN}${url}`, { headers: hdrs }).then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+
+    Promise.all([
+      lire('/api/classes-elearning'),
+      lire('/api/remplacements?plateforme=bet-elearning'),
+      lire(`/api/elearning/honoraires?mois=${now.getMonth() + 1}&annee=${now.getFullYear()}`),
+      lire('/api/coachs/rapports-transmis', supAuthHdrs()),
+      lire('/api/notifications/mes-notifs?limit=50'),
+    ]).then(([dc, drm, dho, drs, dn]) => {
+      if (!vivant) return;
+      setT({
+        sansCoach:      (dc.classes || []).filter(c => !c.coach_id).length,
+        remplacements:  (drm.remplacements || []).filter(r => r.statut === 'a_pourvoir').length,
+        honoraires:     (dho.honoraires || []).filter(h => h.statut === 'en_attente').length,
+        // Un rapport « transmis » attend une lecture du PA : c'est ce qui en fait une tâche.
+        rapports:       (drs.rapports || []).filter(r => r.statut !== 'lu').length,
+        reaffectations: (dn.notifications || []).filter(n => n.meta?.autre_assignation_id && !n.lu).length,
+      });
+    }).finally(() => { if (vivant) setChargement(false); });
+    return () => { vivant = false; };
+  }, []);
+
+  const taches = [
+    { icone: '🏫', label: 'Classes sans coach à assigner', n: t.sansCoach,      vers: '/admin/pa-advisor/classes' },
+    { icone: '🔄', label: 'Remplacements à pourvoir',      n: t.remplacements,  vers: '/admin/pa-advisor/remplacements' },
+    { icone: '📋', label: 'Rapports Superviseur à lire',   n: t.rapports,       vers: '/admin/pa-advisor/rapports-superviseur' },
+    { icone: '💰', label: 'Honoraires à valider',          n: t.honoraires,     vers: '/admin/pa-advisor/honoraires' },
+    { icone: '🔀', label: 'Dossiers à réaffecter',         n: t.reaffectations, vers: '/admin/pa-advisor/reaffectations' },
+  ];
+  const ouvertes = taches.filter(x => x.n > 0);
+  const total = taches.reduce((s, x) => s + x.n, 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>✅ Mes tâches</div>
+        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+          {chargement ? 'Calcul en cours…'
+            : total > 0 ? `${total} élément${total > 1 ? 's' : ''} à traiter au total.`
+            : 'Rien à traiter pour le moment — tout est à jour.'}
+        </div>
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 60, color: '#9CA3AF', fontSize: 13 }}>⏳ Chargement…</div>
+      ) : ouvertes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: '#F8FAFC', borderRadius: 14, border: '1px dashed #E2E8F0' }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Aucune tâche en attente</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 5, maxWidth: 440, margin: '5px auto 0', lineHeight: 1.6 }}>
+            Les classes, remplacements et honoraires comptés ici sont ceux de BET E-Learning.
+            Ce qui relève du présentiel reste sur dash — les deux plateformes ont leur propre file.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 12 }}>
+          {ouvertes.map(x => (
+            <a key={x.label} href={x.vers}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none',
+                background: '#fff', border: '1.5px solid #E2E8F0', borderLeft: '4px solid #8B5CF6',
+                borderRadius: 14, padding: '16px 18px' }}>
+              <span style={{ fontSize: 24 }}>{x.icone}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{x.label}</span>
+              <span style={{ background: '#8B5CF618', color: '#8B5CF6', borderRadius: 99,
+                fontSize: 13, fontWeight: 800, padding: '3px 11px' }}>{x.n}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function OngletCoachsPAAdvisor() {
   const [coaches,      setCoaches]      = useState([]);
@@ -206,7 +300,7 @@ export function OngletCoachsPAAdvisor() {
                     {getTypeContrat(coach)}
                   </span>
                   <span style={{ fontSize:12, color:'#6B7280' }}>
-                    {coach.role === 'coach' ? '🤝 Coach' : coach.role === 'professeur_titulaire' ? '👨‍🏫 Prof titulaire' : '🔄 Prof remplaçant'}
+                    {coach.role === 'coach' ? '🤝 Coach' : estRole(coach.role, 'professeur_titulaire') ? '👨‍🏫 Prof titulaire' : '🔄 Prof remplaçant'}
                   </span>
                   <span style={{ fontSize:10, fontWeight:600, padding:'3px 9px', borderRadius:10, background:'#F0FDF4', color:'#166534', justifySelf:'start' }}>
                     ✅ E-Learning
@@ -287,7 +381,7 @@ export function OngletCoachsPAAdvisor() {
                             { l:'Prénom',        v: modalCoach.prenom },
                             { l:'Nom',           v: modalCoach.nom },
                             { l:'Email',         v: modalCoach.email },
-                            { l:'Rôle',          v: modalCoach.role === 'coach' ? '🤝 Coach' : modalCoach.role === 'professeur_titulaire' ? '👨‍🏫 Prof titulaire' : '🔄 Prof remplaçant' },
+                            { l:'Rôle',          v: modalCoach.role === 'coach' ? '🤝 Coach' : estRole(modalCoach.role, 'professeur_titulaire') ? '👨‍🏫 Prof titulaire' : '🔄 Prof remplaçant' },
                             { l:'Type contrat',  v: getTypeContrat(modalCoach) },
                             { l:'Accès E-Learn', v: modalCoach.acces_elearning ? '✅ Actif' : '❌ Inactif' },
                           ].map(r => (
@@ -2249,7 +2343,6 @@ export function OngletClassesPAAdvisor() {
                         const meilleur = coaches[0];
                         const ROLE_LIB = { coach:'Coach', professeur_titulaire:'Titulaire', professeur_remplacant:'Remplaçant' };
                         const TYPE_LIB = { permanent:'Permanent', freelance:'Freelance', consultant:'Consultant', vacataire:'Vacataire' };
-                        const initiales = co => `${(co.prenom||'')[0]||''}${(co.nom||'')[0]||''}`.toUpperCase();
                         const COLORS = ['#6366F1','#0891B2','#059669','#F97316','#8B5CF6','#EC4899','#DC2626','#0EA5E9'];
                         const couleurCo = co => COLORS[(co.prenom||'A').charCodeAt(0) % COLORS.length];
 
@@ -2263,13 +2356,12 @@ export function OngletClassesPAAdvisor() {
                               <div
                                 onClick={() => setCoachChoisi(prev => ({ ...prev, [c.id]: meilleur.id }))}
                                 style={{ background: selectedCoach === meilleur.id ? 'linear-gradient(135deg,#EEF2FF,#E0E7FF)' : 'linear-gradient(135deg,#F0FDF4,#DCFCE7)', border:`2px solid ${selectedCoach === meilleur.id ? '#6366F1' : '#86EFAC'}`, borderRadius:12, padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:14, transition:'all 0.15s' }}>
-                                <div style={{ width:46, height:46, borderRadius:'50%', background:couleurCo(meilleur), display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:800, color:'#fff', flexShrink:0 }}>
-                                  {initiales(meilleur)}
-                                </div>
+                                <PastilleGroupe nom={`${meilleur.prenom || ''} ${meilleur.nom || ''}`} url={meilleur.avatar_url} taille={46} accent={couleurCo(meilleur)} />
                                 <div style={{ flex:1 }}>
-                                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3, flexWrap:'wrap' }}>
                                     <span style={{ fontSize:14, fontWeight:800, color:'#1E293B' }}>{meilleur.prenom} {meilleur.nom}</span>
                                     <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'1px 8px', fontSize:10, fontWeight:800 }}>RECOMMANDÉ</span>
+                                    <BadgeCategorieCoach note={meilleur.note_moyenne} taille="sm" avecNote />
                                   </div>
                                   <div style={{ fontSize:12, color:'#475569', marginBottom:5 }}>
                                     {ROLE_LIB[meilleur.role] || meilleur.role}{meilleur.type_coach ? ` · ${TYPE_LIB[meilleur.type_coach] || meilleur.type_coach}` : ''}
@@ -2300,16 +2392,21 @@ export function OngletClassesPAAdvisor() {
                                         style={{ background: sel ? '#EEF2FF' : '#FAFAFA', border:`1.5px solid ${sel ? '#6366F1' : '#E5E7EB'}`, borderRadius:10, padding:'12px 16px', cursor:'pointer', display:'flex', alignItems:'center', gap:12, transition:'all 0.12s' }}
                                         onMouseEnter={e => { if (!sel) e.currentTarget.style.borderColor='#A5B4FC'; }}
                                         onMouseLeave={e => { if (!sel) e.currentTarget.style.borderColor='#E5E7EB'; }}>
-                                        <div style={{ width:38, height:38, borderRadius:'50%', background:couleurCo(co), display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#fff', flexShrink:0 }}>
-                                          {initiales(co)}
-                                        </div>
+                                        <PastilleGroupe nom={`${co.prenom || ''} ${co.nom || ''}`} url={co.avatar_url} taille={38} accent={couleurCo(co)} />
                                         <div style={{ flex:1 }}>
-                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
                                             <span style={{ fontSize:13, fontWeight:700, color:'#1E293B' }}>{co.prenom} {co.nom}</span>
                                             {idx === 0 && <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'1px 7px', fontSize:10, fontWeight:700 }}>RECOMMANDÉ</span>}
+                                            {/* LA CATÉGORIE DE CONTRAT, au moment où l'on choisit. C'est le
+                                                critère de la direction : assigner sans la voir, c'est décider
+                                                à l'aveugle alors que le superviseur, lui, l'a sous les yeux. */}
+                                            <BadgeCategorieCoach note={co.note_moyenne} taille="xs" avecNote />
                                           </div>
                                           <div style={{ fontSize:11, color:'#6B7280' }}>
                                             {ROLE_LIB[co.role] || co.role}{co.type_coach ? ` · ${TYPE_LIB[co.type_coach] || co.type_coach}` : ''}
+                                            {co.nb_observations > 0
+                                              ? ` · ${co.nb_observations} observation${co.nb_observations > 1 ? 's' : ''}`
+                                              : ' · jamais observé'}
                                           </div>
                                         </div>
                                         <div style={{ width:20, height:20, borderRadius:'50%', border:`2.5px solid ${sel ? '#6366F1' : '#D1D5DB'}`, background: sel ? '#6366F1' : '#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -3095,7 +3192,6 @@ export function DashboardPAAdvisor() {
                         const meilleur = coaches[0];
                         const ROLE_LIB = { coach:'Coach', professeur_titulaire:'Titulaire', professeur_remplacant:'Remplaçant' };
                         const TYPE_LIB = { permanent:'Permanent', freelance:'Freelance', consultant:'Consultant', vacataire:'Vacataire' };
-                        const initiales = co => `${(co.prenom||'')[0]||''}${(co.nom||'')[0]||''}`.toUpperCase();
                         const COLORS = ['#6366F1','#0891B2','#059669','#F97316','#8B5CF6','#EC4899','#DC2626','#0EA5E9'];
                         const couleurCo = co => COLORS[(co.prenom||'A').charCodeAt(0) % COLORS.length];
 
@@ -3109,13 +3205,12 @@ export function DashboardPAAdvisor() {
                               <div
                                 onClick={() => setCoachChoisi(prev => ({ ...prev, [c.id]: meilleur.id }))}
                                 style={{ background: selectedCoach === meilleur.id ? 'linear-gradient(135deg,#EEF2FF,#E0E7FF)' : 'linear-gradient(135deg,#F0FDF4,#DCFCE7)', border:`2px solid ${selectedCoach === meilleur.id ? '#6366F1' : '#86EFAC'}`, borderRadius:12, padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:14, transition:'all 0.15s' }}>
-                                <div style={{ width:46, height:46, borderRadius:'50%', background:couleurCo(meilleur), display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:800, color:'#fff', flexShrink:0 }}>
-                                  {initiales(meilleur)}
-                                </div>
+                                <PastilleGroupe nom={`${meilleur.prenom || ''} ${meilleur.nom || ''}`} url={meilleur.avatar_url} taille={46} accent={couleurCo(meilleur)} />
                                 <div style={{ flex:1 }}>
-                                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3, flexWrap:'wrap' }}>
                                     <span style={{ fontSize:14, fontWeight:800, color:'#1E293B' }}>{meilleur.prenom} {meilleur.nom}</span>
                                     <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'1px 8px', fontSize:10, fontWeight:800 }}>RECOMMANDÉ</span>
+                                    <BadgeCategorieCoach note={meilleur.note_moyenne} taille="sm" avecNote />
                                   </div>
                                   <div style={{ fontSize:12, color:'#475569', marginBottom:5 }}>
                                     {ROLE_LIB[meilleur.role] || meilleur.role}{meilleur.type_coach ? ` · ${TYPE_LIB[meilleur.type_coach] || meilleur.type_coach}` : ''}
@@ -3146,16 +3241,21 @@ export function DashboardPAAdvisor() {
                                         style={{ background: sel ? '#EEF2FF' : '#FAFAFA', border:`1.5px solid ${sel ? '#6366F1' : '#E5E7EB'}`, borderRadius:10, padding:'12px 16px', cursor:'pointer', display:'flex', alignItems:'center', gap:12, transition:'all 0.12s' }}
                                         onMouseEnter={e => { if (!sel) e.currentTarget.style.borderColor='#A5B4FC'; }}
                                         onMouseLeave={e => { if (!sel) e.currentTarget.style.borderColor='#E5E7EB'; }}>
-                                        <div style={{ width:38, height:38, borderRadius:'50%', background:couleurCo(co), display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#fff', flexShrink:0 }}>
-                                          {initiales(co)}
-                                        </div>
+                                        <PastilleGroupe nom={`${co.prenom || ''} ${co.nom || ''}`} url={co.avatar_url} taille={38} accent={couleurCo(co)} />
                                         <div style={{ flex:1 }}>
-                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
                                             <span style={{ fontSize:13, fontWeight:700, color:'#1E293B' }}>{co.prenom} {co.nom}</span>
                                             {idx === 0 && <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'1px 7px', fontSize:10, fontWeight:700 }}>RECOMMANDÉ</span>}
+                                            {/* LA CATÉGORIE DE CONTRAT, au moment où l'on choisit. C'est le
+                                                critère de la direction : assigner sans la voir, c'est décider
+                                                à l'aveugle alors que le superviseur, lui, l'a sous les yeux. */}
+                                            <BadgeCategorieCoach note={co.note_moyenne} taille="xs" avecNote />
                                           </div>
                                           <div style={{ fontSize:11, color:'#6B7280' }}>
                                             {ROLE_LIB[co.role] || co.role}{co.type_coach ? ` · ${TYPE_LIB[co.type_coach] || co.type_coach}` : ''}
+                                            {co.nb_observations > 0
+                                              ? ` · ${co.nb_observations} observation${co.nb_observations > 1 ? 's' : ''}`
+                                              : ' · jamais observé'}
                                           </div>
                                         </div>
                                         <div style={{ width:20, height:20, borderRadius:'50%', border:`2.5px solid ${sel ? '#6366F1' : '#D1D5DB'}`, background: sel ? '#6366F1' : '#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -3200,8 +3300,12 @@ const CRIT_RP_SUP = {
   // Plus saisi : portait une autre question. Conserve pour les rapports anterieurs.
   respect_programme: { label: 'Respect du programme', icon: '📋' },
 };
-const noteCouleurSup = n => !n ? '#9ca3af' : n >= 4.5 ? '#16a34a' : n >= 3.5 ? '#0891b2' : n >= 2.5 ? '#f59e0b' : '#ef4444';
-const noteFondSup    = n => !n ? '#f3f4f6' : n >= 4.5 ? '#dcfce7' : n >= 3.5 ? '#e0f2fe' : n >= 2.5 ? '#fef3c7' : '#fee2e2';
+/* Les couleurs de note viennent du BARÈME COMMUN, elles ne sont plus redéfinies ici.
+   Les seuils locaux étaient 4,5 / 3,5 / 2,5 alors que le barème de la direction est
+   4 / 3 / 2,5 : un coach à 4,2 était « Corporate » vert chez dash et bleu sur cet écran -
+   deux verdicts contradictoires sur la même personne. Voir utils/categorieCoach.js. */
+const noteCouleurSup = NOTE_COULEUR;
+const noteFondSup    = NOTE_FOND;
 
 export function OngletRapportsSuperviseurPA() {
   const [rapports, setRapports] = useState([]);
@@ -3530,7 +3634,10 @@ export function OngletRapportsSuperviseurPA() {
 
                       {/* Nom + infos */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{coach?.prenom || ''} {coach?.nom || ''}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          {coach?.prenom || ''} {coach?.nom || ''}
+                          <BadgeCategorieCoach note={entry.moyenne} taille="xs" />
+                        </div>
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{entry.nb_rapports} rapport{entry.nb_rapports > 1 ? 's' : ''} · {labelPeriode}</div>
                       </div>
 
@@ -4231,6 +4338,235 @@ export function OngletSuiviApprenantsPAAdvisor() {
           entreprise={modalApprenant.entreprise}
           onFermer={() => setModalApprenant(null)}
         />
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ÉVALUATIONS APPRENANTS - ce que les apprenants disent de leurs coachs.
+   ═══════════════════════════════════════════════════════════════════════════
+   Distinct de l'onglet « Évaluations », qui porte les avis des PARENTS. Deux publics,
+   deux regards : confondre les deux reviendrait à faire dire aux familles ce qu'ont dit
+   les apprenants.
+
+   ⚠️ CES NOTES N'ENTRENT PAS DANS LA CATÉGORIE DE CONTRAT du coach. Celle-ci se calcule
+   sur les OBSERVATIONS (superviseur, conseiller pédagogique) - décision explicite, inscrite
+   dans utils/categorieCoach.js. On affiche donc la moyenne et sa couleur, mais jamais le
+   badge de catégorie : il y affirmerait le contraire.
+
+   Le filtrage par plateforme est fait PAR LE SERVEUR : `appreciations_apprenants` n'a pas
+   de colonne `plateforme`, la route résout `groupe_id` dans `classes_elearning` et écarte
+   ce qui n'en relève pas (cf. Backend/src/routes/appreciations.js).
+═══════════════════════════════════════════════════════════════════════════ */
+const PAR_PAGE_EVAL_APP = 8;
+
+function debutPeriodeEvalApp(p) {
+  const d = new Date();
+  if (p === 'semaine') { d.setDate(d.getDate() - 7);  return d; }
+  if (p === 'mois')    { d.setMonth(d.getMonth() - 1); return d; }
+  return null;                                   // « tout » : aucune borne
+}
+
+export function OngletEvaluationsApprenantsPA() {
+  const [appreciations, setAppreciations] = useState([]);
+  const [chargement, setChargement] = useState(true);
+  const [periode, setPeriode] = useState('mois');
+  // La plage explicite prime sur le raccourci de période : c'est le filtre le plus précis
+  // qui gagne, sinon poser des dates n'aurait aucun effet visible.
+  const [du, setDu] = useState('');
+  const [au, setAu] = useState('');
+  const [page, setPage] = useState(1);
+  const [coachOuvert, setCoachOuvert] = useState(null);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/appreciations`, { headers: supAuthHdrs() });
+        const d = r.ok ? await r.json() : { appreciations: [] };
+        if (vivant) setAppreciations(d.appreciations || []);
+      } catch { if (vivant) setAppreciations([]); }
+      finally { if (vivant) setChargement(false); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  const dansPeriode = (du || au)
+    ? appreciations.filter(a => {
+        const d = (a.created_at || '').slice(0, 10);
+        if (du && d && d < du) return false;
+        if (au && d && d > au) return false;
+        return true;
+      })
+    : (() => {
+        const debut = debutPeriodeEvalApp(periode);
+        return debut ? appreciations.filter(a => a.created_at && new Date(a.created_at) >= debut) : appreciations;
+      })();
+
+  // Regroupement par coach. Les notes restent dans l'ordre chronologique : la barre doit se
+  // lire de gauche à droite comme une progression.
+  const parCoach = {};
+  [...dansPeriode].reverse().forEach(a => {
+    if (!a.coach_id) return;
+    (parCoach[a.coach_id] ??= { coach: a.coach, coach_id: a.coach_id, notes: [], lignes: [] });
+    const n = Number(a.note);
+    if (Number.isFinite(n)) parCoach[a.coach_id].notes.push(n);
+    parCoach[a.coach_id].lignes.push(a);
+  });
+
+  const classement = Object.values(parCoach)
+    .filter(e => e.notes.length)
+    .map(e => ({
+      ...e,
+      moyenne: e.notes.reduce((s, n) => s + n, 0) / e.notes.length,
+      nb: e.notes.length,
+      tendance: e.notes.length >= 2
+        ? (e.notes[e.notes.length - 1] > e.notes[0] ? 'hausse'
+          : e.notes[e.notes.length - 1] < e.notes[0] ? 'baisse' : 'stable')
+        : 'stable',
+    }))
+    .sort((a, b) => b.moyenne - a.moyenne);
+
+  const totalPages = Math.max(1, Math.ceil(classement.length / PAR_PAGE_EVAL_APP));
+  // Borner la page : un filtre qui réduit la liste ne doit pas laisser un écran vide.
+  const pageSure = Math.min(page, totalPages);
+  const visibles = classement.slice((pageSure - 1) * PAR_PAGE_EVAL_APP, pageSure * PAR_PAGE_EVAL_APP);
+
+  const libPeriode = (du || au)
+    ? `du ${du || '…'} au ${au || '…'}`
+    : periode === 'semaine' ? 'cette semaine' : periode === 'mois' ? 'ce mois' : 'toute période';
+
+  const puce = (actif) => ({
+    padding: '5px 13px', borderRadius: 99, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    fontFamily: 'inherit', border: `1.5px solid ${actif ? '#8B5CF6' : '#E2E8F0'}`,
+    background: actif ? '#8B5CF615' : '#fff', color: actif ? '#8B5CF6' : '#64748b',
+  });
+  const champDate = { padding: '6px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, fontFamily: 'inherit', color: '#0f172a' };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>🎓 Évaluations apprenants</div>
+        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+          Ce que les apprenants disent de leurs coachs — distinct des avis des parents.
+          Ces notes n'entrent pas dans la catégorie de contrat, qui repose sur les observations.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['semaine', 'Cette semaine'], ['mois', 'Ce mois'], ['tout', 'Tout']].map(([v, l]) => (
+          <button key={v} onClick={() => { setPeriode(v); setDu(''); setAu(''); setPage(1); }}
+            style={puce(!du && !au && periode === v)}>{l}</button>
+        ))}
+        <span style={{ color: '#CBD5E1' }}>|</span>
+        <input type="date" value={du} onChange={e => { setDu(e.target.value); setPage(1); }} style={champDate} aria-label="Du" />
+        <span style={{ color: '#94a3b8', fontSize: 12 }}>→</span>
+        <input type="date" value={au} onChange={e => { setAu(e.target.value); setPage(1); }} style={champDate} aria-label="Au" />
+        {(du || au) && (
+          <button onClick={() => { setDu(''); setAu(''); setPage(1); }}
+            style={{ ...puce(false), fontWeight: 600 }}>✕ Réinitialiser</button>
+        )}
+      </div>
+
+      {chargement ? (
+        <div style={{ textAlign: 'center', padding: 60, color: '#9CA3AF', fontSize: 13 }}>⏳ Chargement…</div>
+      ) : classement.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 46, background: '#F8FAFC', borderRadius: 14, border: '1px dashed #E2E8F0' }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🎓</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Aucune appréciation d'apprenant</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 5, maxWidth: 460, margin: '5px auto 0', lineHeight: 1.6 }}>
+            Rien de reçu {libPeriode} sur les classes de BET E-Learning. Les appréciations
+            laissées sur les cours présentiel relèvent de dash et ne sont pas listées ici.
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {visibles.map((e, i) => {
+              const rang = (pageSure - 1) * PAR_PAGE_EVAL_APP + i;
+              const medaille = ['🥇', '🥈', '🥉'][rang] || null;
+              return (
+                <div key={e.coach_id} onClick={() => setCoachOuvert(e)} title="Voir le détail des appréciations"
+                  style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff',
+                    border: '1px solid #E2E8F0', borderRadius: 12, padding: '13px 16px', cursor: 'pointer' }}>
+                  <div style={{ width: 30, textAlign: 'center', fontSize: medaille ? 19 : 13, fontWeight: 800, color: '#94a3b8' }}>
+                    {medaille || rang + 1}
+                  </div>
+                  <PastilleGroupe nom={`${e.coach?.prenom || ''} ${e.coach?.nom || ''}`} url={e.coach?.avatar_url} taille={36} accent="#8B5CF6" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                      {e.coach?.prenom || ''} {e.coach?.nom || 'Coach'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                      {e.nb} appréciation{e.nb > 1 ? 's' : ''} · {libPeriode}
+                    </div>
+                  </div>
+                  {/* Les cinq dernières notes, pour lire la trajectoire et pas seulement
+                      la moyenne : deux coachs à 3,5 n'ont pas le même parcours. */}
+                  <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 26, flexShrink: 0 }}>
+                    {e.notes.slice(-5).map((n, ni) => (
+                      <div key={ni} title={`Note : ${n}/5`} style={{ width: 7, borderRadius: 3, background: NOTE_COULEUR(n), height: `${(n / 5) * 100}%`, minHeight: 4 }} />
+                    ))}
+                  </div>
+                  <FlecheTendance tendance={e.tendance} nbNotes={e.nb} />
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: NOTE_FOND(e.moyenne),
+                    border: `2.5px solid ${NOTE_COULEUR(e.moyenne)}`, display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontWeight: 900, fontSize: 14, color: NOTE_COULEUR(e.moyenne), flexShrink: 0 }}>
+                    {e.moyenne.toFixed(1)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSure === 1} style={puce(false)}>← Préc.</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - pageSure) <= 1)
+                .map(p => <button key={p} onClick={() => setPage(p)} style={puce(p === pageSure)}>{p}</button>)}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={pageSure === totalPages} style={puce(false)}>Suiv. →</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* LE DÉTAIL par-dessus la liste : un dépliage ferait sauter la place de chaque ligne. */}
+      {coachOuvert && (
+        <div onClick={() => setCoachOuvert(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,35,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 16 }}>
+          <div onClick={ev => ev.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 780, maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ background: 'linear-gradient(135deg,#8B5CF6,#6D28D9)', padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <PastilleGroupe nom={`${coachOuvert.coach?.prenom || ''} ${coachOuvert.coach?.nom || ''}`} url={coachOuvert.coach?.avatar_url} taille={38} accent="#fff" />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
+                  {coachOuvert.coach?.prenom || ''} {coachOuvert.coach?.nom || 'Coach'}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.78)', marginTop: 2 }}>
+                  {coachOuvert.nb} appréciation{coachOuvert.nb > 1 ? 's' : ''} · moyenne {coachOuvert.moyenne.toFixed(1)}/5 · {libPeriode}
+                </div>
+              </div>
+              <button onClick={() => setCoachOuvert(null)}
+                style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 30, height: 30, color: '#fff', fontSize: 17, cursor: 'pointer' }}>×</button>
+            </div>
+            <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[...coachOuvert.lignes].reverse().map((a, i) => (
+                <div key={a.id || i} style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: a.commentaire ? 6 : 0, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 800, color: NOTE_COULEUR(a.note), fontSize: 13 }}>{a.note}/5</span>
+                    <span style={{ fontSize: 11.5, color: '#64748b' }}>{fmtDateSup(a.created_at)}</span>
+                    {a.groupe?.nom && <span style={{ fontSize: 10.5, background: '#F1F5F9', color: '#475569', borderRadius: 6, padding: '2px 8px' }}>{a.groupe.nom}</span>}
+                    {a.seance?.titre && <span style={{ fontSize: 10.5, color: '#94a3b8' }}>{a.seance.titre}</span>}
+                  </div>
+                  {a.commentaire && <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6 }}>« {a.commentaire} »</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

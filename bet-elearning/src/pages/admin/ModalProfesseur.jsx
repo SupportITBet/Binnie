@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { COULEURS } from '../../constants/couleurs';
 import { useAuth } from '../../contexts/AuthContext';
+import { estRole } from '../../constants/roles';
 
 // ── Styles tranches d'âge ─────────────────────────────────────────────────────
 export const TRANCHES_STYLE = {
@@ -496,7 +497,7 @@ export default function ModalProfSuivi({ prof, onFermer }) {
   const dispos = dispoLocal ?? detail.disponibilites ?? {};
   const nbAbsences = absences ?? detail.absences_mois ?? 0;
 
-  const estRempl = prof.role === 'professeur_remplacant';
+  const estRempl = estRole(prof.role, 'professeur_remplacant');
   const couleur  = estRempl ? '#7C3AED' : COULEURS.cyan;
 
   const TABS = [

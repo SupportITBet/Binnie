@@ -6,9 +6,14 @@ import * as XLSX_ADMIN from 'xlsx';
 import { useAlerte } from '../../contexts/ConfirmContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { estRole } from '../../constants/roles';
 import { COULEURS } from '../../constants/couleurs';
 import { exporterExcelStyle } from '../../utils/genererPDF';
 import { chargerPackages } from '../../constants/packagesCommerciaux';
+import ChampPhotoClasse from '../../components/shared/ChampPhotoClasse';
+import PhotoClasseEntete from '../../components/shared/PhotoClasseEntete';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
+import BadgeCategorieCoach from '../../components/shared/BadgeCategorieCoach';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip as RTooltip } from 'recharts';
 import { PaginationSimple, ModalDetailApprenant, OngletSessionsClasse } from './DashboardAdminShared';
 
@@ -525,6 +530,174 @@ export function OngletInscriptionOnboarding() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   LE DOSSIER D'UNE INSCRIPTION, affiché au moment où l'on choisit sa classe.
+   ═══════════════════════════════════════════════════════════════════════════
+   Quatre blocs, dans l'ordre où l'on en a besoin pour trancher : le niveau (c'est lui qui
+   désigne la classe), l'identité, le rattachement professionnel, puis le suivi.
+
+   LE TEST DE NIVEAU EST RAPPROCHÉ PAR L'E-MAIL. `bet_level_test_results` n'a aucune clé
+   vers `inscriptions_elearning` : le test est passé avant que le dossier n'existe, ou
+   depuis le site public. L'e-mail est le seul lien, et on le compare en minuscules - les
+   adresses sont saisies à la main des deux côtés.
+
+   UN CHAMP VIDE EST AFFICHÉ VIDE, jamais masqué : savoir qu'une date de naissance manque
+   fait partie de la décision - c'est elle qui range un apprenant en enfant, ado ou adulte.
+═══════════════════════════════════════════════════════════════════════════ */
+function DossierInscription({ insc, tests = [], couleur }) {
+  if (!insc) return null;
+
+  const mail = (insc.email || '').trim().toLowerCase();
+  const test = mail
+    ? tests.find(t => (t.email || '').trim().toLowerCase() === mail)
+    : null;
+
+  const PROFILS = { enfant: '🧒 Enfant', adolescent: '🧑 Adolescent', ado: '🧑 Adolescent', adulte: '🧑‍💼 Adulte' };
+  const dateFr = (d) => (d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : null);
+
+  /* L'âge éclaire le profil : « 2012 » ne dit pas grand-chose, « 13 ans » si. */
+  const age = (() => {
+    if (!insc.date_naissance) return null;
+    const n = new Date(insc.date_naissance);
+    if (Number.isNaN(n.getTime())) return null;
+    const a = Math.floor((Date.now() - n.getTime()) / (365.25 * 24 * 3600 * 1000));
+    return a > 0 && a < 120 ? `${a} ans` : null;
+  })();
+
+  const estMineur = ['enfant', 'adolescent', 'ado'].includes(insc.profil_type);
+
+  const blocs = [
+    {
+      titre: 'Niveau', icone: '🎯', accent: true,
+      champs: [
+        ['Niveau détecté (test)', insc.niveau_detecte],
+        ['Niveau déclaré',        insc.niveau_declare],
+        ['CECR estimé',           insc.niveau_cecr_estime],
+        ['Langue souhaitée',      insc.langue_souhaitee],
+      ],
+    },
+    {
+      titre: 'Identité', icone: '👤',
+      champs: [
+        ['Nom complet',       insc.nom_complet],
+        ['Profil',            PROFILS[insc.profil_type] || insc.profil_type],
+        ['Date de naissance', dateFr(insc.date_naissance) + (age ? ` · ${age}` : '')],
+        ['E-mail',            insc.email],
+        ['Téléphone',         insc.telephone],
+      ],
+    },
+    {
+      titre: estMineur ? 'Responsable légal' : 'Rattachement', icone: estMineur ? '👨‍👩‍👧' : '🏢',
+      champs: estMineur
+        ? [
+            ['Parent',    [insc.prenom_parent, insc.nom_parent].filter(Boolean).join(' ')],
+            ['E-mail',    insc.email_parent],
+            ['Téléphone', insc.telephone_parent],
+            ['Établissement', insc.etablissement],
+          ]
+        : [
+            ['Entreprise',  insc.entreprise_nom],
+            ['Poste',       insc.poste],
+            ['Département', insc.departement],
+            ['Établissement', insc.etablissement],
+          ],
+    },
+    {
+      titre: 'Suivi', icone: '📌',
+      champs: [
+        ['Statut',          insc.statut],
+        ['Source',          insc.source],
+        ['Classe demandée', insc.classe],
+        ['Reçu le',         dateFr(insc.created_at)],
+      ],
+    },
+  ];
+
+  const carte = {
+    background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`,
+    borderRadius: 12, padding: '14px 16px',
+  };
+  const titreBloc = {
+    fontSize: 10.5, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase',
+    color: COULEURS.gris400, marginBottom: 10,
+  };
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 11, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: COULEURS.navy }}>📂 Dossier complet</div>
+        <div style={{ fontSize: 11.5, color: COULEURS.gris400 }}>
+          Tout ce qui est connu de ce bénéficiaire, pour choisir sa classe sans quitter cet écran.
+        </div>
+      </div>
+
+      {/* LE TEST EN PREMIER, ou son absence annoncée : c'est le seul élément qui peut
+          rendre l'assignation prématurée. */}
+      {test ? (
+        <div style={{ ...carte, borderLeft: `4px solid ${COULEURS.succes}`, marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 22 }}>✅</div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: COULEURS.navy }}>Test de niveau passé</div>
+            <div style={{ fontSize: 11.5, color: COULEURS.gris400, marginTop: 2 }}>
+              {dateFr(test.submitted_at) || 'date inconnue'}
+              {test.statut ? ` · ${test.statut}` : ''}
+            </div>
+          </div>
+          {(test.niveau || test.level) && (
+            <div style={{ background: `${COULEURS.succes}18`, color: COULEURS.succes, borderRadius: 10,
+              padding: '5px 14px', fontSize: 15, fontWeight: 900 }}>
+              {test.niveau || test.level}
+            </div>
+          )}
+          {(test.score != null) && (
+            <div style={{ fontSize: 12, color: COULEURS.gris600, fontWeight: 700 }}>
+              Score {test.score}{test.total != null ? ` / ${test.total}` : ''}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ ...carte, borderLeft: '4px solid #F59E0B', marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 20 }}>⏳</div>
+          <div style={{ fontSize: 12.5, color: '#78350F', lineHeight: 1.6 }}>
+            <strong>Aucun test de niveau rapproché.</strong> Rien n'empêche l'assignation, mais
+            la classe sera choisie sur le niveau déclaré, pas sur un niveau mesuré.
+            {!mail && <> Ce dossier n'a pas d'adresse e-mail propre : le rapprochement est impossible.</>}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(215px,1fr))', gap: 12 }}>
+        {blocs.map(b => (
+          <div key={b.titre} style={{ ...carte, ...(b.accent ? { borderTop: `3px solid ${couleur}` } : {}) }}>
+            <div style={titreBloc}>{b.icone} {b.titre}</div>
+            <div style={{ display: 'grid', gap: 7 }}>
+              {b.champs.map(([l, v]) => (
+                <div key={l}>
+                  <div style={{ fontSize: 10.5, color: COULEURS.gris400 }}>{l}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: v ? 700 : 400, color: v ? COULEURS.navy : COULEURS.gris400 }}>
+                    {v || 'non renseigné'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {insc.notes_onboarding && (
+        <div style={{ ...carte, marginTop: 12, background: COULEURS.gris50 }}>
+          <div style={titreBloc}>📝 Notes</div>
+          <div style={{ fontSize: 12.5, color: COULEURS.gris600, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+            {insc.notes_onboarding}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OngletParcoursInscriptions() {
   const { couleurTheme, couleurThemeFonce } = useTheme();
 
@@ -533,7 +706,15 @@ export function OngletParcoursInscriptions() {
   const [entreprises,    setEntreprises]    = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [flash,          setFlash]          = useState(null);
-  const [filtreStatut,   setFiltreStatut]   = useState('');
+  /* L'ÉCRAN S'OUVRE SUR CE QUE LE RÔLE DOIT FAIRE.
+     Depuis la bascule, l'Onboarding n'a plus qu'une étape : assigner. Ouvrir son onglet sur
+     la liste entière l'obligeait à filtrer lui-même pour retrouver les dossiers mûrs, à
+     chaque visite. L'assistante e-learning, elle, saisit et vérifie : elle a besoin de tout
+     voir, en commençant par les dossiers qui viennent d'arriver.
+     Le filtre reste un filtre - un clic sur la même puce le retire. */
+  const { profile: _profilCourant } = useAuth();
+  const _estOnboarding = estRole(_profilCourant?.role, 'admin_onboarding');
+  const [filtreStatut,   setFiltreStatut]   = useState(_estOnboarding ? 'teste' : '');
   const [filtreEnt,      setFiltreEnt]      = useState('');
   const [recherche,      setRecherche]      = useState('');
   const [filtreDateDebut, setFiltreDateDebut] = useState('');
@@ -545,6 +726,21 @@ export function OngletParcoursInscriptions() {
   const [modalAjouter,   setModalAjouter]   = useState(false);
   const [modalDetail,    setModalDetail]    = useState(null);
   const [modalAssigner,  setModalAssigner]  = useState(null);
+  /* LES RÉSULTATS DU TEST DE NIVEAU, chargés UNE fois pour tout l'écran et non à chaque
+     ouverture de modale : le rapprochement se fait sur l'e-mail, et refaire l'appel à
+     chaque dossier consulté rejouerait la même requête des dizaines de fois. */
+  const [testsNiveau, setTestsNiveau] = useState([]);
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/bet-elearning/level-test/all`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setTestsNiveau(Array.isArray(d.results) ? d.results : []);
+      } catch { /* le dossier s'affichera sans le volet test */ }
+    })();
+    return () => { vivant = false; };
+  }, []);
   // Rattrapage : lier a posteriori une inscription orpheline (importée sans entreprise) -
   // sans ça, impossible de lui assigner une classe d'entreprise.
   const [modalSupprimer, setModalSupprimer] = useState(null); // { mode:'single', id, nom } | { mode:'bulk', count }
@@ -922,6 +1118,16 @@ export function OngletParcoursInscriptions() {
             {inscriptions.length} dossier{inscriptions.length!==1?'s':''} reçus · {nbEntreprises} entreprise{nbEntreprises!==1?'s':''}
           </div>
         </div>
+        {/* LA CRÉATION D'UN DOSSIER N'EST PLUS DU RESSORT DE L'ONBOARDING.
+            Elle reçoit les dossiers saisis, vérifiés et transmis par l'assistante
+            e-learning ; son rôle commence à l'assignation. Laisser « Import Excel » et
+            « Ajouter manuellement » ici lui laissait croire qu'elle devait encore inscrire.
+
+            RENDU CONDITIONNEL ET NON ATTRIBUT `hidden` : ce conteneur porte un
+            `style={{ display:'flex' }}` en ligne, et un display en ligne l'emporte sur le
+            `display:none` que `hidden` applique via la feuille du navigateur. L'attribut
+            était donc sans aucun effet - les deux boutons restaient visibles. */}
+        {!_estOnboarding && (
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={() => setTab(tab==='excel' ? 'liste' : 'excel')}
             style={{ padding:'9px 16px', borderRadius:9, border:`1px solid ${COULEURS.gris200}`, background: tab==='excel' ? COULEURS.navy : COULEURS.blanc, color: tab==='excel' ? '#fff' : COULEURS.navy, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
@@ -932,6 +1138,7 @@ export function OngletParcoursInscriptions() {
             + Ajouter manuellement
           </button>
         </div>
+        )}
       </div>
 
       {/* KPIs pipeline */}
@@ -1181,7 +1388,13 @@ export function OngletParcoursInscriptions() {
                   style={{ cursor:'pointer', accentColor:couleurTheme }} />
 
                 {/* Bénéficiaire */}
-                <div style={{ cursor:'pointer', display:'flex', alignItems:'center', gap:8 }} onClick={() => setModalDetail(x)}>
+                {/* POUR L'ONBOARDING, CLIQUER SUR LE NOM OUVRE DIRECTEMENT L'ASSIGNATION -
+                    dossier complet en tête de modale, puis choix de la classe. C'est son
+                    geste unique : passer par une fiche de détail d'abord lui ferait ouvrir
+                    deux fenêtres pour une seule décision. Les autres rôles gardent la fiche. */}
+                <div style={{ cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}
+                  title={_estOnboarding ? 'Ouvrir le dossier et assigner une classe' : 'Voir le dossier'}
+                  onClick={() => { if (_estOnboarding) { setModalAssigner(x); setClasseChoisie(''); } else { setModalDetail(x); } }}>
                   {x.avatar_url ? (
                     <img src={x.avatar_url} alt="" style={{ width:26, height:26, borderRadius:'50%', objectFit:'cover', flexShrink:0 }} onError={e => { e.target.style.display='none'; }} />
                   ) : (
@@ -1226,19 +1439,29 @@ export function OngletParcoursInscriptions() {
 
                 {/* Actions selon statut */}
                 <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                  {x.statut === 'recu' && (
+                  {/* Valider et transmettre reviennent à l'assistante e-learning.
+                      L'Onboarding ne voit donc que « Assigner » - le seul geste qui lui
+                      reste. Les boutons sont retirés, pas grisés : un bouton désactivé
+                      laisse croire qu'un droit manque, alors que c'est le métier qui a
+                      changé de mains. */}
+                  {!_estOnboarding && x.statut === 'recu' && (
                     <button onClick={() => valider(x.id)} disabled={saving}
                       style={{ padding:'4px 9px', borderRadius:6, border:'none', background:'#10B981', color:'#fff', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
                       ✅ Valider
                     </button>
                   )}
-                  {x.statut === 'verifie' && (
+                  {!_estOnboarding && x.statut === 'verifie' && (
                     <button onClick={() => transmettre(x.id)} disabled={saving}
                       style={{ padding:'4px 9px', borderRadius:6, border:'none', background:'#F59E0B', color:'#fff', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
                       🎯 → Placement
                     </button>
                   )}
-                  {x.statut === 'teste' && (
+                  {/* « transmis_placement » EST ACCEPTÉ en plus de « teste » : le test de
+                      niveau n'a aucun pouvoir de blocage dans ce parcours, et un dossier
+                      dont le résultat ne revient jamais restait sans aucune action possible,
+                      pour personne. Le dossier affiche alors franchement qu'aucun test n'a
+                      été rapproché. */}
+                  {['teste', 'transmis_placement'].includes(x.statut) && (
                     <button onClick={() => { setModalAssigner(x); setClasseChoisie(''); }}
                       style={{ padding:'4px 9px', borderRadius:6, border:'none', background:couleurTheme, color:'#fff', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
                       🏫 Assigner
@@ -1504,6 +1727,15 @@ export function OngletParcoursInscriptions() {
             </div>
 
             <div style={{ padding:'22px 24px' }}>
+
+              {/* ══════════ LE DOSSIER COMPLET ══════════
+                  On n'assigne pas une ligne de tableau, on assigne une personne. La modale
+                  n'affichait que son nom, son niveau détecté et son entreprise : impossible
+                  de choisir une classe sans rouvrir la fiche ailleurs. Tout ce que porte
+                  `inscriptions_elearning` est désormais sous les yeux au moment du choix,
+                  avec le résultat du test de niveau quand il est revenu. */}
+              <DossierInscription insc={modalAssigner} tests={testsNiveau} couleur={couleurTheme} />
+
               {/* Toggle mode */}
               <div style={{ display:'flex', gap:8, marginBottom:20 }}>
                 <button onClick={() => setModeNouvelleClasse(false)}
@@ -1682,7 +1914,7 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
     entreprise_id: '', entreprise_nom: '',
     nom: '', niveau: 'A1', type_cours: 'en_ligne',
     date_debut: '', date_fin: '', capacite_max: 10,
-    coach_id: '',
+    coach_id: '', photo_url: null,
   };
   const [form, setForm] = useState(FORM0);
 
@@ -1728,12 +1960,16 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
         coach_id:       form.coach_id       || null,
         coach_nom:      coachChoisi ? `${coachChoisi.prenom||''} ${coachChoisi.nom||''}`.trim() : null,
         horaire:        creneaux.map(c => ({ jour: c.jour, debut: c.debut, fin: c.fin })),
+        photo_url:      form.photo_url || null,
       };
       const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning`, {
         method: 'POST', headers: _authHdrsAdmin(), body: JSON.stringify(payload),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || r.status);
+      // La classe existe, mais la photo a été perdue faute de colonne : le dire, sinon
+      // l'image semble avoir disparu sans raison.
+      if (d.photo_non_enregistree) toast.error(d.photo_non_enregistree, { duration: 8000 });
       onCreee(d.classe);
     } catch (e) {
       setFlash(`Erreur : ${e.message}`);
@@ -1779,6 +2015,13 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
                 {entreprises.map(e => <option key={e.id} value={e.id}>{e.nom}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* La photo, juste avant le nom : c'est le couple qui identifie la classe, et
+              elle habille aussi le fil de discussion de cette classe. */}
+          <div style={{ marginBottom:14 }}>
+            <ChampPhotoClasse valeur={form.photo_url} nom={form.nom} accent={couleurTheme}
+              onChange={url => setF('photo_url', url)} />
           </div>
 
           {/* Nom + Niveau */}
@@ -2046,7 +2289,14 @@ function ModalDetailClasseOnboarding({ classe: classeInit, onFermer, onClasseUpd
         <div style={{ background:`linear-gradient(135deg,${couleurTheme},${couleurThemeFonce})`, padding:'22px 28px', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div style={{ display:'flex', gap:14, alignItems:'center', flex:1, minWidth:0 }}>
-              <div style={{ width:52, height:52, borderRadius:14, background:'rgba(255,255,255,0.2)', border:'2px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>🏫</div>
+              {/* LA PHOTO DE LA CLASSE, modifiable ici : c'est l'écran qui gère les
+                  classes, et on corrige l'image en regardant la fiche plutôt qu'en
+                  rouvrant le formulaire de création. Une classe clôturée se consulte mais
+                  ne se modifie plus. L'enregistrement est immédiat - cette fiche n'a pas de
+                  bouton « Enregistrer ». */}
+              <PhotoClasseEntete classe={classe} taille={52} accent="#fff"
+                modifiable={classe.statut !== 'clos'}
+                onChange={url => setClasse(c => ({ ...c, photo_url: url }))} />
               <div style={{ flex:1, minWidth:0 }}>
                 {editNom ? (
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -2978,10 +3228,17 @@ function useApprenantsOnboarding() {
   const [apprenants, setApprenants] = useState([]);
   const [chargement, setChargement] = useState(true);
 
+  /* ⚠️ LA SOURCE EST CELLE DE CETTE PLATEFORME.
+     Cet écran lisait `/api/groupes/apprenants`, c'est-à-dire `groupes_apprenants` : la
+     table des classes de DASH, partagée entre les deux plateformes. Le « Suivi démarrage »
+     de l'Onboarding affichait donc les apprenants du présentiel - même fuite que celle
+     corrigée sur les apprenants de la direction, l'audit, les messages et les modules.
+     `/api/classes-elearning/apprenants/tous` ne rend que les inscrits des classes
+     e-learning. */
   const recharger = useCallback(async () => {
     setChargement(true);
     try {
-      const r = await fetch(`${_API_URL_ADMIN}/api/groupes/apprenants`, { headers: _authHdrsAdmin() });
+      const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning/apprenants/tous`, { headers: _authHdrsAdmin() });
       const d = await r.json().catch(() => ({}));
       setApprenants(Array.isArray(d.apprenants) ? d.apprenants : []);
     } catch { setApprenants([]); }
@@ -3046,14 +3303,21 @@ export function OngletSuiviDemarrage() {
     const apres = { ...avant, [itemId]: !avant[itemId] };
     setApprenants(prev => prev.map(a => a.id === gaId ? { ...a, suivi_checklist: apres } : a));
     try {
-      const r = await fetch(`${_API_URL_ADMIN}/api/groupes/apprenants/${gaId}/suivi`, {
+      // Même bascule que la lecture : la route e-learning écrit dans
+      // `classes_elearning_apprenants`, jamais dans la table de dash.
+      const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning/apprenants/${gaId}/suivi`, {
         method: 'PATCH', headers: _authHdrsAdmin(),
         body: JSON.stringify({ suivi_checklist: apres }),
       });
-      if (!r.ok) throw new Error();
-    } catch {
+      if (!r.ok) {
+        // Le serveur dit précisément si c'est le SQL qui manque - on le remonte plutôt
+        // qu'un échec muet qui ferait croire à un problème de réseau.
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || '');
+      }
+    } catch (e) {
       setApprenants(prev => prev.map(a => a.id === gaId ? { ...a, suivi_checklist: avant } : a));
-      toast.error("L'étape n'a pas pu être enregistrée", { duration: 5000 });
+      toast.error(e.message || "L'étape n'a pas pu être enregistrée", { duration: 6000 });
     }
   }
 
@@ -3282,6 +3546,234 @@ export function OngletMesTachesOnboarding() {
         Ces deux lignes apparaîtront avec l'onglet Dossiers à réaffecter, qui n'est pas encore
         porté.
       </p>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MES APPRENANTS - le portefeuille de l'onboardeuse.
+   ═══════════════════════════════════════════════════════════════════════════
+   Distinct de « Inscriptions », qui montre les ENTRANTS, et de « Suivi démarrage », qui
+   montre une checklist. Celui-ci montre les gens : qui ils sont, dans quelle classe, où ils
+   en sont.
+
+   ⚠️ LA SOURCE EST `classes_elearning_apprenants`, via `/api/classes-elearning/apprenants/tous`
+   - les apprenants de CETTE plateforme. Pas `/api/groupes/apprenants`, qui lit la table
+   partagée `groupes_apprenants` et remonterait les apprenants présentiel de dash.
+═══════════════════════════════════════════════════════════════════════════ */
+const PAR_PAGE_MES_APP = 15;
+
+export function OngletMesApprenantsOnboarding() {
+  const { couleurTheme } = useTheme();
+  const [apprenants, setApprenants] = useState(null);
+  const [recherche, setRecherche] = useState('');
+  const [filtreStatut, setFiltreStatut] = useState('tous');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning/apprenants/tous`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setApprenants(Array.isArray(d.apprenants) ? d.apprenants : []);
+      } catch { if (vivant) setApprenants([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  if (apprenants === null) {
+    return <div style={{ textAlign:'center', padding:60, color:'#9CA3AF', fontSize:13 }}>⏳ Chargement…</div>;
+  }
+
+  const nomDe = (a) => `${a.prenom || ''} ${a.nom || ''}`.trim() || a.nom_complet || a.email || 'Apprenant';
+  const filtres = apprenants.filter(a => {
+    if (filtreStatut !== 'tous' && a.statut !== filtreStatut) return false;
+    if (recherche) {
+      const q = recherche.toLowerCase();
+      if (!`${nomDe(a)} ${a.email || ''} ${a.classe_nom || ''}`.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const totalPages = Math.max(1, Math.ceil(filtres.length / PAR_PAGE_MES_APP));
+  const pageSure = Math.min(page, totalPages);
+  const visibles = filtres.slice((pageSure - 1) * PAR_PAGE_MES_APP, pageSure * PAR_PAGE_MES_APP);
+
+  const STATUTS = [
+    ['tous', 'Tous', apprenants.length],
+    ['actif', 'Actifs', apprenants.filter(a => a.statut === 'actif').length],
+    ['suspendu', 'Suspendus', apprenants.filter(a => a.statut === 'suspendu').length],
+  ];
+  const puce = (actif) => ({
+    padding:'6px 13px', borderRadius:99, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
+    border:`1.5px solid ${actif ? couleurTheme : COULEURS.gris200}`,
+    background: actif ? `${couleurTheme}15` : '#fff', color: actif ? couleurTheme : COULEURS.gris600,
+  });
+
+  return (
+    <div>
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:COULEURS.navy }}>🎓 Mes apprenants</div>
+        <div style={{ fontSize:12, color:COULEURS.gris400, marginTop:3 }}>
+          Les apprenants inscrits dans les classes e-learning. Les apprenants présentiel relèvent de dash.
+        </div>
+      </div>
+
+      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
+        <input value={recherche} onChange={e => { setRecherche(e.target.value); setPage(1); }}
+          placeholder="🔍 Nom, e-mail, classe…"
+          style={{ padding:'8px 12px', borderRadius:8, border:`1.5px solid ${COULEURS.gris200}`, fontSize:12, minWidth:230, fontFamily:'inherit' }} />
+        {STATUTS.map(([v, l, n]) => (
+          <button key={v} onClick={() => { setFiltreStatut(v); setPage(1); }} style={puce(filtreStatut === v)}>
+            {l} <span style={{ fontWeight:900, opacity: n ? 1 : 0.45 }}>{n}</span>
+          </button>
+        ))}
+      </div>
+
+      {filtres.length === 0 ? (
+        <div style={{ textAlign:'center', padding:46, background:COULEURS.gris50, borderRadius:14, border:`1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize:34, marginBottom:10 }}>🎓</div>
+          <div style={{ fontSize:14, fontWeight:700, color:COULEURS.navy }}>Aucun apprenant e-learning</div>
+          <div style={{ fontSize:12, color:COULEURS.gris400, marginTop:5, maxWidth:450, margin:'5px auto 0', lineHeight:1.6 }}>
+            Aucun apprenant n'est encore inscrit dans une classe e-learning. Ils apparaîtront ici
+            dès la première inscription.
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ background:'#fff', borderRadius:14, border:`1px solid ${COULEURS.gris200}`, overflow:'hidden' }}>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                <thead>
+                  <tr style={{ background:COULEURS.gris50 }}>
+                    {['Apprenant', 'Classe', 'Niveau', 'Entreprise', 'Statut'].map(h => (
+                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibles.map(a => (
+                    <tr key={a.id} style={{ borderTop:`1px solid ${COULEURS.gris100}` }}>
+                      <td style={{ padding:'10px 14px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <PastilleGroupe nom={nomDe(a)} url={a.avatar_url} taille={30} accent={couleurTheme} />
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontWeight:700, color:COULEURS.navy }}>{nomDe(a)}</div>
+                            <div style={{ fontSize:11, color:COULEURS.gris400 }}>{a.email || '-'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding:'10px 14px' }}>{a.classe_nom || '-'}</td>
+                      <td style={{ padding:'10px 14px' }}>{a.niveau_classe || a.niveau || '-'}</td>
+                      <td style={{ padding:'10px 14px' }}>{a.entreprise_nom || '-'}</td>
+                      <td style={{ padding:'10px 14px' }}>
+                        <span style={{ fontSize:11, fontWeight:700, borderRadius:10, padding:'3px 10px',
+                          background: a.statut === 'actif' ? '#D1FAE5' : a.statut === 'suspendu' ? '#FEE2E2' : COULEURS.gris100,
+                          color:      a.statut === 'actif' ? '#065F46' : a.statut === 'suspendu' ? '#991B1B' : COULEURS.gris600 }}>
+                          {a.statut || 'inconnu'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{ display:'flex', gap:6, justifyContent:'center', marginTop:14, flexWrap:'wrap' }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSure === 1} style={puce(false)}>← Préc.</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - pageSure) <= 1)
+                .map(p => <button key={p} onClick={() => setPage(p)} style={puce(p === pageSure)}>{p}</button>)}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={pageSure === totalPages} style={puce(false)}>Suiv. →</button>
+              <span style={{ fontSize:11.5, color:COULEURS.gris400, marginLeft:4, alignSelf:'center' }}>{filtres.length} apprenant{filtres.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COACHS - qui enseigne sur la plateforme.
+   ═══════════════════════════════════════════════════════════════════════════
+   `/api/classes-elearning/coaches-elearning` : les coachs HABILITÉS e-learning
+   (`acces_elearning = true`), et non tout le corps enseignant de dash.
+
+   La note moyenne et la catégorie de contrat accompagnent chaque coach - c'est la même
+   route que celle qu'utilise le PA Advisor pour assigner, et le même barème que le
+   Superviseur. Trois écrans, un seul verdict.
+═══════════════════════════════════════════════════════════════════════════ */
+export function OngletCoachsOnboarding() {
+  const { couleurTheme } = useTheme();
+  const [coachs, setCoachs] = useState(null);
+  const [recherche, setRecherche] = useState('');
+
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning/coaches-elearning`, { headers: _authHdrsAdmin() });
+        const d = await r.json().catch(() => ({}));
+        if (vivant) setCoachs(Array.isArray(d.coaches) ? d.coaches : []);
+      } catch { if (vivant) setCoachs([]); }
+    })();
+    return () => { vivant = false; };
+  }, []);
+
+  if (coachs === null) {
+    return <div style={{ textAlign:'center', padding:60, color:'#9CA3AF', fontSize:13 }}>⏳ Chargement…</div>;
+  }
+
+  const nomDe = (c) => `${c.prenom || ''} ${c.nom || ''}`.trim() || c.email || 'Coach';
+  const filtres = coachs.filter(c => !recherche
+    || `${nomDe(c)} ${c.email || ''}`.toLowerCase().includes(recherche.toLowerCase()));
+
+  return (
+    <div>
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:COULEURS.navy }}>👨‍🏫 Coachs e-learning</div>
+        <div style={{ fontSize:12, color:COULEURS.gris400, marginTop:3 }}>
+          Les coachs habilités à intervenir sur BET E-Learning, avec leur catégorie de contrat.
+        </div>
+      </div>
+
+      <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="🔍 Nom ou e-mail…"
+        style={{ padding:'8px 12px', borderRadius:8, border:`1.5px solid ${COULEURS.gris200}`, fontSize:12, minWidth:230, marginBottom:14, fontFamily:'inherit' }} />
+
+      {filtres.length === 0 ? (
+        <div style={{ textAlign:'center', padding:46, background:COULEURS.gris50, borderRadius:14, border:`1px dashed ${COULEURS.gris200}` }}>
+          <div style={{ fontSize:34, marginBottom:10 }}>👨‍🏫</div>
+          <div style={{ fontSize:14, fontWeight:700, color:COULEURS.navy }}>Aucun coach habilité</div>
+          <div style={{ fontSize:12, color:COULEURS.gris400, marginTop:5, maxWidth:450, margin:'5px auto 0', lineHeight:1.6 }}>
+            Un coach n'apparaît ici que si l'accès e-learning lui a été accordé depuis le SuperAdmin.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))', gap:14 }}>
+          {filtres.map(c => (
+            <div key={c.id} style={{ background:'#fff', border:`1px solid ${COULEURS.gris200}`, borderTop:`3px solid ${couleurTheme}`, borderRadius:14, padding:'16px 18px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:11 }}>
+                <PastilleGroupe nom={nomDe(c)} url={c.avatar_url} taille={42} accent={couleurTheme} agrandissable />
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:13.5, fontWeight:800, color:COULEURS.navy }}>{nomDe(c)}</div>
+                  <div style={{ fontSize:11, color:COULEURS.gris400, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.email || '-'}</div>
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <BadgeCategorieCoach note={c.note_moyenne} taille="xs" avecNote />
+                <span style={{ fontSize:11, color:COULEURS.gris400 }}>
+                  {c.nb_observations > 0
+                    ? `${c.nb_observations} observation${c.nb_observations > 1 ? 's' : ''}`
+                    : 'jamais observé'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

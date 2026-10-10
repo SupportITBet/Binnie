@@ -13,6 +13,10 @@ import { supabase } from '../../config/supabase';
 import { calcTranche } from '../../utils/trancheAge';
 
 import AppreciationSeance, { BandeauAppreciation, useSeancesANoter } from "../../components/shared/AppreciationSeance";
+import {
+  SectionMonProfil, SectionPlanning, SectionObjectifs, SectionPaiement,
+  SectionBoutique, SectionTemoignage, SectionSupport,
+} from '../../components/apprenant/SectionsApprenant';
 
 /* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
    Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
@@ -85,6 +89,13 @@ const CHEMIN_VERS_SECTION = {
   '/apprenant/classement':    'classement',
   '/apprenant/presences':    'presences',
   '/apprenant/onboarding':   'onboarding',
+  '/apprenant/profil':       'mon_profil',
+  '/apprenant/planning':     'planning',
+  '/apprenant/objectifs':    'objectifs',
+  '/apprenant/paiement':     'paiement',
+  '/apprenant/boutique':     'boutique',
+  '/apprenant/temoignage':   'temoignage',
+  '/apprenant/support':      'support',
 };
 
 // ── Données mini-jeux (contenu pédagogique statique, pas des mocks) ────────────
@@ -3724,6 +3735,17 @@ export default function DashboardApprenant() {
             })()}
           </div>
         )}
+
+        {/* LES SEPT ÉCRANS DE PARITÉ avec l'espace apprenant de dash. Ils vivent dans
+            `components/apprenant/SectionsApprenant.jsx` : ce fichier dépasse déjà
+            5 000 lignes, et six cents de plus l'auraient rendu illisible. */}
+        {section === 'mon_profil'  && <SectionMonProfil  couleur={couleurTheme} />}
+        {section === 'planning'    && <SectionPlanning   couleur={couleurTheme} />}
+        {section === 'objectifs'   && <SectionObjectifs  couleur={couleurTheme} />}
+        {section === 'paiement'    && <SectionPaiement   couleur={couleurTheme} />}
+        {section === 'boutique'    && <SectionBoutique   couleur={couleurTheme} />}
+        {section === 'temoignage'  && <SectionTemoignage couleur={couleurTheme} profile={profile} />}
+        {section === 'support'     && <SectionSupport    couleur={couleurTheme} />}
 
       </div>
     </TopNavLayout>

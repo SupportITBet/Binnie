@@ -16,17 +16,20 @@ import { OngletRHPaieBulletins, OngletRHContrats, OngletRHConges, OngletRHPaieAp
 import { OngletCustomerCare } from './DashboardCustomerCare';
 import { OngletRemplacements } from './DashboardAdminShared';
 import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsElearning } from './DashboardSuperviseur';
-import { OngletCoachsPAAdvisor, OngletHonorairesPAAdvisor, OngletVueEnsemblePAAdvisor, OngletClassesPAAdvisor, DashboardPAAdvisor, OngletRapportsSuperviseurPA, OngletEvaluationsPAAdvisor, OngletSuiviApprenantsPAAdvisor } from './DashboardPaAdvisor';
+import { OngletCoachsPAAdvisor, OngletHonorairesPAAdvisor, OngletVueEnsemblePAAdvisor, OngletClassesPAAdvisor, DashboardPAAdvisor, OngletRapportsSuperviseurPA, OngletEvaluationsPAAdvisor, OngletSuiviApprenantsPAAdvisor, OngletMesTachesPAAdvisor, OngletEvaluationsApprenantsPA } from './DashboardPaAdvisor';
 import { OngletGestionTests, OngletMesTachesPlacement, OngletRapportsPlacement } from './DashboardPlacement';
 import { OngletCommMesTaches, OngletCommTableauBord, OngletCommInscriptions, OngletCommMesClasses, OngletCommMesApprenants, OngletCommPaiements } from './DashboardCommercialElearning';
+import { OngletDirectionMesTaches, OngletDirectionApprenants } from './DashboardDirection';
 import { OngletMesTachesSav, OngletTableauBordSav, OngletDemandesSav, OngletRemboursementsSav, OngletSatisfactionSav } from './DashboardSav';
 import BetLevelTestsTab from '../../components/shared/BetLevelTestsTab';
 import { OngletEntreprises } from './DashboardAdminShared';
-import { OngletInscriptionOnboarding, OngletParcoursInscriptions, OngletClasses, OngletVueEnsembleOnboarding, OngletSuiviDemarrage, OngletMesTachesOnboarding } from './DashboardOnboarding';
+import { OngletInscriptionOnboarding, OngletParcoursInscriptions, OngletClasses, OngletVueEnsembleOnboarding, OngletSuiviDemarrage, OngletMesTachesOnboarding, OngletMesApprenantsOnboarding, OngletCoachsOnboarding } from './DashboardOnboarding';
+import OngletReaffectations from '../../components/shared/OngletReaffectations';
 import { OngletELearning } from './DashboardElearning';
 import { OngletAuditLogs, EquipePedagogique, OngletAdministrationBET, OngletVueEnsembleManager } from './DashboardManager';
 
 import { fetchUpload } from "../../utils/fetchUpload";
+import { estRole, familleDe } from '../../constants/roles';
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
 
@@ -306,19 +309,45 @@ const CONFIGS_PAR_ROLE = {
       { id: 'parcours',     titre: 'Parcours inscriptions', icone: '📋', chemin: '/admin/onboarding/parcours',     couleur: '#F97316' },
       { id: 'entreprises',  titre: 'Entreprises',           icone: '🏢', chemin: '/admin/onboarding/entreprises',  couleur: '#0891B2' },
       { id: 'classes',      titre: 'Classes',               icone: '🏫', chemin: '/admin/onboarding/classes',      couleur: COULEURS.cyanFonce },
+      { id: 'apprenants',   titre: 'Mes apprenants',        icone: '🎓', chemin: '/admin/onboarding/apprenants',   couleur: '#F97316' },
+      { id: 'coachs',       titre: 'Coachs',                icone: '👨‍🏫', chemin: '/admin/onboarding/coachs',       couleur: '#0EA5E9' },
+      { id: 'reaffectations', titre: 'Dossiers à réaffecter', icone: '🔄', chemin: '/admin/onboarding/reaffectations', couleur: '#F59E0B' },
       { id: 'assignation',  titre: 'Assignation',           icone: '🎯', chemin: '/admin/onboarding/assignation',  couleur: COULEURS.succes },
       { id: 'contenus',     titre: 'Contenus',              icone: '📚', chemin: '/admin/onboarding/contenus',     couleur: '#7C3AED' },
     ],
   },
   admin_elearning: {
     titre: 'Assistant E-Learning',
-    description: 'Suivi du programme, contenus pédagogiques et reporting entreprises',
+    description: "Inscriptions, suivi du parcours, programme pédagogique et reporting entreprises",
     modules: [
-      { id: 'overview',     titre: "Vue d'ensemble", icone: '📊', chemin: '/admin/elearning/overview',     couleur: '#0D9488' },
+      { id: 'inscrire',     titre: 'Inscrire',         icone: '📝', chemin: '/admin/elearning/inscrire',    couleur: '#7C3AED' },
+      { id: 'parcours',     titre: 'Parcours',         icone: '📋', chemin: '/admin/elearning/parcours',    couleur: '#F97316' },
       { id: 'programme',    titre: 'Programme',       icone: '📈', chemin: '/admin/elearning/programme',    couleur: COULEURS.cyan },
       { id: 'reporting',    titre: 'Reporting',        icone: '📋', chemin: '/admin/elearning/reporting',    couleur: '#6366F1' },
       { id: 'entreprises',  titre: 'Entreprises',      icone: '🏢', chemin: '/admin/elearning/entreprises', couleur: '#F97316' },
     ],
+  },
+  /* ── DEUX RÔLES QUI TOMBAIENT SUR « Rôle admin non reconnu » ──
+     `config` est résolu juste avant le rendu, et une absence renvoie un écran d'erreur plein
+     page. `assistant_sav` n'avait pas d'entrée — son dashboard existait mais n'était jamais
+     atteint — et `marketing` non plus, puisque le rôle vient d'être créé. */
+  assistant_sav: {
+    titre:       'Service Après-Vente',
+    description: 'Demandes après-vente, remboursements et suivi de satisfaction',
+    modules: [
+      { id: 'taches',    titre: 'Mes tâches',         icone: '✅', chemin: '/admin/sav/taches',    couleur: '#0E7490' },
+      { id: 'demandes',  titre: 'Demandes SAV',       icone: '📨', chemin: '/admin/sav/demandes',  couleur: COULEURS.cyan },
+      { id: 'rembours',  titre: 'Remboursements',     icone: '💳', chemin: '/admin/sav/remboursements', couleur: '#D97706' },
+      { id: 'satisf',    titre: 'Suivi satisfaction', icone: '😊', chemin: '/admin/sav/satisfaction',   couleur: '#16A34A' },
+    ],
+  },
+  /* Le Marketing n'a pas encore d'écran propre : son menu se limite au socle (notifications,
+     messagerie). Cette entrée existe pour qu'il ENTRE au lieu de buter sur l'écran d'erreur —
+     ses quatre comptes actifs n'avaient aucun accès à bet-elearning. */
+  marketing: {
+    titre:       'Assistant Marketing',
+    description: 'Communication et campagnes — les écrans dédiés restent à construire',
+    modules: [],
   },
   admin_customer_care: {
     titre:       'Customer Care',
@@ -334,6 +363,7 @@ const CONFIGS_PAR_ROLE = {
     titre:       'PA Advisor',
     description: 'Conseil pédagogique, suivi de la qualité des programmes et accompagnement des apprenants et professeurs',
     modules: [
+      { id: 'taches',                titre: 'Mes tâches',           icone: '✅', chemin: '/admin/pa-advisor/taches',               couleur: '#8B5CF6' },
       { id: 'overview',              titre: "Vue d'ensemble",       icone: '📊', chemin: '/admin/pa-advisor/overview',             couleur: '#0EA5E9' },
       { id: 'classes',              titre: 'Classes',              icone: '🏫', chemin: '/admin/pa-advisor/classes',              couleur: '#6366F1' },
       { id: 'coachs',                titre: 'Coachs E-Learning',    icone: '👨‍🏫', chemin: '/admin/pa-advisor/coachs',               couleur: '#0EA5E9' },
@@ -342,7 +372,9 @@ const CONFIGS_PAR_ROLE = {
       { id: 'honoraires',            titre: 'Honoraires',           icone: '💰', chemin: '/admin/pa-advisor/honoraires',           couleur: '#F59E0B' },
       { id: 'apprenants',            titre: 'Suivi apprenants',     icone: '👩‍🎓', chemin: '/admin/pa-advisor/apprenants',           couleur: '#F97316' },
       { id: 'programme',             titre: 'Suivi programme',      icone: '📈', chemin: '/admin/pa-advisor/programme',            couleur: COULEURS.cyan },
-      { id: 'evaluations',           titre: 'Évaluations',          icone: '⭐', chemin: '/admin/pa-advisor/evaluations',          couleur: '#8B5CF6' },
+      { id: 'evaluations',           titre: 'Évaluations parents',  icone: '⭐', chemin: '/admin/pa-advisor/evaluations',          couleur: '#8B5CF6' },
+      { id: 'eval-apprenants',       titre: 'Évaluations apprenants', icone: '🎓', chemin: '/admin/pa-advisor/eval-apprenants',    couleur: '#8B5CF6' },
+      { id: 'reaffectations',        titre: 'Dossiers à réaffecter', icone: '🔀', chemin: '/admin/pa-advisor/reaffectations',      couleur: '#F59E0B' },
       { id: 'reporting',             titre: 'Reporting',            icone: '📊', chemin: '/admin/pa-advisor/reporting',            couleur: COULEURS.succes },
     ],
   },
@@ -1082,7 +1114,7 @@ function ModalDetailBenef({ benef, entreprise, onFermer }) {
                       </div>
 
                       {/* Bouton débloquer (visible si bloqué + rôle autorisé) */}
-                      {blocageStatus.acces_bloque && ['admin_onboarding','admin_manager','admin_superviseur','admin_customer_care'].includes(profile?.role) && (
+                      {blocageStatus.acces_bloque && estRole(profile?.role, ['admin_onboarding', 'admin_manager', 'admin_superviseur', 'admin_customer_care']) && (
                         <div style={{ background:'#F0FDF4', border:'1.5px solid #86EFAC', borderRadius:12, padding:'16px 20px' }}>
                           <div style={{ fontSize:13, fontWeight:700, color:'#065F46', marginBottom:10 }}>🔓 Débloquer l'accès</div>
                           <div style={{ fontSize:12, color:'#166534', marginBottom:12, lineHeight:1.5 }}>
@@ -1105,7 +1137,7 @@ function ModalDetailBenef({ benef, entreprise, onFermer }) {
                       )}
 
                       {/* Message si pas le bon rôle */}
-                      {blocageStatus.acces_bloque && !['admin_onboarding','admin_manager','admin_superviseur','admin_customer_care'].includes(profile?.role) && (
+                      {blocageStatus.acces_bloque && !estRole(profile?.role, ['admin_onboarding', 'admin_manager', 'admin_superviseur', 'admin_customer_care']) && (
                         <div style={{ background:'#FEF9C3', border:'1px solid #FDE68A', borderRadius:10, padding:'12px 16px', fontSize:12, color:'#92400E' }}>
                           ⚠️ Seul un agent Onboarding ou Customer Care peut débloquer cet accès.
                         </div>
@@ -2210,14 +2242,20 @@ function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSupprimee, on
   const { profile } = useAuth();
   const confirm = useConfirm();
   const alerte = useAlerte();
-  const peutModifier = ['admin_elearning', 'admin_commercial'].includes(profile?.role) || profile?.permissions?.crm_entreprises?.update === true;
+  /* `super_admin` ajouté : le repli `profile.permissions.crm_entreprises` ne les
+       rattrapait PAS. La base leur accorde le module `crm`, et le serveur sait que
+       `crm_entreprises` retombe sur `crm` (MODULE_FALLBACK_PARENT) — mais ce repli n'existe
+       que dans `requirePermission`. L'interface, elle, lit la clé exacte : absente, donc
+       bouton grisé pour qui a pourtant le droit.
+       L'Administrateur, lui, reste en lecture sur les entreprises — demande explicite. */
+    const peutModifier = estRole(profile?.role, ['super_admin', 'admin_elearning', 'admin_commercial']) || profile?.permissions?.crm_entreprises?.update === true;
 
   const [tab, setTab]           = useState('beneficiaires');
   const [benDetail, setBen]     = useState(null);
   const [typesSessionsLocal, setTypesSessionsLocal] = useState(entreprise.types_sessions || ['ligne']);
 
   // ── Contrat (renouvellement + statut) - module dédié "contrat", distinct de "crm_entreprises" ──
-  const peutGererContrat = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.contrat?.update === true;
+  const peutGererContrat = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.contrat?.update === true;
   // L'assistante e-learning a le droit "créer" (pas "modifier") sur ce module : elle peut donc
   // proposer un renouvellement, mais seul l'admin BET (peutGererContrat) peut le valider.
   const peutProposerRenouvellement = !peutGererContrat && profile?.permissions?.contrat?.create === true;
@@ -2461,11 +2499,11 @@ function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSupprimee, on
   // quoi que l'admin configure dans Gestion des droits. Seul "admin_manager" (super_admin/admin/
   // manager) est une façade sans ambiguïté - on peut la garder comme accès admin implicite.
   const entrepriseRefusee = entreprise.statut === 'refuse';
-  const peutSaisirVersement = !entrepriseRefusee && (profile?.role === 'admin_manager' || profile?.permissions?.finances?.create === true);
-  const peutModifierVersement = !entrepriseRefusee && (profile?.role === 'admin_manager' || profile?.permissions?.finances?.update === true);
+  const peutSaisirVersement = !entrepriseRefusee && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true);
+  const peutModifierVersement = !entrepriseRefusee && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true);
   // Suppression réservée à l'admin BET - jamais à l'assistante e-learning, même si un rôle
   // "commercial" venait un jour à cocher "Modifier" sur le module Finances.
-  const peutSupprimerVersement = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.finances?.delete === true;
+  const peutSupprimerVersement = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true;
   const [versements, setVersements] = useState([]);
   const [chargVersements, setChargVersements] = useState(false);
   const [showFormVers, setShowFormVers] = useState(false);
@@ -3433,7 +3471,11 @@ export default function DashboardAdmin() {
   const location    = useLocation();
   const alerte      = useAlerte();
 
-  const config = CONFIGS_PAR_ROLE[profile?.role];
+  /* Indexé par nom de FAMILLE, pas par rôle : depuis la dé-fusion, `profile.role` vaut
+     `placement_test` ou `pedagogical_advisor` là où cette table attend `admin_placement` ou
+     `admin_pa_advisor`. Sans `familleDe`, `config` serait `undefined` et les trois blocs qui
+     lisent `config.modules` / `config.description` sans protection planteraient. */
+  const config = CONFIGS_PAR_ROLE[familleDe(profile?.role)];
 
   // États pour le dashboard Contenus - chargés depuis /api/contenus/* (voir useEffect ci-dessous)
   const [catActive, setCatActive]   = useState('tous');
@@ -3494,7 +3536,7 @@ export default function DashboardAdmin() {
 
   useEffect(() => {
     const estPageContenus =
-      profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/contenus';
+      estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/contenus';
     if (estPageContenus) fetchContenus();
   }, [profile?.role, location.pathname, fetchContenus]);
 
@@ -3816,7 +3858,7 @@ export default function DashboardAdmin() {
   const [placementResultats, setPlacementResultats] = useState([]);
   const [placementAssignesCount, setPlacementAssignesCount] = useState(0);
   useEffect(() => {
-    if (profile?.role !== 'admin_placement') return;
+    if (!estRole(profile?.role, 'admin_placement')) return;
     const h = { 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` };
     Promise.all([
       fetch(`${_API_URL_ADMIN}/api/placement/queue`,       { headers: h }),
@@ -3859,7 +3901,7 @@ export default function DashboardAdmin() {
   // ── KPIs réels pour admin_elearning (remplace les MOCK_* de la barre de stats) ──
   const [elearningStats, setElearningStats] = useState({ apprenants:0, coachs:0, groupes:0, sessions:0 });
   useEffect(() => {
-    if (profile?.role !== 'admin_elearning') return;
+    if (!estRole(profile?.role, 'admin_elearning')) return;
     const h = { 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` };
     const maintenant = new Date();
     Promise.all([
@@ -3879,7 +3921,7 @@ export default function DashboardAdmin() {
     }).catch(() => {});
   }, [profile?.role]);
 
-  const stats = profile?.role === 'admin_elearning'
+  const stats = estRole(profile?.role, 'admin_elearning')
     ? [
         { label: 'Apprenants',     valeur: elearningStats.apprenants, couleur: couleurTheme },
         { label: 'Coachs',         valeur: elearningStats.coachs,     couleur: COULEURS.succes },
@@ -4085,66 +4127,96 @@ export default function DashboardAdmin() {
       <div style={styles.corps}>
 
           {/* ══ AGENT ONBOARDING - vues dédiées ══ */}
-          {profile?.role === 'admin_manager' && (location.pathname === '/admin/audit-logs' || location.pathname === '/admin/manager/audit') ? (
+          {estRole(profile?.role, 'admin_manager') && (location.pathname === '/admin/audit-logs' || location.pathname === '/admin/manager/audit') ? (
             <OngletAuditLogs />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/taches' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/taches' ? (
             <OngletMesTachesSuperviseur general />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/classement' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/classement' ? (
             <OngletClassementCoachs />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/plannings' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/plannings' ? (
             <OngletPlanningsElearning />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/observer' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/observer' ? (
             <OngletObserverCours />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/remplacements' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/remplacements' ? (
             <OngletRemplacements />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/cahiers-coachs' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/cahiers-coachs' ? (
             <OngletCahiersCoachs />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/rapports-deputy' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/rapports-deputy' ? (
             <OngletRapportsDeputySuperviseur />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/anomalies' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/anomalies' ? (
             <OngletAnomaliesSuperviseur />
-          ) : profile?.role === 'admin_superviseur' && location.pathname === '/admin/superviseur/deputies' ? (
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/deputies' ? (
             <OngletGestionDeputies />
           ) : /* ── LE VOLET COMMERCIAL, monté sur `admin_elearning` ──
                  Aucun rôle de bet-elearning n'est « Commerciale » : `commercial`,
                  `corporate` et `admin_commercial` se résolvent tous vers `admin_elearning`.
                  Trois de ces écrans sont des réutilisations : Plannings vient du Superviseur,
                  Suivi démarrage de l'Onboarding, Tests reçus du Placement. */
-            profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/taches' ? (
+            estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/taches' ? (
             <OngletCommMesTaches />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/tableau-de-bord' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/tableau-de-bord' ? (
             <OngletCommTableauBord />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/tests' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/tests' ? (
             <BetLevelTestsTab vueInitiale="resultats" />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/inscriptions' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/inscriptions' ? (
             <OngletCommInscriptions />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/classes' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/classes' ? (
             <OngletCommMesClasses />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/plannings' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/plannings' ? (
             <OngletPlanningsElearning />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/apprenants' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/apprenants' ? (
             <OngletCommMesApprenants />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/suivi' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/suivi' ? (
             <OngletSuiviDemarrage />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/vente/paiements' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/paiements' ? (
             <OngletCommPaiements />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/taches' ? (
+          ) : /* ── LA DIRECTION ──
+                 Sept chemins, un seul écran neuf : tous les autres montent des composants
+                 déjà écrits pour d'autres rôles. La direction supervise les mêmes données —
+                 il n'y avait aucune raison d'en écrire une seconde version.
+                 `estRole` couvre admin, super_admin et manager d'un coup. */
+            estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/taches' ? (
+            <OngletDirectionMesTaches />
+          ) : estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/apprenants' ? (
+            /* `OngletCommMesApprenants` lisait /api/groupes/apprenants — les classes de DASH.
+               La direction de BET E-Learning y voyait les apprenants du présentiel. */
+            <OngletDirectionApprenants />
+          ) : estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/classes' ? (
+            <OngletCommMesClasses />
+          ) : estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/plannings' ? (
+            <OngletPlanningsElearning />
+          ) : estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/paiements' ? (
+            /* L'ADMINISTRATEUR N'A PAS LE DROIT D'ENREGISTRER UN PAIEMENT : son bouton est
+               masqué. Le Super Admin le garde — il a tout — et la comptabilité, qui monte ce
+               même écran depuis sa propre route, n'est pas touchée. */
+            <OngletComptaPaiements lectureSeule={profile?.role === 'admin'} />
+          ) : estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/ca' ? (
+            <OngletComptaApercu />
+          ) : estRole(profile?.role, 'admin_manager') && location.pathname === '/admin/direction/administration' ? (
+            <OngletAdministrationBET />
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/taches' ? (
             <OngletMesTachesOnboarding />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/suivi' ? (
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/apprenants' ? (
+            <OngletMesApprenantsOnboarding />
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/coachs' ? (
+            <OngletCoachsOnboarding />
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/reaffectations' ? (
+            <OngletReaffectations couleur="#F97316" />
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/suivi' ? (
             <OngletSuiviDemarrage />
           ) : /* Le MÊME planning e-learning que chez le superviseur et le Deputy : trois rôles
                  regardent les mêmes séances, un seul composant les rend. */
-            profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/plannings' ? (
+            estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/plannings' ? (
             <OngletPlanningsElearning />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding' ? (
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding' ? (
             <OngletVueEnsembleOnboarding />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/parcours' ? (
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/parcours' ? (
             <OngletParcoursInscriptions />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/inscriptions' ? (
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/inscriptions' ? (
             <OngletInscriptionOnboarding />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/entreprises' ? (
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/entreprises' ? (
             <OngletEntreprises />
-          ) : profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/classes' ? (
+          ) : estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/classes' ? (
             <OngletClasses />
 
           ) : /* ── ASSISTANTE SAV ──
@@ -4164,21 +4236,21 @@ export default function DashboardAdmin() {
                lui-même : sans ce repli, une URL inattendue afficherait l'écran generique des
                admins, qui n'a aucun sens pour ce métier. */
             <OngletTableauBordSav />
-          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/taches' ? (
+          ) : estRole(profile?.role, 'admin_placement') && location.pathname === '/admin/placement/taches' ? (
             <OngletMesTachesPlacement />
-          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/rapports' ? (
+          ) : estRole(profile?.role, 'admin_placement') && location.pathname === '/admin/placement/rapports' ? (
             <OngletRapportsPlacement />
           ) : /* « À corriger » et « Résultats candidats » sont le MÊME écran que « Tests de
                  niveau », ouvert sur sa sous-vue de résultats — l'un filtré sur la file de
                  correction, l'autre non. Deux composants distincts auraient dupliqué 554 lignes
                  et fait diverger les corrections. */
-            profile?.role === 'admin_placement' && location.pathname === '/admin/placement/a-corriger' ? (
+            estRole(profile?.role, 'admin_placement') && location.pathname === '/admin/placement/a-corriger' ? (
             <BetLevelTestsTab vueInitiale="resultats" filtreInitial="en_attente" />
-          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/resultats' ? (
+          ) : estRole(profile?.role, 'admin_placement') && location.pathname === '/admin/placement/resultats' ? (
             <BetLevelTestsTab vueInitiale="resultats" />
-          ) : profile?.role === 'admin_placement' && location.pathname === '/admin/placement/tests' ? (
+          ) : estRole(profile?.role, 'admin_placement') && location.pathname === '/admin/placement/tests' ? (
             <OngletGestionTests />
-          ) : profile?.role === 'admin_placement' ? (
+          ) : estRole(profile?.role, 'admin_placement') ? (
             <>
               <div style={styles.descriptionZone}>{config.description}</div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:14, marginBottom:14 }}>
@@ -4255,10 +4327,10 @@ export default function DashboardAdmin() {
               </div>
             </>
 
-          ) : (profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'bibliotheque') ? (
+          ) : (estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'bibliotheque') ? (
             /* ══ BIBLIOTHÈQUE ONBOARDING + RESSOURCES COMMUNES ══ */
             <div>
-              {profile?.role === 'admin_onboarding' && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
+              {estRole(profile?.role, 'admin_onboarding') && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
               {/* Onboarding */}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                 <div style={styles.titreSec}>📚 Contenus d'onboarding</div>
@@ -4334,10 +4406,10 @@ export default function DashboardAdmin() {
               </div>
             </div>
 
-          ) : (profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'upload') ? (
+          ) : (estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'upload') ? (
             /* ══ MISE EN LIGNE ══ */
             <div>
-              {profile?.role === 'admin_onboarding' && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
+              {estRole(profile?.role, 'admin_onboarding') && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
               <div style={styles.titreSec}>⬆ Mise en ligne d'un contenu</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
                 {/* Formulaire upload */}
@@ -4423,10 +4495,10 @@ export default function DashboardAdmin() {
               </div>
             </div>
 
-          ) : (profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'stats') ? (
+          ) : (estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'stats') ? (
             /* ══ STATISTIQUES ══ */
             <div>
-              {profile?.role === 'admin_onboarding' && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
+              {estRole(profile?.role, 'admin_onboarding') && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
               <div style={styles.titreSec}>📈 Statistiques des contenus</div>
               {/* KPIs */}
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14, marginBottom:28 }}>
@@ -4492,10 +4564,10 @@ export default function DashboardAdmin() {
               </div>
             </div>
 
-          ) : (profile?.role === 'admin_onboarding' && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'minijeux') ? (
+          ) : (estRole(profile?.role, 'admin_onboarding') && location.pathname === '/admin/onboarding/contenus' && contenusOnbSousTab === 'minijeux') ? (
             /* ══ GESTION MINI-JEUX ══ */
             <div>
-              {profile?.role === 'admin_onboarding' && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
+              {estRole(profile?.role, 'admin_onboarding') && <ContenusOnbSousTabs actif={contenusOnbSousTab} onChange={setContenusOnbSousTab} />}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                 <div style={styles.titreSec}>🎮 Gestion des mini-jeux</div>
                 <button onClick={()=>{ setEditingJeuId(null); setJeuForm({ nom:'', type:'qcm', cible:'tous', nbQuestions:10, maxTentatives:2 }); setModalJeu(true); }} style={{ background:'#F97316', color:'#fff', border:'none', borderRadius:8, padding:'9px 18px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans", sans-serif' }}>+ Créer un jeu</button>
@@ -4789,95 +4861,109 @@ export default function DashboardAdmin() {
               })()}
             </div>
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/facturation' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/facturation' ? (
             <OngletComptaFacturation />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/paiements' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/paiements' ? (
             <OngletComptaPaiements />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/fournisseurs' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/fournisseurs' ? (
             <OngletComptaFournisseurs />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/tresorerie' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/tresorerie' ? (
             <OngletComptaTresorerie />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/taches' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/taches' ? (
             <OngletComptaMesTaches />
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/honoraires' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/honoraires' ? (
             <OngletComptaHonorairesCoaches />
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/exports' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/exports' ? (
             <OngletComptaExports />
-          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/taches' ? (
+          ) : estRole(profile?.role, 'admin_rh_paie') && location.pathname === '/admin/rh/taches' ? (
             <OngletRHPaieMesTaches />
-          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/grille' ? (
+          ) : estRole(profile?.role, 'admin_rh_paie') && location.pathname === '/admin/rh/grille' ? (
             <OngletRHGrilleTarifaire />
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/rrd-bc-bacn' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/rrd-bc-bacn' ? (
             <OngletComptaRrdBcBacn />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/generale' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/generale' ? (
             <OngletComptaGenerale />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/tva' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/tva' ? (
             <OngletComptaTva />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/immobilisations' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/immobilisations' ? (
             <OngletComptaImmobilisations />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/budgets' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/budgets' ? (
             <OngletComptaBudgets />
 
-          ) : profile?.role === 'admin_comptable' && location.pathname === '/admin/comptable/analytique' ? (
+          ) : estRole(profile?.role, 'admin_comptable') && location.pathname === '/admin/comptable/analytique' ? (
             <OngletComptaAnalytique />
 
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/elearning/programme' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/elearning/inscrire' ? (
+            <OngletInscriptionOnboarding />
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/elearning/parcours' ? (
+            <OngletParcoursInscriptions />
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/elearning/programme' ? (
             <OngletELearning ongletActif="programme" />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/elearning/reporting' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/elearning/reporting' ? (
             <OngletELearning ongletActif="reporting" />
-          ) : profile?.role === 'admin_elearning' && location.pathname === '/admin/elearning/entreprises' ? (
+          ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/elearning/entreprises' ? (
             <OngletEntreprises />
-          ) : profile?.role === 'admin_elearning' ? (
-            <OngletELearning ongletActif="overview" />
+          ) : estRole(profile?.role, 'admin_elearning') ? (
+            /* L'ÉCRAN PAR DÉFAUT EST DÉSORMAIS « Inscrire » et non plus « Vue d'ensemble »,
+               retirée du menu : l'assistante e-learning ouvre son dashboard sur ce qu'elle
+               fait en premier, la saisie d'un dossier. Cette branche reste le repli pour
+               toute URL inconnue sous /admin/. */
+            <OngletInscriptionOnboarding />
 
-          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/contrats' ? (
+          ) : estRole(profile?.role, 'admin_rh_paie') && location.pathname === '/admin/rh/contrats' ? (
             <OngletRHContrats />
 
-          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/paie' ? (
+          ) : estRole(profile?.role, 'admin_rh_paie') && location.pathname === '/admin/rh/paie' ? (
             <OngletRHPaieBulletins />
 
           ) : location.pathname === '/admin/administration' ? (
             <OngletAdministrationBET />
-          ) : profile?.role === 'admin_customer_care' && location.pathname === '/admin/support/tickets' ? (
+          ) : estRole(profile?.role, 'admin_customer_care') && location.pathname === '/admin/support/tickets' ? (
             <OngletCustomerCare ongletActif="tickets" />
-          ) : profile?.role === 'admin_customer_care' && location.pathname === '/admin/support/profils' ? (
+          ) : estRole(profile?.role, 'admin_customer_care') && location.pathname === '/admin/support/profils' ? (
             <OngletCustomerCare ongletActif="profils" />
-          ) : profile?.role === 'admin_customer_care' && location.pathname === '/admin/support/blocages' ? (
+          ) : estRole(profile?.role, 'admin_customer_care') && location.pathname === '/admin/support/blocages' ? (
             <OngletCustomerCare ongletActif="blocages" />
-          ) : profile?.role === 'admin_customer_care' ? (
+          ) : estRole(profile?.role, 'admin_customer_care') ? (
             <OngletCustomerCare ongletActif="overview" />
-          ) : profile?.role === 'admin_rh_paie' && location.pathname === '/admin/rh/conges' ? (
+          ) : estRole(profile?.role, 'admin_rh_paie') && location.pathname === '/admin/rh/conges' ? (
             <OngletRHConges />
 
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/overview' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/taches' ? (
+            <OngletMesTachesPAAdvisor />
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/eval-apprenants' ? (
+            <OngletEvaluationsApprenantsPA />
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/reaffectations' ? (
+            <OngletReaffectations couleur="#8B5CF6" />
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/overview' ? (
             <OngletVueEnsemblePAAdvisor />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/classes' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/classes' ? (
             <OngletClassesPAAdvisor />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/programme' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/programme' ? (
             <OngletELearning ongletActif="programme" />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/evaluations' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/evaluations' ? (
             <OngletEvaluationsPAAdvisor />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/reporting' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/reporting' ? (
             <OngletELearning ongletActif="reporting" />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/apprenants' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/apprenants' ? (
             <OngletSuiviApprenantsPAAdvisor />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/remplacements' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/remplacements' ? (
             <OngletRemplacements />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/coachs' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/coachs' ? (
             <OngletCoachsPAAdvisor />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/honoraires' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/honoraires' ? (
             <OngletHonorairesPAAdvisor />
-          ) : profile?.role === 'admin_pa_advisor' && location.pathname === '/admin/pa-advisor/rapports-superviseur' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') && location.pathname === '/admin/pa-advisor/rapports-superviseur' ? (
             <OngletRapportsSuperviseurPA />
-          ) : profile?.role === 'admin_pa_advisor' ? (
+          ) : estRole(profile?.role, 'admin_pa_advisor') ? (
             <>
               <div style={styles.descriptionZone}>{config.description}</div>
               <DashboardPAAdvisor />
@@ -4897,10 +4983,10 @@ export default function DashboardAdmin() {
               </div>
             </>
 
-          ) : profile?.role === 'admin_manager' ? (
+          ) : estRole(profile?.role, 'admin_manager') ? (
             <OngletVueEnsembleManager />
 
-          ) : profile?.role === 'admin_comptable' ? (
+          ) : estRole(profile?.role, 'admin_comptable') ? (
             <OngletComptaApercu />
 
           ) : (
@@ -4951,7 +5037,7 @@ export default function DashboardAdmin() {
           </div>
 
           {/* Calendrier des évaluations (manager + superviseur) */}
-          {(profile?.role === 'admin_manager' || profile?.role === 'admin_superviseur') && (
+          {(estRole(profile?.role, 'admin_manager') || estRole(profile?.role, 'admin_superviseur')) && (
             <div style={{ marginBottom: 32 }}>
               <div style={styles.titreSec}>📆 Calendrier des évaluations</div>
               <div style={{ background: COULEURS.blanc, borderRadius: 14, overflow: 'hidden', border: `1px solid ${COULEURS.gris200}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
@@ -4988,10 +5074,10 @@ export default function DashboardAdmin() {
           {/* Tableau professeurs (visible pour manager et superviseur) */}
 
           {/* ══ RH / PAIE - Résumé vue d'ensemble ══ */}
-          {profile?.role === 'admin_rh_paie' && <OngletRHPaieApercu />}
+          {estRole(profile?.role, 'admin_rh_paie') && <OngletRHPaieApercu />}
 
           {/* ══ Équipe pédagogique (manager + superviseur) ══ */}
-          {(profile?.role === 'admin_manager' || profile?.role === 'admin_superviseur') && (
+          {(estRole(profile?.role, 'admin_manager') || estRole(profile?.role, 'admin_superviseur')) && (
             <EquipePedagogique />
           )}
           </>

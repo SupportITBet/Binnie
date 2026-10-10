@@ -158,6 +158,10 @@ export default function ManagerDashboard() {
   const [wfStatut, setWfStatut] = useState("tous");
   const [wfPage, setWfPage] = useState(1);
   const PER_PAGE = 8;
+  /* L'Équipe Pédagogique liste les coachs — ils sont bien plus nombreux que les assistantes
+     commerciales, et huit par page obligeait à feuilleter sans fin. Les trois autres onglets
+     gardent leur pagination : ce n'est pas la même densité d'information. */
+  const PER_PAGE_PEDAGO = 20;
 
   const fetchCoachs = useCallback(() => {
     fetch(`${API_URL}/api/admin/utilisateurs?role=coach`, { headers: authHdrs() })
@@ -254,8 +258,8 @@ export default function ManagerDashboard() {
   /* ── Workflows : assignations filtrées par statut ── */
   const assignationsFiltres = useMemo(() => (assignations||[]).filter(a => wfStatut === "tous" || a.statut === wfStatut), [assignations, wfStatut]);
 
-  const paginate = (list, page) => list.slice((page-1)*PER_PAGE, page*PER_PAGE);
-  const totalPages = list => Math.max(1, Math.ceil(list.length / PER_PAGE));
+  const paginate = (list, page, parPage = PER_PAGE) => list.slice((page-1)*parPage, page*parPage);
+  const totalPages = (list, parPage = PER_PAGE) => Math.max(1, Math.ceil(list.length / parPage));
 
   /* ══════════════════════════════════════════════════════
      RENDUS PAR ONGLET
@@ -493,7 +497,7 @@ export default function ManagerDashboard() {
   const renderPedagoTeam = () => {
     if (coachs === null) return <EmptyState icon="⏳" text="Chargement…" />;
     if (coachs.length === 0) return <EmptyState text="Aucun coach enregistré." />;
-    const paged = paginate(coachs, pedaPage);
+    const paged = paginate(coachs, pedaPage, PER_PAGE_PEDAGO);
     return (
       <div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:14, fontStyle:"italic" }}>🎓 Équipe pédagogique - charge de travail (groupes actifs) - lecture seule</div>
@@ -520,7 +524,7 @@ export default function ManagerDashboard() {
             </tbody>
           </table>
         </div>
-        <Pagination page={pedaPage} setPage={setPedaPage} totalPages={totalPages(coachs)} />
+        <Pagination page={pedaPage} setPage={setPedaPage} totalPages={totalPages(coachs, PER_PAGE_PEDAGO)} />
       </div>
     );
   };

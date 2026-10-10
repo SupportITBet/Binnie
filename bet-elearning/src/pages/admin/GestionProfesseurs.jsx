@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
-import { LIBELLES_ROLES } from '../../constants/roles';
+import { LIBELLES_ROLES, estRole } from '../../constants/roles';
 import ModalProfSuivi from './ModalProfesseur';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -389,8 +389,8 @@ export default function GestionProfesseurs() {
   // Seuls les coachs habilités à la plateforme e-learning (acces_elearning=true) sont
   // affichés ici - un coach non habilité n'a rien à faire dans cette gestion e-learning.
   const tousProfs = coachs.filter(u => u.acces_elearning);
-  const nbTitulaires  = tousProfs.filter(u => u.role === 'professeur_titulaire').length;
-  const nbRemplacants = tousProfs.filter(u => u.role === 'professeur_remplacant').length;
+  const nbTitulaires  = tousProfs.filter(u => estRole(u.role, 'professeur_titulaire')).length;
+  const nbRemplacants = tousProfs.filter(u => estRole(u.role, 'professeur_remplacant')).length;
   const nbActifs      = tousProfs.filter(u => u.est_actif).length;
   const nbCertifs     = tousProfs.filter(u => (u.certifications || []).length > 0).length;
 
@@ -468,7 +468,7 @@ export default function GestionProfesseurs() {
             const couleur = COULEUR_ROLE[p.role] || couleurTheme;
             const init    = p.initiales || `${p.prenom?.[0] || ''}${p.nom?.[0] || ''}`.toUpperCase();
             const dispoNb = p.disponibilites ? JOURS_SEMAINE.filter(j => p.disponibilites[j]?.actif).length : 0;
-            const estRempl = p.role === 'professeur_remplacant';
+            const estRempl = estRole(p.role, 'professeur_remplacant');
 
             return (
               <div

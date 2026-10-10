@@ -240,17 +240,37 @@ router.get("/", authenticateAdmin, requireLecture, async (req, res) => {
     const groupeIds = [...new Set((data || []).map(a => a.groupe_id).filter(Boolean))];
     const seanceIds = [...new Set((data || []).map(a => a.seance_id).filter(Boolean))];
 
+    /* CHAQUE PLATEFORME A SES PROPRES CLASSES ET SÉANCES. `appreciations_apprenants` n'a
+       pas de colonne `plateforme` : son seul rattachement est `groupe_id`, qui désigne
+       soit un `groupes` (classe dash), soit un `classes_elearning`. On résout donc dans la
+       paire de tables de la plateforme qui demande, et on ne renvoie que les appréciations
+       dont la classe s'y trouve.
+       Sans ce filtre, le PA de bet-elearning aurait lu les appréciations laissées sur les
+       cours présentiel de dash - la même fuite que celle corrigée sur les modules, les
+       apprenants et les messages.
+       Dash n'envoie pas l'en-tête : son comportement est inchangé. */
+    const versBet = req.headers["x-plateforme"] === "bet-elearning";
+    const tableClasses = versBet ? "classes_elearning" : "groupes";
+    const tableSeances = versBet ? "seances_elearning" : "seances";
+
+    const sur = (p) => p.then(r => (r?.error ? { data: [] } : r), () => ({ data: [] }));
     const [{ data: coachs }, { data: groupes }, { data: seances }] = await Promise.all([
-      coachIds.length  ? supabase.from("utilisateurs").select("id, nom, prenom, avatar_url").in("id", coachIds) : { data: [] },
-      groupeIds.length ? supabase.from("groupes").select("id, nom, niveau").in("id", groupeIds)                 : { data: [] },
-      seanceIds.length ? supabase.from("seances").select("id, titre, date_seance, type_cours").in("id", seanceIds) : { data: [] },
+      coachIds.length  ? sur(supabase.from("utilisateurs").select("id, nom, prenom, avatar_url").in("id", coachIds)) : { data: [] },
+      groupeIds.length ? sur(supabase.from(tableClasses).select("id, nom, niveau").in("id", groupeIds))             : { data: [] },
+      seanceIds.length ? sur(supabase.from(tableSeances).select("id, titre, date_seance, type_cours").in("id", seanceIds)) : { data: [] },
     ]);
     const mapC = Object.fromEntries((coachs  || []).map(c => [c.id, c]));
     const mapG = Object.fromEntries((groupes || []).map(g => [g.id, g]));
     const mapS = Object.fromEntries((seances || []).map(s => [s.id, s]));
 
+    /* Une appréciation SANS classe résolue appartient à l'autre plateforme : on l'écarte
+       plutôt que de l'afficher sans nom de classe, ce qui la ferait passer pour une
+       donnée incomplète d'ici. Celles qui n'ont aucun `groupe_id` restent visibles - elles
+       ne sont rattachées à rien et ne trahissent aucune plateforme. */
+    const retenues = (data || []).filter(a => !a.groupe_id || mapG[a.groupe_id]);
+
     res.json({
-      appreciations: (data || []).map(a => ({
+      appreciations: retenues.map(a => ({
         ...a,
         coach:  a.coach_id  ? (mapC[a.coach_id]  || null) : null,
         groupe: a.groupe_id ? (mapG[a.groupe_id] || null) : null,

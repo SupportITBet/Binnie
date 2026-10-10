@@ -183,6 +183,27 @@ async function contexte(conversationId, userId) {
  * `authenticateUser` et non `authenticateAdmin` : un coach est membre à part entière et
  * doit voir ses groupes. Seule la CRÉATION est réservée.
  */
+/* LA PLATEFORME D'OÙ VIENT LA DEMANDE.
+   bet-elearning pose l'en-tête `X-Plateforme`, dash ne le pose jamais — même convention que
+   pour les routes du superviseur (`app.js`, aiguillage superviseurRouterBet/Dash). Un appel
+   sans en-tête est donc du dash, ce qui correspond aussi au défaut posé en base par la
+   migration : un oubli ne rend jamais un groupe invisible des deux côtés. */
+function plateformeDe(req) {
+  return req.headers["x-plateforme"] === "bet-elearning" ? "bet-elearning" : "dash";
+}
+
+/* Filtre tolérant à une base non migrée : tant que la colonne `plateforme` n'existe pas,
+   PostgREST rend une erreur sur `.eq("plateforme", …)`. On réessaie alors sans le filtre
+   plutôt que de renvoyer une liste vide — mieux vaut l'ancien comportement partagé qu'un
+   écran vide inexplicable avant l'exécution du script SQL. */
+async function groupesDeLaPlateforme(req, ids) {
+  const base = () => supabase.from("conversations_groupes").select("*").in("id", ids)
+    .eq("archive", false).order("updated_at", { ascending: false });
+  const r = await base().eq("plateforme", plateformeDe(req));
+  if (r.error && /plateforme/.test(r.error.message || "")) return await base();
+  return r;
+}
+
 router.get("/", authenticateUser, async (req, res) => {
   /* `peut_creer` accompagne TOUTES les réponses, y compris les réponses vides.
      Il ne figurait que dans le cas nominal : sur une base non migrée - ou simplement
@@ -210,8 +231,16 @@ router.get("/", authenticateUser, async (req, res) => {
        les siens et ceux qu'il supervise restent distingués par `supervision`, pour que
        l'écran ne mélange pas « mes groupes » et « ceux que je surveille ». */
     if (supervise) {
-      const { data: tous, error: eT } = await supabase
-        .from("conversations_groupes").select("id").eq("archive", false);
+      /* Même pour le superviseur global : il supervise SA plateforme, pas l'autre. Sans ce
+         filtre, il récupérait ici les identifiants de tous les groupes, y compris ceux de
+         dash, qui étaient ensuite écartés plus bas — mais apparaissaient dans `ids`. */
+      let qTous = supabase.from("conversations_groupes").select("id").eq("archive", false)
+        .eq("plateforme", plateformeDe(req));
+      let { data: tous, error: eT } = await qTous;
+      if (eT && /plateforme/.test(eT.message || "")) {
+        ({ data: tous, error: eT } = await supabase
+          .from("conversations_groupes").select("id").eq("archive", false));
+      }
       if (eT) { if (tableAbsente(eT)) return vide({ non_installe: true }); throw eT; }
       (tous || []).forEach(c => { if (!ids.includes(c.id)) ids.push(c.id); });
     }
@@ -231,8 +260,7 @@ router.get("/", authenticateUser, async (req, res) => {
     }
 
     const [{ data: convs, error: e1 }, { data: tousMembres }] = await Promise.all([
-      supabase.from("conversations_groupes").select("*").in("id", ids)
-        .eq("archive", false).order("updated_at", { ascending: false }),
+      groupesDeLaPlateforme(req, ids),
       // Tous les membres des conversations concernées en UNE requête : une par
       // conversation ferait autant d'allers-retours que de groupes affichés.
       supabase.from("conversation_membres").select("conversation_id, user_id").in("conversation_id", ids),
@@ -317,18 +345,30 @@ router.get("/personnel", authenticateAdmin, requireCreateur, async (req, res) =>
  *
  * Les apprenants ACTIFS de toutes les classes, pour les groupes qui les accueillent.
  *
- * On part des rattachements (`groupes_apprenants`) et non de la table `utilisateurs` : un
- * compte au rôle « apprenant » peut exister sans classe - dossier abandonné, doublon,
- * compte de test - et n'a rien à faire dans un groupe d'événement. La classe accompagne
- * chaque nom : sur 77 apprenants, deux homonymes ne se distinguent que par elle.
+ * On part des rattachements et non de la table `utilisateurs` : un compte au rôle
+ * « apprenant » peut exister sans classe - dossier abandonné, doublon, compte de test - et
+ * n'a rien à faire dans un groupe d'événement. La classe accompagne chaque nom : sur
+ * 77 apprenants, deux homonymes ne se distinguent que par elle.
+ *
+ * ⚠️ CHAQUE PLATEFORME A SES PROPRES CLASSES, donc ses propres apprenants : `groupes` /
+ * `groupes_apprenants` pour dash, `classes_elearning` / `classes_elearning_apprenants`
+ * pour bet-elearning. Sans cette distinction, créer un groupe depuis bet-elearning
+ * proposait les 83 apprenants de dash - des gens qui n'ont pas de compte sur cette
+ * plateforme et qui n'auraient jamais lu le fil.
  */
+const SOURCE_APPRENANTS = {
+  "dash":          { table: "groupes_apprenants",            classe: "groupes" },
+  "bet-elearning": { table: "classes_elearning_apprenants",  classe: "classes_elearning" },
+};
+
 router.get("/apprenants", authenticateAdmin, requireCreateur, async (req, res) => {
   try {
     const q = String(req.query.q || "").trim();
+    const src = SOURCE_APPRENANTS[plateformeDe(req)];
 
     const { data: rattachements, error: eRatt } = await supabase
-      .from("groupes_apprenants")
-      .select("apprenant_id, groupes(nom)")
+      .from(src.table)
+      .select(`apprenant_id, ${src.classe}(nom)`)
       .eq("statut", "actif")
       .not("apprenant_id", "is", null);
     if (eRatt) throw eRatt;
@@ -337,7 +377,7 @@ router.get("/apprenants", authenticateAdmin, requireCreateur, async (req, res) =
     // sur une seule ligne plutôt que de le faire apparaître deux fois dans la liste.
     const classesDe = {};
     (rattachements || []).forEach(r => {
-      const nom = r.groupes?.nom;
+      const nom = r[src.classe]?.nom;
       if (!nom) return;
       (classesDe[r.apprenant_id] = classesDe[r.apprenant_id] || []).push(nom);
     });
@@ -413,6 +453,11 @@ router.post("/", authenticateAdmin, requireCreateur, async (req, res) => {
       description: description?.trim() || null,
       type: "libre",
       cree_par: moi,
+      /* Un groupe appartient à la plateforme qui l'a créé, et n'est visible que d'elle.
+         Comme `photo_url` et `avec_apprenants` ci-dessous, la colonne peut manquer tant
+         que le script SQL n'a pas été joué : le repli plus bas recrée alors le groupe sans
+         elle, et la valeur par défaut de la base ('dash') prend le relais. */
+      plateforme: plateformeDe(req),
       avec_apprenants: ouvertApprenants,
       // Absente tant que le SQL n'est pas joué : le repli ci-dessous crée alors le groupe
       // sans elle plutôt que de refuser la création sur une base non migrée.
@@ -428,8 +473,11 @@ router.post("/", authenticateAdmin, requireCreateur, async (req, res) => {
        tout - l'utilisateur croit l'avoir enregistrée. Le PATCH le signalait déjà
        (`photo_non_enregistree`), la création non. */
     let photoNonEnregistree = false;
-    if (error && tableAbsente(error) && (ouvertApprenants || photoCreation)) {
-      const { avec_apprenants: _ignore, photo_url: _ignore2, ...sansColonne } = aInserer;
+    /* `plateforme` est TOUJOURS envoyée, contrairement à `photo_url` et `avec_apprenants` :
+       la condition ne peut donc plus dépendre d'elles, sinon une base non migrée refuserait
+       toute création de groupe au lieu de retomber sur l'ancien comportement. */
+    if (error && tableAbsente(error)) {
+      const { avec_apprenants: _ignore, photo_url: _ignore2, plateforme: _ignore3, ...sansColonne } = aInserer;
       ({ data: conv, error } = await supabase.from("conversations_groupes").insert(sansColonne).select().single());
       if (!error && photoCreation) photoNonEnregistree = true;
     }

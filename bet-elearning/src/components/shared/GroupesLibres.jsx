@@ -9,6 +9,8 @@ import { COULEURS } from '../../constants/couleurs';
 import { envoyerFichier, maxMoPour } from '../../utils/uploadFichier';
 import { useEnregistreurVocal, microDisponible, dureeLisible } from '../../hooks/useEnregistreurVocal';
 import SelecteurEmoji, { insererAuCurseur } from './SelecteurEmoji';
+import PastilleGroupe, { initiales } from './PastilleGroupe';
+import toast from 'react-hot-toast';
 
 /**
  * Groupes de discussion libres - ceux qui ne suivent pas une classe.
@@ -38,14 +40,39 @@ const ROLES_LISIBLES = {
 };
 const libelleRole = (r) => ROLES_LISIBLES[r] || r || '-';
 
-const initiales = (nom) =>
-  String(nom || '?').trim().split(/\s+/).slice(0, 2).map(m => m[0]).join('').toUpperCase();
+/* `initiales` vient de `PastilleGroupe` : la copie locale et celle du composant auraient
+   fini par découper les noms différemment, et deux initiales différentes pour la même
+   personne au même écran passent pour un doublon. */
 
 const estAudio = (nom = '') =>
   ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'webm', 'opus'].includes(String(nom).split('.').pop().toLowerCase());
 
 const estImage = (nom = '') =>
   ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(String(nom).split('.').pop().toLowerCase());
+
+/* LA VIDÉO SE REGARDE DANS LE FIL, comme l'audio s'y écoute déjà. Elle tombait jusqu'ici
+   dans le lien générique « 📎 » : il fallait l'ouvrir dans un autre onglet pour la voir,
+   alors qu'un message vidéo se consulte d'un coup d'œil ou pas du tout.
+   `webm` n'est PAS ici : c'est le conteneur des notes vocales de ce chat, et il reste donc
+   rangé avec l'audio, testé en premier. */
+const estVideo = (nom = '') =>
+  ['mp4', 'mov', 'm4v', 'ogv', 'avi', 'mkv'].includes(String(nom).split('.').pop().toLowerCase());
+
+/* Le téléchargement passe par le relais serveur : un lien direct vers Cloudinary ouvre le
+   fichier dans l'onglet au lieu de l'enregistrer, et lui fait perdre son nom. */
+const telechargerFichier = async (f) => {
+  const nom = f?.nom || 'fichier';
+  const ext = nom.includes('.') ? nom.split('.').pop().toLowerCase() : 'bin';
+  try {
+    const proxy = `${API_URL}/api/upload/download?url=${encodeURIComponent(f.url)}&nom=${encodeURIComponent(nom)}&type=${encodeURIComponent(ext)}`;
+    const r = await fetch(proxy);
+    const blob = await r.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = nom; a.click();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+  } catch { window.open(f.url, '_blank'); }
+};
 
 const S = {
   carte: { background: COULEURS.blanc, borderRadius: 14, border: `1px solid ${COULEURS.gris200}`, padding: 18 },
@@ -72,6 +99,9 @@ function FilGroupe({ conversation, profile, couleur }) {
   const [citation, setCitation] = useState(null);
   const [surligne, setSurligne] = useState(null);
   const [pct, setPct] = useState(0);
+  // L'image qu'on regarde en grand, ou `null`. Une vignette de 260 px ne laisse pas lire
+  // une capture d'écran, et c'est l'essentiel de ce qui transite dans ces fils.
+  const [imagePleinEcran, setImagePleinEcran] = useState(null);
   const finRef = useRef(null);
   const fichierRef = useRef(null);
   const vocal = useEnregistreurVocal({ dureeMaxS: 180 });
@@ -110,6 +140,33 @@ function FilGroupe({ conversation, profile, couleur }) {
     if (!FIREBASE_ACTIF || !db || !profile?.id || !messages.length) return;
     setDoc(doc(db, 'chats', convId), { lastRead: { [profile.id]: serverTimestamp() } }, { merge: true }).catch(() => {});
   }, [convId, profile?.id, messages.length]);
+
+  /* IDENTITÉ DES AUTEURS (photo + rôle) - résolue depuis leur identifiant, jamais recopiée
+     dans le message. Le message ne porte que `auteur_id` et `auteur_nom` : les bulles se
+     rabattaient sur le seul nom, et rien ne disait si celui qui écrit est un coach, une
+     assistante ou un apprenant - alors que tout le monde écrit dans le même fil.
+     Résoudre ici plutôt que de recopier a deux effets voulus : l'historique déjà écrit en
+     bénéficie, et un changement de photo ou de rôle se propage partout au lieu de rester
+     figé dans les anciens messages.
+     `idsDemandes` empêche de redemander les mêmes profils à chaque nouveau message. */
+  const [profils, setProfils] = useState({});
+  const idsDemandes = useRef(new Set());
+  useEffect(() => {
+    const manquants = [...new Set(messages.map(m => m.auteur_id).filter(Boolean))]
+      .filter(id => !idsDemandes.current.has(id));
+    if (!manquants.length) return;
+    manquants.forEach(id => idsDemandes.current.add(id));
+    (async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/admin/profils-chat?ids=${manquants.join(',')}`, {
+          headers: { Authorization: `Bearer ${jeton()}` },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.profils && Object.keys(d.profils).length) setProfils(p => ({ ...p, ...d.profils }));
+      } catch { /* les initiales et le nom seul restent un repli acceptable */ }
+    })();
+  }, [messages]);
 
   const auteur = `${profile?.prenom || ''} ${profile?.nom || ''}`.trim() || '-';
 
@@ -178,7 +235,15 @@ function FilGroupe({ conversation, profile, couleur }) {
   return (
     <div style={{ background: COULEURS.blanc, borderRadius: 14, border: `1px solid ${COULEURS.gris200}`, overflow: 'hidden' }}>
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${COULEURS.gris200}`, background: `${couleur}0D`, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 800, fontSize: 13, color: couleur }}>💬 {conversation.nom}</span>
+        {/* LE GROUPE EN TÊTE DE SON FIL - sa photo et son nom, comme chez dash. En lecture
+            seule ici : la photo se change depuis la fiche du groupe (👥), là où se trouvent
+            déjà les droits d'administration. */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+          <PastilleGroupe nom={conversation.nom} url={conversation.photo_url} taille={28} accent={couleur} agrandissable />
+          <span style={{ fontWeight: 800, fontSize: 13, color: couleur, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {conversation.nom}
+          </span>
+        </span>
         <span style={{ fontSize: 11, fontWeight: 600, color: COULEURS.gris400 }}>
           Visible par les membres du groupe · lisible par la direction
         </span>
@@ -212,7 +277,20 @@ function FilGroupe({ conversation, profile, couleur }) {
               style={{ display: 'flex', flexDirection: 'column', alignItems: moi ? 'flex-end' : 'flex-start',
                 background: surligne === m.id ? `${couleur}18` : 'transparent',
                 borderRadius: 10, padding: surligne === m.id ? '4px 6px' : 0, transition: 'background .35s ease' }}>
-              {!moi && <span style={{ fontSize: 10, fontWeight: 700, color: couleur, marginBottom: 2, paddingLeft: 4 }}>{m.auteur_nom}</span>}
+              {/* QUI ÉCRIT : sa photo, son nom, son rôle. Le rôle compte autant que le nom
+                  dans un fil où coachs, assistantes et apprenants se répondent - sans lui,
+                  rien ne distingue une consigne d'une question. */}
+              {!moi && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, paddingLeft: 2 }}>
+                  <PastilleGroupe nom={m.auteur_nom} url={profils[m.auteur_id]?.avatar_url} taille={20} accent={couleur} />
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: couleur }}>{m.auteur_nom}</span>
+                  {profils[m.auteur_id]?.role && (
+                    <span style={{ fontSize: 9.5, fontWeight: 600, color: COULEURS.gris400 }}>
+                      · {libelleRole(profils[m.auteur_id].role)}
+                    </span>
+                  )}
+                </span>
+              )}
 
               {m.repond_a && (
                 <button onClick={() => allerAuMessage(m.repond_a.id)} title="Aller au message cité"
@@ -237,12 +315,39 @@ function FilGroupe({ conversation, profile, couleur }) {
                     {/* `preload="metadata"` : la durée s'affiche sans télécharger tout le son. */}
                     <audio controls preload="metadata" src={m.fichier.url} style={{ width: '100%', height: 34, borderRadius: 6 }} />
                   </div>
+                ) : m.fichier && estVideo(m.fichier.nom) ? (
+                  <div style={{ ...bulle, padding: 6, maxWidth: 320 }}>
+                    {/* `preload="metadata"` : la vignette et la durée arrivent sans charger
+                        la vidéo entière - dans un fil qui en compte dix, tout précharger
+                        saturerait la connexion pour rien. */}
+                    <video src={m.fichier.url} controls preload="metadata" playsInline
+                      style={{ width: '100%', maxHeight: 260, borderRadius: 8, display: 'block', background: '#000' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 11, opacity: .85 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{m.fichier.nom}</span>
+                      <button onClick={() => telechargerFichier(m.fichier)} title="Télécharger"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'inherit', opacity: .8, padding: 0 }}>⬇</button>
+                    </div>
+                  </div>
+                ) : m.fichier && estImage(m.fichier.nom) ? (
+                  /* L'IMAGE S'AFFICHE, au lieu de n'être qu'un lien à ouvrir ailleurs. Un
+                     clic l'agrandit : une vignette de 260 px ne suffit pas à lire une
+                     capture d'écran, le cas le plus fréquent dans ces fils. */
+                  <div style={{ ...bulle, padding: 6, maxWidth: 320 }}>
+                    <img src={m.fichier.url} alt={m.fichier.nom} loading="lazy"
+                      onClick={() => setImagePleinEcran({ url: m.fichier.url, nom: m.fichier.nom })}
+                      style={{ width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 11, opacity: .85 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{m.fichier.nom}</span>
+                      <button onClick={() => telechargerFichier(m.fichier)} title="Télécharger"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'inherit', opacity: .8, padding: 0 }}>⬇</button>
+                    </div>
+                  </div>
                 ) : m.fichier ? (
-                  <a href={m.fichier.url} target="_blank" rel="noreferrer"
-                    style={{ ...bulle, display: 'flex', alignItems: 'center', gap: 9, textDecoration: 'none' }}>
-                    <span style={{ fontSize: 20 }}>{estImage(m.fichier.nom) ? '🖼️' : '📎'}</span>
+                  <button onClick={() => telechargerFichier(m.fichier)}
+                    style={{ ...bulle, display: 'flex', alignItems: 'center', gap: 9, border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                    <span style={{ fontSize: 20 }}>{String(m.fichier.nom || '').toLowerCase().endsWith('.pdf') ? '📄' : '📎'}</span>
                     <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.fichier.nom}</span>
-                  </a>
+                  </button>
                 ) : (
                   <div style={bulle}>{m.texte}</div>
                 )}
@@ -342,6 +447,22 @@ function FilGroupe({ conversation, profile, couleur }) {
           {envoi ? (pct > 0 && pct < 100 ? `${pct}%` : '⏳') : '✉️'}
         </button>
       </div>
+
+      {/* L'IMAGE EN GRAND, par-dessus tout le reste. */}
+      {imagePleinEcran && (
+        <div onClick={() => setImagePleinEcran(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.88)', zIndex: 10050,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, cursor: 'zoom-out' }}>
+          <img src={imagePleinEcran.url} alt={imagePleinEcran.nom} onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '92vw', maxHeight: '86vh', borderRadius: 12, objectFit: 'contain', cursor: 'default' }} />
+          <button onClick={() => setImagePleinEcran(null)}
+            style={{ position: 'absolute', top: 18, right: 22, background: 'rgba(255,255,255,.15)', color: '#fff',
+              border: 'none', borderRadius: '50%', width: 38, height: 38, fontSize: 18, cursor: 'pointer' }}>✕</button>
+          <div style={{ position: 'absolute', bottom: 22, color: 'rgba(255,255,255,.85)', fontSize: 13, fontWeight: 600 }}>
+            {imagePleinEcran.nom}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -359,7 +480,16 @@ export default function GroupesLibres({ profile, couleur = '#0891B2' }) {
   const [modalCreation, setModalCreation] = useState(false);
   const [modalMembres, setModalMembres] = useState(null);
 
-  const hdr = useCallback(() => ({ Authorization: `Bearer ${jeton()}`, 'Content-Type': 'application/json' }), []);
+  /* `X-Plateforme` EST CE QUI SÉPARE LES DEUX MESSAGERIES. Sans lui, le serveur considère
+     la demande comme venant de dash — même convention que pour les routes du superviseur —
+     et cet écran affichait les groupes créés depuis dash. Il doit accompagner TOUS les
+     appels de ce composant, lecture comme écriture : un groupe créé sans cet en-tête
+     naîtrait côté dash et disparaîtrait aussitôt de la liste de son auteur. */
+  const hdr = useCallback(() => ({
+    Authorization: `Bearer ${jeton()}`,
+    'Content-Type': 'application/json',
+    'X-Plateforme': 'bet-elearning',
+  }), []);
 
   const charger = useCallback(async () => {
     try {
@@ -430,6 +560,7 @@ export default function GroupesLibres({ profile, couleur = '#0891B2' }) {
                       background: ouvert?.id === c.id ? `${couleur}14` : (c.supervision ? '#FFFBEB' : COULEURS.gris50),
                       borderColor: ouvert?.id === c.id ? couleur : (c.supervision ? '#FDE68A' : COULEURS.gris200),
                       color: ouvert?.id === c.id ? couleur : COULEURS.navy }}>
+                    <PastilleGroupe nom={c.nom} url={c.photo_url} taille={22} accent={couleur} />
                     <span>{c.nom}</span>
                     <span style={{ fontSize: 11, color: COULEURS.gris400, fontWeight: 500 }}>{c.nb_membres}</span>
                     <span onClick={e => { e.stopPropagation(); setModalMembres(c); }} title="Voir les membres"
@@ -510,7 +641,14 @@ function SelecteurPersonnel({ hdr, couleur, selection, onToggle, exclus = [], so
       <div style={{ maxHeight: 280, overflowY: 'auto', border: `1px solid ${COULEURS.gris200}`, borderRadius: 9 }}>
         {!visibles.length && (
           <div style={{ padding: 20, textAlign: 'center', color: COULEURS.gris400, fontSize: 12.5 }}>
-            {q ? `Personne ne correspond à « ${q} »` : 'Aucun collègue à proposer.'}
+            {q
+              ? `Personne ne correspond à « ${q} »`
+              : estApprenants
+                /* La liste ne vient QUE des classes e-learning : tant qu'aucun apprenant
+                   n'y est inscrit elle est vide, et un simple « aucun résultat » ferait
+                   croire à une panne. */
+                ? "Aucun apprenant inscrit dans une classe e-learning pour l'instant."
+                : 'Aucun collègue à proposer.'}
           </div>
         )}
         {visibles.map(p => {
@@ -564,18 +702,45 @@ function ModalCreation({ hdr, couleur, onFermer, onCree }) {
      tard exposerait ce que le personnel s'est déjà dit dans ce fil. */
   const [avecApprenants, setAvecApprenants] = useState(false);
   const [ongletSel, setOngletSel] = useState('personnel');
+  /* La photo, dès la création : le serveur l'accepte depuis toujours sur cette route,
+     seul le champ manquait de ce côté-ci. */
+  const [photo, setPhoto] = useState(null);
+  const [envoiPhoto, setEnvoiPhoto] = useState(false);
+  const champPhoto = useRef(null);
 
   const basculer = (p) => setSelection(s => s.some(x => x.id === p.id) ? s.filter(x => x.id !== p.id) : [...s, p]);
+
+  const choisirPhoto = async (fichier) => {
+    if (!fichier) return;
+    setEnvoiPhoto(true);
+    try {
+      /* `envoyerFichier` rend un OBJET ({ url, public_id… }), pas une chaîne : l'envoyer
+         tel quel ferait refuser l'URL par le serveur. */
+      const envoye = await envoyerFichier(fichier, 'avatar');
+      if (!envoye?.url) throw new Error('Image non déposée');
+      setPhoto(envoye.url);
+    } catch (e) {
+      toast.error(e.message || 'Image impossible à déposer');
+    } finally {
+      setEnvoiPhoto(false);
+      // Permet de re-choisir le MÊME fichier après un échec : sans cette remise à zéro, le
+      // navigateur considère qu'il n'y a pas eu de changement et ne redéclenche rien.
+      if (champPhoto.current) champPhoto.current.value = '';
+    }
+  };
 
   const creer = async () => {
     setOccupe(true); setErreur(null);
     try {
       const r = await fetch(`${API_URL}/api/conversations`, {
         method: 'POST', headers: hdr(),
-        body: JSON.stringify({ nom, description, membres: selection.map(p => p.id), avec_apprenants: avecApprenants }),
+        body: JSON.stringify({ nom, description, membres: selection.map(p => p.id), avec_apprenants: avecApprenants, photo_url: photo }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Création impossible');
+      // Le groupe existe, mais la photo a été perdue faute de colonne : le dire, sinon
+      // l'image semble avoir disparu sans raison.
+      if (d.photo_non_enregistree) toast.error(d.photo_non_enregistree, { duration: 8000 });
       onCree();
     } catch (e) { setErreur(e.message); }
     finally { setOccupe(false); }
@@ -605,8 +770,34 @@ function ModalCreation({ hdr, couleur, onFermer, onCree }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 22, alignItems: 'start' }}>
           <div>
             <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: COULEURS.gris600, marginBottom: 5 }}>Nom du groupe</label>
-            <input value={nom} onChange={e => setNom(e.target.value)} maxLength={80}
-              placeholder="Ex. Coachs Angré - rentrée 2026" style={{ ...S.champ, width: '100%', marginBottom: 12 }} />
+            {/* La photo à côté du nom, pas en dessous : c'est le couple qui identifie le
+                fil, et les séparer ferait passer l'image pour un réglage secondaire. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button type="button" disabled={envoiPhoto}
+                  onClick={() => champPhoto.current?.click()}
+                  title={photo ? 'Changer la photo du groupe' : 'Ajouter une photo de groupe'}
+                  style={{ width: 44, height: 44, borderRadius: '50%', padding: 0, overflow: 'hidden',
+                    border: `1.5px dashed ${photo ? 'transparent' : COULEURS.gris200}`,
+                    background: COULEURS.gris50, cursor: envoiPhoto ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {envoiPhoto
+                    ? <span style={{ fontSize: 11, color: COULEURS.gris400, fontWeight: 700 }}>…</span>
+                    : photo
+                      ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: 17 }}>📷</span>}
+                </button>
+                {photo && !envoiPhoto && (
+                  <button type="button" onClick={() => setPhoto(null)} title="Retirer la photo"
+                    style={{ position: 'absolute', top: -3, right: -3, width: 18, height: 18, borderRadius: '50%',
+                      border: 'none', background: '#B91C1C', color: '#fff', fontSize: 9, lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
+                )}
+                <input ref={champPhoto} type="file" accept="image/*" hidden
+                  onChange={e => choisirPhoto(e.target.files?.[0])} />
+              </div>
+              <input value={nom} onChange={e => setNom(e.target.value)} maxLength={80}
+                placeholder="Ex. Coachs Angré - rentrée 2026" style={{ ...S.champ, flex: 1, minWidth: 0 }} />
+            </div>
 
             <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: COULEURS.gris600, marginBottom: 5 }}>
               Objet <span style={{ fontWeight: 400, color: COULEURS.gris400 }}>(facultatif)</span>
@@ -679,6 +870,48 @@ function ModalMembres({ conversation, hdr, couleur, onFermer, onChange }) {
   const [selection, setSelection] = useState([]);
   const [occupe, setOccupe] = useState(false);
   const [aRetirer, setARetirer] = useState(null);
+  /* La photo vit dans un état local plutôt que d'être relue de `conversation` : le parent
+     ne se recharge qu'après coup, et l'image resterait l'ancienne le temps du rechargement. */
+  const [photo, setPhoto] = useState(conversation.photo_url || null);
+  const [envoiPhoto, setEnvoiPhoto] = useState(false);
+  const champPhoto = useRef(null);
+
+  /* Déposer la photo, ou la retirer (`null`). L'enregistrement est IMMÉDIAT : cette fiche
+     n'a pas de bouton « Enregistrer », et une image choisie qui ne serait pas partie se
+     perdrait à la fermeture sans que rien ne le dise. */
+  const majPhoto = async (url) => {
+    setEnvoiPhoto(true);
+    try {
+      const r = await fetch(`${API_URL}/api/conversations/${conversation.id}`, {
+        method: 'PATCH', headers: hdr(), body: JSON.stringify({ photo_url: url }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Enregistrement impossible');
+      if (d.photo_non_enregistree) { toast.error(d.photo_non_enregistree, { duration: 8000 }); return; }
+      setPhoto(url);
+      onChange?.();                     // la liste et l'en-tête du fil suivent
+      toast.success(url ? 'Photo du groupe mise à jour ✓' : 'Photo retirée');
+    } catch (e) {
+      toast.error(e.message || 'Photo impossible à enregistrer');
+    } finally {
+      setEnvoiPhoto(false);
+      if (champPhoto.current) champPhoto.current.value = '';
+    }
+  };
+
+  const choisirPhoto = async (fichier) => {
+    if (!fichier) return;
+    setEnvoiPhoto(true);
+    try {
+      const envoye = await envoyerFichier(fichier, 'avatar');
+      if (!envoye?.url) throw new Error('Image non déposée');
+      await majPhoto(envoye.url);
+    } catch (e) {
+      toast.error(e.message || 'Image impossible à déposer');
+      setEnvoiPhoto(false);
+      if (champPhoto.current) champPhoto.current.value = '';
+    }
+  };
 
   const charger = useCallback(async () => {
     try {
@@ -711,11 +944,39 @@ function ModalMembres({ conversation, hdr, couleur, onFermer, onChange }) {
   return (
     <Voile onFermer={onFermer}>
       <div style={{ ...S.carte, width: '92vw', maxWidth: 940, maxHeight: '92vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>{conversation.nom}</div>
-            <div style={{ fontSize: 12.5, color: COULEURS.gris600, marginTop: 3 }}>
-              {membres.length} membre{membres.length > 1 ? 's' : ''}{conversation.description ? ` · ${conversation.description}` : ''}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 13, minWidth: 0 }}>
+            {/* LA PHOTO DU GROUPE, modifiable ici et nulle part ailleurs : c'est la seule
+                fiche où l'on dispose déjà des droits d'administration. */}
+            <div style={{ position: 'relative', flexShrink: 0, width: 54, height: 54, opacity: envoiPhoto ? 0.5 : 1 }}>
+              <PastilleGroupe nom={conversation.nom} url={photo} taille={54} accent={couleur} agrandissable />
+              {estAdmin && (
+                <>
+                  <button type="button" disabled={envoiPhoto}
+                    onClick={() => champPhoto.current?.click()}
+                    title={photo ? 'Changer la photo du groupe' : 'Ajouter une photo au groupe'}
+                    style={{ position: 'absolute', bottom: -3, right: -3, width: 22, height: 22, borderRadius: '50%',
+                      border: `2px solid ${COULEURS.blanc}`, background: COULEURS.navy, color: '#fff', fontSize: 10,
+                      lineHeight: 1, cursor: envoiPhoto ? 'default' : 'pointer', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                    {envoiPhoto ? '…' : '✏️'}
+                  </button>
+                  {photo && !envoiPhoto && (
+                    <button type="button" onClick={() => majPhoto(null)} title="Retirer la photo"
+                      style={{ position: 'absolute', top: -3, right: -3, width: 20, height: 20, borderRadius: '50%',
+                        border: `2px solid ${COULEURS.blanc}`, background: '#B91C1C', color: '#fff', fontSize: 9,
+                        lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
+                  )}
+                  <input ref={champPhoto} type="file" accept="image/*" hidden
+                    onChange={e => choisirPhoto(e.target.files?.[0])} />
+                </>
+              )}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: COULEURS.navy }}>{conversation.nom}</div>
+              <div style={{ fontSize: 12.5, color: COULEURS.gris600, marginTop: 3 }}>
+                {membres.length} membre{membres.length > 1 ? 's' : ''}{conversation.description ? ` · ${conversation.description}` : ''}
+              </div>
             </div>
           </div>
           <button onClick={onFermer} style={{ ...S.bouton(COULEURS.gris100), color: COULEURS.gris600, padding: '6px 12px' }}>✕</button>

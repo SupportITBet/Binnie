@@ -65,6 +65,19 @@ router.get("/moi", authenticateCoach, async (req, res) => {
 const MIGRATION_DISPO_MOIS = "Backend/sql/coach_disponibilites_mois_migration.sql";
 const isMissingMoisColumn = (err) => (err?.message || "").includes("mois") || (err?.message || "").includes("column");
 
+/* LA PLATEFORME D'OÙ L'ON DÉCLARE. Un coach peut être disponible le mardi matin en ligne et
+   indisponible en présentiel le même jour - le trajet n'est pas le même. Une seule grille
+   pour les deux ne peut donc pas être juste.
+   Dash n'envoie pas cet en-tête : il reste sur 'dash', son comportement est inchangé. */
+const plateformeDeDispo = (req) =>
+  req.headers["x-plateforme"] === "bet-elearning" ? "bet-elearning" : "dash";
+
+/* Tant que `Backend/sql/coach_disponibilites_plateforme.sql` n'est pas joué, la colonne
+   n'existe pas : on relit sans elle plutôt que de renvoyer une erreur au coach, qui
+   verrait sa grille disparaître sans comprendre pourquoi. */
+const sansColonnePlateforme = (err) =>
+  !!err && (err.code === "42703" || err.code === "PGRST204" || /plateforme/.test(err.message || ""));
+
 // ── GET disponibilités du coach connecté (mois/année, défaut = mois courant) ──
 router.get("/disponibilites", authenticateCoach, async (req, res) => {
   try {
@@ -72,19 +85,21 @@ router.get("/disponibilites", authenticateCoach, async (req, res) => {
     const mois  = parseInt(req.query.mois, 10)  || (now.getMonth() + 1);
     const annee = parseInt(req.query.annee, 10) || now.getFullYear();
 
-    const { data, error } = await supabase
-      .from("coach_disponibilites")
-      .select("*")
-      .eq("coach_id", req.coachId)
-      .eq("mois", mois)
-      .eq("annee", annee);
+    const plateforme = plateformeDeDispo(req);
+    const base = () => supabase
+      .from("coach_disponibilites").select("*")
+      .eq("coach_id", req.coachId).eq("mois", mois).eq("annee", annee);
+
+    let { data, error } = await base().eq("plateforme", plateforme);
+    if (sansColonnePlateforme(error)) ({ data, error } = await base());
+
     if (error) {
       if (isMissingMoisColumn(error)) {
         return res.json({ ok: false, error: "MIGRATION SQL NON JOUÉE - colonnes mois/annee absentes de coach_disponibilites", migration_file: MIGRATION_DISPO_MOIS, disponibilites: [] });
       }
       return res.status(500).json({ error: error.message });
     }
-    res.json({ disponibilites: data || [], mois, annee });
+    res.json({ disponibilites: data || [], mois, annee, plateforme });
   } catch (err) {
     res.status(500).json({ error: "Erreur interne" });
   }
@@ -99,13 +114,20 @@ router.post("/disponibilites", authenticateCoach, async (req, res) => {
     const mois  = parseInt(req.body.mois, 10)  || (now.getMonth() + 1);
     const annee = parseInt(req.body.annee, 10) || now.getFullYear();
 
-    // Récupérer les créneaux verrouillés existants pour ce mois
-    const { data: existing, error: existErr } = await supabase
-      .from("coach_disponibilites")
-      .select("jour, creneau, verrouille")
-      .eq("coach_id", req.coachId)
-      .eq("mois", mois)
-      .eq("annee", annee);
+    const plateforme = plateformeDeDispo(req);
+
+    // Récupérer les créneaux verrouillés existants pour ce mois ET cette plateforme : un
+    // créneau verrouillé en présentiel ne doit pas bloquer la déclaration en ligne.
+    const baseExist = () => supabase
+      .from("coach_disponibilites").select("jour, creneau, verrouille")
+      .eq("coach_id", req.coachId).eq("mois", mois).eq("annee", annee);
+
+    let { data: existing, error: existErr } = await baseExist().eq("plateforme", plateforme);
+    let colonneAbsente = false;
+    if (sansColonnePlateforme(existErr)) {
+      colonneAbsente = true;
+      ({ data: existing, error: existErr } = await baseExist());
+    }
     if (existErr && isMissingMoisColumn(existErr)) {
       return res.status(409).json({ error: "MIGRATION SQL NON JOUÉE - colonnes mois/annee absentes de coach_disponibilites", migration_file: MIGRATION_DISPO_MOIS });
     }
@@ -127,18 +149,32 @@ router.post("/disponibilites", authenticateCoach, async (req, res) => {
         dispo:      s.dispo,
         verrouille: false,
         updated_at: new Date().toISOString(),
+        ...(colonneAbsente ? {} : { plateforme }),
       }));
 
     if (toUpsert.length === 0) {
       return res.json({ message: "Aucun créneau modifiable (tous verrouillés)", updated: 0 });
     }
 
+    /* LA CLÉ DE CONFLIT INCLUT LA PLATEFORME, sinon la déclaration faite en ligne écraserait
+       celle du présentiel pour le même créneau. Elle doit correspondre exactement à la
+       contrainte posée par `coach_disponibilites_plateforme.sql`. */
+    const conflit = colonneAbsente
+      ? "coach_id,mois,annee,jour,creneau"
+      : "coach_id,plateforme,mois,annee,jour,creneau";
+
     const { error } = await supabase
       .from("coach_disponibilites")
-      .upsert(toUpsert, { onConflict: "coach_id,mois,annee,jour,creneau" });
+      .upsert(toUpsert, { onConflict: conflit });
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ message: "Disponibilités enregistrées", updated: toUpsert.length, mois, annee });
+    res.json({
+      message: "Disponibilités enregistrées", updated: toUpsert.length, mois, annee, plateforme,
+      ...(colonneAbsente ? {
+        avertissement: "La séparation par plateforme n'est pas encore installée sur cette base "
+          + "(Backend/sql/coach_disponibilites_plateforme.sql) : ces créneaux sont communs aux deux plateformes.",
+      } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: "Erreur interne" });
   }
@@ -151,21 +187,25 @@ router.get("/:id/disponibilites", authenticateAdmin, async (req, res) => {
     const mois  = parseInt(req.query.mois, 10)  || (now.getMonth() + 1);
     const annee = parseInt(req.query.annee, 10) || now.getFullYear();
 
-    const { data, error } = await supabase
-      .from("coach_disponibilites")
-      .select("*")
-      .eq("coach_id", req.params.id)
-      .eq("mois", mois)
-      .eq("annee", annee)
-      .eq("dispo", true)
-      .order("debut", { ascending: true });
+    /* Le superviseur ne lit que les créneaux déclarés POUR SA PLATEFORME. C'est ce qui
+       permet au dossier coach de bet-elearning d'afficher enfin cet onglet : il montrait
+       jusqu'ici les disponibilités saisies pour le présentiel, et on l'avait donc vidé. */
+    const plateforme = plateformeDeDispo(req);
+    const base = () => supabase
+      .from("coach_disponibilites").select("*")
+      .eq("coach_id", req.params.id).eq("mois", mois).eq("annee", annee)
+      .eq("dispo", true).order("debut", { ascending: true });
+
+    let { data, error } = await base().eq("plateforme", plateforme);
+    if (sansColonnePlateforme(error)) ({ data, error } = await base());
+
     if (error) {
       if (isMissingMoisColumn(error)) {
         return res.json({ ok: false, error: "MIGRATION SQL NON JOUÉE - colonnes mois/annee absentes de coach_disponibilites", migration_file: MIGRATION_DISPO_MOIS, disponibilites: [] });
       }
       return res.status(500).json({ error: error.message });
     }
-    res.json({ disponibilites: data || [], mois, annee });
+    res.json({ disponibilites: data || [], mois, annee, plateforme });
   } catch (err) {
     res.status(500).json({ error: "Erreur interne" });
   }
@@ -627,14 +667,41 @@ router.get("/ma-note", authenticateAdmin, async (req, res) => {
     }
     const moi = req.user.id;
 
-    const [{ data: evals }, { data: rapports }] = await Promise.all([
-      supabase.from("evaluations_coachs")
+    /* LA NOTE EST CELLE DE LA PLATEFORME D'OÙ L'ON REGARDE. `evaluations_coachs` et
+       `rapports_observation` portent toutes deux une colonne `plateforme`, et le
+       superviseur de chaque côté ne compte que les siennes (cf. superviseurRoutesBet.js).
+       Sans ce filtre, un coach ouvrant bet-elearning voyait une moyenne mêlant ses
+       observations de dash - un chiffre que le superviseur de cette plateforme n'aurait
+       jamais retrouvé sur sa propre fiche.
+       Dash n'envoie pas cet en-tête : son comportement est inchangé, il continue de tout
+       lire. Le filtre ne s'applique qu'à bet-elearning, qui le réclame explicitement. */
+    const plateforme = req.headers["x-plateforme"] === "bet-elearning" ? "bet-elearning" : null;
+    const filtrer = (q) => (plateforme ? q.eq("plateforme", plateforme) : q);
+
+    /* Si la colonne venait à manquer sur une base, on relit sans elle plutôt que de
+       renvoyer une erreur : le coach verrait son bandeau de note disparaître sans
+       comprendre pourquoi. */
+    const sansColonne = (e) => !!e && (e.code === "42703" || e.code === "PGRST204");
+
+    let [rEvals, rRapports] = await Promise.all([
+      filtrer(supabase.from("evaluations_coachs")
         .select("note_finale, ponctualite, qualite_pedagogique, satisfaction_apprenants, respect_programme, communication, periode, date_evaluation")
-        .eq("coach_id", moi).order("date_evaluation", { ascending: false }),
-      supabase.from("rapports_observation")
+        .eq("coach_id", moi)).order("date_evaluation", { ascending: false }),
+      filtrer(supabase.from("rapports_observation")
         .select("note_globale, date_observation")
-        .eq("coach_id", moi).order("date_observation", { ascending: false }),
+        .eq("coach_id", moi)).order("date_observation", { ascending: false }),
     ]);
+    if (sansColonne(rEvals.error)) {
+      rEvals = await supabase.from("evaluations_coachs")
+        .select("note_finale, ponctualite, qualite_pedagogique, satisfaction_apprenants, respect_programme, communication, periode, date_evaluation")
+        .eq("coach_id", moi).order("date_evaluation", { ascending: false });
+    }
+    if (sansColonne(rRapports.error)) {
+      rRapports = await supabase.from("rapports_observation")
+        .select("note_globale, date_observation")
+        .eq("coach_id", moi).order("date_observation", { ascending: false });
+    }
+    const evals = rEvals.data, rapports = rRapports.data;
 
     const notes = [];
     let nbTotal = 0;

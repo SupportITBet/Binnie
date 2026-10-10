@@ -13,6 +13,7 @@ import { genererRecuVersement } from '../../utils/recuVersement';
 import { ModalSoumissionParcours, ModalRenouvellementContrat, STATUT_CONTRAT_LIB } from './GestionEntreprises';
 
 import { fetchUpload } from "../../utils/fetchUpload";
+import { estRole } from '../../constants/roles';
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
 
@@ -409,7 +410,9 @@ export function OngletRemplacements() {
 }
 
 // Partagé entre admin_onboarding, admin_elearning et admin_commercial (résidu) - route "Entreprises"
-export function OngletEntreprises() {
+/* `lectureSeule` : la direction consulte le portefeuille entreprises sans le modifier — la
+   création d'une entreprise relève du commercial et de l'onboarding. */
+export function OngletEntreprises({ lectureSeule = false }) {
   const { couleurTheme, couleurThemeFonce, couleurThemeClair } = useTheme();
   const { profile } = useAuth();
   const alerte = useAlerte();
@@ -504,7 +507,7 @@ export function OngletEntreprises() {
       </div>
 
       {/* En-tête + bouton nouvelle entreprise (Onboarding n'a pas le droit de créer une entreprise) */}
-      {profile?.role !== 'admin_onboarding' && (
+      {!lectureSeule && !estRole(profile?.role, 'admin_onboarding') && (
         <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
           <button
             onClick={() => setModalParcours(true)}
@@ -1842,14 +1845,20 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
   const { profile } = useAuth();
   const confirm = useConfirm();
   const alerte = useAlerte();
-  const peutModifier = ['admin_elearning', 'admin_commercial'].includes(profile?.role) || profile?.permissions?.crm_entreprises?.update === true;
+  /* `super_admin` ajouté : le repli `profile.permissions.crm_entreprises` ne les
+       rattrapait PAS. La base leur accorde le module `crm`, et le serveur sait que
+       `crm_entreprises` retombe sur `crm` (MODULE_FALLBACK_PARENT) — mais ce repli n'existe
+       que dans `requirePermission`. L'interface, elle, lit la clé exacte : absente, donc
+       bouton grisé pour qui a pourtant le droit.
+       L'Administrateur, lui, reste en lecture sur les entreprises — demande explicite. */
+    const peutModifier = estRole(profile?.role, ['super_admin', 'admin_elearning', 'admin_commercial']) || profile?.permissions?.crm_entreprises?.update === true;
 
   const [tab, setTab]           = useState('beneficiaires');
   const [benDetail, setBen]     = useState(null);
   const [typesSessionsLocal, setTypesSessionsLocal] = useState(entreprise.types_sessions || ['ligne']);
 
   // ── Contrat (renouvellement + statut) - module dédié "contrat", distinct de "crm_entreprises" ──
-  const peutGererContrat = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.contrat?.update === true;
+  const peutGererContrat = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.contrat?.update === true;
   // L'assistante e-learning a le droit "créer" (pas "modifier") sur ce module : elle peut donc
   // proposer un renouvellement, mais seul l'admin BET (peutGererContrat) peut le valider.
   const peutProposerRenouvellement = !peutGererContrat && profile?.permissions?.contrat?.create === true;
@@ -2093,11 +2102,11 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
   // quoi que l'admin configure dans Gestion des droits. Seul "admin_manager" (super_admin/admin/
   // manager) est une façade sans ambiguïté - on peut la garder comme accès admin implicite.
   const entrepriseRefusee = entreprise.statut === 'refuse';
-  const peutSaisirVersement = !entrepriseRefusee && (profile?.role === 'admin_manager' || profile?.permissions?.finances?.create === true);
-  const peutModifierVersement = !entrepriseRefusee && (profile?.role === 'admin_manager' || profile?.permissions?.finances?.update === true);
+  const peutSaisirVersement = !entrepriseRefusee && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true);
+  const peutModifierVersement = !entrepriseRefusee && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true);
   // Suppression réservée à l'admin BET - jamais à l'assistante e-learning, même si un rôle
   // "commercial" venait un jour à cocher "Modifier" sur le module Finances.
-  const peutSupprimerVersement = ['admin_manager', 'admin_superviseur'].includes(profile?.role) || profile?.permissions?.finances?.delete === true;
+  const peutSupprimerVersement = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true;
   const [versements, setVersements] = useState([]);
   const [chargVersements, setChargVersements] = useState(false);
   const [showFormVers, setShowFormVers] = useState(false);
@@ -5775,7 +5784,7 @@ export function ModalDetailBenef({ benef, entreprise, onFermer }) {
                       </div>
 
                       {/* Bouton débloquer (visible si bloqué + rôle autorisé) */}
-                      {blocageStatus.acces_bloque && ['admin_onboarding','admin_manager','admin_superviseur','admin_customer_care'].includes(profile?.role) && (
+                      {blocageStatus.acces_bloque && estRole(profile?.role, ['admin_onboarding', 'admin_manager', 'admin_superviseur', 'admin_customer_care']) && (
                         <div style={{ background:'#F0FDF4', border:'1.5px solid #86EFAC', borderRadius:12, padding:'16px 20px' }}>
                           <div style={{ fontSize:13, fontWeight:700, color:'#065F46', marginBottom:10 }}>🔓 Débloquer l'accès</div>
                           <div style={{ fontSize:12, color:'#166534', marginBottom:12, lineHeight:1.5 }}>
@@ -5798,7 +5807,7 @@ export function ModalDetailBenef({ benef, entreprise, onFermer }) {
                       )}
 
                       {/* Message si pas le bon rôle */}
-                      {blocageStatus.acces_bloque && !['admin_onboarding','admin_manager','admin_superviseur','admin_customer_care'].includes(profile?.role) && (
+                      {blocageStatus.acces_bloque && !estRole(profile?.role, ['admin_onboarding', 'admin_manager', 'admin_superviseur', 'admin_customer_care']) && (
                         <div style={{ background:'#FEF9C3', border:'1px solid #FDE68A', borderRadius:10, padding:'12px 16px', fontSize:12, color:'#92400E' }}>
                           ⚠️ Seul un agent Onboarding ou Customer Care peut débloquer cet accès.
                         </div>

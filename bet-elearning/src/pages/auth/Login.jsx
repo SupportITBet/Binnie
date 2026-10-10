@@ -1,47 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLE_REDIRECT } from '../../constants/roles';
+import { ROLE_REDIRECT, ROLE_MAP_BET, estStaff, roleBetDe } from '../../constants/roles';
 import { BoutonLangueClair } from '../../components/shared/BoutonLangue';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
-// Mapping rôles backend BET → rôles bet-elearning
-const ROLE_MAP_BET = {
-  super_admin:         'admin_manager',
-  admin:               'admin_manager',
-  manager:             'admin_manager',
-  superviseur:         'admin_superviseur',
-  deputy_superviseur:  'admin_deputy_superviseur',
-  data_collector:      'admin_placement',
-  placement_test:      'admin_placement',
-  onboarding:          'admin_onboarding',
-  pedagogical_advisor: 'admin_pa_advisor',
-  admin_elearning:     'admin_elearning',
-  assistant_elearning: 'admin_elearning',
-  customer_care:       'admin_customer_care',
-  // Assistante Corporate fusionnée avec Assistant E-Learning - voir constants/roles.js
-  commercial:          'admin_elearning',
-  rh:                  'admin_rh_paie',
-  rh_paie:             'admin_rh_paie',
-  comptable:           'admin_comptable',
-  coach:               'professeur_titulaire',
-  responsable:         'admin_responsable',
-  gestionnaire:        'admin_gestionnaire',
-  // Rôles admin_* stockés directement en base
-  admin_placement:     'admin_placement',
-  admin_onboarding:    'admin_onboarding',
-  admin_customer_care: 'admin_customer_care',
-  admin_commercial:    'admin_elearning',
-  admin_pa_advisor:    'admin_pa_advisor',
-  admin_rh_paie:       'admin_rh_paie',
-  admin_comptable:     'admin_comptable',
-  admin_manager:       'admin_manager',
-  admin_superviseur:        'admin_superviseur',
-  admin_deputy_superviseur: 'admin_deputy_superviseur',
-  professeur_titulaire:  'professeur_titulaire',
-  professeur_remplacant: 'professeur_remplacant',
-};
+/* LA TABLE DE CORRESPONDANCE N'EST PLUS RECOPIÉE ICI.
+   Ce fichier portait sa propre copie de trente-et-une entrées, figée sur l'ancienne fusion des
+   rôles : `admin`, `super_admin` et `manager` y aboutissaient encore tous à `admin_manager`.
+   Résultat, le rôle obtenu dépendait de la page de connexion utilisée — la table centrale avait
+   dé-fusionné, celle-ci non. On importe désormais la seule qui fasse foi. */
+
 
 const NAVY   = '#0F172A';
 const CYAN   = '#0891B2';
@@ -50,20 +20,52 @@ const GRIS   = '#94A3B8';
 const BLANC  = '#FFFFFF';
 const DUREE_CODE = 30;
 
+/* ── LES PROFILS PROPOSÉS À LA CONNEXION ──────────────────────────────────────────────────
+   Cette liste était figée sur les anciens noms de façade et n'en comptait que douze : ni le
+   Super Admin, ni l'Administrateur, ni la Commerciale, ni l'Assistante SAV, ni l'Agent
+   Marketing n'y figuraient — on ne pouvait donc pas les choisir à l'écran, alors que leurs
+   comptes existent.
+
+   ELLE EST PUREMENT VISUELLE, et c'est important à savoir : le profil cliqué ne détermine RIEN.
+   Après authentification, c'est le rôle renvoyé par le serveur qui décide du menu et de la
+   redirection (voir `redirectUtilisateurReel`). Un compte qui se trompe de carte arrive quand
+   même au bon endroit — la carte ne sert qu'à orienter l'utilisateur et à colorer l'écran.
+   C'est pourquoi l'ajouter ne présente aucun risque d'élévation de privilège.
+
+   `id` porte le nom RÉEL du rôle, plus la façade : c'est ce nom qui sert à retrouver la carte
+   une fois le compte identifié. */
 const PROFILS_BET = [
   { id: 'coach', label: 'Coach / Professeur', emoji: '👨‍🏫', color: '#0D9488', bg: '#F0FDFA',
     desc: 'Titulaire & remplaçant', roles: ['Prof. Titulaire', 'Prof. Remplaçant'] },
-  { id: 'admin_manager',        label: 'Manager BET',         emoji: '🔧', color: '#0891B2', bg: '#E0F2FE', desc: 'Pilotage global de la plateforme' },
-  { id: 'admin_superviseur',         label: 'Superviseur',          emoji: '🔭', color: '#4F46E5', bg: '#EEF2FF', desc: 'Contrôle qualité & profs' },
-  { id: 'admin_deputy_superviseur',  label: 'Deputy Superviseur',   emoji: '🔍', color: '#6D28D9', bg: '#F5F3FF', desc: 'Observation & rapports terrain' },
-  { id: 'admin_placement',      label: 'Placement Test',      emoji: '🎯', color: '#16A34A', bg: '#DCFCE7', desc: 'Tests de niveau apprenants' },
-  { id: 'admin_onboarding',     label: 'Onboarding',          emoji: '🏷️',  color: '#EA580C', bg: '#FFF7ED', desc: 'Accueil & intégration classes' },
-  { id: 'admin_customer_care',  label: 'Customer Care',       emoji: '💬', color: '#EC4899', bg: '#FDF2F8', desc: 'Support & fidélisation client' },
-  { id: 'admin_pa_advisor',     label: 'PA Advisor',          emoji: '📋', color: '#0369A1', bg: '#EFF6FF', desc: 'Conseil pédagogique individuel' },
-  { id: 'admin_rh_paie',        label: 'RH / Paie',           emoji: '🤝', color: '#0F766E', bg: '#F0FDFA', desc: 'Ressources humaines & salaires' },
-  { id: 'admin_comptable',      label: 'Comptable',           emoji: '💰', color: '#D97706', bg: '#FFFBEB', desc: 'Comptabilité & trésorerie' },
-  { id: 'admin_elearning',      label: 'Assistant E-Learning',emoji: '💻', color: '#7C3AED', bg: '#F5F3FF', desc: 'Gestion de la plateforme e-learning', roles: ['E-Learning'] },
+
+  // ── Direction ──
+  { id: 'super_admin',          label: 'Super Admin',          emoji: '🛡️', color: '#DC2626', bg: '#FEF2F2', desc: 'Gouvernance, droits & configuration' },
+  { id: 'admin',                label: 'Administrateur',       emoji: '🏛️', color: '#7C3AED', bg: '#F5F3FF', desc: 'Administration BET & supervision' },
+  { id: 'manager',              label: 'Manager BET',          emoji: '🔧', color: '#0891B2', bg: '#E0F2FE', desc: 'Pilotage global de la plateforme' },
+
+  // ── Pédagogie & supervision ──
+  { id: 'superviseur',          label: 'Superviseur',          emoji: '🔭', color: '#4F46E5', bg: '#EEF2FF', desc: 'Contrôle qualité & profs' },
+  { id: 'deputy_superviseur',   label: 'Deputy Superviseur',   emoji: '🔍', color: '#6D28D9', bg: '#F5F3FF', desc: 'Observation & rapports terrain' },
+  { id: 'pedagogical_advisor',  label: 'PA Advisor',           emoji: '📋', color: '#0369A1', bg: '#EFF6FF', desc: 'Conseil pédagogique individuel' },
+  { id: 'onboarding',           label: 'Onboarding',           emoji: '🏷️',  color: '#EA580C', bg: '#FFF7ED', desc: 'Accueil & intégration classes' },
+  { id: 'placement_test',       label: 'Agent Placement',      emoji: '🎯', color: '#16A34A', bg: '#DCFCE7', desc: 'Tests de niveau apprenants' },
+  { id: 'data_collector',       label: 'Data Collector',       emoji: '📥', color: '#64748B', bg: '#F1F5F9', desc: 'Collecte & qualité des données' },
+
+  // ── Commerce & relation client ──
+  { id: 'commercial',           label: 'Commerciale',          emoji: '🤝', color: '#0284C7', bg: '#E0F2FE', desc: 'Inscriptions, classes & paiements' },
+  /* Assistante SAV, Assistant Marketing et Gestionnaire NE SONT PAS PROPOSÉS ICI, volontairement.
+     Leurs rôles existent et leurs comptes fonctionnent — ils passent par la porte du personnel
+     (`/connexion/admin`), qui demande un identifiant sans choix de profil. Retirer la carte ne
+     retire donc aucun accès : cette liste est purement visuelle, c'est le rôle renvoyé par le
+     serveur qui décide du menu et de la redirection. */
+  { id: 'admin_elearning',      label: 'Assistant E-Learning', emoji: '💻', color: '#7C3AED', bg: '#F5F3FF', desc: 'Gestion de la plateforme e-learning', roles: ['E-Learning'] },
+  { id: 'customer_care',        label: 'Customer Care',        emoji: '💬', color: '#EC4899', bg: '#FDF2F8', desc: 'Support & fidélisation client' },
+
+  // ── Administration & finances ──
+  { id: 'rh',                   label: 'RH / Paie',            emoji: '🤝', color: '#0F766E', bg: '#F0FDFA', desc: 'Ressources humaines & salaires' },
+  { id: 'comptable',            label: 'Comptable',            emoji: '💰', color: '#D97706', bg: '#FFFBEB', desc: 'Comptabilité & trésorerie' },
 ];
+
 
 const STATS_BET = [
   { n: '1 284', l: 'Apprenants actifs' },
@@ -134,9 +136,11 @@ export default function Login() {
       try { data = await res.json(); } catch {}
       if (!res.ok) { setErreur(data.error || 'Identifiants incorrects.'); return; }
 
-      // Bloquer si acces_elearning non activé (sauf les rôles admin_* qui ont accès natif)
-      const roleAdmin = data.profil.role?.startsWith('admin_') || ['super_admin', 'admin', 'manager', 'assistant_elearning', 'professeur_titulaire', 'professeur_remplacant', 'client_entreprise'].includes(data.profil.role);
-      if (!roleAdmin && !data.profil.acces_elearning) {
+      /* Même règle que sur la porte du personnel (`LoginAdmin.jsx`), et depuis la MÊME liste :
+         les deux pages en portaient une copie, et elles divergeaient — celle-ci acceptait
+         `admin` et `manager`, l'autre non. Un compte entrait donc ou pas selon la page
+         utilisée. `acces_elearning` reste la règle pour les apprenants et les parents. */
+      if (!estStaff(data.profil.role) && !data.profil.acces_elearning) {
         setErreur("Votre accès à la plateforme e-learning n'est pas encore activé. Contactez votre Super Admin BET.");
         return;
       }
@@ -234,7 +238,7 @@ export default function Login() {
   }
 
   function redirectUtilisateurReel(p, sess) {
-    const roleBet = ROLE_MAP_BET[p.role];
+    const roleBet = roleBetDe(p.role);
     if (!roleBet) {
       setErreur("Rôle du compte non reconnu - contactez un administrateur.");
       return;

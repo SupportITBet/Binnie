@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTabState } from '../../hooks/useTabState';
 import { useTheme } from '../../contexts/ThemeContext';
 import { COULEURS } from '../../constants/couleurs';
-import { LIBELLES_ROLES as LIBELLES_ROLES_VUE_ENSEMBLE } from '../../constants/roles';
+import { LIBELLES_ROLES as LIBELLES_ROLES_VUE_ENSEMBLE, estRole, ROLE_MAP_BET } from '../../constants/roles';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip } from 'recharts';
 import ModalProfSuivi from './ModalProfesseur';
 import { useMessagerie } from '../../contexts/MessagerieContext';
@@ -407,8 +407,8 @@ export function EquipePedagogique() {
   const [onglet, setOnglet] = useTabState('tous', 'onglet_equipe');
   const [detail, setDetail] = useState(null);
 
-  const titulaires   = MOCK_PROFESSEURS.filter(p => p.role === 'professeur_titulaire');
-  const remplacants  = MOCK_PROFESSEURS.filter(p => p.role === 'professeur_remplacant');
+  const titulaires   = MOCK_PROFESSEURS.filter(p => estRole(p.role, 'professeur_titulaire'));
+  const remplacants  = MOCK_PROFESSEURS.filter(p => estRole(p.role, 'professeur_remplacant'));
   const liste        = onglet === 'titulaires' ? titulaires : onglet === 'remplacants' ? remplacants : MOCK_PROFESSEURS;
 
   const TABS = [
@@ -503,7 +503,7 @@ export function EquipePedagogique() {
 
         {liste.map((p, idx) => {
           const cs = CONTRAT_STYLE[p.contrat] || { bg:COULEURS.gris100, txt:COULEURS.gris600 };
-          const estRempl = p.role === 'professeur_remplacant';
+          const estRempl = estRole(p.role, 'professeur_remplacant');
           return (
             <div
               key={p.id}
@@ -850,6 +850,10 @@ export function OngletVueEnsembleManager() {
         const entreprises = entR?.entreprises || [];
         const utilisateurs = usersR?.utilisateurs || [];
         const paiements = paieR?.paiements || [];
+        /* `acces_elearning` est le seul marqueur dont dispose la table `utilisateurs` : elle
+           n'a pas de colonne `plateforme`, les comptes étant communs aux deux plateformes.
+           C'est donc lui qui distingue « a accès à BET E-Learning » de « existe chez BET ». */
+        const utilisateursElearning = utilisateurs.filter(u => u.acces_elearning);
         const montantContrats = entreprises.reduce((s, e) => s + (e.montant_contrat || 0), 0);
         const totalEncaisse = paiements.reduce((s, p) => s + (p.montant || 0), 0);
         setStats({
@@ -859,7 +863,12 @@ export function OngletVueEnsembleManager() {
           entreprisesActives:    entreprises.filter(e => e.statut === 'actif').length,
           entreprisesEnAttente:  entreprises.filter(e => e.statut === 'en_attente').length,
           entreprisesRefusees:   entreprises.filter(e => e.statut === 'refuse').length,
-          utilisateurs:          utilisateurs.length,
+          /* MÊME FILTRE QUE « Professeurs » JUSTE AU-DESSUS, et pour la même raison.
+             `utilisateurs.length` comptait TOUS les comptes de la base — 343, dont 189 coachs
+             de dash, 85 apprenants et 19 parents — alors que 4 seulement sont habilités à
+             BET E-Learning. Le chiffre était faux d'un facteur quatre-vingt-cinq et décrivait
+             l'effectif de dash sur le tableau de bord de l'e-learning. */
+          utilisateurs:          utilisateursElearning.length,
           actionsAujourdhui:     auditR?.total_today ?? null,
           notifsNonLues:         (notifsR?.notifications || []).filter(n => !n.lu).length,
           montantContrats,
@@ -869,8 +878,10 @@ export function OngletVueEnsembleManager() {
         });
         setParModule((auditR?.par_module || []).slice(0, 8).map(m => ({ nom: MODULE_LABELS_VUE_ENSEMBLE[m.module] || m.module, actions: m.count })));
         setParHeure(auditR?.par_heure || []);
+        /* La répartition par rôle souffrait du même défaut : elle dessinait la pyramide des
+           rôles de dash. Elle ne décrit plus que les comptes habilités ici. */
         const roleMap = {};
-        for (const u of utilisateurs) { const r = LIBELLES_ROLES_VUE_ENSEMBLE[u.role] || u.role; roleMap[r] = (roleMap[r] || 0) + 1; }
+        for (const u of utilisateursElearning) { const r = LIBELLES_ROLES_VUE_ENSEMBLE[u.role] || u.role; roleMap[r] = (roleMap[r] || 0) + 1; }
         setParRole(Object.entries(roleMap).map(([nom, valeur]) => ({ nom, valeur })).sort((a, b) => b.valeur - a.valeur).slice(0, 8));
 
         // Encaissement des 6 derniers mois (pour la courbe financière)
@@ -1046,35 +1057,10 @@ export function OngletVueEnsembleManager() {
   );
 }
 
-const _ROLE_MAP_ADMIN = {
-  super_admin:'admin_manager', admin:'admin_manager', manager:'admin_manager',
-  superviseur:'admin_superviseur', deputy_superviseur:'admin_deputy_superviseur', responsable_centre:'admin_superviseur',
-  data_collector:'admin_placement', placement_test:'admin_placement',
-  onboarding:'admin_onboarding',
-  pedagogical_advisor:'admin_pa_advisor',
-  admin_elearning:'admin_elearning', assistant_elearning:'admin_elearning',
-  customer_care:'admin_customer_care',
-  // Assistante Corporate fusionnée avec Assistant E-Learning - voir constants/roles.js
-  commercial:'admin_elearning', corporate:'admin_elearning',
-  rh:'admin_rh_paie', rh_paie:'admin_rh_paie',
-  comptable:'admin_comptable',
-  coach:'professeur_titulaire',
-  responsable:'admin_responsable',
-  gestionnaire:'admin_gestionnaire',
-  observateur:'admin_observateur',
-  // Identité (rôle déjà stocké sous son nom façade en base) - sans ces entrées, un
-  // utilisateur dont `role` vaut déjà "admin_placement"/"admin_onboarding"/etc. ne
-  // trouvait aucune clé dans cette table et retombait sur le fallback 'admin_elearning'
-  // (voir plus bas), le rendant invisible sous son vrai onglet dans Administration BET.
-  admin_manager:'admin_manager', admin_superviseur:'admin_superviseur',
-  admin_deputy_superviseur:'admin_deputy_superviseur', admin_placement:'admin_placement',
-  admin_onboarding:'admin_onboarding', admin_pa_advisor:'admin_pa_advisor',
-  admin_customer_care:'admin_customer_care', admin_commercial:'admin_elearning',
-  admin_rh_paie:'admin_rh_paie', admin_comptable:'admin_comptable',
-  admin_responsable:'admin_responsable', admin_gestionnaire:'admin_gestionnaire',
-  admin_observateur:'admin_observateur',
-  professeur_titulaire:'professeur_titulaire', professeur_remplacant:'professeur_remplacant',
-};
+/* Table centrale : cette copie rejouait l'ancienne fusion et affichait un Super Admin
+   comme « Manager BET » dans la liste des administrateurs. */
+const _ROLE_MAP_ADMIN = ROLE_MAP_BET;
+
 function _mapUserAdmin(u) {
   const info = u.coach_info || {};
   return {

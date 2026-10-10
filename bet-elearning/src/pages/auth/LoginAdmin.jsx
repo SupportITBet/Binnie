@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ROLE_REDIRECT, ROLE_MAP_BET } from '../../constants/roles';
+import { ROLE_REDIRECT, ROLE_MAP_BET, estStaff, roleBetDe } from '../../constants/roles';
 import { COULEURS } from '../../constants/couleurs';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -67,9 +67,12 @@ export default function LoginAdmin() {
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || 'Identifiants incorrects.'); return; }
 
-      // Bloquer l'accès si acces_elearning n'est pas activé (sauf super_admin et tous les rôles admin_*)
-      const roleAdmin = data.profil.role?.startsWith('admin_') || ['super_admin', 'assistant_elearning', 'professeur_titulaire', 'professeur_remplacant', 'client_entreprise'].includes(data.profil.role);
-      if (!roleAdmin && data.profil.acces_elearning === false) {
+      /* `acces_elearning` NE S'APPLIQUE PLUS AU PERSONNEL. Ce drapeau existe pour ouvrir la
+         plateforme aux apprenants et aux parents au cas par cas ; l'appliquer au staff refusait
+         l'entrée à quarante-deux des quarante-neuf comptes actifs, dont l'Administrateur.
+         La liste en dur qui précédait reposait sur `role.startsWith('admin_')` — vrai du temps
+         des rôles de façade, faux depuis que chaque métier porte son propre nom. */
+      if (!estStaff(data.profil.role) && data.profil.acces_elearning === false) {
         setCompteBloque({ prenom: data.profil.prenom || '', nom: data.profil.nom || '', email: data.profil.email || email });
         return;
       }
@@ -179,7 +182,7 @@ export default function LoginAdmin() {
     localStorage.setItem('admin_profil',  JSON.stringify(profil));
 
     // Mapper le rôle backend vers le rôle bet-elearning
-    let roleBet = ROLE_MAP_BET[profil.role] || profil.role || 'admin_elearning';
+    let roleBet = roleBetDe(profil.role) || profil.role || 'admin_elearning';
     // Pour les coachs : type_coach (enregistré via PATCH) prime sur le rôle générique
     if (profil.role === 'coach') {
       if (profil.type_coach === 'professeur_remplacant') roleBet = 'professeur_remplacant';
@@ -188,9 +191,9 @@ export default function LoginAdmin() {
     const profilBet = {
       id:        profil.id,
       role:      roleBet,
-      // Le rôle de la base, conservé pour l'affichage. Voir ROLE_MAP_BET : un super admin
-      // porte la façade `admin_manager` parce que son dashboard est celui du manager, mais
-      // l'en-tête doit dire « Super Admin ». Jamais utilisé pour router ni autoriser.
+      // `role_reel` est conservé par simple prudence : depuis la dé-fusion, ROLE_MAP_BET ne
+      // traduit plus que des synonymes, donc il vaut presque toujours `role`. Il reste utile
+      // le jour où un alias devrait être affiché sous son nom d'origine.
       role_reel: profil.role,
       prenom:    profil.prenom || '',
       nom:       profil.nom    || '',

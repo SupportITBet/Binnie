@@ -18,6 +18,27 @@ const COULEUR_ROLE_DEFAULT = {
   professeur_remplacant: '#64748B',
   client_entreprise:     '#F97316',
 };
+/* Alias de la dé-fusion des rôles : cette table est indexée par nom de FAMILLE, or un compte
+   arrive désormais avec le nom de son métier. Sans ces lignes, la couleur de thème par défaut d'un rôle
+   retombe sur le repli générique — pas de plantage, mais une perte visible. Chaque alias
+   pointe sur la même valeur, rien n'est recopié. */
+if (COULEUR_ROLE_DEFAULT.admin_manager !== undefined) COULEUR_ROLE_DEFAULT.super_admin = COULEUR_ROLE_DEFAULT.admin_manager;
+if (COULEUR_ROLE_DEFAULT.admin_manager !== undefined) COULEUR_ROLE_DEFAULT.admin = COULEUR_ROLE_DEFAULT.admin_manager;
+if (COULEUR_ROLE_DEFAULT.admin_manager !== undefined) COULEUR_ROLE_DEFAULT.manager = COULEUR_ROLE_DEFAULT.admin_manager;
+if (COULEUR_ROLE_DEFAULT.admin_superviseur !== undefined) COULEUR_ROLE_DEFAULT.superviseur = COULEUR_ROLE_DEFAULT.admin_superviseur;
+if (COULEUR_ROLE_DEFAULT.admin_deputy_superviseur !== undefined) COULEUR_ROLE_DEFAULT.deputy_superviseur = COULEUR_ROLE_DEFAULT.admin_deputy_superviseur;
+if (COULEUR_ROLE_DEFAULT.admin_placement !== undefined) COULEUR_ROLE_DEFAULT.placement_test = COULEUR_ROLE_DEFAULT.admin_placement;
+if (COULEUR_ROLE_DEFAULT.admin_placement !== undefined) COULEUR_ROLE_DEFAULT.data_collector = COULEUR_ROLE_DEFAULT.admin_placement;
+if (COULEUR_ROLE_DEFAULT.admin_onboarding !== undefined) COULEUR_ROLE_DEFAULT.onboarding = COULEUR_ROLE_DEFAULT.admin_onboarding;
+if (COULEUR_ROLE_DEFAULT.admin_pa_advisor !== undefined) COULEUR_ROLE_DEFAULT.pedagogical_advisor = COULEUR_ROLE_DEFAULT.admin_pa_advisor;
+if (COULEUR_ROLE_DEFAULT.admin_elearning !== undefined) COULEUR_ROLE_DEFAULT.commercial = COULEUR_ROLE_DEFAULT.admin_elearning;
+if (COULEUR_ROLE_DEFAULT.admin_customer_care !== undefined) COULEUR_ROLE_DEFAULT.customer_care = COULEUR_ROLE_DEFAULT.admin_customer_care;
+if (COULEUR_ROLE_DEFAULT.admin_rh_paie !== undefined) COULEUR_ROLE_DEFAULT.rh = COULEUR_ROLE_DEFAULT.admin_rh_paie;
+if (COULEUR_ROLE_DEFAULT.admin_comptable !== undefined) COULEUR_ROLE_DEFAULT.comptable = COULEUR_ROLE_DEFAULT.admin_comptable;
+if (COULEUR_ROLE_DEFAULT.admin_gestionnaire !== undefined) COULEUR_ROLE_DEFAULT.gestionnaire = COULEUR_ROLE_DEFAULT.admin_gestionnaire;
+if (COULEUR_ROLE_DEFAULT.admin_responsable !== undefined) COULEUR_ROLE_DEFAULT.responsable = COULEUR_ROLE_DEFAULT.admin_responsable;
+if (COULEUR_ROLE_DEFAULT.admin_observateur !== undefined) COULEUR_ROLE_DEFAULT.observateur = COULEUR_ROLE_DEFAULT.admin_observateur;
+
 
 export const PALETTE_THEME = [
   '#0891B2', '#06B6D4', '#0D9488', '#10B981',

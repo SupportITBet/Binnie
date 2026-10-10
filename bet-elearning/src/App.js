@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UsersProvider } from './contexts/UsersContext';
 import { MessagerieProvider } from './contexts/MessagerieContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
-import { ROLE_REDIRECT, ROLE_LOGIN } from './constants/roles';
+import { ROLE_REDIRECT, ROLE_LOGIN, estRole } from './constants/roles';
 import { LangueProvider } from './contexts/LangueContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ConfirmProvider } from './contexts/ConfirmContext';
@@ -94,7 +94,16 @@ function RoutePrivee({ children, rolesAutorises }) {
     return <Navigate to={loginPage} replace />;
   }
 
-  if (rolesAutorises && !rolesAutorises.includes(profile.role)) {
+  /* `estRole` AU LIEU DE `includes`, ET C'EST LE POINT CLÉ DE LA DÉ-FUSION DES RÔLES.
+     Les onze listes `rolesAutorises` de ce fichier nomment des FAMILLES d'écrans
+     (`admin_manager`, `admin_elearning`…). Depuis que chaque métier a son propre rôle, un
+     `includes` strict rejetterait `admin`, `super_admin` et `manager` de la route
+     `admin_manager` — c'est-à-dire de leur propre écran.
+     `estRole` répond vrai pour le rôle lui-même ET pour ceux de sa famille (voir
+     `constants/roles.js`). Une seule ligne ici évite de réécrire les onze listes et garantit
+     qu'aucun accès n'est perdu. Restreindre une route à un seul rôle reste possible : il
+     suffit d'y nommer ce rôle, qui n'est la famille de personne d'autre. */
+  if (rolesAutorises && !estRole(profile.role, rolesAutorises)) {
     return <Navigate to={ROLE_REDIRECT[profile.role] || '/connexion'} replace />;
   }
 
@@ -108,15 +117,28 @@ function RedirectRacine() {
   return <Navigate to={ROLE_REDIRECT[profile.role] || '/connexion'} replace />;
 }
 
+/* ADMIS SUR LES ROUTES /admin/* — un nom par métier, plus les anciens noms de façade.
+   Depuis la dé-fusion des rôles, un compte arrive avec le nom de SON métier (`admin`,
+   `commercial`, `rh`…) et non plus avec une façade. Les seize noms de métier manquaient ici :
+   ces comptes étaient refusés à l'entrée. Les anciens noms `admin_*` sont conservés — un alias
+   encore en base ou un jeton déjà émis ne doit pas se retrouver dehors. */
 const ROLES_ADMIN = [
-  'admin_manager', 'admin_superviseur', 'admin_deputy_superviseur', 'admin_responsable', 'admin_gestionnaire',
-  'admin_placement', 'admin_onboarding', 'admin_elearning', 'admin_customer_care',
-  'admin_pa_advisor', 'admin_rh_paie', 'admin_comptable',
-  'admin_commercial', 'admin_observateur', 'assistant_sav',
-  // Admis explicitement : si la façade `admin_manager` venait à changer, le super admin ne
-  // doit pas se retrouver exclu des routes d'administration.
-  'super_admin',
+  // ── Direction ──
+  'super_admin', 'admin', 'manager',
+  // ── Pédagogie & supervision ──
+  'superviseur', 'deputy_superviseur', 'pedagogical_advisor', 'onboarding',
+  'placement_test', 'data_collector',
+  // ── Commerce & relation client ──
+  'commercial', 'admin_elearning', 'customer_care', 'assistant_sav', 'marketing',
+  // ── Administration & finances ──
+  'rh', 'comptable', 'gestionnaire', 'responsable', 'observateur',
+  // ── Anciens noms de façade, gardés par sécurité ──
+  'admin_manager', 'admin_superviseur', 'admin_deputy_superviseur', 'admin_responsable',
+  'admin_gestionnaire', 'admin_placement', 'admin_onboarding', 'admin_customer_care',
+  'admin_pa_advisor', 'admin_rh_paie', 'admin_comptable', 'admin_commercial',
+  'admin_observateur',
 ];
+
 
 function AppRoutes() {
   seedLocalStorageIfNeeded();
@@ -284,16 +306,17 @@ function AppRoutes() {
       />
 
       {/* Admin BET - Configuration */}
+      {/* PILOTAGE : `configuration.gerer` n'est accordé qu'au super_admin en base — la garde le reflète.
+          Elle nommait la famille `admin_manager`, ce qui laissait aussi entrer le manager. */}
       <Route
         path="/admin/manager/configuration"
         element={
-          <RoutePrivee rolesAutorises={['admin_manager']}>
+          <RoutePrivee rolesAutorises={['super_admin']}>
             <GestionConfiguration />
           </RoutePrivee>
         }
       />
 
-      {/* Admin BET - Reporting exécutif */}
       <Route
         path="/admin/reporting"
         element={
@@ -330,16 +353,18 @@ function AppRoutes() {
       />
 
       {/* Admin BET - Gestion des droits */}
+      {/* PILOTAGE : réservé au Super Admin et à l'Administrateur, les deux seuls à détenir
+          `roles.manage` en base. La liste nommait `admin_manager` — le manager entrait — et
+          `admin_superviseur` — un superviseur atteignait la matrice des permissions. */}
       <Route
         path="/admin/droits"
         element={
-          <RoutePrivee rolesAutorises={['admin_manager', 'admin_superviseur']}>
+          <RoutePrivee rolesAutorises={['super_admin', 'admin']}>
             <GestionDroits />
           </RoutePrivee>
         }
       />
 
-      {/* Admin BET - Gestion des entreprises */}
       <Route
         path="/admin/entreprises"
         element={

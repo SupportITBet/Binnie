@@ -134,7 +134,10 @@ const sdo = (s) => STATUT_DOSSIER[s] || { lib: s || '—', c: COULEURS.gris600, 
 export function OngletCommMesTaches() {
   const { couleurTheme } = useTheme();
   const [assignations] = useLecture('/api/parcours/assignations', 'assignations');
-  const [apprenants] = useLecture('/api/groupes/apprenants', 'apprenants');
+  // Source e-learning, comme « Mes apprenants » : `/api/groupes/apprenants` remontait les
+  // apprenants du présentiel de dash. Ces deux écrans n'utilisent que `suivi_checklist`,
+  // `apprenant_id` et le total — tous présents dans la table d'ici.
+  const [apprenants] = useLecture('/api/classes-elearning/apprenants/tous', 'apprenants');
 
   const chargement = assignations === null || apprenants === null;
   const a = assignations || [], ap = apprenants || [];
@@ -195,7 +198,10 @@ export function OngletCommMesTaches() {
 export function OngletCommTableauBord() {
   const { couleurTheme } = useTheme();
   const [assignations] = useLecture('/api/parcours/assignations', 'assignations');
-  const [apprenants] = useLecture('/api/groupes/apprenants', 'apprenants');
+  // Source e-learning, comme « Mes apprenants » : `/api/groupes/apprenants` remontait les
+  // apprenants du présentiel de dash. Ces deux écrans n'utilisent que `suivi_checklist`,
+  // `apprenant_id` et le total — tous présents dans la table d'ici.
+  const [apprenants] = useLecture('/api/classes-elearning/apprenants/tous', 'apprenants');
   const [classes] = useLecture('/api/classes-elearning', 'classes');
 
   const a = assignations || [], ap = apprenants || [], cl = classes || [];
@@ -387,12 +393,26 @@ export function OngletCommMesClasses() {
 ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
 export function OngletCommMesApprenants() {
-  const [apprenants] = useLecture('/api/groupes/apprenants', 'apprenants');
+  /* ⚠️ LA SOURCE EST CELLE DE CETTE PLATEFORME.
+     Cet onglet lisait `/api/groupes/apprenants`, c'est-à-dire `groupes_apprenants` : la
+     table des classes de DASH, partagée entre les deux plateformes. Il affichait donc les
+     apprenants du présentiel. `/api/classes-elearning/apprenants/tous` ne rend que les
+     inscrits des classes e-learning.
+     Les champs changent avec la table : `nom_complet` au lieu de
+     `prenom_apprenant`/`nom_apprenant`, `classe_nom` au lieu de `groupe_nom`. Garder les
+     anciens noms aurait rempli le tableau de tirets sans rien signaler. */
+  const [apprenants] = useLecture('/api/classes-elearning/apprenants/tous', 'apprenants');
+  /* Le coach n'est pas porté par l'inscription mais par la CLASSE : on le résout ici
+     plutôt que de l'omettre - savoir qui encadre un apprenant fait partie du suivi. */
+  const [classes] = useLecture('/api/classes-elearning', 'classes');
+  const coachParClasse = Object.fromEntries((classes || []).map(c => [c.id, c.coach_nom]));
+
   const [q, setQ] = useState('');
   const ap = apprenants || [];
+  const nomDe = (x) => (x.nom_complet || `${x.prenom || ''} ${x.nom || ''}`).trim();
   const filtrees = ap.filter(x => {
     if (!q.trim()) return true;
-    const t = `${x.prenom_apprenant || ''} ${x.nom_apprenant || ''} ${x.groupe_nom || ''} ${x.coach_nom || ''}`.toLowerCase();
+    const t = `${nomDe(x)} ${x.email || ''} ${x.classe_nom || ''} ${coachParClasse[x.classe_id] || ''}`.toLowerCase();
     return t.includes(q.trim().toLowerCase());
   });
 
@@ -408,17 +428,17 @@ export function OngletCommMesApprenants() {
         <div style={{ textAlign: 'center', padding: 50, color: COULEURS.gris400 }}>Chargement…</div>
       ) : (
         <Tableau
-          colonnes={[{ lib: 'Apprenant' }, { lib: 'Groupe' }, { lib: 'Coach' }, { lib: 'Inscrit le' }, { lib: 'Compte' }]}
+          colonnes={[{ lib: 'Apprenant' }, { lib: 'Classe' }, { lib: 'Coach' }, { lib: 'Inscrit le' }, { lib: 'Compte' }]}
           vide={<Vide icone="🎓" titre={ap.length === 0 ? 'Aucun apprenant' : 'Aucun résultat'}
             texte={ap.length === 0
-              ? "Aucun apprenant n'est rattaché à vos classes. L'appartenance aux classes est commune aux deux plateformes."
+              ? "Aucun apprenant n'est encore inscrit dans une classe e-learning. Les apprenants du présentiel relèvent de dash et ne sont pas listés ici."
               : 'Videz la recherche pour revoir la liste.'} />}
           lignes={filtrees.map(x => (
             <tr key={x.id} style={{ borderBottom: `1px solid ${COULEURS.gris100}` }}>
-              <Td gras>{`${x.prenom_apprenant || ''} ${x.nom_apprenant || ''}`.trim() || '—'}</Td>
-              <Td>{x.groupe_nom || '—'}</Td>
-              <Td>{x.coach_nom || '—'}</Td>
-              <Td petit>{_date(x.date_ajout)}</Td>
+              <Td gras>{nomDe(x) || '—'}</Td>
+              <Td>{x.classe_nom || '—'}</Td>
+              <Td>{coachParClasse[x.classe_id] || '—'}</Td>
+              <Td petit>{_date(x.date_ajout || x.created_at)}</Td>
               <Td>
                 {/* `apprenant_id` renseigné = le compte d'accès existe réellement. C'est ce qui
                     distingue un apprenant inscrit d'un apprenant qui peut se connecter. */}
