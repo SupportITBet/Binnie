@@ -82,6 +82,9 @@ const COULEUR_TYPE_CONTENU = {
    nouveau porte `groupe_ids`. Les écrans n'ont pas à connaître les deux : ils
    demandent la liste, et le repli sur l'ancien champ se fait ici. */
 const classesDuContenu = (c) => (c?.groupe_ids?.length ? c.groupe_ids : (c?.groupe_id ? [c.groupe_id] : []));
+/* Les classes visées par un DEVOIR. Même repli que pour les contenus : un devoir créé
+   avant le multi-classes ne porte que `classe_id`. */
+const classesDuDevoir = (d) => (d?.classe_ids?.length ? d.classe_ids : (d?.classe_id ? [d.classe_id] : []));
 const contenuViseClasse = (c, classeId) => classesDuContenu(c).includes(classeId);
 
 const PRESENCE_OPTIONS = [
@@ -1670,7 +1673,7 @@ export default function DashboardProfesseur() {
   const [erreurModal,       setErreurModal]       = useState(null); // { titre, message }
   const [modalReception,    setModalReception]    = useState(null); // devoirId ouvert en modal Réception
   const [receptModalStatut, setReceptModalStatut] = useState('tous'); // filtre statut dans le modal réception
-  const [creerForm, setCreerForm]           = useState({ categorie: 'devoir', titre: '', groupe_id: '', date_limite: '', heure_limite: '23:59', date_ouverture: '', heure_ouverture: '00:00', instructions: '', type: 'fichier', typeEval: 'qcm', dureeMin: 60, ressourceUrl: '', blocs: [] });
+  const [creerForm, setCreerForm]           = useState({ categorie: 'devoir', titre: '', groupe_id: '', groupe_ids: [], dureeComposition: 0, date_limite: '', heure_limite: '23:59', date_ouverture: '', heure_ouverture: '00:00', instructions: '', type: 'fichier', typeEval: 'qcm', dureeMin: 60, ressourceUrl: '', blocs: [] });
   const [blocEditing, setBlocEditing] = useState(null); // id du bloc en cours d'édition
   const [uploadBlocEnCours, setUploadBlocEnCours] = useState(null);
 
@@ -1999,7 +2002,7 @@ export default function DashboardProfesseur() {
     // Charger les rendus de tous les devoirs de la classe de cet apprenant
     const appInfo = Object.entries(apprenantsByClasse).flatMap(([cId, apps]) => apps.map(x => ({ ...x, classe_id: cId }))).find(x => x.id === modalApprenant || x.apprenant_id === modalApprenant);
     if (appInfo) {
-      devoirsReels.filter(d => d.classe_id === appInfo.classe_id).forEach(d => chargerRendusPourDevoir(d.id));
+      devoirsReels.filter(d => classesDuDevoir(d).includes(appInfo.classe_id)).forEach(d => chargerRendusPourDevoir(d.id));
     }
   }, [modalApprenant]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2263,17 +2266,33 @@ export default function DashboardProfesseur() {
     const tok = localStorage.getItem('admin_token') || localStorage.getItem('bet_access_token');
     if (!tok) return;
     setDevoirsLoading(true);
-    Promise.all(
-      classesReelles.map(cl =>
-        fetch(`${_PROF_API}/api/elearning/devoirs?classe_id=${cl.id}`, { headers: _profHdrs() })
-          .then(r => r.json()).then(d => (d.devoirs || []).map(dv => ({ ...dv, classe_nom: cl.nom })))
-          .catch(() => [])
-      )
-    ).then(results => {
-      setDevoirsReels(results.flat());
-      setDevoirsLoading(false);
-    });
-  }, [classesReelles]);
+    /* ── UN SEUL APPEL, ET NON UN PAR CLASSE ──
+       On interrogeait la route une fois PAR CLASSE, puis on étiquetait chaque devoir du
+       nom de la classe interrogée. Un devoir donné à deux classes revenait donc DEUX FOIS
+       dans la liste, chaque copie portant une seule de ses classes — et le coach croyait
+       qu'il n'avait été attribué qu'à l'une d'elles.
+       Le filtre `coach_id` ramène ses devoirs en une fois ; les noms de classes se
+       résolvent depuis `classe_ids`, qui dit la vérité sur les destinataires. */
+    fetch(`${_PROF_API}/api/elearning/devoirs?coach_id=${profile?.id || ''}`, { headers: _profHdrs() })
+      .then(r => r.json())
+      .then(d => {
+        const nomDe = (id) => classesReelles.find(c => c.id === id)?.nom;
+        setDevoirsReels((d.devoirs || []).map(dv => {
+          const ids = dv.classe_ids?.length ? dv.classe_ids : (dv.classe_id ? [dv.classe_id] : []);
+          const noms = ids.map(nomDe).filter(Boolean);
+          return {
+            ...dv,
+            classe_ids_resolus: ids,
+            /* Toutes les classes, pas la première : « Anglais Moov A2, MOOV CI - A1 » dit
+               la portée réelle, là où un nom seul laissait croire à une attribution
+               unique. */
+            classe_nom: noms.join(', ') || '—',
+          };
+        }));
+        setDevoirsLoading(false);
+      })
+      .catch(() => { setDevoirsReels([]); setDevoirsLoading(false); });
+  }, [classesReelles, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Chargement notes réelles ──────────────────────────────────────────────
   useEffect(() => {
@@ -2381,7 +2400,10 @@ export default function DashboardProfesseur() {
     try {
       const body = {
         classe_id:      creerForm.groupe_id,
+        classe_ids:     creerForm.groupe_ids?.length ? creerForm.groupe_ids : (creerForm.groupe_id ? [creerForm.groupe_id] : []),
         titre:          creerForm.titre,
+        // 0 = aucun minuteur. Le serveur ignore cette valeur hors rendu « texte ».
+        duree_min:      creerForm.dureeComposition > 0 ? creerForm.dureeComposition : null,
         instructions:   creerForm.instructions || '',
         // Les 3 catégories partagent le même contenu - seule la vraie catégorie (devoir/
         // exercice/evaluation) est envoyée : le Backend s'en sert pour le bonus de
@@ -5662,7 +5684,7 @@ export default function DashboardProfesseur() {
                     {/* Titre + bouton */}
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                       <div style={S.titreSec}>Gestion des devoirs</div>
-                      <button style={S.btn(couleurTheme)} onClick={() => { setBlocEditing(null); setCreerForm({ categorie:'devoir', titre:'', groupe_id:classesReelles[0]?.id||'', date_limite:'', heure_limite:'23:59', date_ouverture:'', heure_ouverture:'00:00', instructions:'', type:'fichier', typeEval:'texte_libre', dureeMin:60, ressourceUrl:'', blocs:[] }); setModalCreer(true); }}>
+                      <button style={S.btn(couleurTheme)} onClick={() => { setBlocEditing(null); setCreerForm({ categorie:'devoir', titre:'', groupe_id:classesReelles[0]?.id||'', groupe_ids:classesReelles[0]?.id?[classesReelles[0].id]:[], dureeComposition:0, date_limite:'', heure_limite:'23:59', date_ouverture:'', heure_ouverture:'00:00', instructions:'', type:'fichier', typeEval:'texte_libre', dureeMin:60, ressourceUrl:'', blocs:[] }); setModalCreer(true); }}>
                         + Créer un devoir / évaluation
                       </button>
                     </div>
@@ -5761,7 +5783,7 @@ export default function DashboardProfesseur() {
                                       <button onClick={() => {
                                         setEditDevoirId(d.id);
                                         setBlocEditing(null);
-                                        setCreerForm({ categorie:d.categorie||'devoir', titre:d.titre||'', groupe_id:d.classe_id||'', date_limite:d.date_limite||'', heure_limite:d.heure_limite||'23:59', date_ouverture:d.date_ouverture||'', heure_ouverture:d.heure_ouverture||'00:00', instructions:d.instructions||'', type:d.type_rendu||'fichier', typeEval:d.format_type||'texte_libre', dureeMin:d.duree_min||60, ressourceUrl:d.ressource_url||'', blocs:d.blocs||[] });
+                                        setCreerForm({ categorie:d.categorie||'devoir', titre:d.titre||'', groupe_id:d.classe_id||'', groupe_ids:(d.classe_ids?.length?d.classe_ids:(d.classe_id?[d.classe_id]:[])), dureeComposition:d.duree_min||0, date_limite:d.date_limite||'', heure_limite:d.heure_limite||'23:59', date_ouverture:d.date_ouverture||'', heure_ouverture:d.heure_ouverture||'00:00', instructions:d.instructions||'', type:d.type_rendu||'fichier', typeEval:d.format_type||'texte_libre', dureeMin:d.duree_min||60, ressourceUrl:d.ressource_url||'', blocs:d.blocs||[] });
                                         setModalCreer(true);
                                       }} style={{ padding:'6px 12px', borderRadius:8, border:'none', background:'#EFF6FF', color:'#1D4ED8', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
                                         ✏️ Modifier
@@ -5827,7 +5849,9 @@ export default function DashboardProfesseur() {
                 // ── Filtrage des devoirs (classe + date limite) ──────────────
                 const devoirsPublies = devoirsReels.filter(d => {
                   if (d.statut !== 'publie') return false;
-                  if (receptFiltreClasse !== 'toutes' && d.classe_id !== receptFiltreClasse) return false;
+                  /* Le devoir est retenu s'il vise la classe filtrée, même quand elle
+                     n'est pas la première de sa liste. */
+                  if (receptFiltreClasse !== 'toutes' && !classesDuDevoir(d).includes(receptFiltreClasse)) return false;
                   if (receptDateDebut && d.date_limite && d.date_limite < receptDateDebut) return false;
                   if (receptDateFin   && d.date_limite && d.date_limite > receptDateFin)   return false;
                   // Si filtre statut actif, ne garder que les devoirs ayant au moins un rendu du bon statut
@@ -6338,7 +6362,7 @@ export default function DashboardProfesseur() {
       const notesManuelles = notesReelles.filter(n => n.inscription_id === inscriptionId);
       // Devoirs réels de la classe avec statut/note du rendu de cet apprenant
       const devoirsA = devoirsReels
-        .filter(d => d.classe_id === a.groupe_id)
+        .filter(d => classesDuDevoir(d).includes(a.groupe_id))
         .map(d => {
           const rendus = devoirRendusMap[d.id] || [];
           const rendu  = rendus.find(r => r.inscription_id === inscriptionId);
@@ -7959,33 +7983,59 @@ export default function DashboardProfesseur() {
                   />
                 </div>
 
-                {/* Groupe */}
+                {/* ── CLASSES DESTINATAIRES ──
+                    Une liste déroulante ne laissait choisir QU'UNE classe. Un coach qui
+                    donne le même devoir à son A2 du matin et à celui du soir devait le
+                    créer deux fois : deux consignes à écrire, deux fichiers à joindre, et
+                    deux corrections le jour où une faute s'y glisse. On coche autant de
+                    classes qu'on veut ; la consigne reste unique.
+                    Chaque carte porte son effectif, parce que c'est ce qui dit combien de
+                    copies vont arriver à corriger. */}
                 <div>
-                  <label style={LBL}>Groupe *</label>
-                  <select
-                    style={{ ...S.select, width: '100%' }}
-                    value={creerForm.groupe_id}
-                    onChange={e => setCreerForm(p => ({ ...p, groupe_id: e.target.value }))}
-                  >
-                    <option value="">- Choisir un groupe -</option>
-                    {mesGroupes.filter(g => g.est_actif && !g._delegation).map(g => <option key={g.id} value={g.id}>{g.nom}</option>)}
-                  </select>
-                  {(() => {
-                    const groupeSel = mesGroupes.find(g => g.id === creerForm.groupe_id);
-                    if (!groupeSel) return null;
-                    return (
-                      <div style={{ marginTop: 8, background: COULEURS.gris50, border: `1px solid ${COULEURS.gris200}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: COULEURS.navy }}>👥 {groupeSel.nom}</span>
-                        {groupeSel.niveau && (
-                          <span style={{ fontSize: 11.5, padding: '2px 9px', borderRadius: 20, background: '#E0F2FE', color: '#0E7490', fontWeight: 700 }}>🎯 {groupeSel.niveau}</span>
-                        )}
-                        <span style={{ fontSize: 12, color: COULEURS.gris600 }}>👩‍🎓 {groupeSel.nb_apprenants ?? 0} apprenant{(groupeSel.nb_apprenants ?? 0) > 1 ? 's' : ''}</span>
-                        <span style={{ fontSize: 11.5, padding: '2px 9px', borderRadius: 20, background: groupeSel.statut === 'actif' ? '#D1FAE5' : COULEURS.gris100, color: groupeSel.statut === 'actif' ? '#065F46' : COULEURS.gris600, fontWeight: 700 }}>
-                          {groupeSel.statut === 'actif' ? '✓ Actif' : groupeSel.statut || '-'}
-                        </span>
-                      </div>
-                    );
-                  })()}
+                  <label style={LBL}>
+                    Classes destinataires *
+                    {(creerForm.groupe_ids || []).length > 0 && (
+                      <span style={{ color: catActive.couleur, marginLeft: 6 }}>
+                        ({creerForm.groupe_ids.length} classe{creerForm.groupe_ids.length > 1 ? 's' : ''} ·{' '}
+                        {mesGroupes.filter(g => creerForm.groupe_ids.includes(g.id)).reduce((t, g) => t + (g.nb_apprenants ?? 0), 0)} apprenant(s))
+                      </span>
+                    )}
+                  </label>
+                  {mesGroupes.filter(g => g.est_actif && !g._delegation).length === 0 ? (
+                    <div style={{ fontSize: 12.5, color: COULEURS.gris400, padding: '8px 0' }}>Aucune classe active ne vous est assignée.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      {mesGroupes.filter(g => g.est_actif && !g._delegation).map(g => {
+                        const choisi = (creerForm.groupe_ids || []).includes(g.id);
+                        return (
+                          <div key={g.id}
+                            onClick={() => setCreerForm(p => {
+                              const ids = p.groupe_ids || [];
+                              const suivants = ids.includes(g.id) ? ids.filter(x => x !== g.id) : [...ids, g.id];
+                              /* `groupe_id` suit la première classe cochée : plusieurs
+                                 écrans la lisent encore (aperçu, filtres). */
+                              return { ...p, groupe_ids: suivants, groupe_id: suivants[0] || '' };
+                            })}
+                            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+                              border: `2px solid ${choisi ? catActive.couleur : COULEURS.gris200}`,
+                              background: choisi ? catActive.couleur + '10' : COULEURS.blanc, transition: 'all .12s' }}>
+                            <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              border: `2px solid ${choisi ? catActive.couleur : COULEURS.gris200}`, background: choisi ? catActive.couleur : COULEURS.blanc,
+                              color: '#fff', fontSize: 12, fontWeight: 800 }}>{choisi ? '✓' : ''}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: choisi ? catActive.couleur : COULEURS.navy }}>👥 {g.nom}</span>
+                            {g.niveau && <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 20, background: '#E0F2FE', color: '#0E7490', fontWeight: 700 }}>🎯 {g.niveau}</span>}
+                            <span style={{ fontSize: 12, color: COULEURS.gris600, marginLeft: 'auto' }}>
+                              👩‍🎓 {g.nb_apprenants ?? 0} apprenant{(g.nb_apprenants ?? 0) > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 6, lineHeight: 1.5 }}>
+                    Une seule consigne : la corriger plus tard la corrigera pour toutes ces classes.
+                    Chaque apprenant rend sa propre copie.
+                  </div>
                 </div>
 
                 {/* Date limite */}
@@ -8006,21 +8056,25 @@ export default function DashboardProfesseur() {
                     onChange={e => setCreerForm(p => ({ ...p, heure_limite: e.target.value }))} />
                 </div>
 
-                {/* Programmation ouverture - texte/les_deux */}
-                {(creerForm.type === 'texte' || creerForm.type === 'les_deux') && (
-                  <>
-                    <div>
-                      <label style={LBL}>📅 Date d'ouverture</label>
-                      <input type="date" style={S.input} value={creerForm.date_ouverture}
-                        onChange={e => setCreerForm(p => ({ ...p, date_ouverture: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label style={LBL}>🕐 Heure d'ouverture</label>
-                      <input type="time" style={S.input} value={creerForm.heure_ouverture}
-                        onChange={e => setCreerForm(p => ({ ...p, heure_ouverture: e.target.value }))} />
-                    </div>
-                  </>
-                )}
+                {/* ── PROGRAMMATION DE L'OUVERTURE, POUR TOUS LES TYPES DE RENDU ──
+                    Ces deux champs n'apparaissaient que sur un rendu « texte » ou
+                    « les deux ». Un devoir à rendre en FICHIER ne pouvait donc pas être
+                    programmé : il s'ouvrait dès sa publication, alors que c'est justement
+                    le cas où l'on veut préparer le sujet à l'avance et le libérer au bon
+                    moment. Rien côté serveur ne justifiait cette restriction —
+                    `date_ouverture` et `heure_ouverture` sont enregistrées quel que soit
+                    le type, et `devoirOuvert()` les applique de la même façon.
+                    Même comportement que dash, où le champ est commun aux trois types. */}
+                <div>
+                  <label style={LBL}>📅 Date d'ouverture</label>
+                  <input type="date" style={S.input} value={creerForm.date_ouverture}
+                    onChange={e => setCreerForm(p => ({ ...p, date_ouverture: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={LBL}>🕐 Heure d'ouverture</label>
+                  <input type="time" style={S.input} value={creerForm.heure_ouverture}
+                    onChange={e => setCreerForm(p => ({ ...p, heure_ouverture: e.target.value }))} />
+                </div>
 
                 {/* Durée - seulement pour evaluation */}
                 {creerForm.categorie === 'evaluation' && (
@@ -8032,6 +8086,46 @@ export default function DashboardProfesseur() {
                       value={creerForm.dureeMin}
                       onChange={e => setCreerForm(p => ({ ...p, dureeMin: parseInt(e.target.value) || 60 }))}
                     />
+                  </div>
+                )}
+
+                {/* ── MINUTEUR DE COMPOSITION ──
+                    La date limite borne le DÉPÔT, pas la DURÉE de l'épreuve : sans
+                    minuteur, une rédaction « à rendre pour le 20 » se travaille six jours,
+                    dictionnaire ouvert. Le chrono démarre à la première ouverture par
+                    l'apprenant, pas à la publication — sinon il serait écoulé avant d'avoir
+                    lu le sujet.
+                    Réservé au rendu EN TEXTE : un fichier se prépare hors ligne, un chrono
+                    n'y aurait pas le même sens.
+                    « Aucun » par défaut : c'est une option, pas une règle imposée. */}
+                {creerForm.type === 'texte' && (
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <label style={LBL}>⏱ Temps de composition</label>
+                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                      {[
+                        { v: 0,   lib: 'Aucun' },
+                        { v: 30,  lib: '30 min' },
+                        { v: 60,  lib: '1 h' },
+                        { v: 120, lib: '2 h' },
+                        { v: 180, lib: '3 h' },
+                      ].map(o => {
+                        const actif = (creerForm.dureeComposition || 0) === o.v;
+                        return (
+                          <button key={o.v} onClick={() => setCreerForm(p => ({ ...p, dureeComposition: o.v }))}
+                            style={{ padding: '7px 16px', borderRadius: 99, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                              border: `2px solid ${actif ? catActive.couleur : COULEURS.gris200}`,
+                              background: actif ? catActive.couleur + '14' : COULEURS.blanc,
+                              color: actif ? catActive.couleur : COULEURS.gris600, fontFamily: 'inherit' }}>
+                            {o.lib}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 6, lineHeight: 1.5 }}>
+                      {creerForm.dureeComposition > 0
+                        ? `Le compte à rebours démarre quand l'apprenant ouvre le devoir. À zéro, sa copie vous est envoyée en l'état — ce qui n'a pas été fait vaut zéro, et vous tranchez la note finale.`
+                        : `Sans minuteur, l'apprenant dispose de tout le temps jusqu'à la date limite.`}
+                    </div>
                   </div>
                 )}
 
@@ -8226,9 +8320,9 @@ export default function DashboardProfesseur() {
             <div style={{ padding: '16px 24px', borderTop: `1px solid ${COULEURS.gris200}`, display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0 }}>
               <button disabled={savingDevoir} onClick={() => { setModalCreer(false); setEditDevoirId(null); }} style={S.btnGhost}>Annuler</button>
               <button
-                disabled={!creerForm.titre || !creerForm.groupe_id || savingDevoir}
+                disabled={!creerForm.titre || !(creerForm.groupe_ids || []).length || savingDevoir}
                 onClick={sauvegarderDevoir}
-                style={{ ...S.btn(catActive.couleur), opacity: (!creerForm.titre || !creerForm.groupe_id || savingDevoir) ? 0.5 : 1, cursor: (!creerForm.titre || !creerForm.groupe_id || savingDevoir) ? 'not-allowed' : 'pointer' }}
+                style={{ ...S.btn(catActive.couleur), opacity: (!creerForm.titre || !(creerForm.groupe_ids || []).length || savingDevoir) ? 0.5 : 1, cursor: (!creerForm.titre || !(creerForm.groupe_ids || []).length || savingDevoir) ? 'not-allowed' : 'pointer' }}
               >
                 {savingDevoir ? '⏳ Envoi en cours…' : (editDevoirId ? '💾 Enregistrer les modifications' : `${catActive.icone} Créer ${catActive.lib.toLowerCase()}`)}
               </button>
@@ -8420,11 +8514,21 @@ export default function DashboardProfesseur() {
                           )}
                         </div>
                         <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+                          {/* Le lien Cloudinary brut répond 401 sur un .docx ou un .pdf —
+                              Cloudinary bloque la livraison publique des fichiers `raw`.
+                              Le coach recevait donc une page d'erreur sur la copie qu'il
+                              voulait corriger. Le relais signe la requête côté serveur. */}
                           {r.fichier_url && (
-                            <a href={r.fichier_url} target="_blank" rel="noreferrer"
-                              style={{ padding:'5px 10px', borderRadius:7, background:'#EFF6FF', color:'#1D4ED8', fontSize:11, fontWeight:700, textDecoration:'none', border:'1px solid #BFDBFE', display:'inline-flex', alignItems:'center', gap:4 }}>
-                              📥 Télécharger
-                            </a>
+                            <>
+                              <a href={urlOuvrir(r.fichier_url, r.fichier_nom)} target="_blank" rel="noreferrer"
+                                style={{ padding:'5px 10px', borderRadius:7, background:'#F0FDF4', color:'#15803D', fontSize:11, fontWeight:700, textDecoration:'none', border:'1px solid #BBF7D0', display:'inline-flex', alignItems:'center', gap:4 }}>
+                                👁 Consulter
+                              </a>
+                              <a href={urlTelecharger(r.fichier_url, r.fichier_nom)}
+                                style={{ padding:'5px 10px', borderRadius:7, background:'#EFF6FF', color:'#1D4ED8', fontSize:11, fontWeight:700, textDecoration:'none', border:'1px solid #BFDBFE', display:'inline-flex', alignItems:'center', gap:4 }}>
+                                📥 Télécharger
+                              </a>
+                            </>
                           )}
                           {r.contenu_texte && (
                             <button onClick={() => { setCorrectionModal({ devoir:d, rendu:r }); setCorrectionForm({ note: r.note ?? (r.statut==='en_retard'?'0':''), commentaire: r.commentaire_coach||'' }); }}
@@ -8588,7 +8692,13 @@ export default function DashboardProfesseur() {
                     <div style={{ fontWeight:700, color:COULEURS.navy, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rendu.fichier_nom || 'Fichier déposé'}</div>
                     <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:2 }}>Fichier soumis par l'apprenant</div>
                   </div>
-                  <a href={rendu.fichier_url} target="_blank" rel="noreferrer"
+                  {/* Même relais : « Consulter » ouvre dans l'onglet (en-tête `inline`),
+                      « Télécharger » enregistre. Sans lui, les deux menaient à un 401. */}
+                  <a href={urlOuvrir(rendu.fichier_url, rendu.fichier_nom)} target="_blank" rel="noreferrer"
+                    style={{ padding:'8px 16px', borderRadius:8, background:'#15803D', color:'#fff', fontSize:12, fontWeight:700, textDecoration:'none', flexShrink:0 }}>
+                    👁 Consulter
+                  </a>
+                  <a href={urlTelecharger(rendu.fichier_url, rendu.fichier_nom)}
                     style={{ padding:'8px 16px', borderRadius:8, background:'#1D4ED8', color:'#fff', fontSize:12, fontWeight:700, textDecoration:'none', flexShrink:0 }}>
                     📥 Télécharger
                   </a>

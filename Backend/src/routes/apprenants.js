@@ -14,6 +14,7 @@ import { enrichirPaiementsAvecTouchPoint } from "../utils/enrichirPaiementsTouch
 import { notifyRole, notifyUser, notifyOnboarding, ROLES_SUPERVISION_GLOBALE } from "../services/notifyRole.js";
 import { contexteMarquage, noterLectureEnCache, MOTIF } from "../services/lectureSequentielle.js";
 import { contenusAnnotesEl, contexteMarquageEl, MOTIF_EL } from "../services/lectureSequentielleElearning.js";
+import { estChronometre, echeanceComposition, compositionExpiree, dureeComposition } from "../services/minuteurDevoir.js";
 import { utilisateurDuJeton } from "../services/cacheAuth.js";
 import { photoValide } from "../utils/photoUrl.js";
 
@@ -1578,7 +1579,9 @@ router.get("/parent/enfant/:id/devoirs", async (req, res) => {
     const groupeId = auth.enfant.groupe_id;
     if (!groupeId) return res.json({ devoirs: [] });
     const [{ data: evals }, { data: rendus }] = await Promise.all([
-      supabase.from("evaluations_groupes").select("*").eq("groupe_id", groupeId).order("created_at", { ascending: false }),
+      /* `contains` : une évaluation peut viser plusieurs groupes, et `groupe_id` ne porte
+         que le premier. Le parent voyait donc moins de devoirs que son enfant. */
+      supabase.from("evaluations_groupes").select("*").contains("groupe_ids", [groupeId]).order("created_at", { ascending: false }),
       supabase.from("resultats_evaluations_groupes").select("*").eq("ga_id", req.params.id),
     ]);
     const rendusMap = {};
@@ -2730,7 +2733,11 @@ router.get("/mes-evaluations", async (req, res) => {
     const { data: evals } = await supabase
       .from("evaluations_groupes")
       .select("id, titre, type, categorie, type_rendu, instructions, questions, ressource_url, blocs, sur_toeic, duree_min, date_evaluation, heure_debut, date_ouverture, heure_ouverture, statut, created_at")
-      .eq("groupe_id", ga.groupe_id)
+      /* `contains` et non `eq` : depuis qu'une évaluation vise plusieurs groupes,
+         `groupe_id` ne porte que le premier. Filtrer dessus privait l'apprenant des
+         devoirs où son groupe n'arrivait pas en tête — une liste incomplète, sans rien
+         qui l'indique. */
+      .contains("groupe_ids", [ga.groupe_id])
       .in("statut", ga.statut === "archive" ? ["publie", "cloture"] : ["publie"])
       .order("date_evaluation", { ascending: false });
 
@@ -2800,6 +2807,69 @@ router.post("/upload-audio", (req, res) => {
 
 // POST /api/apprenants/evaluations/:evalId/soumettre
 // Accepte JSON (texte/QCM) OU multipart/form-data (fichier → Cloudinary)
+/**
+ * POST /api/apprenants/evaluations/:evalId/commencer — l'apprenant ouvre une composition.
+ *
+ * Démarre son chrono, ou rend l'échéance déjà en cours s'il avait commencé. Appelée à
+ * l'ouverture du panneau : c'est l'ouverture qui fait foi, pas la publication, sinon le
+ * temps serait écoulé avant d'avoir lu le sujet.
+ *
+ * IDEMPOTENT : rouvrir ne redémarre pas le compte à rebours. Sans cela, fermer puis
+ * rouvrir l'onglet rendrait le minuteur sans effet.
+ */
+router.post("/evaluations/:evalId/commencer", async (req, res) => {
+  try {
+    const bearer = req.headers.authorization?.replace("Bearer ", "").trim();
+    if (!bearer) return res.status(401).json({ error: "Non authentifié" });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(bearer);
+    if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
+
+    const { ga_id } = req.body || {};
+    if (!ga_id) return res.status(400).json({ error: "ga_id requis" });
+
+    const { data: eval0 } = await supabase
+      .from("evaluations_groupes").select("*").eq("id", req.params.evalId)
+      .eq("statut", "publie").maybeSingle();
+    if (!eval0) return res.status(404).json({ error: "Évaluation introuvable ou non publiée" });
+
+    if (!estChronometre(eval0)) {
+      return res.json({ chronometre: false, commence_at: null, echeance: null, expire: false });
+    }
+
+    const { data: existant } = await supabase
+      .from("resultats_evaluations_groupes")
+      .select("id, commence_at, statut")
+      .eq("evaluation_id", req.params.evalId).eq("ga_id", ga_id).maybeSingle();
+
+    let commenceAt = existant?.commence_at;
+    if (!commenceAt) {
+      commenceAt = new Date().toISOString();
+      /* `upsert` et non `insert` : la ligne peut déjà exister (brouillon, note posée
+         d'avance). On ne veut ni la dupliquer ni l'écraser. */
+      const { error } = await supabase.from("resultats_evaluations_groupes").upsert({
+        evaluation_id: req.params.evalId,
+        ga_id,
+        groupe_id:   eval0.groupe_id,
+        statut:      existant?.statut || "en_cours",
+        commence_at: commenceAt,
+      }, { onConflict: "evaluation_id,ga_id" });
+      if (error) throw error;
+    }
+
+    const fin = echeanceComposition(eval0, commenceAt);
+    res.json({
+      chronometre: true,
+      duree_min:   dureeComposition(eval0),
+      commence_at: commenceAt,
+      echeance:    fin ? fin.toISOString() : null,
+      expire:      compositionExpiree(eval0, commenceAt),
+    });
+  } catch (err) {
+    console.error("[evaluations/commencer]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/evaluations/:evalId/soumettre", (req, res) => {
   uploadRendu.single("fichier")(req, res, async (multerErr) => {
     if (multerErr) return res.status(400).json({ error: multerErr.message });
@@ -2815,6 +2885,9 @@ router.post("/evaluations/:evalId/soumettre", (req, res) => {
       // ga_id peut arriver comme champ JSON ou FormData
       const ga_id = body.ga_id;
       if (!ga_id) return res.status(400).json({ error: "ga_id requis" });
+
+      /* Le minuteur de composition est vérifié plus bas, une fois l'évaluation chargée :
+         c'est elle qui porte `duree_composition_min`. */
 
       // Récupérer l'évaluation
       const { data: eval0 } = await supabase
@@ -2856,10 +2929,36 @@ router.post("/evaluations/:evalId/soumettre", (req, res) => {
       // rendu est figé (l'apprenant ne doit plus pouvoir écraser une note déjà donnée).
       const { data: resultatExistant } = await supabase
         .from("resultats_evaluations_groupes")
-        .select("statut, fichier_url, fichier_nom")
+        .select("statut, fichier_url, fichier_nom, commence_at")
         .eq("evaluation_id", evalId).eq("ga_id", ga_id).maybeSingle();
       if (resultatExistant?.statut === "corrige") {
         return res.status(403).json({ error: "Ce devoir a déjà été corrigé par votre coach - vous ne pouvez plus le modifier.", code: "DEJA_CORRIGE" });
+      }
+
+      /* ── LE MINUTEUR EST VÉRIFIÉ ICI, ET C'EST CE QUI LE REND RÉEL ──
+         Le compte à rebours du navigateur donne l'expérience ; ce contrôle donne la règle.
+         Sans lui, il suffirait de laisser l'onglet ouvert, de changer l'horloge de sa
+         machine ou d'appeler la route directement pour composer sans limite.
+         Le dépôt automatique envoyé PAR le navigateur à l'expiration est accepté
+         (`auto_minuteur`) : il arrive forcément une fraction de seconde après l'échéance,
+         et le refuser perdrait précisément la copie qu'il vient sauver. */
+      if (estChronometre(eval0)) {
+        if (!resultatExistant?.commence_at) {
+          return res.status(409).json({
+            error: "Cette évaluation est chronométrée : ouvrez-la d'abord pour démarrer votre temps de composition.",
+            code: "COMPOSITION_NON_COMMENCEE",
+          });
+        }
+        const envoiAutomatique = body.auto_minuteur === "1" || body.auto_minuteur === true;
+        if (!envoiAutomatique && compositionExpiree(eval0, resultatExistant.commence_at)) {
+          const fin = echeanceComposition(eval0, resultatExistant.commence_at);
+          return res.status(403).json({
+            error: `Votre temps de composition (${dureeComposition(eval0)} min) est écoulé depuis le `
+                 + `${fin.toLocaleString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. `
+                 + `Ce que vous aviez écrit a été transmis à votre coach.`,
+            code: "COMPOSITION_EXPIREE",
+          });
+        }
       }
 
       // reponses_qcm peut arriver comme string JSON via FormData

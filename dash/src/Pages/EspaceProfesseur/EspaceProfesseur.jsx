@@ -294,6 +294,11 @@ const BLOCS_PAR_TYPE = {
 };
 
 /** Les blocs autorisés pour un type donné - tout, si le type est inconnu. */
+/* Les groupes visés par une ÉVALUATION. Repli sur `groupe_id` pour celles créées avant
+   le multi-groupes, qui ne portent que lui. */
+const groupesDeLEval = (ev) =>
+  (ev?.groupe_ids?.length ? ev.groupe_ids : (ev?.groupe_id ? [ev.groupe_id] : []));
+
 const blocsAutorises = (typeContenu) =>
   BLOCS_PAR_TYPE[typeContenu] || Object.keys(BLOCK_TYPES);
 
@@ -885,7 +890,7 @@ export default function EspaceProfesseur() {
 
   // évaluations
   const [showCreateEvalModal, setShowCreateEvalModal] = useState(false);
-  const [evalForm, setEvalForm] = useState({ groupe_id:"", titre:"", date_limite:"", heure_limite:"23:59", date_ouverture:"", heure_ouverture:"", type:"qcm", categorie:"devoir", typeRendu:"fichier", surTOEIC:false, dureeMin:60, questions:[], ressourceUrl:"", instructions:"", notifierEleves:true, envoyerEmail:false, blocs:[] });
+  const [evalForm, setEvalForm] = useState({ groupe_id:"", groupe_ids:[], dureeComposition:0, titre:"", date_limite:"", heure_limite:"23:59", date_ouverture:"", heure_ouverture:"", type:"qcm", categorie:"devoir", typeRendu:"fichier", surTOEIC:false, dureeMin:60, questions:[], ressourceUrl:"", instructions:"", notifierEleves:true, envoyerEmail:false, blocs:[] });
   const [evalQForm, setEvalQForm] = useState({ texte:"", options:["","","",""], correct:"", media:"" });
   const [evalBlocEditing, setEvalBlocEditing] = useState(null); // id du bloc en cours d'édition dans "Créer évaluation"
   const [uploadExerciceEnCours, setUploadExerciceEnCours] = useState(false);
@@ -1733,7 +1738,24 @@ export default function EspaceProfesseur() {
                 .catch(() => [])
             )
           ).then(results => {
-            setEvaluations(results.flat());
+            /* ── DÉDOUBLONNER ET RECOLLER LES GROUPES ──
+               On interroge une fois par groupe, et chaque réponse étiquette l'évaluation
+               du nom du groupe interrogé. Une évaluation donnée à deux groupes revenait
+               donc DEUX FOIS, chaque copie ne portant qu'un seul de ses destinataires :
+               le coach croyait qu'elle n'avait été attribuée qu'à l'un d'eux.
+               On garde une entrée par évaluation, dont `groupe_nom` liste TOUS les groupes
+               qui l'ont réellement reçue — c'est `groupe_ids` qui fait foi, l'ordre des
+               requêtes n'ayant aucun sens pédagogique. */
+            const parId = new Map();
+            results.flat().forEach(ev => {
+              if (!parId.has(ev.id)) parId.set(ev.id, ev);
+            });
+            const nomDe = (gid) => grps.find(g => g.id === gid)?.nom;
+            setEvaluations([...parId.values()].map(ev => {
+              const ids = ev.groupe_ids?.length ? ev.groupe_ids : (ev.groupe_id ? [ev.groupe_id] : []);
+              const noms = ids.map(nomDe).filter(Boolean);
+              return { ...ev, groupe_ids_resolus: ids, groupe_nom: noms.join(", ") || ev.groupe_nom || "—" };
+            }));
             setEvalsLoading(false);
           });
         }
@@ -1814,8 +1836,10 @@ export default function EspaceProfesseur() {
     if (sousOngletEval !== "notes") return;
     const token = localStorage.getItem("coach_token") || localStorage.getItem("admin_token");
     if (!token) return;
+    /* L'évaluation est retenue si elle CONCERNE le groupe filtré, même quand il n'en est
+       pas le premier destinataire. */
     const evalsCibles = evalClasseFiltre
-      ? evaluations.filter(e => e.groupe_id === evalClasseFiltre)
+      ? evaluations.filter(e => groupesDeLEval(e).includes(evalClasseFiltre))
       : evaluations;
     if (evalsCibles.length === 0) { setNotesData([]); return; }
     setNotesDataLoading(true);
@@ -2983,11 +3007,15 @@ export default function EspaceProfesseur() {
   /* ── CRÉER / MODIFIER UNE ÉVALUATION ── */
   const sauvegarderEval = async (publierDirectement = false) => {
     if (!evalForm.titre.trim()) { toast.error("Titre requis"); return; }
-    const groupeId = evalForm.groupe_id || groupes[0]?.id;
+    const groupeId  = evalForm.groupe_id || groupes[0]?.id;
+    /* Les destinataires partent dans le corps ; l'URL garde le groupe courant, qui reste
+       celui depuis lequel on travaille (listes de copies, saisie des notes). */
+    const groupeIds = evalForm.groupe_ids?.length ? evalForm.groupe_ids : (groupeId ? [groupeId] : []);
     if (!groupeId) { toast.error("Sélectionnez un groupe"); return; }
     const token = localStorage.getItem("coach_token") || localStorage.getItem("admin_token");
     const body = {
       titre:          evalForm.titre.trim(),
+      groupe_ids:     groupeIds,
       // Les 3 catégories partagent le même contenu - seule la vraie catégorie (devoir/
       // exercice/evaluation) est envoyée, plus jamais collapsée en "evaluation" : le Backend
       // s'en sert pour le bonus de gamification réservé aux devoirs notés ≥ 80 % (groupes.js).
@@ -3011,6 +3039,8 @@ export default function EspaceProfesseur() {
       blocs:          evalForm.typeRendu === "texte" ? evalForm.blocs : [],
       sur_toeic:      !!evalForm.surTOEIC,
       duree_min:      Number(evalForm.dureeMin) || 60,
+      // 0 = aucun minuteur. Le serveur l'ignore hors rendu « texte ».
+      duree_composition_min: Number(evalForm.dureeComposition) > 0 ? Number(evalForm.dureeComposition) : null,
       date_evaluation:evalForm.date_limite    || null,
       heure_debut:    evalForm.heure_limite   || null,
       statut:         publierDirectement ? "publie" : "brouillon",
@@ -3036,7 +3066,7 @@ export default function EspaceProfesseur() {
     } catch { toast.error("Erreur réseau"); }
     setShowCreateEvalModal(false);
     setEvalEditId(null);
-    setEvalForm({ groupe_id:groupes[0]?.id||"", titre:"", date_limite:"", heure_limite:"23:59", date_ouverture:"", heure_ouverture:"", type:"qcm", categorie:"devoir", typeRendu:"fichier", surTOEIC:false, dureeMin:60, questions:[], ressourceUrl:"", instructions:"", notifierEleves:true, envoyerEmail:false, blocs:[] });
+    setEvalForm({ groupe_id:groupes[0]?.id||"", groupe_ids:groupes[0]?.id?[groupes[0].id]:[], dureeComposition:0, titre:"", date_limite:"", heure_limite:"23:59", date_ouverture:"", heure_ouverture:"", type:"qcm", categorie:"devoir", typeRendu:"fichier", surTOEIC:false, dureeMin:60, questions:[], ressourceUrl:"", instructions:"", notifierEleves:true, envoyerEmail:false, blocs:[] });
     setEvalQForm({ texte:"", options:["","","",""], correct:"", media:"" });
     setEvalBlocEditing(null);
   };
@@ -3088,6 +3118,9 @@ export default function EspaceProfesseur() {
     setEvalEditId(ev.id);
     setEvalForm({
       groupe_id:          ev.groupe_id    || groupes[0]?.id || "",
+      // Repli sur `groupe_id` pour les évaluations créées avant le multi-groupes.
+      groupe_ids:         ev.groupe_ids?.length ? ev.groupe_ids : (ev.groupe_id ? [ev.groupe_id] : []),
+      dureeComposition:   ev.duree_composition_min || 0,
       titre:              ev.titre        || "",
       date_limite:        ev.date_evaluation || "",
       heure_limite:       ev.heure_debut  || "23:59",
@@ -4726,7 +4759,7 @@ const messagesFiltres = useMemo(() => {
                       {/* Header */}
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
                         <h2 style={tabTitle}>Gestion des devoirs</h2>
-                        <button style={btnPrimary} onClick={()=>{ setEvalEditId(null); setEvalForm({ groupe_id:groupes[0]?.id||"", titre:"", date_limite:"", heure_limite:"23:59", date_ouverture:"", heure_ouverture:"", type:"qcm", categorie:"devoir", typeRendu:"fichier", surTOEIC:false, dureeMin:60, questions:[], ressourceUrl:"", instructions:"", notifierEleves:true, envoyerEmail:false, blocs:[] }); setEvalBlocEditing(null); setShowCreateEvalModal(true); }}>
+                        <button style={btnPrimary} onClick={()=>{ setEvalEditId(null); setEvalForm({ groupe_id:groupes[0]?.id||"", groupe_ids:groupes[0]?.id?[groupes[0].id]:[], dureeComposition:0, titre:"", date_limite:"", heure_limite:"23:59", date_ouverture:"", heure_ouverture:"", type:"qcm", categorie:"devoir", typeRendu:"fichier", surTOEIC:false, dureeMin:60, questions:[], ressourceUrl:"", instructions:"", notifierEleves:true, envoyerEmail:false, blocs:[] }); setEvalBlocEditing(null); setShowCreateEvalModal(true); }}>
                           + Créer un devoir / évaluation
                         </button>
                       </div>
@@ -5163,10 +5196,18 @@ const messagesFiltres = useMemo(() => {
                                       {res.contenu_texte}
                                     </div>
                                   )}
+                                  {/* `urlDocument` : l'URL Cloudinary brute répond 401 sur
+                                      un .pdf ou un .docx — le coach recevait une page
+                                      d'erreur sur la copie qu'il devait corriger. */}
                                   {res.fichier_url && (
-                                    <a href={res.fichier_url} target="_blank" rel="noreferrer" style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, color:BET, fontWeight:600, textDecoration:"none", background:`${BET}10`, padding:"6px 12px", borderRadius:8, marginBottom:10 }}>
-                                      📎 {res.fichier_nom || "Voir le fichier rendu"}
-                                    </a>
+                                    <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+                                      <a href={urlDocument(res.fichier_url, { nom: res.fichier_nom, inline: true })} target="_blank" rel="noreferrer" style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, color:BET, fontWeight:600, textDecoration:"none", background:`${BET}10`, padding:"6px 12px", borderRadius:8 }}>
+                                        👁 {res.fichier_nom || "Consulter la copie"}
+                                      </a>
+                                      <a href={urlDocument(res.fichier_url, { nom: res.fichier_nom })} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, color:"#1D4ED8", fontWeight:600, textDecoration:"none", background:"#EFF6FF", padding:"6px 12px", borderRadius:8 }}>
+                                        📥 Télécharger
+                                      </a>
+                                    </div>
                                   )}
                                   {res.reponses_qcm && Object.keys(res.reponses_qcm).length > 0 && (
                                     <div style={{ fontSize:12, color:"#6b7280", background:"#f8fafc", borderRadius:8, padding:"10px 12px", border:"1px solid #e2e8f0", marginBottom:10 }}>
@@ -10284,29 +10325,59 @@ const messagesFiltres = useMemo(() => {
                         value={evalForm.titre} onChange={e=>setEvalForm(f=>({...f,titre:e.target.value}))}/>
                     </div>
 
-                    {/* Groupe */}
-                    <div>
-                      <label style={LBL}>Groupe *</label>
-                      <select style={{ ...INP,width:"100%" }} value={evalForm.groupe_id} onChange={e=>setEvalForm(f=>({...f,groupe_id:e.target.value}))}>
-                        <option value="">- Sélectionner -</option>
-                        {groupes.filter(g=>g.statut!=="archive"&&g.statut!=="cloture").map(g=><option key={g.id} value={g.id}>{g.nom}</option>)}
-                      </select>
-                      {(() => {
-                        const groupeSel = groupes.find(g => g.id === evalForm.groupe_id);
-                        if (!groupeSel) return null;
-                        return (
-                          <div style={{ marginTop:8, background:"#f8fafc", border:"1px solid #e5e7eb", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                            <span style={{ fontSize:13, fontWeight:700, color:"#0f172a" }}>👥 {groupeSel.nom}</span>
-                            {groupeSel.niveau && (
-                              <span style={{ fontSize:11.5, padding:"2px 9px", borderRadius:20, background:"#E0F2FE", color:"#0E7490", fontWeight:700 }}>🎯 {groupeSel.niveau}</span>
-                            )}
-                            <span style={{ fontSize:12, color:"#6b7280" }}>👩‍🎓 {groupeSel.nb_apprenants ?? 0} apprenant{(groupeSel.nb_apprenants ?? 0) > 1 ? "s" : ""}</span>
-                            <span style={{ fontSize:11.5, padding:"2px 9px", borderRadius:20, background:groupeSel.statut==="actif"?"#D1FAE5":"#f1f5f9", color:groupeSel.statut==="actif"?"#065F46":"#6b7280", fontWeight:700 }}>
-                              {groupeSel.statut==="actif" ? "✓ Actif" : groupeSel.statut || "-"}
-                            </span>
-                          </div>
-                        );
-                      })()}
+                    {/* ── GROUPES DESTINATAIRES ──
+                        Une liste déroulante ne laissait choisir QU'UN groupe. Un coach qui
+                        donne le même devoir à deux de ses classes devait le créer deux
+                        fois : deux consignes, deux fichiers, et deux corrections le jour
+                        où une faute s'y glisse. On coche autant de groupes qu'on veut.
+                        Chaque ligne porte son effectif — c'est ce qui dit combien de copies
+                        vont arriver à corriger. */}
+                    <div style={{ gridColumn:"1/-1" }}>
+                      <label style={LBL}>
+                        Groupes destinataires *
+                        {(evalForm.groupe_ids || []).length > 0 && (
+                          <span style={{ color:catActive.couleur, marginLeft:6 }}>
+                            ({evalForm.groupe_ids.length} groupe{evalForm.groupe_ids.length>1?"s":""} ·{" "}
+                            {groupes.filter(g=>evalForm.groupe_ids.includes(g.id)).reduce((t,g)=>t+(g.nb_apprenants??0),0)} apprenant(s))
+                          </span>
+                        )}
+                      </label>
+                      {groupes.filter(g=>g.statut!=="archive"&&g.statut!=="cloture").length === 0 ? (
+                        <div style={{ fontSize:12.5, color:"#9ca3af", padding:"8px 0" }}>Aucun groupe actif ne vous est assigné.</div>
+                      ) : (
+                        <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                          {groupes.filter(g=>g.statut!=="archive"&&g.statut!=="cloture").map(g=>{
+                            const choisi = (evalForm.groupe_ids || []).includes(g.id);
+                            return (
+                              <div key={g.id}
+                                onClick={()=>setEvalForm(f=>{
+                                  const ids = f.groupe_ids || [];
+                                  const suivants = ids.includes(g.id) ? ids.filter(x=>x!==g.id) : [...ids, g.id];
+                                  /* `groupe_id` suit le premier coché : c'est le groupe sous
+                                     lequel la route est appelée, et plusieurs écrans le
+                                     lisent encore. */
+                                  return { ...f, groupe_ids: suivants, groupe_id: suivants[0] || "" };
+                                })}
+                                style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:10, cursor:"pointer",
+                                  border:`2px solid ${choisi?catActive.couleur:"#e5e7eb"}`,
+                                  background: choisi?catActive.couleur+"10":"#fff", transition:"all .12s" }}>
+                                <span style={{ width:18, height:18, borderRadius:5, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+                                  border:`2px solid ${choisi?catActive.couleur:"#e5e7eb"}`, background: choisi?catActive.couleur:"#fff",
+                                  color:"#fff", fontSize:12, fontWeight:800 }}>{choisi?"✓":""}</span>
+                                <span style={{ fontSize:13, fontWeight:700, color: choisi?catActive.couleur:"#0f172a" }}>👥 {g.nom}</span>
+                                {g.niveau && <span style={{ fontSize:11, padding:"2px 9px", borderRadius:20, background:"#E0F2FE", color:"#0E7490", fontWeight:700 }}>🎯 {g.niveau}</span>}
+                                <span style={{ fontSize:12, color:"#6b7280", marginLeft:"auto" }}>
+                                  👩‍🎓 {g.nb_apprenants ?? 0} apprenant{(g.nb_apprenants ?? 0)>1?"s":""}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div style={{ fontSize:11, color:"#9ca3af", marginTop:6, lineHeight:1.5 }}>
+                        Une seule consigne : la corriger plus tard la corrigera pour tous ces groupes.
+                        Chaque apprenant rend sa propre copie, et vous corrigez groupe par groupe.
+                      </div>
                     </div>
 
                     {/* Date limite */}
@@ -10330,6 +10401,37 @@ const messagesFiltres = useMemo(() => {
                       <label style={LBL}>🕐 Heure d'ouverture</label>
                       <input type="time" style={INP} value={evalForm.heure_ouverture} onChange={e=>setEvalForm(f=>({...f,heure_ouverture:e.target.value}))}/>
                     </div>
+
+                    {/* ── MINUTEUR DE COMPOSITION ──
+                        La date limite borne le DÉPÔT, pas la DURÉE de l'épreuve : sans
+                        minuteur, une rédaction « à rendre pour le 20 » se travaille six
+                        jours, dictionnaire ouvert. Le chrono démarre à la première
+                        ouverture par l'apprenant, pas à la publication — sinon il serait
+                        écoulé avant d'avoir lu le sujet.
+                        Réservé au rendu EN TEXTE, et « Aucun » par défaut : c'est une
+                        option, pas une règle imposée. */}
+                    {evalForm.typeRendu === "texte" && (
+                      <div style={{ gridColumn:"1/-1" }}>
+                        <label style={LBL}>⏱ Temps de composition</label>
+                        <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+                          {[{v:0,l:"Aucun"},{v:30,l:"30 min"},{v:60,l:"1 h"},{v:120,l:"2 h"},{v:180,l:"3 h"}].map(o=>{
+                            const actif = (evalForm.dureeComposition||0) === o.v;
+                            return (
+                              <button key={o.v} onClick={()=>setEvalForm(f=>({...f,dureeComposition:o.v}))}
+                                style={{ padding:"7px 16px", borderRadius:99, fontSize:12.5, fontWeight:700, cursor:"pointer",
+                                  border:`2px solid ${actif?catActive.couleur:"#e5e7eb"}`,
+                                  background: actif?catActive.couleur+"14":"#fff",
+                                  color: actif?catActive.couleur:"#6b7280" }}>{o.l}</button>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontSize:11, color:"#9ca3af", marginTop:6, lineHeight:1.5 }}>
+                          {evalForm.dureeComposition > 0
+                            ? "Le compte à rebours démarre quand l'apprenant ouvre l'épreuve. À zéro, sa copie vous est envoyée en l'état — ce qui n'a pas été fait vaut zéro, et vous tranchez la note finale."
+                            : "Sans minuteur, l'apprenant dispose de tout le temps jusqu'à la date limite."}
+                        </div>
+                      </div>
+                    )}
 
                   </div>
 
@@ -10521,12 +10623,12 @@ const messagesFiltres = useMemo(() => {
                   </label>
                   <div style={{ display:"flex",gap:10,marginLeft:"auto" }}>
                   <button onClick={fermerModal} style={btnSecondary}>Annuler</button>
-                  <button onClick={()=>sauvegarderEval(false)} disabled={!evalForm.titre||!evalForm.groupe_id}
-                    style={{ ...btnPrimary,background:catActive.couleur,opacity:(!evalForm.titre||!evalForm.groupe_id)?0.5:1,cursor:(!evalForm.titre||!evalForm.groupe_id)?"not-allowed":"pointer" }}>
+                  <button onClick={()=>sauvegarderEval(false)} disabled={!evalForm.titre||!(evalForm.groupe_ids||[]).length}
+                    style={{ ...btnPrimary,background:catActive.couleur,opacity:(!evalForm.titre||!(evalForm.groupe_ids||[]).length)?0.5:1,cursor:(!evalForm.titre||!(evalForm.groupe_ids||[]).length)?"not-allowed":"pointer" }}>
                     {catActive.icone} {evalEditId?"Enregistrer":"Créer"} {catActive.lib.toLowerCase()}
                   </button>
-                  <button onClick={()=>sauvegarderEval(true)} disabled={!evalForm.titre||!evalForm.groupe_id}
-                    style={{ padding:"9px 18px",borderRadius:9,border:"none",background:!evalForm.titre||!evalForm.groupe_id?"#e5e7eb":"#22c55e",color:"#fff",fontSize:13,fontWeight:700,cursor:!evalForm.titre||!evalForm.groupe_id?"not-allowed":"pointer",opacity:!evalForm.titre||!evalForm.groupe_id?0.5:1 }}>
+                  <button onClick={()=>sauvegarderEval(true)} disabled={!evalForm.titre||!(evalForm.groupe_ids||[]).length}
+                    style={{ padding:"9px 18px",borderRadius:9,border:"none",background:!evalForm.titre||!(evalForm.groupe_ids||[]).length?"#e5e7eb":"#22c55e",color:"#fff",fontSize:13,fontWeight:700,cursor:!evalForm.titre||!(evalForm.groupe_ids||[]).length?"not-allowed":"pointer",opacity:!evalForm.titre||!(evalForm.groupe_ids||[]).length?0.5:1 }}>
                     🚀 Créer & publier
                   </button>
                   </div>

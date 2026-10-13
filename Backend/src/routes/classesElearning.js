@@ -88,9 +88,12 @@ async function verifierQuotaClasse(classeId) {
       message: `Tentative d'ajout d'un bénéficiaire dans la classe "${classe.nom}" alors qu'elle est déjà pleine (${classe.capacite_max}/${classe.capacite_max}).`,
       meta: { classe_id: classeId, capacite_max: classe.capacite_max },
     };
+    /* Le second appel sort la direction des destinataires. Sans cela elle recevait DEUX
+       fois le même texte — `notifyRole` l'ajoute à chaque appel —, et une cloche qui
+       répète la même ligne cesse d'être lue. */
     await Promise.allSettled([
       notifyRole(ROLES_QUOTA.pa, notif),
-      notifyRole(ROLES_QUOTA.onboarding, notif),
+      notifyRole(ROLES_QUOTA.onboarding, { ...notif, supervision: false }),
     ]);
     return { bloque: true, message };
   }
@@ -127,7 +130,7 @@ async function verifierQuotaClasse(classeId) {
         };
         await Promise.allSettled([
           notifyRole(ROLES_QUOTA.pa, notif),
-          notifyRole(ROLES_QUOTA.onboarding, notif),
+          notifyRole(ROLES_QUOTA.onboarding, { ...notif, supervision: false }),
         ]);
         return { bloque: true, message };
       }
@@ -800,7 +803,12 @@ router.post("/", authenticateAdmin, requirePermission("classes","create"), async
         meta:    { classe_id: data.id, classe_nom: data.nom },
       }).catch(err => console.error("[classes-elearning] notifyUser coach", err.message));
 
+      /* `supervision: false` ici et plus bas : la direction reçoit le message FACTUEL de
+         la supervision (« voici une classe, voici son coach »), une seule fois. Sans cela
+         elle recevait deux notifications pour une seule classe créée — celle du PA puis
+         celle de la supervision —, dont une qui ne lui était pas adressée. */
       await notifyRole(ROLES_QUOTA.pa, {
+        supervision: false,
         type:    "success",
         titre:   `Nouvelle classe créée - ${data.nom}`,
         message: `${creeePar} a créé la classe "${data.nom}"${contexteClasse}, avec ${data.coach_nom || "un coach"} comme coach.${debutLe}`,
@@ -808,6 +816,7 @@ router.post("/", authenticateAdmin, requirePermission("classes","create"), async
       }).catch(err => console.error("[classes-elearning] notifyRole PA", err.message));
     } else {
       await notifyRole(ROLES_QUOTA.pa, {
+        supervision: false,
         type:    "warning",
         titre:   `⚠️ Classe sans coach - ${data.nom}`,
         message: `${creeePar} a créé la classe "${data.nom}"${contexteClasse}, sans coach. À pourvoir pour que le programme démarre.${debutLe}`,
@@ -971,7 +980,10 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes","update"), a
         meta:    { classe_id: data.id, classe_nom: data.nom, coach_id: payload.coach_id },
       }).catch(err => console.error("[classes-elearning PATCH] notifyRole supervision", err.message));
 
+      /* `supervision: false` : la direction a déjà reçu le message de la supervision
+         ci-dessus. Sans cela, une seule assignation de coach lui en envoyait TROIS. */
       await notifyRole(ROLES_QUOTA.onboarding, {
+        supervision: false,
         type:    "success",
         titre:   remplacement
           ? `Coach remplacé - ${data.nom}`
@@ -982,7 +994,10 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes","update"), a
         meta:    { classe_id: data.id, classe_nom: data.nom },
       }).catch(err => console.error("[classes-elearning PATCH] notifyRole onboarding", err.message));
 
+      /* `supervision: false` : la direction a déjà reçu le message de la supervision
+         ci-dessus. Sans cela, une seule assignation de coach lui en envoyait TROIS. */
       await notifyRole(ROLES_ASSISTANTE, {
+        supervision: false,
         type:    "info",
         titre:   remplacement
           ? `🔁 Coach remplacé - ${data.nom}`

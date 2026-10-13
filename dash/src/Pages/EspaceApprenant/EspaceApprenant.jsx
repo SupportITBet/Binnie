@@ -928,6 +928,95 @@ export default function EspaceApprenant() {
   const stopRecording = (blocId) => mediaRecordersRef.current[blocId]?.recorder?.stop();
   const fmtRecTime = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
   const [submitFichier, setSubmitFichier] = useState(null);
+
+  /* ── LE DEVOIR EN COURS SURVIT AU RECHARGEMENT ──
+     Actualiser la page refermait le panneau et effaçait tout ce qui avait été saisi : un
+     apprenant à mi-chemin d'une composition perdait son travail sur un simple F5, un
+     réseau qui coupe ou un téléphone qui met l'onglet en veille. Le rendu n'est envoyé
+     qu'à la soumission — il n'y avait aucun filet entre l'ouverture et l'envoi.
+
+     `sessionStorage` et non `localStorage` : le brouillon appartient à CETTE session de
+     travail. Le retrouver des jours plus tard, sur une évaluation peut-être déjà rendue ou
+     expirée, créerait plus de confusion qu'il n'en éviterait.
+
+     Le fichier choisi ne peut pas être conservé — un objet `File` n'est pas sérialisable,
+     et aucun navigateur n'autorise à repeupler un `<input type="file">`. On le dit à la
+     réouverture plutôt que de laisser croire qu'il est toujours joint. */
+  /* ── LE MINUTEUR DE COMPOSITION ──
+     L'échéance vient du SERVEUR et n'est jamais calculée ici : le navigateur ne fait que
+     l'afficher et déclencher l'envoi à zéro. Un chrono calculé localement se contournerait
+     en changeant l'horloge de sa machine ou en rouvrant dans un autre onglet. */
+  const [compo, setCompo] = useState(null); // { echeance, duree_min, chronometre }
+  const autoEnvoiFait = useRef(false);
+
+  const CLE_BROUILLON = `bet_devoir_en_cours_dash_${espaceInfo?.profil?.id || "anon"}`;
+  const brouillonRestaure = useRef(false);
+  const [fichierAJoindreDeNouveau, setFichierAJoindreDeNouveau] = useState(false);
+
+  useEffect(() => {
+    try {
+      const b = JSON.parse(sessionStorage.getItem(CLE_BROUILLON) || "null");
+      if (!b?.devoirId) return;
+      setSubmitTexte(b.texte || "");
+      setSubmitQcm(b.qcm || {});
+      setSubmitBlocs(b.blocs || {});
+      setFichierAJoindreDeNouveau(!!b.avaitUnFichier);
+      brouillonRestaure.current = b.devoirId;
+    } catch { /* brouillon illisible : on repart à zéro plutôt que de planter */ }
+  }, [CLE_BROUILLON]);
+
+  /* On rouvre l'OBJET, pas un identifiant : le panneau lit ses consignes, sa date limite
+     et ses blocs. Une évaluation entre-temps corrigée n'est pas rouverte — le brouillon
+     n'a plus d'objet, et le rouvrir enverrait l'apprenant sur un écran qu'il ne peut
+     plus valider. */
+  useEffect(() => {
+    const id = brouillonRestaure.current;
+    if (!id || devoirOuvert || !mesEvals.length) return;
+    const d = mesEvals.find(x => x.id === id);
+    brouillonRestaure.current = null;
+    if (!d || d.rendu?.statut === "corrige") return;
+    setDevoirOuvert(d);
+  }, [mesEvals, devoirOuvert]);
+
+  /* Enregistré à chaque frappe : quelques kilo-octets en mémoire du navigateur, sans
+     commune mesure avec ce que ça évite. */
+  useEffect(() => {
+    try {
+      if (!devoirOuvert) { sessionStorage.removeItem(CLE_BROUILLON); return; }
+      sessionStorage.setItem(CLE_BROUILLON, JSON.stringify({
+        devoirId: devoirOuvert.id,
+        texte: submitTexte,
+        qcm: submitQcm,
+        blocs: submitBlocs,
+        avaitUnFichier: !!submitFichier,
+      }));
+    } catch { /* quota plein ou stockage refusé : le brouillon est un confort, pas un dû */ }
+  }, [devoirOuvert, submitTexte, submitQcm, submitBlocs, submitFichier, CLE_BROUILLON]);
+
+  /* Démarre (ou retrouve) le chrono dès que le panneau s'ouvre. Idempotent côté serveur :
+     rouvrir ne relance pas le compte à rebours — sinon fermer puis rouvrir l'onglet
+     rendrait le minuteur sans effet. */
+  useEffect(() => {
+    const evalId = devoirOuvert?._evalId || devoirOuvert?.id;
+    if (!evalId) { setCompo(null); autoEnvoiFait.current = false; return; }
+    let vivant = true;
+    (async () => {
+      try {
+        const token = localStorage.getItem("user_token");
+        // Même source que partout ailleurs dans cet écran : l'inscription au groupe.
+        const gid = espaceInfo?.groupe?.id;
+        if (!token || !gid) return;
+        const r = await fetch(`${API_URL}/api/apprenants/evaluations/${evalId}/commencer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ ga_id: gid }),
+        });
+        if (!r.ok || !vivant) return;
+        setCompo(await r.json());
+      } catch { /* hors ligne : le serveur refusera un dépôt tardif de toute façon */ }
+    })();
+    return () => { vivant = false; };
+  }, [devoirOuvert?._evalId, devoirOuvert?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitErreur, setSubmitErreur] = useState("");
   const [nowTick, setNowTick] = useState(new Date());
@@ -5038,10 +5127,15 @@ export default function EspaceApprenant() {
                 return j>0 ? `${j}j ${fmt2(h)}:${fmt2(m)}:${fmt2(s)}` : `${fmt2(h)}:${fmt2(m)}:${fmt2(s)}`;
               }
 
-              async function soumettreDevoir(d) {
+              /* `auto` = envoi déclenché par le minuteur, pas par l'apprenant. Pas de
+                 confirmation à demander à quelqu'un dont le temps vient d'expirer, et
+                 l'envoi part même incomplet : c'est précisément cette copie qu'il sauve.
+                 Le serveur le reconnaît (`auto_minuteur`) et l'accepte malgré l'échéance
+                 franchie d'une fraction de seconde. */
+              async function soumettreDevoir(d, auto = false) {
                 if (submitLoading) return;
-                if (!gaId) { await alerte("Impossible de soumettre : identifiant groupe manquant", { titre: "Erreur", danger: true }); return; }
-                if (!(await confirm("Vous pourrez encore la modifier ou l'annuler tant que votre coach ne l'a pas corrigée.", { titre: "Envoyer ce devoir ?", confirmLabel: "✅ Envoyer", danger: false }))) return;
+                if (!gaId) { if (!auto) await alerte("Impossible de soumettre : identifiant groupe manquant", { titre: "Erreur", danger: true }); return; }
+                if (!auto && !(await confirm("Vous pourrez encore la modifier ou l'annuler tant que votre coach ne l'a pas corrigée.", { titre: "Envoyer ce devoir ?", confirmLabel: "✅ Envoyer", danger: false }))) return;
                 setSubmitLoading(true); setSubmitErreur("");
                 try {
                   const token = localStorage.getItem("user_token");
@@ -5055,12 +5149,13 @@ export default function EspaceApprenant() {
                     if (submitTexte.trim()) fd.append("contenu_texte", submitTexte.trim());
                     if (Object.keys(submitQcm).length) fd.append("reponses_qcm", JSON.stringify(submitQcm));
                     if (Object.keys(submitBlocs).length) fd.append("reponses_blocs", JSON.stringify(submitBlocs));
+                    if (auto) fd.append("auto_minuteur", "1");
                     resp = await fetch(url, { method:"POST", headers:{ Authorization:`Bearer ${token}` }, body: fd });
                   } else {
                     resp = await fetch(url, {
                       method:"POST",
                       headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-                      body: JSON.stringify({ ga_id: gaId, contenu_texte: submitTexte.trim(), reponses_qcm: submitQcm, reponses_blocs: submitBlocs }),
+                      body: JSON.stringify({ ga_id: gaId, contenu_texte: submitTexte.trim(), reponses_qcm: submitQcm, reponses_blocs: submitBlocs, ...(auto ? { auto_minuteur: true } : {}) }),
                     });
                   }
                   const json = await resp.json();
@@ -5270,7 +5365,7 @@ export default function EspaceApprenant() {
                     if (isFichier && !hasQcm) return (
                       <>
                         <div onClick={fermer} style={{ position:"fixed", inset:0, background:"rgba(10,18,35,0.6)", zIndex:1298, backdropFilter:"blur(3px)" }} />
-                        <div style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(92vw,720px)", background:"#fff", zIndex:1299, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
+                        <div style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(92vw,870px)", background:"#fff", zIndex:1299, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
                           <div style={{ background:`linear-gradient(135deg,${PRIMARY_COLOR},#0e7490)`, padding:"20px 24px", flexShrink:0, display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
                             <div>
                               <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>📎 Déposer un fichier</div>
@@ -5281,6 +5376,57 @@ export default function EspaceApprenant() {
                           <div style={{ flex:1, overflowY:"auto", padding:"24px" }}>
                             {d.instructions && <div style={{ background:"#f8fafc", borderRadius:12, padding:"16px 18px", marginBottom:22, fontSize:14, color:"#374151", lineHeight:1.7 }}><div style={{ fontWeight:700, color:"#0f172a", marginBottom:6 }}>📋 Consigne</div>{d.instructions}</div>}
                             {d.date_limite && <div style={{ marginBottom:18, fontSize:13, color:"#92400E", fontWeight:600 }}>⏳ Date limite : {d.date_limite} à {d.heure_limite||"23:59"}</div>}
+
+                            {/* ── LE COMPTE À REBOURS DE COMPOSITION ──
+                                Distinct de la date limite, qui borne le DÉPÔT : celui-ci
+                                borne le temps passé sur la copie, et il court depuis que
+                                l'apprenant a ouvert l'épreuve. Il reste sous les yeux en
+                                permanence — on ne compose pas de la même façon selon qu'il
+                                reste deux heures ou quatre minutes. */}
+                            {compo?.chronometre && compo.echeance && (()=>{
+                              const msRestant = new Date(compo.echeance) - nowTick;
+                              const fini = msRestant <= 0;
+                              const p2 = (n)=>String(n).padStart(2,"0");
+                              const h = Math.floor(msRestant/3600000);
+                              const m = Math.floor((msRestant%3600000)/60000);
+                              const sec = Math.floor((msRestant%60000)/1000);
+                              const urgent = !fini && msRestant < 5*60000;
+
+                              /* L'ENVOI AUTOMATIQUE, une seule fois : sans le drapeau, le
+                                 tic d'horloge le relancerait chaque seconde. Rien n'est
+                                 réexpédié si la copie est déjà rendue ou corrigée. */
+                              if (fini && !autoEnvoiFait.current && !submitLoading
+                                  && d.monResultat?.statut !== "rendu" && d.monResultat?.statut !== "corrige") {
+                                autoEnvoiFait.current = true;
+                                soumettreDevoir(d, true);
+                              }
+
+                              return (
+                                <div style={{ marginBottom:18, padding:"14px 18px", borderRadius:12,
+                                  background: fini?"#FEF2F2":urgent?"#FFF7ED":"#EFF6FF",
+                                  border:`1px solid ${fini?"#FECACA":urgent?"#FDBA74":"#BFDBFE"}` }}>
+                                  <div style={{ fontSize:12, fontWeight:700, color: fini?"#991B1B":urgent?"#9A3412":"#1D4ED8", marginBottom:4 }}>
+                                    ⏱ Temps de composition — {compo.duree_min} min
+                                  </div>
+                                  {fini ? (
+                                    <div style={{ fontSize:13, color:"#991B1B", fontWeight:700, lineHeight:1.6 }}>
+                                      Temps écoulé. Votre copie a été transmise à votre coach en l'état.
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div style={{ fontSize:26, fontWeight:900, color: urgent?"#C2410C":"#1D4ED8", fontVariantNumeric:"tabular-nums", fontFamily:"monospace", lineHeight:1.2 }}>
+                                        {h>0?`${h}:`:""}{p2(m)}:{p2(sec)}
+                                      </div>
+                                      <div style={{ fontSize:11.5, color: urgent?"#9A3412":"#1E40AF", marginTop:4, lineHeight:1.5 }}>
+                                        {urgent
+                                          ? "Moins de 5 minutes — votre copie partira automatiquement à zéro."
+                                          : "À zéro, votre copie est envoyée automatiquement, même incomplète. Ce qui n'a pas été fait vaut zéro ; votre coach tranche la note finale."}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             {d.ressource_url && (
                               <a href={d.ressource_url} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", gap:12, background:"#F0F9FF", border:"1px solid #BAE6FD", borderRadius:12, padding:"14px 18px", marginBottom:18, textDecoration:"none" }}>
                                 <span style={{ fontSize:22 }}>📎</span>
@@ -5290,8 +5436,13 @@ export default function EspaceApprenant() {
                                 </div>
                               </a>
                             )}
+                            {/* `urlDocument` ET PAS L'URL BRUTE. Cloudinary refuse la
+                                livraison publique des fichiers `raw` : en cliquant pour
+                                relire la copie qu'il a déposée, l'apprenant recevait un
+                                401 sur un .pdf ou un .docx. Le relais est utilisé partout
+                                ailleurs dans cet écran ; cet endroit avait été oublié. */}
                             {!submitFichier && d.rendu?.fichier_url && (
-                              <a href={d.rendu.fichier_url} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", gap:12, background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 18px", marginBottom:14, textDecoration:"none" }}>
+                              <a href={urlDocument(d.rendu.fichier_url, { nom: d.rendu.fichier_nom, inline: true })} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", gap:12, background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 18px", marginBottom:14, textDecoration:"none" }}>
                                 <span style={{ fontSize:22 }}>✅</span>
                                 <div>
                                   <div style={{ fontSize:13, fontWeight:700, color:"#166534" }}>Fichier déjà envoyé</div>
@@ -5333,7 +5484,7 @@ export default function EspaceApprenant() {
                         {/* Pas de fermeture au clic sur le fond ni de bouton ✕ : une fois ouvert,
                             le devoir doit être soumis pour pouvoir en sortir. */}
                         <div style={{ position:"fixed", inset:0, background:"rgba(10,18,35,0.6)", zIndex:1298, backdropFilter:"blur(3px)" }} />
-                        <div style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(92vw,800px)", background:"#fff", zIndex:1299, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
+                        <div style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(92vw,870px)", background:"#fff", zIndex:1299, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
                           <div style={{ background:`linear-gradient(135deg,${PRIMARY_COLOR},#0e7490)`, padding:"20px 24px", flexShrink:0, display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
                             <div>
                               <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>📝 {(hasQcm||isMixte)?"Répondre aux questions":"Rendre mon devoir"}</div>
@@ -5471,8 +5622,9 @@ export default function EspaceApprenant() {
                             {/* Fichier optionnel si les_deux */}
                             {isLesTwo && (
                               <>
+                                {/* Même relais : sans lui, 401 sur un .pdf ou un .docx. */}
                                 {!submitFichier && d.rendu?.fichier_url && (
-                                  <a href={d.rendu.fichier_url} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", gap:10, background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:10, padding:"10px 14px", textDecoration:"none" }}>
+                                  <a href={urlDocument(d.rendu.fichier_url, { nom: d.rendu.fichier_nom, inline: true })} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", gap:10, background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:10, padding:"10px 14px", textDecoration:"none" }}>
                                     <span style={{ fontSize:18 }}>✅</span>
                                     <div style={{ fontSize:12, color:"#166534", fontWeight:700 }}>Fichier déjà envoyé - {d.rendu.fichier_nom || d.rendu.fichier_url.split("/").pop()}</div>
                                   </a>

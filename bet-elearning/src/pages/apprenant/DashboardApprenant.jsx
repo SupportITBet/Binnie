@@ -1034,6 +1034,73 @@ export default function DashboardApprenant() {
   const [submitFichier,       setSubmitFichier]       = useState(null);
   const [submitErreur,        setSubmitErreur]        = useState('');
   const [recState,            setRecState]            = useState({}); // { [blocId]: { recording, uploading, seconds } }
+
+  /* ── LE MINUTEUR DE COMPOSITION ──
+     L'échéance vient du SERVEUR et n'est jamais calculée ici : le navigateur ne fait que
+     l'afficher et déclencher l'envoi à zéro. Un chrono calculé localement se contournerait
+     en changeant l'horloge de sa machine ou en rouvrant dans un autre onglet.
+     `echeanceComposition` est une date ISO renvoyée par `/devoirs/:id/commencer`. */
+  const [compo, setCompo] = useState(null); // { echeance, duree_min, chronometre, expire }
+  const autoEnvoiFait = useRef(false);
+
+  /* ── LE DEVOIR EN COURS SURVIT AU RECHARGEMENT ──
+     Actualiser la page refermait le panneau et effaçait tout ce qui avait été saisi : un
+     apprenant à mi-chemin d'une composition perdait son travail sur un simple F5, un
+     réseau qui coupe ou un téléphone qui met l'onglet en veille. Le rendu n'est envoyé
+     qu'à la soumission — il n'y avait donc aucun filet entre l'ouverture et l'envoi.
+
+     `sessionStorage` et non `localStorage` : le brouillon appartient à CETTE session de
+     travail. Le retrouver des jours plus tard, sur un devoir peut-être déjà rendu ou
+     expiré, créerait plus de confusion qu'il n'en éviterait.
+
+     Le fichier choisi ne peut pas être conservé — un objet `File` n'est pas sérialisable,
+     et le navigateur n'autorise pas à repeupler un `<input type="file">`. On le dit
+     explicitement à la réouverture plutôt que de laisser croire qu'il est toujours joint. */
+  const CLE_BROUILLON = `bet_devoir_en_cours_${profile?.id || 'anon'}`;
+  const brouillonRestaure = useRef(false);
+  const [fichierAJoindreDeNouveau, setFichierAJoindreDeNouveau] = useState(false);
+
+  useEffect(() => {
+    try {
+      const b = JSON.parse(sessionStorage.getItem(CLE_BROUILLON) || 'null');
+      if (!b?.devoirId) return;
+      setSubmitTexte(b.texte || '');
+      setSubmitQcm(b.qcm || {});
+      setSubmitBlocs(b.blocs || {});
+      setFichierAJoindreDeNouveau(!!b.avaitUnFichier);
+      brouillonRestaure.current = b.devoirId;   // le devoir sera rouvert dès qu'il sera chargé
+    } catch { /* brouillon illisible : on repart à zéro plutôt que de planter */ }
+  }, [CLE_BROUILLON]);
+
+  /* La réouverture attend que les devoirs soient chargés : on rouvre l'OBJET, pas un
+     identifiant — le panneau lit ses consignes, sa date limite et ses blocs. Un devoir
+     entre-temps rendu, corrigé ou expiré n'est pas rouvert : le brouillon n'a plus
+     d'objet, et le rouvrir enverrait l'apprenant sur un écran qu'il ne peut plus valider. */
+  useEffect(() => {
+    const id = brouillonRestaure.current;
+    if (!id || devoirOuvertApp || !devoirsReels_app.length) return;
+    const d = devoirsReels_app.find(x => x.id === id);
+    brouillonRestaure.current = null;
+    if (!d) return;
+    const rendu = devoirRenduState[id];
+    if (rendu?.statut === 'corrige') return;
+    setDevoirOuvertApp(d);
+  }, [devoirsReels_app, devoirRenduState, devoirOuvertApp]);
+
+  /* On enregistre à chaque frappe. C'est un objet de quelques kilo-octets au plus, écrit
+     en mémoire du navigateur : le coût est nul comparé à la perte qu'il évite. */
+  useEffect(() => {
+    try {
+      if (!devoirOuvertApp) { sessionStorage.removeItem(CLE_BROUILLON); return; }
+      sessionStorage.setItem(CLE_BROUILLON, JSON.stringify({
+        devoirId: devoirOuvertApp.id,
+        texte: submitTexte,
+        qcm: submitQcm,
+        blocs: submitBlocs,
+        avaitUnFichier: !!submitFichier,
+      }));
+    } catch { /* quota plein ou stockage refusé : le brouillon est un confort, pas un dû */ }
+  }, [devoirOuvertApp, submitTexte, submitQcm, submitBlocs, submitFichier, CLE_BROUILLON]);
   const [confirmOuvrirDevoir, setConfirmOuvrirDevoir] = useState(null); // devoir en attente de confirmation d'ouverture
   const [confirmSoumettre,    setConfirmSoumettre]    = useState(false); // confirmation avant envoi définitif
   const mediaRecordersRef = useRef({});
@@ -1188,7 +1255,10 @@ export default function DashboardApprenant() {
         const { data: devoirs } = await supabase
           .from('devoirs_elearning')
           .select('*')
-          .eq('classe_id', inscr.classe_id)
+          /* `contains` : un devoir peut être donné à plusieurs classes, et `classe_id` ne
+             porte que la première. Filtrer dessus privait l'apprenant des devoirs où sa
+             classe n'arrivait pas en tête. */
+          .contains('classe_ids', [inscr.classe_id])
           .eq('statut', 'publie')
           .order('created_at', { ascending: false });
         if (devoirs && devoirs.length > 0) {
@@ -1256,6 +1326,29 @@ export default function DashboardApprenant() {
       return false;
     }
   }
+
+  /* Démarre (ou retrouve) le chrono dès que le panneau s'ouvre. Idempotent côté serveur :
+     rouvrir le devoir ne relance pas le compte à rebours — c'est tout l'enjeu, sinon
+     fermer puis rouvrir l'onglet rendrait le minuteur sans effet. */
+  useEffect(() => {
+    if (!devoirOuvertApp?.id) { setCompo(null); autoEnvoiFait.current = false; return; }
+    let vivant = true;
+    (async () => {
+      try {
+        const sess = await supabase.auth.getSession();
+        const tok = sess.data.session?.access_token;
+        if (!tok) return;
+        const r = await fetch(`${_API}/api/elearning/devoirs/${devoirOuvertApp.id}/commencer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}`, 'X-Plateforme': 'bet-elearning' },
+          body: JSON.stringify({ inscription_id: inscriptionReelle?.id, classe_id: inscriptionReelle?.classe_id }),
+        });
+        if (!r.ok || !vivant) return;
+        setCompo(await r.json());
+      } catch { /* hors ligne : le serveur refusera un dépôt tardif de toute façon */ }
+    })();
+    return () => { vivant = false; };
+  }, [devoirOuvertApp?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ui = useAgeInterface(apprenant);
 
@@ -1837,6 +1930,18 @@ export default function DashboardApprenant() {
                         const mRestantes = msRestants !== null ? Math.floor((msRestants % 3600000) / 60000) : null;
                         const sRestantes = msRestants !== null ? Math.floor((msRestants % 60000) / 1000) : null;
                         const fmt2 = n => String(n).padStart(2, '0');
+                        /* LE COMPTE À REBOURS D'OUVERTURE. « Disponible le 2026-10-13 à
+                           16:42:00 » oblige à faire la soustraction de tête, et la date
+                           brute ne dit pas si c'est dans dix minutes ou dans trois jours.
+                           Le même tic d'horloge que le compteur de rendu sert ici : il
+                           bat déjà chaque seconde, rien à ajouter. */
+                        const ouvDate = d.date_ouverture ? new Date(`${d.date_ouverture}T${(d.heure_ouverture || '00:00').slice(0, 5)}:00`) : null;
+                        const msAvantOuv = ouvDate ? ouvDate - now : null;
+                        const dureeHumaine = (ms) => {
+                          const j = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
+                          const m = Math.floor((ms % 3600000) / 60000), sec = Math.floor((ms % 60000) / 1000);
+                          return j > 0 ? `${j}j ${fmt2(h)}:${fmt2(m)}:${fmt2(sec)}` : `${fmt2(h)}:${fmt2(m)}:${fmt2(sec)}`;
+                        };
                         const timerStr = msRestants !== null && msRestants > 0
                           ? jRestants > 0
                             ? `${jRestants}j ${fmt2(hRestantes)}:${fmt2(mRestantes)}:${fmt2(sRestantes)}`
@@ -1852,7 +1957,17 @@ export default function DashboardApprenant() {
                                 <div style={{ fontSize:15, fontWeight:700, color:COULEURS.navy, marginBottom:4 }}>{d.titre}</div>
                                 <div style={{ display:'flex', gap:12, fontSize:12, color:COULEURS.gris600, flexWrap:'wrap' }}>
                                   {!d.ouvert && (
-                                    <span style={{ color:'#7C3AED', fontWeight:700 }}>🔒 Disponible le {d.date_ouverture} à {d.heure_ouverture}</span>
+                                    <span style={{ display:'inline-flex', flexDirection:'column', gap:2 }}>
+                                      <span style={{ color:'#7C3AED', fontWeight:700 }}>🔒 Disponible le {d.date_ouverture} à {d.heure_ouverture}</span>
+                                      {msAvantOuv !== null && msAvantOuv > 0 && (
+                                        /* Sous l'heure brute, le délai réel. Rouge sous une
+                                           heure : c'est le moment où l'on s'organise pour
+                                           être devant son écran. */
+                                        <span style={{ color: msAvantOuv < 3600000 ? '#EF4444' : '#7C3AED', fontWeight:700, fontVariantNumeric:'tabular-nums', fontFamily:'monospace', fontSize:11.5 }}>
+                                          ⏱ Ouverture dans {dureeHumaine(msAvantOuv)}
+                                        </span>
+                                      )}
+                                    </span>
                                   )}
                                   {d.ouvert && !d.expire && d.date_limite && timerStr && (
                                     <span style={{ color: jRestants !== null && jRestants <= 1 ? '#EF4444' : jRestants <= 3 ? '#F59E0B' : COULEURS.gris600, fontWeight: jRestants !== null && jRestants <= 3 ? 700 : 400, fontVariantNumeric:'tabular-nums', fontFamily:'monospace' }}>
@@ -3912,7 +4027,7 @@ export default function DashboardApprenant() {
         <>
           <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.65)', zIndex:1000, backdropFilter:'blur(3px)' }} />
           {/* 836 px : les 760 d'origine élargis de 10%. Les blocs de cours portent des vidéos, des images et des tableaux de quiz qui se serraient dans le panneau ; le plafond à 92vw reste, pour que le panneau ne couvre jamais tout l'écran. */}
-          <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,836px)', background:'#fff', zIndex:1001, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
+          <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,870px)', background:'#fff', zIndex:1001, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
 
             {/* Header */}
             <div style={{ background:'linear-gradient(135deg,#059669,#10B981)', padding:'20px 24px', flexShrink:0 }}>
@@ -4364,10 +4479,14 @@ export default function DashboardApprenant() {
         setSubmitLoading(false);
       }
 
-      async function soumettreTexte() {
+      /* `auto` = envoi déclenché par le minuteur, pas par l'apprenant. Il part SANS
+         condition de complétude : c'est précisément la copie incomplète qu'il faut sauver.
+         Le serveur le reconnaît (`auto_minuteur`) et l'accepte malgré l'échéance franchie
+         d'une fraction de seconde — le refuser perdrait ce qu'il vient sauver. */
+      async function soumettreTexte(auto = false) {
         const texteOk   = (isTexte || isLesTwo) && submitTexte.trim();
         const qcmOk     = hasQcm && Object.keys(submitQcm).length === questions.length;
-        if (!texteOk && !qcmOk && !hasQcm && !isMixte) return;
+        if (!auto && !texteOk && !qcmOk && !hasQcm && !isMixte) return;
         setSubmitLoading(true);
         setSubmitErreur('');
         try {
@@ -4378,6 +4497,7 @@ export default function DashboardApprenant() {
             contenu_texte:  submitTexte.trim(),
             reponses_qcm:   submitQcm,
             reponses_blocs: submitBlocs,
+            ...(auto ? { auto_minuteur: true } : {}),
           };
           const r = await fetch(`${_API}/api/elearning/devoirs/${d.id}/rendre`, {
             method: 'POST',
@@ -4456,6 +4576,55 @@ export default function DashboardApprenant() {
                   ⏳ Date limite : {d.date_limite} à {d.heure_limite || '23:59'}
                 </div>
               )}
+
+              {/* ── LE COMPTE À REBOURS DE COMPOSITION ──
+                  Distinct de la date limite, qui borne le DÉPÔT : celui-ci borne le temps
+                  passé sur la copie, et il court depuis que l'apprenant a ouvert le devoir.
+                  Il doit rester sous les yeux en permanence — on ne compose pas de la même
+                  façon selon qu'il reste deux heures ou quatre minutes. */}
+              {compo?.chronometre && compo.echeance && (() => {
+                const msRestant = new Date(compo.echeance) - now;
+                const fini = msRestant <= 0;
+                const fmt2 = (n) => String(n).padStart(2, '0');
+                const h = Math.floor(msRestant / 3600000);
+                const m = Math.floor((msRestant % 3600000) / 60000);
+                const sec = Math.floor((msRestant % 60000) / 1000);
+                const urgent = !fini && msRestant < 5 * 60000;
+
+                /* L'ENVOI AUTOMATIQUE. Une seule fois (`autoEnvoiFait`), sans quoi le tic
+                   d'horloge le relancerait chaque seconde. On n'envoie que si la copie
+                   n'est pas déjà rendue : rouvrir un devoir rendu ne doit rien réexpédier. */
+                if (fini && !autoEnvoiFait.current && !submitLoading && d.statut !== 'rendu' && d.statut !== 'corrige') {
+                  autoEnvoiFait.current = true;
+                  soumettreTexte(true);
+                }
+
+                return (
+                  <div style={{ marginBottom:18, padding:'14px 18px', borderRadius:12,
+                    background: fini ? '#FEF2F2' : urgent ? '#FFF7ED' : '#EFF6FF',
+                    border:`1px solid ${fini ? '#FECACA' : urgent ? '#FDBA74' : '#BFDBFE'}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color: fini ? '#991B1B' : urgent ? '#9A3412' : '#1D4ED8', marginBottom:4 }}>
+                      ⏱ Temps de composition — {compo.duree_min} min
+                    </div>
+                    {fini ? (
+                      <div style={{ fontSize:13, color:'#991B1B', fontWeight:700, lineHeight:1.6 }}>
+                        Temps écoulé. Votre copie a été transmise à votre coach en l'état.
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize:26, fontWeight:900, color: urgent ? '#C2410C' : '#1D4ED8', fontVariantNumeric:'tabular-nums', fontFamily:'monospace', lineHeight:1.2 }}>
+                          {h > 0 ? `${h}:` : ''}{fmt2(m)}:{fmt2(sec)}
+                        </div>
+                        <div style={{ fontSize:11.5, color: urgent ? '#9A3412' : '#1E40AF', marginTop:4, lineHeight:1.5 }}>
+                          {urgent
+                            ? 'Moins de 5 minutes — votre copie partira automatiquement à zéro.'
+                            : "À zéro, votre copie est envoyée automatiquement, même incomplète. Ce qui n'a pas été fait vaut zéro ; votre coach tranche la note finale."}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
               {d.ressource_url && (
                 <a href={d.ressource_url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:12, background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:12, padding:'14px 18px', marginBottom:18, textDecoration:'none' }}>
                   <span style={{ fontSize:22 }}>📎</span>
@@ -4465,13 +4634,51 @@ export default function DashboardApprenant() {
                   </div>
                 </a>
               )}
+              {/* Le fichier ne survit pas au rechargement — un objet `File` n'est pas
+                  sérialisable et aucun navigateur n'autorise à repeupler un champ de
+                  fichier. On le dit, plutôt que de laisser croire qu'il est encore joint
+                  et de découvrir un envoi sans pièce jointe. */}
+              {fichierAJoindreDeNouveau && !submitFichier && (
+                <div style={{ background:'#FFFBEB', border:'1px solid #FCD34D', borderRadius:12, padding:'12px 16px', marginBottom:14, fontSize:12.5, color:'#92400E', lineHeight:1.6 }}>
+                  ⚠️ Vos réponses ont été retrouvées, mais le fichier que vous aviez choisi
+                  avant le rechargement doit être sélectionné à nouveau.
+                </div>
+              )}
+              {/* ── CE QUI A DÉJÀ ÉTÉ DÉPOSÉ ──
+                  En cliquant « Modifier ma copie », l'apprenant retrouvait une zone de
+                  dépôt vide, identique à celle du premier rendu : rien ne lui disait quel
+                  fichier était actuellement enregistré, ni s'il avait bien envoyé le bon.
+                  Il devait redéposer à l'aveugle. On montre la copie en place, avec de
+                  quoi la rouvrir pour vérifier avant de la remplacer. */}
+              {d.rendu?.fichier_url && (
+                <div style={{ background:'#F0FDF4', border:'1px solid #BBF7D0', borderRadius:12, padding:'14px 18px', marginBottom:14, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:22 }}>✅</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#15803D' }}>Votre copie actuelle</div>
+                    <div style={{ fontSize:12, color:'#166534', wordBreak:'break-all' }}>
+                      {d.rendu.fichier_nom || d.rendu.fichier_url.split('/').pop()}
+                      {d.rendu.rendu_at && ` · déposée le ${new Date(d.rendu.rendu_at).toLocaleDateString('fr-FR', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' })}`}
+                    </div>
+                  </div>
+                  <a href={urlOuvrir(d.rendu.fichier_url, d.rendu.fichier_nom)} target="_blank" rel="noreferrer"
+                    style={{ fontSize:12.5, fontWeight:700, color:'#15803D', textDecoration:'underline' }}>👁 Ouvrir</a>
+                </div>
+              )}
+              {d.rendu?.contenu_texte && !d.rendu?.fichier_url && (
+                <div style={{ background:'#F0FDF4', border:'1px solid #BBF7D0', borderRadius:12, padding:'14px 18px', marginBottom:14 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:'#15803D', marginBottom:6 }}>Votre réponse actuelle</div>
+                  <div style={{ fontSize:12.5, color:'#166534', whiteSpace:'pre-wrap', lineHeight:1.6, maxHeight:140, overflowY:'auto' }}>{d.rendu.contenu_texte}</div>
+                </div>
+              )}
               <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', border:`2px dashed ${submitFichier ? couleurTheme : COULEURS.gris300}`, borderRadius:14, padding:'40px 20px', cursor:'pointer', background: submitFichier ? `${couleurTheme}10` : COULEURS.gris50, gap:12, transition:'all 0.2s', marginBottom:8 }}>
                 <span style={{ fontSize:44 }}>{submitFichier ? '✅' : '📁'}</span>
                 <span style={{ fontSize:15, color: submitFichier ? couleurTheme : COULEURS.gris600, fontWeight:600, textAlign:'center' }}>
-                  {submitFichier ? submitFichier.name : 'Cliquez pour choisir votre fichier'}
+                  {submitFichier ? submitFichier.name
+                    : d.rendu?.fichier_url ? 'Cliquez pour REMPLACER votre fichier'
+                    : 'Cliquez pour choisir votre fichier'}
                 </span>
                 <span style={{ fontSize:12.5, color:COULEURS.gris400 }}>.pdf · .docx · .mp4 · .mp3 · .jpg · .png</span>
-                <input type="file" accept=".pdf,.docx,.mp4,.mp3,.jpg,.png" style={{ display:'none' }} onChange={e => setSubmitFichier(e.target.files[0] || null)} />
+                <input type="file" accept=".pdf,.docx,.mp4,.mp3,.jpg,.png" style={{ display:'none' }} onChange={e => { setSubmitFichier(e.target.files[0] || null); setFichierAJoindreDeNouveau(false); }} />
               </label>
             </div>
             {submitErreur && (
@@ -4495,7 +4702,11 @@ export default function DashboardApprenant() {
       return (
         <>
           <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.55)', zIndex:1300, backdropFilter:'blur(2px)' }} />
-          <div style={{ position:'fixed', top:0, right:0, height:'100vh', width:'min(580px, 100vw)', background:'#fff', zIndex:1301, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.18)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
+          {/* 870 px comme les trois autres panneaux de l'espace apprenant. À 580 px, les
+              questions à options longues passaient à la ligne au milieu d'un mot et les
+              blocs d'un devoir mixte se serraient — alors que c'est l'écran où l'apprenant
+              compose, celui qui mérite le plus de place. */}
+          <div style={{ position:'fixed', top:0, right:0, height:'100vh', width:'min(92vw, 870px)', background:'#fff', zIndex:1301, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.18)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
             {/* Header */}
             <div style={{ background:`linear-gradient(135deg, ${couleurTheme} 0%, ${couleurThemeFonce||couleurTheme} 100%)`, padding:'20px 24px', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexShrink:0 }}>
               <div>
@@ -4665,7 +4876,7 @@ export default function DashboardApprenant() {
                   <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', border:`2px dashed ${submitFichier ? couleurTheme : COULEURS.gris300}`, borderRadius:12, padding:'20px 16px', cursor:'pointer', background: submitFichier ? `${couleurTheme}10` : COULEURS.gris50, gap:8 }}>
                     <span style={{ fontSize:28 }}>{submitFichier ? '✅' : '📁'}</span>
                     <span style={{ fontSize:13, color: submitFichier ? couleurTheme : COULEURS.gris600, fontWeight:600 }}>{submitFichier ? submitFichier.name : 'Joindre un fichier (optionnel)'}</span>
-                    <input type="file" accept=".pdf,.docx,.mp4,.mp3,.jpg,.png" style={{ display:'none' }} onChange={e => setSubmitFichier(e.target.files[0] || null)} />
+                    <input type="file" accept=".pdf,.docx,.mp4,.mp3,.jpg,.png" style={{ display:'none' }} onChange={e => { setSubmitFichier(e.target.files[0] || null); setFichierAJoindreDeNouveau(false); }} />
                   </label>
                 </div>
               )}

@@ -9,6 +9,7 @@ import { demarrerNotificationEvaluationsGroupesClotures } from "./jobs/notifierE
 import { demarrerGamificationCoachMensuel } from "./jobs/gamificationCoachMensuel.js";
 import { demarrerGamificationCoachMensuelDash } from "./jobs/gamificationCoachMensuelDash.js";
 import { demarrerRelancesFacturesImpayees } from "./jobs/relancesFacturesImpayees.js";
+import { demarrerCloturerCompositions } from "./jobs/cloturerCompositions.js";
 import { demarrerNotificationEcheancesPaiement } from "./jobs/notifierEcheancesPaiement.js";
 import { demarrerRelancesMarketing } from "./jobs/relancesMarketing.js";
 import { demarrerEnvoiCampagnesProgrammees } from "./jobs/envoyerCampagnesProgrammees.js";
@@ -28,6 +29,9 @@ const server = app.listen(PORT, async () => {
   demarrerGamificationCoachMensuel();
   demarrerGamificationCoachMensuelDash();
   demarrerRelancesFacturesImpayees();
+  // Remet au coach les compositions dont le minuteur a expiré sans que l'apprenant
+  // ait pu les envoyer (onglet fermé, réseau coupé).
+  demarrerCloturerCompositions();
   demarrerNotificationEcheancesPaiement();
   demarrerRelancesMarketing();
   demarrerEnvoiCampagnesProgrammees();

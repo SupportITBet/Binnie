@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const authHdrs = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
@@ -75,10 +76,28 @@ function defaultQForm(type) {
  * côté. Les sous-onglets internes restent affichés : on peut toujours passer de la file à la
  * bibliothèque sans repasser par le menu.
  */
-export default function BetLevelTestsTab({ peut = () => true, vueInitiale = 'tests', filtreInitial = 'Tous' }) {
+export default function BetLevelTestsTab({ peut: peutProp, vueInitiale = 'tests', filtreInitial = 'Tous', sansBibliotheque = false }) {
   const confirm = useConfirm();
+  const { profile } = useAuth();
+  /* ── LE DÉFAUT ÉTAIT `() => true` : TOUT PERMIS ──
+     Chaque bouton de cet écran teste `peut('examens', …)`, mais AUCUN des trois écrans
+     qui montent ce composant ne passait la prop. Le défaut s'appliquait donc partout :
+     l'assistante e-learning voyait « ✏️ Modifier » et « 🗑 » actifs sur la banque de
+     tests, et ne découvrait son absence de droit qu'au refus du serveur — ce qui se lit
+     comme une panne, pas comme une règle.
+     On lit maintenant les permissions du compte connecté, celles-là mêmes que
+     `requirePermission` applique côté serveur. La prop reste acceptée pour qu'un
+     appelant puisse restreindre davantage ; elle ne peut plus élargir par omission. */
+  const peut = peutProp || ((module, action) => {
+    const CLE = { read: 'read', create: 'create', update: 'update', delete: 'delete' };
+    const p = profile?.permissions?.[module];
+    if (!p) return false;
+    return p[CLE[action] || action] === true || p.manage === true;
+  });
   const [view, setView] = useState('tests');
-  const [activeMain, setActiveMain] = useState(vueInitiale);
+  /* Si la bibliothèque est retirée, on force la vue des résultats : un `vueInitiale`
+     resté sur « tests » afficherait un onglet qu'on vient précisément d'enlever. */
+  const [activeMain, setActiveMain] = useState(sansBibliotheque ? 'resultats' : vueInitiale);
 
   const [tests, setTests] = useState([]);
   const [loadingTests, setLT] = useState(true);
@@ -295,9 +314,14 @@ export default function BetLevelTestsTab({ peut = () => true, vueInitiale = 'tes
     );
   }
 
-  /* ══ VUE PRINCIPALE ══ */
+  /* ══ VUE PRINCIPALE ══
+     `sansBibliotheque` retire l'onglet « Bibliothèque de tests » — la banque de questions.
+     Pour l'assistante e-learning, cet onglet n'avait aucune raison d'être affiché : elle
+     consulte les résultats de ses candidats, elle ne construit pas les tests. Le montrer
+     en lecture seule aurait quand même donné à voir tout le contenu des épreuves, ce qui
+     n'est pas plus souhaitable que de pouvoir les modifier. */
   const mainTabs = [
-    { key:'tests', label:'Bibliothèque de tests', icon:'📚', count:tests.length },
+    ...(sansBibliotheque ? [] : [{ key:'tests', label:'Bibliothèque de tests', icon:'📚', count:tests.length }]),
     { key:'resultats', label:'Résultats candidats', icon:'📋', count:resultats.length },
   ];
 

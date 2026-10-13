@@ -245,6 +245,24 @@ async function checkAutoSuspension(gaId, declencheurId) {
  * `envoyerEmail` est le choix du coach au moment de publier ; le service garantit de son
  * côté qu'un seul envoi part par évaluation, quelles que soient les republications.
  */
+/** Annonce l'évaluation à TOUS les groupes qu'elle vise, pas seulement à celui de l'URL. */
+function notifierTousLesGroupes(evalData, groupeUrl, envoyerEmail, acteurId) {
+  const cibles = evalData.groupe_ids?.length ? evalData.groupe_ids : [evalData.groupe_id || groupeUrl];
+  /* L'e-mail ne part qu'une fois, pour le groupe depuis lequel on publie : le service
+     d'envoi se dédoublonne par ressource, mais mieux vaut ne pas le solliciter N fois. */
+  cibles.filter(Boolean).forEach((gid, i) =>
+    notifyEvalPublished(gid, evalData, envoyerEmail && i === 0, acteurId)
+  );
+}
+
+/**
+ * Prévient les apprenants d'une évaluation publiée.
+ *
+ * APPELÉE UNE FOIS PAR GROUPE VISÉ. Elle ne recevait que le groupe de l'URL : une
+ * évaluation donnée à deux groupes n'était annoncée qu'à l'un d'eux, l'autre la
+ * découvrait en ouvrant son espace — ou pas du tout. `notifierTousLesGroupes` ci-dessous
+ * boucle sur `groupe_ids`, la vérité sur les destinataires.
+ */
 async function notifyEvalPublished(groupeId, evalData, envoyerEmail = false, acteurId = null) {
   try {
     const label = evalData.categorie === "examen" ? "Examen" : evalData.categorie === "devoir" ? "Devoir" : "Évaluation";
@@ -2332,7 +2350,8 @@ router.get("/apprenants/:gaId/evaluations", authenticateAdmin, async (req, res) 
     let { data: evals, error } = await supabase
       .from("evaluations_groupes")
       .select("id, titre, type_evaluation:type, date_evaluation, heure_debut, statut, instructions")
-      .eq("groupe_id", ga.groupe_id)
+      // `contains` : l'évaluation peut viser plusieurs groupes (voir ci-dessus).
+      .contains("groupe_ids", [ga.groupe_id])
       .in("statut", ["publie", "cloture"])
       .order("date_evaluation", { ascending: false, nullsLast: true });
 
@@ -3052,7 +3071,9 @@ router.get("/:id/stats", authenticateAdmin, async (req, res) => {
     const tauxPresence = totalPresences ? Math.round((presents / totalPresences) * 100) : null;
 
     const { data: evals, error: errEvals } = await supabase
-      .from("evaluations_groupes").select("id").eq("groupe_id", id);
+      // `contains` : compter les évaluations QUI CONCERNENT ce groupe, pas seulement
+      // celles dont il est le premier destinataire.
+      .from("evaluations_groupes").select("id").contains("groupe_ids", [id]);
     if (errEvals) throw errEvals;
     const evalIds = (evals || []).map(e => e.id);
 
@@ -4764,7 +4785,10 @@ router.get("/:id/evaluations", authenticateAdmin, async (req, res) => {
     const { data, error } = await supabase
       .from("evaluations_groupes")
       .select("*")
-      .eq("groupe_id", groupeId)
+      /* `contains` et non `eq` : une évaluation peut viser plusieurs groupes, et
+         `groupe_id` ne porte que le premier. Filtrer dessus faisait disparaître le sujet
+         des écrans de tous les autres groupes auxquels il était pourtant donné. */
+      .contains("groupe_ids", [groupeId])
       .order("created_at", { ascending: false });
     if (error) throw error;
 
@@ -4808,9 +4832,21 @@ router.post("/:id/evaluations", authenticateAdmin, async (req, res) => {
     } = req.body;
     if (!titre) return res.status(400).json({ error: "titre requis" });
 
+    /* Les groupes visés : ceux envoyés par le client, sinon celui de l'URL. On garde le
+       groupe de l'URL dans la liste même s'il n'y figure pas — le coach crée depuis CE
+       groupe, l'en exclure produirait une évaluation absente de l'écran d'où elle vient. */
+    const groupesVises = [...new Set([
+      ...(Array.isArray(req.body.groupe_ids) ? req.body.groupe_ids.filter(Boolean) : []),
+      groupeId,
+    ])];
+
     const payload = {
       coach_id:        req.profil.id,
-      groupe_id:       groupeId,
+      /* `groupe_ids` PORTE LES DESTINATAIRES, `groupe_id` reste le premier d'entre eux.
+         Le groupe de l'URL sert de repli : un client pas encore déployé envoie son
+         évaluation sans `groupe_ids` et continue de fonctionner. */
+      groupe_id:       groupesVises[0],
+      groupe_ids:      groupesVises,
       titre,
       type:            type            || "qcm",
       categorie:       categorie       || "evaluation",
@@ -4823,6 +4859,11 @@ router.post("/:id/evaluations", authenticateAdmin, async (req, res) => {
       blocs:           Array.isArray(blocs) ? blocs : [],
       sur_toeic:       !!sur_toeic,
       duree_min:       duree_min       || 60,
+      /* Minuteur de composition, distinct de `duree_min` ci-dessus qui est la durée
+         ANNONCÉE de l'épreuve. `null` quand il n'est pas demandé — c'est une option.
+         Réservé au rendu en texte : un fichier se prépare hors ligne. */
+      duree_composition_min: (type_rendu === "texte" && Number(req.body.duree_composition_min) > 0)
+        ? Number(req.body.duree_composition_min) : null,
       date_evaluation: date_evaluation || null,
       heure_debut:     heure_debut     || null,
       date_ouverture:  date_ouverture  || null,
@@ -4831,14 +4872,20 @@ router.post("/:id/evaluations", authenticateAdmin, async (req, res) => {
       notifier_eleves: notifier_eleves !== false,
       created_by:      req.profil.id,
     };
-    const { data, error } = await supabase.from("evaluations_groupes").insert(payload).select().single();
+    let { data, error } = await supabase.from("evaluations_groupes").insert(payload).select().single();
+    /* La colonne arrive par un SQL à part (evaluations_groupes_multi_classes.sql). Tant
+       qu'il n'est pas joué, on rejoue sans elle plutôt que de refuser la création. */
+    if (error && (error.code === "42703" || /groupe_ids/.test(error.message || ""))) {
+      const { groupe_ids: _absent, ...sansColonne } = payload;
+      ({ data, error } = await supabase.from("evaluations_groupes").insert(sansColonne).select().single());
+    }
     if (error) throw error;
 
     res.status(201).json({ evaluation: data });
 
     // Notifier apprenants + commerciale + onboarding + PA advisor si publiée directement
     if (data.statut === "publie" && data.notifier_eleves) {
-      notifyEvalPublished(groupeId, data, !!req.body.envoyer_email, req.profil?.id || null);
+      notifierTousLesGroupes(data, groupeId, !!req.body.envoyer_email, req.profil?.id || null);
     }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4847,7 +4894,12 @@ router.post("/:id/evaluations", authenticateAdmin, async (req, res) => {
 router.patch("/:id/evaluations/:evalId", authenticateAdmin, async (req, res) => {
   try {
     const { id: groupeId, evalId } = req.params;
-    const { data: eval0 } = await supabase.from("evaluations_groupes").select("*").eq("id", evalId).eq("groupe_id", groupeId).maybeSingle();
+    /* `contains` et non `eq` : ce contrôle vérifie que l'évaluation CONCERNE le groupe de
+       l'URL. Avec `eq("groupe_id")` il ne reconnaissait que le PREMIER groupe visé — un
+       devoir donné à B puis A s'ouvrait depuis B et répondait « introuvable » depuis A,
+       alors qu'il s'affichait bien dans la liste des deux. Le coach voyait le devoir sans
+       pouvoir ni le corriger ni le modifier. */
+    const { data: eval0 } = await supabase.from("evaluations_groupes").select("*").eq("id", evalId).contains("groupe_ids", [groupeId]).maybeSingle();
     if (!eval0) return res.status(404).json({ error: "Évaluation introuvable" });
     if (req.role === "coach" && eval0.coach_id !== req.profil.id && !(await estDelegueSurGroupe(req.profil.id, groupeId)))
       return res.status(403).json({ error: "Accès refusé" });
@@ -4856,7 +4908,7 @@ router.patch("/:id/evaluations/:evalId", authenticateAdmin, async (req, res) => 
 
     // Bloquer la dépublication ET toute modification de contenu si au moins un apprenant a
     // soumis - sinon on fausse un devoir déjà rendu (questions/consignes changées après coup).
-    const CONTENT_FIELDS = ["titre","type","categorie","type_rendu","instructions","questions","ressource_url","blocs","sur_toeic","duree_min","date_evaluation","heure_debut","date_ouverture","heure_ouverture"];
+    const CONTENT_FIELDS = ["titre","type","categorie","type_rendu","instructions","questions","ressource_url","blocs","sur_toeic","duree_min","duree_composition_min","date_evaluation","heure_debut","date_ouverture","heure_ouverture"];
     const touchesContent = CONTENT_FIELDS.some(k => req.body[k] !== undefined);
     const touchesDepublication = req.body.statut === "brouillon" && eval0.statut === "publie";
     if (touchesContent || touchesDepublication) {
@@ -4871,18 +4923,31 @@ router.patch("/:id/evaluations/:evalId", authenticateAdmin, async (req, res) => 
       }
     }
 
-    const allowed = ["titre","type","categorie","type_rendu","instructions","questions","ressource_url","blocs","sur_toeic","duree_min","date_evaluation","heure_debut","date_ouverture","heure_ouverture","statut","notifier_eleves"];
+    const allowed = ["titre","type","categorie","type_rendu","instructions","questions","ressource_url","blocs","sur_toeic","duree_min","duree_composition_min","date_evaluation","heure_debut","date_ouverture","heure_ouverture","statut","notifier_eleves"];
     const updates = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+    /* Les destinataires se modifient par `groupe_ids` ; `groupe_id` suit avec le premier.
+       On refuse de vider la liste : une évaluation sans groupe n'est demandée à personne
+       et disparaît de tous les écrans, y compris celui de son auteur. */
+    if (Array.isArray(req.body.groupe_ids)) {
+      const ids = [...new Set(req.body.groupe_ids.filter(Boolean))];
+      if (!ids.length) return res.status(400).json({ error: "Une évaluation doit viser au moins un groupe" });
+      updates.groupe_ids = ids;
+      updates.groupe_id  = ids[0];
+    }
 
-    const { data, error } = await supabase.from("evaluations_groupes").update(updates).eq("id", evalId).select().single();
+    let { data, error } = await supabase.from("evaluations_groupes").update(updates).eq("id", evalId).select().single();
+    if (error && (error.code === "42703" || /groupe_ids/.test(error.message || ""))) {
+      const { groupe_ids: _absent, ...sansColonne } = updates;
+      ({ data, error } = await supabase.from("evaluations_groupes").update(sansColonne).eq("id", evalId).select().single());
+    }
     if (error) throw error;
 
     res.json({ evaluation: data });
 
     // Notifier apprenants + commerciale + onboarding + PA advisor à la publication
     if (updates.statut === "publie" && eval0.statut !== "publie" && data.notifier_eleves) {
-      notifyEvalPublished(groupeId, data, !!req.body.envoyer_email, req.profil?.id || null);
+      notifierTousLesGroupes(data, groupeId, !!req.body.envoyer_email, req.profil?.id || null);
     }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4891,7 +4956,7 @@ router.patch("/:id/evaluations/:evalId", authenticateAdmin, async (req, res) => 
 router.delete("/:id/evaluations/:evalId", authenticateAdmin, async (req, res) => {
   try {
     const { id: groupeId, evalId } = req.params;
-    const { data: eval0 } = await supabase.from("evaluations_groupes").select("coach_id, statut").eq("id", evalId).eq("groupe_id", groupeId).maybeSingle();
+    const { data: eval0 } = await supabase.from("evaluations_groupes").select("coach_id, statut").eq("id", evalId).contains("groupe_ids", [groupeId]).maybeSingle();
     if (!eval0) return res.status(404).json({ error: "Évaluation introuvable" });
     if (req.role === "coach" && eval0.coach_id !== req.profil.id && !(await estDelegueSurGroupe(req.profil.id, groupeId)))
       return res.status(403).json({ error: "Accès refusé" });
@@ -4917,7 +4982,7 @@ router.delete("/:id/evaluations/:evalId", authenticateAdmin, async (req, res) =>
 router.get("/:id/evaluations/:evalId/resultats", authenticateAdmin, async (req, res) => {
   try {
     const { id: groupeId, evalId } = req.params;
-    const { data: eval0 } = await supabase.from("evaluations_groupes").select("*").eq("id", evalId).eq("groupe_id", groupeId).maybeSingle();
+    const { data: eval0 } = await supabase.from("evaluations_groupes").select("*").eq("id", evalId).contains("groupe_ids", [groupeId]).maybeSingle();
     if (!eval0) return res.status(404).json({ error: "Évaluation introuvable" });
     if (req.role === "coach" && eval0.coach_id !== req.profil.id && !(await estDelegueSurGroupe(req.profil.id, groupeId)))
       return res.status(403).json({ error: "Accès refusé" });
@@ -4929,7 +4994,10 @@ router.get("/:id/evaluations/:evalId/resultats", authenticateAdmin, async (req, 
     // validation groupée ni y apparaître comme ayant un devoir "à faire".
     const { data: apprenants } = await supabase
       .from("groupes_apprenants")
-      .select("id, nom_apprenant, prenom_apprenant, statut")
+      /* `note` et `apprenant_id` EN PLUS : `note` porte le JSON qui relie l'inscription à
+         son `assignation_id`, seul chemin vers le parent d'un mineur côté dash. Sans eux,
+         la correction ne pouvait prévenir que l'apprenant lui-même. */
+      .select("id, nom_apprenant, prenom_apprenant, statut, apprenant_id, email_apprenant, note")
       .eq("groupe_id", groupeId)
       .neq("statut", "retire")
       .neq("statut", "transfere");
@@ -4957,7 +5025,7 @@ router.get("/:id/evaluations/:evalId/resultats", authenticateAdmin, async (req, 
 router.patch("/:id/evaluations/:evalId/resultats/:gaId", authenticateAdmin, async (req, res) => {
   try {
     const { id: groupeId, evalId, gaId } = req.params;
-    const { data: eval0 } = await supabase.from("evaluations_groupes").select("coach_id, categorie, titre").eq("id", evalId).eq("groupe_id", groupeId).maybeSingle();
+    const { data: eval0 } = await supabase.from("evaluations_groupes").select("coach_id, categorie, titre").eq("id", evalId).contains("groupe_ids", [groupeId]).maybeSingle();
     if (!eval0) return res.status(404).json({ error: "Évaluation introuvable" });
     if (req.role === "coach" && eval0.coach_id !== req.profil.id && !(await estDelegueSurGroupe(req.profil.id, groupeId)))
       return res.status(403).json({ error: "Accès refusé" });
@@ -5016,7 +5084,7 @@ router.post("/:id/evaluations/:evalId/valider", authenticateAdmin, async (req, r
       return res.status(400).json({ error: "corrections[] requis" });
 
     // Vérifier accès
-    const { data: eval0 } = await supabase.from("evaluations_groupes").select("*").eq("id", evalId).eq("groupe_id", groupeId).maybeSingle();
+    const { data: eval0 } = await supabase.from("evaluations_groupes").select("*").eq("id", evalId).contains("groupe_ids", [groupeId]).maybeSingle();
     if (!eval0) return res.status(404).json({ error: "Évaluation introuvable" });
     if (req.role === "coach" && eval0.coach_id !== req.profil.id && !(await estDelegueSurGroupe(req.profil.id, groupeId)))
       return res.status(403).json({ error: "Accès refusé" });
@@ -5106,6 +5174,38 @@ router.post("/:id/evaluations/:evalId/valider", authenticateAdmin, async (req, r
           verifierBadges(a.apprenant_id, "devoir_correction").catch(() => {});
         }
       }
+
+      /* ── LE PARENT D'UN MINEUR REÇOIT LA NOTE DE SON ENFANT ──
+         Seul l'apprenant était prévenu. Sur un profil enfant, c'est pourtant le parent qui
+         suit la scolarité — et souvent le seul des deux à ouvrir la plateforme : la note
+         partait à un compte que personne ne consulte.
+         Le chemin est celui déjà employé par les remplacements de coach
+         (`notifierParentsMineursGroupeDash`) : l'`assignation_id` caché dans `note` mène à
+         `assignations_parcours`, qui porte le `profil_type` et l'e-mail du parent.
+         Le message est écrit de SON point de vue, pas recopié de celui de l'enfant. */
+      try {
+        const assignationId = JSON.parse(a.note || "{}").assignation_id;
+        if (assignationId) {
+          const { data: asg } = await supabase
+            .from("assignations_parcours").select("prospect_email, profil_type")
+            .eq("id", assignationId).maybeSingle();
+          if (asg?.profil_type === "enfant" && asg.prospect_email) {
+            const { data: parent } = await supabase
+              .from("utilisateurs").select("id").eq("role", "parent")
+              .ilike("email", asg.prospect_email.trim()).maybeSingle();
+            if (parent?.id) {
+              const prenom = a.prenom_apprenant || "Votre enfant";
+              await sendNotif(parent.id, {
+                type: "correction",
+                titre: `🏅 Note de ${prenom} - ${noteStr}`,
+                message: `${prenom} a reçu la note de ${noteStr} pour "${titreEval}"`
+                       + `${c.commentaire_coach ? ` - commentaire du coach : "${c.commentaire_coach}"` : ""}`,
+                meta,
+              });
+            }
+          }
+        }
+      } catch (e) { console.error("[correction] notif parent:", e.message); }
 
       // Chercher commerciale via assignations_parcours
       if (a.email_apprenant) {

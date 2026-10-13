@@ -167,7 +167,8 @@ export default function DashboardParent() {
       const [{ data: pres }, { data: res }, { data: devs }, { data: rendus }, { data: sess }, { data: crs }] = await Promise.all([
         supabase.from('presences_elearning').select('*').eq('inscription_id', enfantActif.id),
         supabase.from('resultats_elearning').select('*').eq('inscription_id', enfantActif.id).order('date_evaluation', { ascending: false }),
-        classeId ? supabase.from('devoirs_elearning').select('*').eq('classe_id', classeId).eq('statut', 'publie').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+        /* `contains` : un devoir peut viser plusieurs classes (voir l'espace apprenant). */
+        classeId ? supabase.from('devoirs_elearning').select('*').contains('classe_ids', [classeId]).eq('statut', 'publie').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
         // Rendus de l'enfant : note + statut réel par devoir
         supabase.from('devoirs_rendus_elearning').select('devoir_id, statut, note, note_max, commentaire_coach, rendu_at, corrige_at').eq('inscription_id', enfantActif.id),
         classeId ? supabase.from('seances_elearning').select('*').eq('classe_id', classeId).order('date', { ascending: false }) : Promise.resolve({ data: [] }),

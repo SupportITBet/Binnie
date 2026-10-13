@@ -4213,7 +4213,11 @@ export default function DashboardAdmin() {
           ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/tableau-de-bord' ? (
             <OngletCommTableauBord />
           ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/tests' ? (
-            <BetLevelTestsTab vueInitiale="resultats" />
+            /* L'assistante CONSULTE les résultats de ses candidats ; elle ne construit pas
+               les épreuves. La bibliothèque de tests est retirée, et `peut` refuse toute
+               écriture — deux verrous plutôt qu'un, parce que la permission en base est
+               portée par le rôle `commercial`, plus large que ce métier. */
+            <BetLevelTestsTab vueInitiale="resultats" sansBibliotheque peut={() => false} />
           ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/inscriptions' ? (
             <OngletCommInscriptions />
           ) : estRole(profile?.role, 'admin_elearning') && location.pathname === '/admin/vente/classes' ? (
