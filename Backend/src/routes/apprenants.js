@@ -13,9 +13,11 @@ import { assurerActiviteDuJour, attribuerPoints } from "../services/gamification
 import { enrichirPaiementsAvecTouchPoint } from "../utils/enrichirPaiementsTouchpoint.js";
 import { notifyRole, notifyUser, notifyOnboarding, ROLES_SUPERVISION_GLOBALE } from "../services/notifyRole.js";
 import { contexteMarquage, noterLectureEnCache, MOTIF } from "../services/lectureSequentielle.js";
+import { annoterSessionsDeLeursCours } from "../services/coursDeSession.js";
 import { contenusAnnotesEl, contexteMarquageEl, MOTIF_EL } from "../services/lectureSequentielleElearning.js";
 import { estChronometre, echeanceComposition, compositionExpiree, dureeComposition } from "../services/minuteurDevoir.js";
 import { utilisateurDuJeton } from "../services/cacheAuth.js";
+import { estElearning, inscriptionsElearningDe, inscriptionCourante, classeIdsDe } from "../services/plateformeApprenant.js";
 import { photoValide } from "../utils/photoUrl.js";
 
 cloudinary.config({
@@ -157,7 +159,12 @@ router.get("/check-eligibilite", async (req, res) => {
       .limit(1)
       .maybeSingle();
 
-    if (insc) return res.json({ eligible: true, raison: null });
+    /* ON DIT DE QUEL MONDE VIENT L'APPRENANT, et c'est ce qui manquait à l'application
+       mobile. Elle le connectait sans savoir où chercher ses données, appelait donc toutes
+       les routes sur la branche de dash, et lui affichait un espace vide. Le client retient
+       cette valeur et la renvoie en `X-Plateforme` à chaque appel : la route sait alors
+       quelles tables lire, sans avoir à deviner ni à interroger les deux. */
+    if (insc) return res.json({ eligible: true, raison: null, plateforme: "bet-elearning" });
 
     // 2. Vérifie présence directe dans une classe e-learning (non suspendue)
     const { data: classeApp } = await supabase
@@ -174,7 +181,7 @@ router.get("/check-eligibilite", async (req, res) => {
       const estParent =
         classeApp.profil_type === 'enfant' &&
         (classeApp.email_parent || '').toLowerCase().trim() === email.toLowerCase().trim();
-      return res.json({ eligible: true, raison: null, estParent: estParent || false });
+      return res.json({ eligible: true, raison: null, estParent: estParent || false, plateforme: "bet-elearning" });
     }
 
     // 2b. Apprenant suspendu dans la table (mais app_metadata pas encore mis à jour)
@@ -217,7 +224,7 @@ router.get("/check-eligibilite", async (req, res) => {
         .limit(1)
         .maybeSingle();
 
-      if (inscription) return res.json({ eligible: true, raison: null, perimetre: "coaching" });
+      if (inscription) return res.json({ eligible: true, raison: null, perimetre: "coaching", plateforme: "dash" });
 
       /* Inscrit mais plus actif : il a été transféré - auquel cas une autre ligne « actif »
          existe et on ne serait pas ici - ou il a arrêté sa formation. Le dire précisément
@@ -1640,7 +1647,62 @@ router.get("/parent/enfant/:id/seances", async (req, res) => {
     });
 
     seances.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    return res.json({ seances });
+
+    /* ── LE PROGRAMME DE LA SÉANCE, POUR LE PARENT ──
+       Le cours que le coach rattache à une séance ne vit pas sur `seances` mais sur
+       `sessions_live.contenu_ids`, reliée par `seance_id`. Le parent ne voyait donc rien du
+       programme de son enfant, là où l'apprenant et le coach l'ont — et où le portail
+       bet-elearning le donne aux deux. On recoupe par `seance_id`, et à défaut par date :
+       une session programmée avant que le lien `seance_id` n'existe n'en porte pas.
+
+       LES BROUILLONS SONT EXCLUS : comme pour l'apprenant, un cours non publié n'est pas
+       un cours partagé, et en annoncer le titre promet ce qui n'est pas encore là. */
+    const { data: live } = await supabase
+      .from("sessions_live")
+      .select("id, seance_id, date, heure, contenu_ids, lien, plateforme")
+      .eq("groupe_id", groupeId)
+      .neq("is_corbeille", true);
+
+    const avecCours = await annoterSessionsDeLeursCours(live || []);
+    const parSeanceId = new Map();
+    const parDateLive = new Map();
+    for (const s of avecCours) {
+      if (s.seance_id) parSeanceId.set(String(s.seance_id), s);
+      if (s.date && !parDateLive.has(s.date)) parDateLive.set(s.date, s);
+    }
+
+    /* LE LIEN DE LA SALLE SUIT LA MÊME RÈGLE QUE PARTOUT : H-10, et pas une minute avant.
+       Il était servi en clair dès la programmation, et le bouton « Rejoindre » du dashboard
+       parent restait donc actif des jours à l'avance — pour une salle vide. Griser le bouton
+       ne suffirait pas : un lien Meet est public, c'est en ne le transmettant pas que la
+       règle tient. Le présentiel n'est pas concerné, il n'a pas de salle à ouvrir. */
+    const MINUTES_OUVERTURE_SALLE = 10;
+    const salleOuverte = (date, heure) => {
+      if (!date) return true;                       // date illisible : on ne retient rien
+      const debut = new Date(`${date}T${String(heure || "00:00").slice(0, 5)}:00`).getTime();
+      if (!Number.isFinite(debut)) return true;
+      return Date.now() >= debut - MINUTES_OUVERTURE_SALLE * 60 * 1000;
+    };
+
+    const enrichies = seances.map(s => {
+      const sl = parSeanceId.get(String(s.id)) || parDateLive.get(s.date) || null;
+      const heure = s.heure_debut || sl?.heure || null;
+      /* `lieu` porte DEUX choses selon la modalité : un lien de visio en ligne, l'adresse
+         du centre en présentiel. On ne retire que ce qui est une URL — masquer une adresse
+         empêcherait le parent de savoir où déposer son enfant, ce que le verrou ne cherche
+         pas à faire. */
+      const lieuEstUnLien = typeof s.lieu === "string" && /^https?:\/\//i.test(s.lieu);
+      const aMasquer = lieuEstUnLien && !salleOuverte(s.date, heure);
+      return {
+        ...s,
+        contenu_modules: sl?.contenu_modules || [],
+        contenu_titres:  sl?.contenu_titres  || [],
+        contenu_ids:     sl?.contenu_ids     || [],
+        ...(aMasquer ? { lieu: null, salle_ouvre_a: heure, salle_ouvre_dans_min: MINUTES_OUVERTURE_SALLE } : {}),
+      };
+    });
+
+    return res.json({ seances: enrichies });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -1811,6 +1873,93 @@ router.get("/mon-espace", async (req, res) => {
     // faire échouer le chargement de l'espace apprenant.
     if (profil?.role === "apprenant") {
       assurerActiviteDuJour(profil.id).catch(() => {});
+    }
+
+    /* ══ LA BRANCHE BET E-LEARNING ════════════════════════════════════════════════════════
+       Tout ce qui suit interroge `groupes_apprenants`, `groupes` et `assignations_parcours`
+       — les tables de BET Languages. Un apprenant e-learning n'y a aucune ligne : la route
+       lui répondait `actif: false` et « Vous n'êtes pas encore affecté(e) à une classe »,
+       alors qu'il a bien une classe, un coach et des séances. C'est l'écran d'accueil de
+       l'application mobile, donc la première chose qu'il voyait après s'être connecté.
+
+       ON RÉPOND DANS LA MÊME FORME, à dessein : `groupe.groupes.nom`, `groupe.niveau`,
+       `coach.{prenom,nom,email}` sont ce que les écrans lisent déjà. Traduire ici évite de
+       réécrire l'application — et évite surtout qu'elle apprenne l'existence de deux
+       schémas, ce qui la rendrait impossible à faire évoluer.
+
+       Placée APRÈS le contrôle `actif === false` : une désactivation de compte vaut des deux
+       côtés et doit continuer de l'emporter. */
+    if (estElearning(req)) {
+      const inscriptions = await inscriptionsElearningDe({ id: user.id, email });
+      const courante     = inscriptionCourante(inscriptions);
+
+      if (!courante) {
+        return res.json({
+          actif: false,
+          profil: profilBase,
+          groupe: null,
+          statut_detail: { compte_actif: true, classe_trouvee: false, coach_assigne: false, classe_active: false },
+          message_blocage: "Vous n'êtes pas encore affecté(e) à une classe. Notre équipe s'en charge.",
+        });
+      }
+
+      const classe = courante.classe || null;
+      let coachInfo = null;
+      if (classe?.coach_id) {
+        const { data: c } = await supabase
+          .from("utilisateurs").select("id, nom, prenom, email, telephone, avatar_url")
+          .eq("id", classe.coach_id).maybeSingle();
+        coachInfo = c || null;
+      }
+
+      /* `classes_elearning_apprenants` ne porte PAS de date de sortie, et la classe close se
+         lit sur son statut. On ne fabrique donc pas de `formation_arretee` sur une donnée qui
+         n'existe pas : l'inventer afficherait un arrêt de formation à qui n'en a pas eu. */
+      const classeCloturee = ["clos", "termine", "archive"].includes(classe?.statut);
+      const suspendu       = courante.statut === "suspendu";
+
+      return res.json({
+        actif: !suspendu,
+        profil: profilBase,
+        // La forme d'une ligne `groupes_apprenants`, remplie depuis l'inscription e-learning.
+        groupe: {
+          id:         courante.id,
+          groupe_id:  courante.classe_id,
+          statut:     courante.statut,
+          niveau:     courante.niveau_cecr || classe?.niveau || null,
+          nom_apprenant:    courante.nom_complet || profilBase.nom,
+          prenom_apprenant: profilBase.prenom,
+          email_apprenant:  courante.email || email,
+          // `telephone` (la const de la branche dash) est déclarée PLUS BAS : s'en servir ici
+          // lèverait une TDZ à l'exécution, que la compilation ne signale pas.
+          telephone:  courante.telephone || profil?.telephone || user.user_metadata?.telephone || null,
+          date_ajout: courante.date_inscription || courante.date_ajout || null,
+          groupes: classe ? {
+            id: classe.id, nom: classe.nom, filiere: classe.type_cours || null,
+            statut: classe.statut, coach_id: classe.coach_id || null,
+            utilisateurs: coachInfo ? { nom: coachInfo.nom, prenom: coachInfo.prenom } : null,
+          } : null,
+        },
+        coach: coachInfo,
+        /* Le parcours et les paiements sont des notions du coaching BET : une formation
+           e-learning est financée par l'entreprise, pas par l'apprenant. On rend des valeurs
+           vides plutôt que d'en inventer — l'écran « Paiement » affichera son état vide, ce
+           qui est la vérité pour lui. */
+        parcours: null,
+        paiements: [],
+        classe_cloturee: classeCloturee,
+        formation_arretee: null,
+        contact_assistance: await resoudreContactAssistance(null),
+        statut_detail: {
+          compte_actif:   true,
+          classe_trouvee: true,
+          coach_assigne:  !!classe?.coach_id,
+          classe_active:  !classeCloturee,
+        },
+        message_blocage: suspendu
+          ? "Votre accès est temporairement suspendu. Contactez votre responsable BET."
+          : null,
+      });
     }
 
     const telephone = profil?.telephone || user.user_metadata?.telephone || null;
@@ -2546,6 +2695,27 @@ router.get("/mes-fichiers", async (req, res) => {
     if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
 
     const email = user.email;
+
+    /* Les ressources d'une classe e-learning vivent dans `fichiers_classes_elearning`, pas
+       dans `groupes_fichiers` : l'apprenant recevait une liste vide alors que son coach y
+       avait déposé des documents. On rend les mêmes champs — `nom`, `url`, `type_fichier` —
+       pour que l'écran des ressources n'ait rien à distinguer. */
+    if (estElearning(req)) {
+      const classeIds = classeIdsDe(await inscriptionsElearningDe({ id: user.id, email }));
+      if (!classeIds.length) return res.json({ fichiers: [] });
+      const { data, error: errF } = await supabase
+        .from("fichiers_classes_elearning")
+        .select("id, nom, url, public_id, categorie, taille_ko, created_at, coach_id, classe_id, visible")
+        .in("classe_id", classeIds)
+        .order("created_at", { ascending: false });
+      if (errF) throw errF;
+      return res.json({
+        fichiers: (data || [])
+          .filter(f => f.visible !== false)
+          .map(f => ({ ...f, groupe_id: f.classe_id, type_fichier: f.categorie || null })),
+      });
+    }
+
     const [resEmail, resId] = await Promise.all([
       supabase.from("groupes_apprenants").select("id, groupe_id, statut").ilike("email_apprenant", email),
       supabase.from("groupes_apprenants").select("id, groupe_id, statut").eq("apprenant_id", user.id),
@@ -2589,6 +2759,27 @@ router.get("/mes-presences", async (req, res) => {
     if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
 
     const email = user.email;
+
+    /* Mêmes présences que `/api/mon-espace/presences`, dans la forme que cet écran attend
+       (`presences` + index `parDate`). La source est `presences_elearning`. */
+    if (estElearning(req)) {
+      const inscrIds = (await inscriptionsElearningDe({ id: user.id, email })).map(i => i.id);
+      if (!inscrIds.length) return res.json({ presences: [], parDate: {} });
+      const { data: brutes } = await supabase
+        .from("presences_elearning")
+        .select("*, seance:seances_elearning(date, heure_debut, type, classe_id)")
+        .in("inscription_id", inscrIds);
+      const presences = (brutes || [])
+        .map(p => ({ ...p, date_seance: p.seance?.date || null, groupe_id: p.seance?.classe_id || null }))
+        .sort((a, b) => String(b.date_seance || "").localeCompare(String(a.date_seance || "")));
+      const parDateEl = {};
+      for (const p of presences) {
+        if (!p.date_seance) continue;
+        (parDateEl[p.date_seance] ||= []).push(p);
+      }
+      return res.json({ presences, parDate: parDateEl });
+    }
+
     const GA_SELECT = "id, groupe_id, statut, nom_apprenant, prenom_apprenant, email_apprenant, apprenant_id";
 
     // Chercher toutes les entrées GA (sans filtre de statut)
@@ -2686,6 +2877,43 @@ router.get("/mes-evaluations", async (req, res) => {
     if (!bearer) return res.status(401).json({ error: "Non authentifié" });
     const { data: { user }, error: authErr } = await supabase.auth.getUser(bearer);
     if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
+
+    /* ── LES RÉSULTATS D'UN APPRENANT E-LEARNING ──
+       Ils sont dans `resultats_elearning`, rattachés à son INSCRIPTION — pas à un `ga_id`.
+       La lecture ci-dessous ne trouvait aucun groupe et répondait « aucun groupe actif
+       trouvé pour cet apprenant », message que l'écran affichait tel quel à quelqu'un qui a
+       bien une classe. On rend la même forme (`evaluations` + `ga_id`), `ga_id` portant ici
+       l'identifiant d'inscription : c'est la clé de l'apprenant dans son monde. */
+    if (estElearning(req)) {
+      const inscriptions = await inscriptionsElearningDe({ id: user.id, email: user.email });
+      const courante = inscriptionCourante(inscriptions);
+      const inscrIds = inscriptions.map(i => i.id);
+      if (!inscrIds.length) {
+        return res.json({ evaluations: [], ga_id: null, debug: "aucune inscription e-learning pour cet apprenant" });
+      }
+      const { data: resultats, error: errR } = await supabase
+        .from("resultats_elearning")
+        .select("*")
+        .in("inscription_id", inscrIds)
+        .order("date_evaluation", { ascending: false });
+      if (errR) throw errR;
+
+      // Le nom de l'évaluateur, pour que l'apprenant sache QUI l'a corrigé.
+      const evalIds = [...new Set((resultats || []).map(r => r.evalue_par).filter(Boolean))];
+      const { data: evaluateurs } = evalIds.length
+        ? await supabase.from("utilisateurs").select("id, nom, prenom").in("id", evalIds)
+        : { data: [] };
+      const nomEval = Object.fromEntries((evaluateurs || []).map(u => [u.id, `${u.prenom || ""} ${u.nom || ""}`.trim()]));
+
+      return res.json({
+        evaluations: (resultats || []).map(r => ({
+          ...r,
+          date_evaluation: r.date_evaluation || r.created_at,
+          correcteur_nom: r.evalue_par ? (nomEval[r.evalue_par] || null) : null,
+        })),
+        ga_id: courante?.id || null,
+      });
+    }
 
     // Trouver le groupes_apprenants de cet utilisateur
     // « retire » EST INCLUS : un apprenant qui a arrêté sa formation garde l'accès à ce qu'il
@@ -3132,7 +3360,38 @@ router.delete("/evaluations/:evalId/rendu", async (req, res) => {
  * courrier : un apprenant connecté ferait partir un mail des serveurs BET vers l'adresse
  * de son choix.
  */
-async function contactsDeLApprenant(user) {
+async function contactsDeLApprenant(user, surElearning = false) {
+    /* ── L'ÉQUIPE D'UN APPRENANT E-LEARNING ──
+       Sa classe est dans `classes_elearning`, son coach sur `classes_elearning.coach_id` :
+       rien de tout cela n'est dans `groupes_apprenants`, et l'écran « Contacts » lui
+       répondait donc une liste vide — personne à qui écrire. On remonte son coach, puis on
+       laisse l'assistance générale compléter comme pour tout le monde. */
+    if (surElearning) {
+      const inscriptions = await inscriptionsElearningDe({ id: user.id, email: user.email });
+      const courante = inscriptionCourante(inscriptions);
+      const contactsEl = [];
+      const coachIdEl = courante?.classe?.coach_id;
+      if (coachIdEl) {
+        const { data: coach } = await supabase.from("utilisateurs")
+          .select("id, nom, prenom, email, telephone, role, avatar_url")
+          .eq("id", coachIdEl).maybeSingle();
+        if (coach) contactsEl.push({
+          id: coach.id, role: "Coach", nom: `${coach.prenom || ""} ${coach.nom || ""}`.trim(),
+          email: coach.email || null, telephone: coach.telephone || null,
+          photo_url: photoValide(coach.avatar_url) || null,
+          classe: courante?.classe?.nom || null,
+        });
+      }
+      const assistance = await resoudreContactAssistance(null);
+      if (assistance?.email) {
+        contactsEl.push({
+          id: "assistance", role: "Assistance BET", nom: assistance.nom || "Assistance BET",
+          email: assistance.email, telephone: assistance.telephone || null, photo_url: null,
+        });
+      }
+      return contactsEl;
+    }
+
     // Trouver le groupes_apprenants de l'apprenant
     let ga = null;
     const { data: gaById } = await supabase.from("groupes_apprenants")
@@ -3385,7 +3644,7 @@ router.get("/mes-contacts", async (req, res) => {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(bearer);
     if (authErr || !user) return res.status(401).json({ error: "Token invalide" });
 
-    res.json({ contacts: await contactsDeLApprenant(user) });
+    res.json({ contacts: await contactsDeLApprenant(user, estElearning(req)) });
   } catch (err) {
     console.error("[apprenants/mes-contacts]", err);
     res.status(500).json({ error: err.message });

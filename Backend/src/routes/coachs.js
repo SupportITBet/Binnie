@@ -11,6 +11,8 @@ import { resolveParentUserId } from "./groupes.js";
 import { clotureSeance } from "./seances.js";
 
 import { staffDesClasses } from "../services/staffDesClasses.js";
+import { annoterSessionsDeLeursCours } from "../services/coursDeSession.js";
+import { estElearning, inscriptionsElearningDe, classeIdsDe } from "../services/plateformeApprenant.js";
 import {
   motifDe, periodesDe, pausesDe, joursSuivis, dureeDepuisJours, dureeLisible,
 } from "../services/archiveApprenants.js";
@@ -1162,6 +1164,76 @@ router.get("/sessions-live", authenticateCoach, async (req, res) => {
   }
 });
 
+/**
+ * Les séances e-learning d'un apprenant, dans la forme d'une `sessions_live`.
+ *
+ * LE LIEN N'EST PAS SERVI AVANT L'OUVERTURE DE LA SALLE, exactement comme pour les sessions
+ * de dash : une adresse Meet ou Zoom est publique, et quiconque l'a copiée la veille entre
+ * quand il veut. Griser un bouton ne protège rien — c'est en ne transmettant pas l'adresse
+ * que la règle tient. Une séance clôturée ne rend pas son lien non plus.
+ */
+async function sessionsElearningDe(user) {
+  const inscriptions = await inscriptionsElearningDe({ id: user.id, email: user.email });
+  const classeIds = classeIdsDe(inscriptions);
+  if (!classeIds.length) return [];
+
+  const [{ data: seances }, { data: classes }] = await Promise.all([
+    supabase.from("seances_elearning").select("*").in("classe_id", classeIds)
+      .order("date", { ascending: false }),
+    supabase.from("classes_elearning").select("id, nom, niveau").in("id", classeIds),
+  ]);
+  if (!seances?.length) return [];
+
+  const coachIds = [...new Set(seances.map(s => s.coach_id).filter(Boolean))];
+  const { data: coachs } = coachIds.length
+    ? await supabase.from("utilisateurs").select("id, nom, prenom").in("id", coachIds)
+    : { data: [] };
+  const nomCoach  = Object.fromEntries((coachs  || []).map(c => [c.id, `${c.prenom || ""} ${c.nom || ""}`.trim()]));
+  const parClasse = Object.fromEntries((classes || []).map(c => [c.id, c]));
+
+  const MINUTES = 10;
+  const maintenant = Date.now();
+  const salleOuverte = (s) => {
+    if (!s.date || !s.heure_debut) return true;
+    const debut = new Date(`${s.date}T${String(s.heure_debut).slice(0, 5)}:00`).getTime();
+    if (!Number.isFinite(debut)) return true;
+    return maintenant >= debut - MINUTES * 60 * 1000;
+  };
+  const close = (s) => ["realisee", "terminee", "annulee"].includes(s.statut);
+
+  return seances.map(s => {
+    const lien = s.lien_zoom || s.lien_meet || s.lien_teams || null;
+    const presentiel = s.type === "presentiel";
+    const servirLien = !presentiel && lien && !close(s) && salleOuverte(s);
+    return {
+      id: s.id,
+      titre: s.objectifs_session || parClasse[s.classe_id]?.nom || "Séance",
+      date: s.date,
+      heure: s.heure_debut,
+      heure_fin: s.heure_fin,
+      duree: s.duree_minutes || null,
+      plateforme: presentiel ? "presentiel"
+        : s.lien_zoom ? "zoom" : s.lien_meet ? "meet" : s.lien_teams ? "teams" : "autre",
+      lien: servirLien ? lien : null,
+      ...(servirLien || presentiel ? {} : { salle_ouvre_a: s.heure_debut }),
+      statut: s.statut === "realisee" ? "terminee" : s.statut,
+      groupe_id: s.classe_id,
+      coach_id: s.coach_id,
+      coach_nom: nomCoach[s.coach_id] || null,
+      notes: s.compte_rendu || null,
+      demarree_at: s.demarree_at || null,
+      terminee_at: s.terminee_at || null,
+      duree_reelle_s: s.duree_reelle_s ?? null,
+      contenu_ids: s.contenu_ids || [],
+      contenu_modules: [],
+      contenu_titres: [],
+      groupes: parClasse[s.classe_id]
+        ? { nom: parClasse[s.classe_id].nom, niveau: parClasse[s.classe_id].niveau, filiere: null }
+        : null,
+    };
+  });
+}
+
 // GET public - apprenants: sessions à venir + terminées des 60 derniers jours
 router.get("/sessions-live/upcoming", authenticateUser, async (req, res) => {
   try {
@@ -1172,6 +1244,19 @@ router.get("/sessions-live/upcoming", authenticateUser, async (req, res) => {
        un parent ne reçoit que les sessions de ses propres classes, filtrées ICI et non
        plus à l'écran, où il suffisait de lire la réponse réseau pour tout voir. */
     const large = estPersonnel(req.user);
+
+    /* ── LES SESSIONS D'UN APPRENANT E-LEARNING ──
+       Elles ne sont pas dans `sessions_live` mais dans `seances_elearning`, rattachées à sa
+       classe. `groupesDeLUtilisateur` ne lui trouvant aucun groupe, la route répondait
+       `{ sessions: [] }` : l'écran « Session live » de l'application mobile était vide pour
+       lui, alors que son coach en avait programmé cinq.
+       On rend la forme de `sessions_live` — `date`, `heure`, `lien`, `plateforme`,
+       `groupes.nom` — pour que l'écran n'ait pas à connaître deux schémas. Le lien suit la
+       même règle que partout : pas servi avant l'ouverture de la salle. */
+    if (!large && estElearning(req)) {
+      return res.json({ sessions: await sessionsElearningDe(req.user) });
+    }
+
     let mesGroupes = null;
     if (!large) {
       mesGroupes = await groupesDeLUtilisateur(req.user);
@@ -1227,16 +1312,14 @@ router.get("/sessions-live/upcoming", authenticateUser, async (req, res) => {
 
     const sessions = [...(rUp.data || []), ...(rPast.data || [])];
 
-    // Enrichir avec les titres des modules (contenu_ids)
-    const allModuleIds = [...new Set(sessions.flatMap(s => s.contenu_ids || []))].filter(Boolean);
-    let moduleMap = {};
-    if (allModuleIds.length > 0) {
-      const { data: mods } = await supabase
-        .from("modules_elearning")
-        .select("id, titre, cours_id")
-        .in("id", allModuleIds);
-      (mods || []).forEach(m => { moduleMap[m.id] = { titre: m.titre, cours_id: m.cours_id }; });
-    }
+    /* LES COURS RATTACHÉS À LA SESSION. On n'en renvoyait que le TITRE, et l'écran apprenant
+       n'en faisait donc qu'une pastille inerte : il voyait « 📦 Leçon 1 » sans pouvoir
+       l'ouvrir, là où le portail bet-elearning donne accès au cours entier depuis la
+       session. `contenu_modules` porte de quoi afficher ET ouvrir — l'identifiant d'abord,
+       que l'écran recoupe avec la liste de ses cours accessibles (celle qui porte déjà le
+       verrou de lecture et les blocs). Le filtre des brouillons et la raison pour laquelle
+       les blocs ne sortent pas d'ici vivent dans le service. */
+    const avecCours = await annoterSessionsDeLeursCours(sessions, { inclureBrouillons: large });
     /* LE LIEN N'EST PAS SERVI AVANT L'OUVERTURE DE LA SALLE, et seulement aux apprenants
        et aux parents. Un lien Meet, Zoom ou Jitsi est public : quiconque l'a copié la
        veille entre quand il veut, quoi qu'affiche l'écran. Griser un bouton ne protège
@@ -1253,10 +1336,12 @@ router.get("/sessions-live/upcoming", authenticateUser, async (req, res) => {
       return maintenantMs >= debut - MINUTES_OUVERTURE_SALLE * 60 * 1000;
     };
 
-    const enriched = sessions.map(s => ({
+    /* `contenu_titres` reste servi : le suivi pédagogique s'en sert pour nommer une session
+       sans titre. Le service le dérive de la même liste filtrée, pour qu'un brouillon masqué
+       ne reparaisse pas par cette porte. */
+    const enriched = avecCours.map(s => ({
       ...s,
       ...(!large && !salleOuverte(s) ? { lien: null, salle_ouvre_a: s.heure } : {}),
-      contenu_titres: (s.contenu_ids || []).map(id => moduleMap[id]?.titre).filter(Boolean),
     }));
 
     res.json({ sessions: enriched });

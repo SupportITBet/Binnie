@@ -58,7 +58,12 @@ const jour = (d) => {
 export async function classesDeLApprenantEl(user) {
   const CHAMPS = "classe_id, date_inscription, date_ajout, statut";
   const [parId, parEmail] = await Promise.all([
-    supabase.from("classes_elearning_apprenants").select(CHAMPS).eq("apprenant_id", user.id),
+    /* Sans identifiant, on n'interroge pas cet axe : `apprenant_id=eq.null` ne filtre pas
+       « les lignes sans compte », il échoue. Le parent qui consulte son enfant par e-mail
+       passe par le second axe. */
+    user.id
+      ? supabase.from("classes_elearning_apprenants").select(CHAMPS).eq("apprenant_id", user.id)
+      : Promise.resolve({ data: [] }),
     user.email
       ? supabase.from("classes_elearning_apprenants").select(CHAMPS).ilike("email", user.email)
       : Promise.resolve({ data: [] }),

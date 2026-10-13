@@ -334,12 +334,19 @@ router.post("/seances", authenticateAdmin, requirePermission("planning", "create
             .from("utilisateurs").select("id").in("id", appIds).eq("actif", true);
           const idsValides = (utilisateursActifs || []).map(u => u.id);
           if (idsValides.length) {
+            /* `source` MANQUAIT, et c'est pourquoi personne ne voyait rien. La cloche de
+               bet-elearning n'interroge que `?source=bet-elearning` ; une notification
+               écrite sans cette colonne atterrit dans l'autre plateforme — elle existe en
+               base mais reste invisible à son destinataire. Le reste des routes passe par
+               `notifyRole`/`notifyUser`, qui la posent ; ces deux insertions directes
+               l'avaient oubliée. */
             const { error: errNotif } = await supabase.from("notifications").insert(idsValides.map(uid => ({
               user_id: uid,
               type:    "cours",
               titre:   "📅 Nouvelle session planifiée",
               message: msgAppr,
               lu:      false,
+              source:  "bet-elearning",
               meta:    { seance_id: data?.id, classe_id, date },
             })));
             if (errNotif) console.warn("[seance notif apprenants insert]", errNotif.message);
@@ -372,8 +379,10 @@ router.post("/seances", authenticateAdmin, requirePermission("planning", "create
           for (const eid of entrepriseIds) {
             const { data: rhUsers } = await supabase.from("utilisateurs").select("id").eq("role", "client_entreprise").eq("entreprise_id", eid).eq("actif", true);
             if (rhUsers?.length) {
+              // Même oubli que pour les apprenants : sans `source`, la RH ne voyait rien.
               await supabase.from("notifications").insert(rhUsers.map(u => ({
                 user_id: u.id, type: "cours", lu: false,
+                source: "bet-elearning",
                 titre: "📅 Nouvelle session planifiée",
                 message: `Une session a été planifiée le ${dateLabel} (${heureLabel}) pour vos apprenants.`,
                 meta: { seance_id: data?.id, classe_id, date },
@@ -381,7 +390,11 @@ router.post("/seances", authenticateAdmin, requirePermission("planning", "create
             }
           }
         }
-      } catch {}
+      } catch (e) {
+        // Un `catch` muet masquait toute panne de ce bloc : on ne savait même pas qu'il
+        // échouait. Il ne doit pas faire échouer la création de séance, mais il doit se voir.
+        console.error("[seance] notifications:", e.message);
+      }
     })();
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -511,6 +524,33 @@ router.patch("/seances/:id", authenticateAdmin, requirePermission("planning", "u
 
     // Notifier tous les apprenants de la classe - présents ou non - quand le coach clôture
     // une session (live ou présentiel).
+    /* ── LA SALLE S'OUVRE : PRÉVENIR CEUX QUI DOIVENT ENTRER ──
+       Le démarrage ne notifiait PERSONNE. L'apprenant devait deviner que son coach venait
+       d'ouvrir — un cours en ligne commence quand la salle s'ouvre, pas à l'heure prévue.
+       La supervision est prévenue pour pouvoir vérifier en direct que le cours se tient.
+
+       `premierDemarrage` : une réouverture de salle (le coach rafraîchit sa page) ne
+       redéclenche rien. Sans ce garde-fou, le superviseur recevrait plusieurs alertes pour
+       un seul cours et finirait par n'en lire aucune. `demarree_at` n'étant posé qu'à la
+       première ouverture, il suffit à le dire. */
+    const premierDemarrage = payload.statut === "en_cours" && !avant.demarree_at;
+    if (premierDemarrage && data.classe_id) {
+      const lien = data.lien_zoom || data.lien_meet || data.lien_teams || null;
+      notifierApprenantsClasse(data.classe_id, {
+        type:    "session",
+        titre:   "🎥 Votre cours vient de commencer",
+        message: `Votre coach a ouvert la salle. ${lien ? "Rejoignez-le depuis Mon Live." : "Rendez-vous en classe."}`,
+        meta:    { seance_id: data.id, classe_id: data.classe_id, lien },
+      }).catch(e => console.error("[seance demarree] notif apprenants:", e.message));
+
+      notifyRole(ROLES_SUIVI_PEDAGO, {
+        type:    "cours",
+        titre:   "🎥 Session démarrée",
+        message: `Un coach vient d'ouvrir la salle${data.date ? ` pour la séance du ${new Date(data.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}` : ""}.`,
+        meta:    { seance_id: data.id, classe_id: data.classe_id },
+      }).catch(e => console.error("[seance demarree] notif encadrement:", e.message));
+    }
+
     if (payload.statut === "realisee" && !etaitRealisee && data.classe_id) {
       const dateLabel = data.date ? new Date(data.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long" }) : "";
       notifierApprenantsClasse(data.classe_id, {
@@ -519,6 +559,29 @@ router.patch("/seances/:id", authenticateAdmin, requirePermission("planning", "u
         message: `Votre session${dateLabel ? ` du ${dateLabel}` : ""} vient d'être clôturée par votre coach.${data.bilan_session ? " Un bilan est disponible." : ""}`,
         meta:    { seance_id: data.id, classe_id: data.classe_id },
       }).catch(() => {});
+
+      /* ── LA CLÔTURE SE SAIT AU-DELÀ DE LA CLASSE ──
+         Seuls les apprenants étaient prévenus. Or la clôture est le moment où les présences
+         deviennent consultables et où l'honoraire du coach est calculé : l'encadrement et
+         la RH qui finance la formation ont l'un et l'autre une raison d'être informés. */
+      notifyRole(ROLES_SUIVI_PEDAGO, {
+        type:    "cours",
+        titre:   "✅ Session clôturée",
+        message: `La séance${dateLabel ? ` du ${dateLabel}` : ""} a été clôturée par le coach — présences consultables.`,
+        meta:    { seance_id: data.id, classe_id: data.classe_id },
+      }).catch(e => console.error("[seance cloturee] notif encadrement:", e.message));
+
+      (async () => {
+        const { data: cl } = await supabase
+          .from("classes_elearning").select("nom, entreprise_id").eq("id", data.classe_id).maybeSingle();
+        if (!cl?.entreprise_id) return;   // classe « particuliers » : aucune RH à prévenir
+        await notifyEntreprise(cl.entreprise_id, {
+          type:    "cours",
+          titre:   `✅ Séance réalisée - ${cl.nom}`,
+          message: `La séance${dateLabel ? ` du ${dateLabel}` : ""} de ${cl.nom} s'est tenue et vient d'être clôturée.`,
+          meta:    { seance_id: data.id, classe_id: data.classe_id, entreprise_id: cl.entreprise_id },
+        });
+      })().catch(e => console.error("[seance cloturee] notif RH:", e.message));
 
       // Remplacement (étapes 5 & 6) - réattribution honoraires + clôture auto si complet
       traiterClotureSeanceRemplacement(data.id, data.classe_id).catch(() => {});

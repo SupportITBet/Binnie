@@ -78,13 +78,24 @@ router.get("/a-noter", authenticateUser, async (req, res) => {
       const seanceIds = [...new Set(presences.map(p => p.seance_id).filter(Boolean))];
       if (!seanceIds.length) return res.json({ seances: [] });
 
-      const { data: seances } = await supabase
+      /* LES COLONNES DE `seances_elearning` NE SONT PAS CELLES DE `seances`.
+         Cette requête demandait `titre`, `date_seance`, `duree_h` et `type_cours` — quatre
+         colonnes qui n'existent QUE côté présentiel. Postgres refusait donc la requête
+         entière (42703 « column seances_elearning.titre does not exist ») ; l'erreur n'était
+         pas lue, `seances` valait `null`, et la route répondait « rien à noter ». Le bandeau
+         d'appréciation n'est jamais apparu, sur une séance pourtant clôturée avec l'apprenant
+         marqué présent. On lit les vrais noms, et on les remet ensuite sous ceux que l'écran
+         attend — c'est ce que fait déjà `groupe_id` / `ga_id` juste en dessous. */
+      const { data: seances, error: errSeances } = await supabase
         .from("seances_elearning")
-        .select("id, titre, date_seance, heure_debut, duree_h, classe_id, coach_id, type_cours, statut")
+        .select("id, objectifs_session, bilan_session, date, heure_debut, duree_minutes, classe_id, coach_id, type, statut")
         .in("id", seanceIds)
         .eq("statut", "realisee")
-        .order("date_seance", { ascending: false })
+        .order("date", { ascending: false })
         .limit(200);
+      /* L'ERREUR EST LUE, désormais. Elle était silencieuse, et c'est ce silence qui a
+         laissé la fonctionnalité hors service sans que rien ne le signale. */
+      if (errSeances) throw errSeances;
       const candidates = seances || [];
       if (!candidates.length) return res.json({ seances: [] });
 
@@ -107,9 +118,13 @@ router.get("/a-noter", authenticateUser, async (req, res) => {
       return res.json({
         seances: candidates.filter(s => !notees.has(s.id)).map(s => ({
           ...s,
-          // `groupe_id` et `ga_id` : les noms que l'écran et la route d'écriture
-          // attendent, quelle que soit la plateforme d'origine.
+          // `groupe_id`, `ga_id`, `titre`, `date_seance` : les noms que l'écran et la route
+          // d'écriture attendent, quelle que soit la plateforme d'origine.
           groupe_id:  s.classe_id,
+          titre:      s.objectifs_session || s.bilan_session || "Séance",
+          date_seance: s.date,
+          duree_h:    s.duree_minutes ? Math.round((s.duree_minutes / 60) * 10) / 10 : null,
+          type_cours: s.type || null,
           coach_nom:  s.coach_id  ? (nomCoach[s.coach_id]    || null) : null,
           groupe_nom: s.classe_id ? (nomClasse[s.classe_id]  || null) : null,
           ga_id:      inscrParClasse[s.classe_id] || null,
@@ -223,9 +238,13 @@ router.post("/", authenticateUser, async (req, res) => {
        La ligne enregistrée reste identique — `groupe_id` reçoit la classe et `ga_id`
        l'inscription — ce que la lecture côté supervision sait déjà interpréter. */
     if (req.headers["x-plateforme"] === "bet-elearning") {
-      const { data: sE } = await supabase
-        .from("seances_elearning").select("id, classe_id, coach_id, statut, date_seance")
+      /* `date_seance` n'existe pas ici — la colonne s'appelle `date`. La requête échouait
+         donc en 42703, `sE` valait `null`, et l'apprenant recevait « Séance introuvable »
+         sur une séance bien présente : sa note était refusée avant d'être écrite. */
+      const { data: sE, error: errSE } = await supabase
+        .from("seances_elearning").select("id, classe_id, coach_id, statut, date")
         .eq("id", seance_id).maybeSingle();
+      if (errSE) throw errSE;
       if (!sE) return res.status(404).json({ error: "Séance introuvable" });
 
       const { data: parId } = await supabase
@@ -390,11 +409,23 @@ router.get("/", authenticateAdmin, requireLecture, async (req, res) => {
     const [{ data: coachs }, { data: groupes }, { data: seances }] = await Promise.all([
       coachIds.length  ? sur(supabase.from("utilisateurs").select("id, nom, prenom, avatar_url").in("id", coachIds)) : { data: [] },
       groupeIds.length ? sur(supabase.from(tableClasses).select("id, nom, niveau").in("id", groupeIds))             : { data: [] },
-      seanceIds.length ? sur(supabase.from(tableSeances).select("id, titre, date_seance, type_cours").in("id", seanceIds)) : { data: [] },
+      /* LES DEUX TABLES N'ONT PAS LES MÊMES COLONNES. `titre`, `date_seance` et `type_cours`
+         n'existent que côté présentiel : sur bet-elearning la requête échouait en 42703,
+         `sur()` la ramenait silencieusement à une liste vide, et le PA lisait les notes de
+         ses coachs sans jamais savoir de quelle séance elles parlaient. */
+      seanceIds.length
+        ? sur(supabase.from(tableSeances)
+            .select(versBet ? "id, objectifs_session, bilan_session, date, type" : "id, titre, date_seance, type_cours")
+            .in("id", seanceIds))
+        : { data: [] },
     ]);
     const mapC = Object.fromEntries((coachs  || []).map(c => [c.id, c]));
     const mapG = Object.fromEntries((groupes || []).map(g => [g.id, g]));
-    const mapS = Object.fromEntries((seances || []).map(s => [s.id, s]));
+    /* Ramenées aux noms que l'écran lit, pour qu'une appréciation e-learning s'affiche
+       exactement comme une appréciation du présentiel. */
+    const mapS = Object.fromEntries((seances || []).map(s => [s.id, versBet
+      ? { id: s.id, titre: s.objectifs_session || s.bilan_session || "Séance", date_seance: s.date, type_cours: s.type || null }
+      : s]));
 
     /* Une appréciation SANS classe résolue appartient à l'autre plateforme : on l'écarte
        plutôt que de l'afficher sans nom de classe, ce qui la ferait passer pour une

@@ -2653,6 +2653,95 @@ router.get("/elearning/mes-classes", requireEntrepriseOrAdmin, async (req, res) 
   }
 });
 
+/* ── GET /api/entreprise/elearning/seances ─────────────────────────────────────
+   Les séances programmées par le coach pour les classes de CETTE entreprise, avec les
+   présences relevées.
+
+   POURQUOI UNE ROUTE DÉDIÉE. La RH n'avait accès à aucune session : l'état `sessions` du
+   dashboard était déclaré et jamais rempli, aucune route ne les lui servait. Elle finançait
+   une formation sans pouvoir vérifier qu'un cours avait eu lieu.
+
+   La route admin `/api/elearning/seances` aurait techniquement répondu — `client_entreprise`
+   figure dans les rôles acceptés par `authenticateAdmin` — mais elle renvoie les séances de
+   TOUTES les entreprises. Filtrer à l'écran aurait laissé passer sur le réseau les plannings
+   des autres clients, visibles de quiconque lit la réponse : c'est la fuite qu'on a déjà eue
+   ailleurs. Le périmètre est donc posé ICI, sur `entreprise_id`, et rien d'autre ne sort.
+
+   LES PRÉSENCES SONT AGRÉGÉES CÔTÉ SERVEUR : un dashboard qui appelle une route par séance
+   en émet trente au chargement. On renvoie le compte par séance, et le détail nominatif avec
+   — la RH a le droit de savoir qui de ses salariés a suivi le cours qu'elle paie. */
+router.get("/elearning/seances", requireEntrepriseOrAdmin, async (req, res) => {
+  try {
+    const entrepriseId = req.profil.entreprise_id;
+    if (!entrepriseId) return res.json({ seances: [] });
+
+    const { data: classes } = await supabase
+      .from("classes_elearning")
+      .select("id, nom, niveau, coach_id")
+      .eq("entreprise_id", entrepriseId);
+    const classeIds = (classes || []).map(c => c.id);
+    if (!classeIds.length) return res.json({ seances: [] });
+
+    const { data: seances, error } = await supabase
+      .from("seances_elearning")
+      .select("*")
+      .in("classe_id", classeIds)
+      .order("date", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    if (!seances?.length) return res.json({ seances: [] });
+
+    const seanceIds = seances.map(s => s.id);
+    const coachIds  = [...new Set([...(classes || []).map(c => c.coach_id), ...seances.map(s => s.coach_id)].filter(Boolean))];
+
+    const [{ data: presences }, { data: coachs }, { data: inscrits }] = await Promise.all([
+      supabase.from("presences_elearning")
+        .select("id, seance_id, inscription_id, statut, duree_connexion_min")
+        .in("seance_id", seanceIds),
+      coachIds.length
+        ? supabase.from("utilisateurs").select("id, nom, prenom").in("id", coachIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from("classes_elearning_apprenants")
+        .select("id, classe_id, nom_complet, email")
+        .in("classe_id", classeIds),
+    ]);
+
+    const nomClasse = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
+    const nomCoach  = Object.fromEntries((coachs  || []).map(c => [c.id, `${c.prenom || ""} ${c.nom || ""}`.trim()]));
+    const nomInscrit = Object.fromEntries((inscrits || []).map(i => [i.id, i.nom_complet || i.email]));
+    /* L'EFFECTIF DE LA CLASSE sert de dénominateur au taux de présence. Sans lui, « 3
+       présents » ne dit pas s'il en manquait un ou douze. */
+    const effectif = {};
+    for (const i of inscrits || []) effectif[i.classe_id] = (effectif[i.classe_id] || 0) + 1;
+
+    const parSeance = {};
+    for (const p of presences || []) (parSeance[p.seance_id] ||= []).push(p);
+
+    res.json({
+      seances: seances.map(s => {
+        const liste = parSeance[s.id] || [];
+        const presents = liste.filter(p => ["present", "retard"].includes(p.statut));
+        return {
+          ...s,
+          classe_nom: nomClasse[s.classe_id] || null,
+          coach_nom:  nomCoach[s.coach_id]   || null,
+          effectif_classe: effectif[s.classe_id] || 0,
+          nb_presents: presents.length,
+          nb_absents:  liste.filter(p => p.statut === "absent").length,
+          nb_retards:  liste.filter(p => p.statut === "retard").length,
+          presences: liste.map(p => ({
+            inscription_id: p.inscription_id,
+            nom: nomInscrit[p.inscription_id] || null,
+            statut: p.statut,
+            duree_connexion_min: p.duree_connexion_min ?? null,
+          })),
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/entreprise/elearning/rapports ────────────────────────────────────
 // Rapports mensuels publiés pour l'entreprise
 router.get("/elearning/rapports", requireEntrepriseOrAdmin, async (req, res) => {

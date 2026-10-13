@@ -1,6 +1,8 @@
 import express from "express";
 import supabase from "../config/supabase.js";
 import { bornerAFenetre, annoterFenetre } from "../services/lectureSequentielle.js";
+import { classesDeLApprenantEl } from "../services/lectureSequentielleElearning.js";
+import { estElearning, inscriptionsElearningDe, classeIdsDe } from "../services/plateformeApprenant.js";
 import { emailAutorise } from "../services/accesApprenant.js";
 import { authenticateUser } from "../middlewares/auth.js";
 import { historiqueTestsDe } from "./levelTest.js";
@@ -129,6 +131,105 @@ async function getIds(email) {
 }
 
 /**
+ * Les présences d'un apprenant du portail bet-elearning.
+ *
+ * Elles vivent dans `presences_elearning`, rattachées à l'inscription et à la séance. La
+ * lecture de dash passe par `presences_privees` et `groupes_presences`, où un apprenant
+ * e-learning n'a aucune ligne : il recevait une liste vide, sur le web comme sur mobile.
+ *
+ * On rend les mêmes champs que la branche dash — `date_seance`, `statut`, `source` — pour
+ * que les écrans n'aient pas à connaître deux formes de présence.
+ */
+async function presencesElearningDe(email) {
+  const propre = email.trim();
+  const { data: compte } = await supabase
+    .from("utilisateurs").select("id").ilike("email", propre).maybeSingle();
+
+  const inscriptions = await inscriptionsElearningDe({ id: compte?.id || null, email: propre });
+  const inscrIds = inscriptions.map(i => i.id);
+  if (!inscrIds.length) return [];
+
+  const { data: brutes } = await supabase
+    .from("presences_elearning")
+    .select("*, seance:seances_elearning(date, heure_debut, heure_fin, type, classe_id, objectifs_session)")
+    .in("inscription_id", inscrIds);
+
+  const classeIds = classeIdsDe(inscriptions);
+  const { data: classes } = classeIds.length
+    ? await supabase.from("classes_elearning").select("id, nom, statut").in("id", classeIds)
+    : { data: [] };
+  const nomClasse = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
+
+  return (brutes || [])
+    .map(p => ({
+      ...p,
+      date_seance: p.seance?.date || null,
+      heure_debut: p.seance?.heure_debut || null,
+      /* Le présentiel existe aussi en e-learning : l'étiqueter « session live » ferait
+         passer un cours en salle pour une visio, exactement le défaut corrigé côté dash. */
+      source:      p.seance?.type === "presentiel" ? "cours" : "session_live",
+      plateforme:  p.seance?.type === "presentiel" ? "presentiel" : null,
+      session_titre: p.seance?.objectifs_session || null,
+      classe_nom:  nomClasse[p.seance?.classe_id] || null,
+    }))
+    .sort((a, b) => String(b.date_seance || "").localeCompare(String(a.date_seance || "")));
+}
+
+/**
+ * Les séances d'un apprenant du portail bet-elearning.
+ *
+ * ── CE QUI CHANGE PAR RAPPORT À DASH ──
+ * Les séances y sont rattachées à une CLASSE (`seances_elearning.classe_id`), pas à une
+ * inscription, et `classes_elearning_apprenants` ne porte aucune date de sortie : la
+ * fenêtre est donc « depuis son inscription », sans « après son départ » à distinguer.
+ * C'est la même limite que celle documentée dans `lectureSequentielleElearning.js`, et on
+ * s'y tient plutôt que d'inventer un bornage sur des colonnes qui n'existent pas.
+ *
+ * Une séance tenue AVANT l'arrivée de l'apprenant n'est pas la sienne : il n'y était pas,
+ * et la faire figurer dans son planning laisserait croire à une absence.
+ *
+ * On renvoie `lien_visio` et `type_session` normalisés comme le reste de l'application :
+ * l'écran de planning y applique la règle d'ouverture de salle (H-10) sans avoir à savoir
+ * laquelle des trois colonnes `lien_zoom` / `lien_meet` / `lien_teams` le coach a remplie.
+ */
+async function seancesElearningDe(email) {
+  const propre = email.trim();
+  const { data: compte } = await supabase
+    .from("utilisateurs").select("id").ilike("email", propre).maybeSingle();
+
+  const rattachements = await classesDeLApprenantEl({ id: compte?.id || null, email: propre });
+  if (!rattachements.length) return [];
+
+  const classeIds = rattachements.map(r => r.classe_id);
+  const [{ data: brutes }, { data: classes }] = await Promise.all([
+    supabase.from("seances_elearning").select("*").in("classe_id", classeIds)
+      .order("date", { ascending: false }),
+    supabase.from("classes_elearning").select("id, nom, statut").in("id", classeIds),
+  ]);
+
+  const nomDe = Object.fromEntries((classes || []).map(c => [c.id, c]));
+  const arriveeDe = Object.fromEntries(
+    rattachements.map(r => [r.classe_id, String(r.date_inscription || r.date_ajout || "").slice(0, 10)])
+  );
+
+  return (brutes || [])
+    .filter(s => {
+      const arrivee = arriveeDe[s.classe_id];
+      return !arrivee || String(s.date || "") >= arrivee;
+    })
+    .map(s => ({
+      ...s,
+      date_seance: s.date,
+      date_cours:  s.date,
+      titre:       s.objectifs_session || s.bilan_session || null,
+      classe_nom:  nomDe[s.classe_id]?.nom || null,
+      classe_passee: nomDe[s.classe_id]?.statut === "termine",
+      type_session: s.type === "presentiel" ? "presentiel" : "ligne",
+      lien_visio:  s.lien_zoom || s.lien_meet || s.lien_teams || null,
+    }));
+}
+
+/**
  * Lit une table rattachée à une classe sur TOUT le parcours, chaque classe bornée à la
  * fenêtre où l'apprenant y était réellement inscrit.
  *
@@ -188,6 +289,29 @@ router.get("/tests-niveau", authenticateUser, async (req, res) => {
   const email = await emailAutorise(req.user, req.query.email);
   if (!email) return res.status(403).json({ error: "Accès refusé à ces données" });
   try {
+    /* LE TEST D'UN APPRENANT E-LEARNING N'EST PAS DANS `level_test_results`. Son niveau est
+       posé sur son inscription (`inscriptions_elearning.niveau_detecte` + `date_test`), par
+       le circuit de placement. L'historique revenait donc vide, et l'écran lui affirmait
+       qu'il n'avait jamais passé de test — alors que c'est ce test qui lui a valu sa classe.
+       Vérifié : niveau A1 détecté le 11/10/2026, invisible jusqu'ici. */
+    if (estElearning(req)) {
+      const { data: inscrs } = await supabase
+        .from("inscriptions_elearning")
+        .select("id, niveau_detecte, date_test, created_at")
+        .ilike("email", email.trim())
+        .not("niveau_detecte", "is", null);
+      return res.json({
+        historique: (inscrs || [])
+          .map(i => ({
+            id: i.id,
+            level: i.niveau_detecte,
+            submitted_at: i.date_test || i.created_at,
+            source: "placement_elearning",
+          }))
+          .sort((a, b) => String(b.submitted_at || "").localeCompare(String(a.submitted_at || ""))),
+      });
+    }
+
     const { assignation_id } = await getIds(email);
     const tous = await historiqueTestsDe({ assignation_id, email });
     res.json({
@@ -212,6 +336,19 @@ router.get("/seances", authenticateUser, async (req, res) => {
   const email = await emailAutorise(req.user, req.query.email);
   if (!email) return res.status(403).json({ error: "Accès refusé à ces données" });
   try {
+    /* DEUX PLATEFORMES, DEUX JEUX DE TABLES — UNE SEULE ROUTE.
+       Un apprenant du portail e-learning n'a aucune ligne dans `groupes_apprenants` ni
+       dans `seances` : la lecture ci-dessous ne pouvait donc RIEN lui renvoyer, et son
+       onglet « Mon planning » affichait « Aucune séance » alors que son coach en avait
+       programmé cinq. Ses séances vivent dans `seances_elearning`, rattachées à sa classe.
+       On choisit la source selon la plateforme de la requête — comme `contexteMarquage` /
+       `contexteMarquageEl` le font déjà pour le verrou de lecture — plutôt que d'ouvrir une
+       seconde route de planning : deux routes rendant la même donnée finissent par
+       diverger, et personne ne sait plus laquelle fait foi. */
+    if (String(req.headers["x-plateforme"] || "").toLowerCase() === "bet-elearning") {
+      return res.json({ seances: await seancesElearningDe(email) });
+    }
+
     const { assignation_id, ga, parcours } = await getIds(email);
     let data = [];
 
@@ -278,6 +415,14 @@ router.get("/presences", authenticateUser, async (req, res) => {
        L'optionnel `parcours?.length` est précisément ce qui a caché l'erreur à la relecture : il
        donne au lecteur l'impression que le cas « absent » est géré. Sur une variable non
        déclarée, `?.` ne protège de rien — seul `typeof` le ferait. */
+    /* LES PRÉSENCES E-LEARNING SONT AILLEURS. Elles vivent dans `presences_elearning`,
+       rattachées à l'inscription et à la séance — pas dans `presences_privees` ni
+       `groupes_presences`. Sans cet aiguillage, l'apprenant e-learning recevait une liste
+       vide, sur le web comme sur l'application mobile. */
+    if (estElearning(req)) {
+      return res.json({ presences: await presencesElearningDe(email) });
+    }
+
     const { assignation_id, ga, parcours } = await getIds(email);
     let presences = [];
 
