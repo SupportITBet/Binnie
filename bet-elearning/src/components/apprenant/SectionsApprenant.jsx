@@ -4,7 +4,7 @@ import { COULEURS } from '../../constants/couleurs';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const jeton = () => localStorage.getItem('bet_access_token') || localStorage.getItem('admin_token') || '';
-const hdr = () => ({ Authorization: `Bearer ${jeton()}`, 'Content-Type': 'application/json' });
+const hdr = () => ({ Authorization: `Bearer ${jeton()}`, 'Content-Type': 'application/json', 'X-Plateforme': 'bet-elearning' });
 
 /**
  * Les sept écrans qui manquaient à l'espace apprenant de bet-elearning face à celui de dash :

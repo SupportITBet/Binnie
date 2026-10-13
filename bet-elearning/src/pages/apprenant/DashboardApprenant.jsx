@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAgeInterface } from '../../hooks/useAgeInterface';
 import { COULEURS } from '../../constants/couleurs';
+import { urlOuvrir, urlTelecharger } from '../../utils/fichierUrl';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { genererPDF, fmtDatePDF } from '../../utils/genererPDF';
 import SalleVirtuelle from '../../components/shared/SalleVirtuelle';
@@ -582,7 +583,12 @@ export default function DashboardApprenant() {
 
   // ── Exercice modal ──
   const [exerciceOuvert, setExerciceOuvert] = useState(null);
-  const [exoTermines, setExoTermines]       = useState({});
+  /* `exoTermines` A ÉTÉ SUPPRIMÉ. Deux états décrivaient le même fait — « ce cours est
+     terminé » : `terminesLive`, chargé depuis `/mes-cours-lus` et écrit en base par le
+     lecteur de session, et celui-ci, purement local au modal de cours. Le bouton du modal
+     ne faisait donc que colorer un bouton : rien ne partait au serveur, l'état se perdait
+     au rechargement, et le coach voyait « 0 lecture » sur un cours que toute sa classe
+     avait lu. Un seul état désormais, celui qui existe réellement en base. */
   const [exoReponses, setExoReponses]       = useState({});
   const [exoSoumis, setExoSoumis]           = useState({});
 
@@ -819,7 +825,7 @@ export default function DashboardApprenant() {
         if (!token) return;
         await fetch(`${_API}/api/contenus/mini-jeux/${jeuId}/resultat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' },
           body: JSON.stringify({ score, score_max: scoreMax ?? null, tentative_numero }),
         });
         // Mise à jour optimiste des KPIs affichés - évite d'attendre un F5 pour les voir bouger.
@@ -906,8 +912,37 @@ export default function DashboardApprenant() {
     { id: 'processus',    icone: '🗺️', titre: "Processus d'apprentissage", desc: "Comment se déroulent les sessions, les devoirs, les évaluations et la progression jusqu'au certificat.", duree: '4 min' },
     { id: 'certification',icone: '🏆', titre: 'Votre certificat BET', desc: "Les critères pour obtenir votre certificat : assiduité, notes, passage de niveau. Votre objectif final.", duree: '2 min' },
   ];
+  /* ── LE GUIDE DE BIENVENUE SE TERMINE UNE FOIS, PAR COMPTE ──
+     Son état ne vivait QUE dans `localStorage`. Il était donc attaché au navigateur et non
+     à l'apprenant : le même compte revoyait les quatre étapes sur son téléphone, sur un
+     autre poste, ou après un simple nettoyage de cache. Le serveur gardait pourtant la
+     trace de la validation depuis le début — elle n'était jamais relue.
+     `localStorage` reste utilisé, mais seulement pour ÉVITER LE CLIGNOTEMENT : sans lui,
+     le guide s'afficherait une fraction de seconde à chaque chargement, le temps que la
+     réponse du serveur arrive. C'est le serveur qui tranche. */
   const clefOnboarding = `bet_onboarding_done_${profile?.id || 'default'}`;
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem(clefOnboarding));
+  useEffect(() => {
+    if (!profile?.id) return;
+    let vivant = true;
+    (async () => {
+      try {
+        const sess = await supabase.auth.getSession();
+        const tok = sess.data.session?.access_token || localStorage.getItem('bet_access_token');
+        if (!tok) return;
+        const r = await fetch(`${_API}/api/gamification/onboarding-complete`, { headers: { Authorization: `Bearer ${tok}` } });
+        if (!r.ok || !vivant) return;
+        const d = await r.json();
+        if (d.fait) {
+          /* On recopie dans `localStorage` pour que les prochains chargements de CE
+             navigateur n'aient plus à attendre la réponse. */
+          localStorage.setItem(clefOnboarding, '1');
+          setShowOnboarding(false);
+        }
+      } catch { /* hors ligne : on garde ce que dit le navigateur */ }
+    })();
+    return () => { vivant = false; };
+  }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [etapesValidees, setEtapesValidees] = useState({});
   const toutValide = ETAPES_ONBOARDING.every(e => etapesValidees[e.id]);
   async function validerOnboarding() {
@@ -1110,14 +1145,35 @@ export default function DashboardApprenant() {
         setProgressionReelle_app(prog    || []);
         setResultatsReels_app(res        || []);
 
-        // 3. Cours publiés par le coach pour cette classe (contenus_classes_elearning)
-        const { data: contenus } = await supabase
-          .from('contenus_classes_elearning')
-          .select('*')
-          .eq('classe_id', inscr.classe_id)
-          .eq('est_visible', true)
-          .order('ordre', { ascending: true });
-        if (contenus && contenus.length > 0) setContenus_app(contenus);
+        /* 3. Cours publiés par le coach — SERVIS PAR L'API, ANNOTÉS DU VERROU.
+           La lecture directe de la table ne pouvait pas dire ce qui est verrouillé : le
+           calcul demande les rattachements, leurs dates et les lectures déjà faites. Le
+           refaire ici aurait créé une seconde implémentation de la règle, celle qui finit
+           par diverger de ce que le serveur applique à l'écriture — et par afficher un
+           cadenas sur un cours autorisé, ou l'inverse, bien pire.
+           Repli sur la lecture directe si l'API échoue : mieux vaut des cours sans verrou
+           affiché qu'un espace apprenant vide. */
+        let contenus = null;
+        try {
+          const sess = await supabase.auth.getSession();
+          const tk = sess.data.session?.access_token;
+          if (tk) {
+            const rc = await fetch(`${_API}/api/apprenants/mes-contenus-elearning`, {
+              headers: { Authorization: `Bearer ${tk}`, 'X-Plateforme': 'bet-elearning' },
+            });
+            if (rc.ok) contenus = (await rc.json()).contenus || [];
+          }
+        } catch { /* repli ci-dessous */ }
+        if (contenus === null) {
+          const { data } = await supabase
+            .from('contenus_classes_elearning')
+            .select('*')
+            .contains('classe_ids', [inscr.classe_id])
+            .eq('est_visible', true)
+            .order('ordre', { ascending: true });
+          contenus = data || [];
+        }
+        if (contenus.length > 0) setContenus_app(contenus);
 
         // 4. Fichiers partagés par le coach pour cette classe
         const { data: fichiers } = await supabase
@@ -1165,6 +1221,42 @@ export default function DashboardApprenant() {
     })();
   }, [profile]);
 
+  /**
+   * Marquer un cours comme terminé — ou revenir en arrière.
+   *
+   * OPTIMISTE : l'écran répond au clic, car l'aller-retour coûte ~150 ms pour un geste qui
+   * n'envoie qu'un booléen. On REVIENT EN ARRIÈRE si le serveur refuse, en disant pourquoi :
+   * un refus silencieux se lit exactement comme un bouton en panne.
+   */
+  async function marquerCoursTermine(contenuId) {
+    setTerminesLive(p => ({ ...p, [contenuId]: true }));
+    const s = await supabase.auth.getSession();
+    const tok = s.data.session?.access_token;
+    if (!tok) {
+      setTerminesLive(p => ({ ...p, [contenuId]: false }));
+      alert('Session expirée — reconnectez-vous.');
+      return false;
+    }
+    try {
+      const r = await fetch(`${_API}/api/apprenants/contenus/${contenuId}/lu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}`, 'X-Plateforme': 'bet-elearning' },
+        body: JSON.stringify({ classe_id: apprenant?.groupe_id || null }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setTerminesLive(p => ({ ...p, [contenuId]: false }));
+        alert(d.error || "Impossible d'enregistrer ce cours.");
+        return false;
+      }
+      return true;
+    } catch {
+      setTerminesLive(p => ({ ...p, [contenuId]: false }));
+      alert("Connexion interrompue — le cours n'a pas été enregistré.");
+      return false;
+    }
+  }
+
   const ui = useAgeInterface(apprenant);
 
   // ── Données filtrées ──────────────────────────────────────────────────────
@@ -1197,6 +1289,10 @@ export default function DashboardApprenant() {
     semaine: c.semaine, est_visible: c.est_visible, blocs: c.blocs || [],
     objectifs: c.objectifs || '', dureeEstimee: c.duree_estimee || 30,
     statut: c.statut,
+    /* L'état du verrou, calculé par le serveur et transporté tel quel : l'écran AFFICHE
+       la règle, il ne la recalcule pas. */
+    verrouille: c.verrouille === true, bloque_par: c.bloque_par || null,
+    lecture_sequentielle: c.lecture_sequentielle === true,
   }));
   const exercices  = cours.filter(c => c.type_contenu === 'exercice');
   const badgesApp    = gamifBadges.filter(b => b.obtenu);
@@ -1674,7 +1770,7 @@ export default function DashboardApprenant() {
                   {exercices.map((c) => {
                     const blocs   = c.blocs || [];
                     const duree   = blocs.reduce((s, b) => s + (b.dureeMin || 0), 0);
-                    const termine = exoTermines[c.id];
+                    const termine = terminesLive[c.id];
                     const nbQuiz  = blocs.filter(b => b.type === 'quiz').reduce((s, b) => s + (b.questions?.length || 0), 0);
                     return (
                       <div key={c.id} style={{ background:'#fff', borderRadius:14, border:`1px solid ${termine ? '#6EE7B7' : COULEURS.gris200}`, borderLeft:`4px solid ${termine ? COULEURS.succes : '#10B981'}`, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
@@ -1785,6 +1881,29 @@ export default function DashboardApprenant() {
                                   <button onClick={() => setDevoirOuvertApp(d)} style={{ padding:'7px 14px', borderRadius:8, border:'none', background:'#FEE2E2', color:'#991B1B', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
                                     Voir
                                   </button>
+                                )}
+                                {/* REVENIR SUR SA COPIE TANT QU'ELLE N'A PAS ÉTÉ CORRIGÉE.
+                                    Une fois rendu, le devoir n'offrait plus aucune action :
+                                    l'apprenant qui s'était trompé de fichier ou voulait
+                                    compléter sa réponse n'avait aucun recours, alors que le
+                                    serveur acceptait la re-soumission. Elle est fermée dès
+                                    que le coach a corrigé — c'est le statut qui le dit, et
+                                    le serveur le refuse désormais aussi (403 DEJA_CORRIGE). */}
+                                {d.statut === 'rendu' && !d.expire && (
+                                  <button onClick={() => {
+                                    setSubmitTexte(d.rendu?.contenu_texte || ''); setSubmitQcm(d.rendu?.reponses_qcm || {});
+                                    setSubmitBlocs(d.rendu?.reponses_blocs || {}); setSubmitFichier(null);
+                                    if (d.type_rendu === 'fichier') setDevoirOuvertApp(d);
+                                    else setConfirmOuvrirDevoir(d);
+                                  }}
+                                    style={{ padding:'7px 14px', borderRadius:8, border:`1.5px solid ${couleurTheme}`, background:'#fff', color:couleurTheme, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                    ✏️ Modifier ma copie
+                                  </button>
+                                )}
+                                {d.statut === 'corrige' && (
+                                  <span style={{ fontSize:10.5, color:COULEURS.gris400, textAlign:'right', maxWidth:150 }}>
+                                    🔒 Corrigé — plus modifiable
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -3614,6 +3733,12 @@ export default function DashboardApprenant() {
                     const blocs  = c.blocs || [];
                     const duree  = blocs.reduce((s, b) => s + (b.dureeMin || 0), 0);
                     const termine = terminesLive[c.id];
+                    /* VERROUILLÉ : un cours publié après un cours obligatoire qui n'a pas
+                       été terminé. On le laisse VISIBLE et grisé plutôt que de le cacher —
+                       savoir qu'il existe et ce qui le retient, c'est précisément ce qui
+                       pousse à finir le précédent. Le masquer donnerait l'impression que
+                       le coach n'a rien publié. */
+                    const ferme = c.verrouille && !termine;
                     const typeColors = {
                       lecon:    { bg:'#E0F2FE', accent:'#0891B2', icone:'📖' },
                       exercice: { bg:'#D1FAE5', accent:'#10B981', icone:'✏️' },
@@ -3622,8 +3747,8 @@ export default function DashboardApprenant() {
                     };
                     const tc = typeColors[c.type_contenu] || typeColors.lecon;
                     return (
-                      <div key={c.id} style={{ background:'#fff', borderRadius:14, border:`1px solid ${termine ? '#6EE7B7' : COULEURS.gris200}`, borderLeft:`4px solid ${tc.accent}`, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
-                        <div style={{ width:48, height:48, borderRadius:12, background:tc.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{tc.icone}</div>
+                      <div key={c.id} style={{ background: ferme ? '#FAFAFA' : '#fff', opacity: ferme ? 0.78 : 1, borderRadius:14, border:`1px solid ${ferme ? '#FDE68A' : termine ? '#6EE7B7' : COULEURS.gris200}`, borderLeft:`4px solid ${ferme ? '#F59E0B' : tc.accent}`, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
+                        <div style={{ width:48, height:48, borderRadius:12, background: ferme ? '#FEF3C7' : tc.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{ferme ? '🔒' : tc.icone}</div>
                         <div style={{ flex:1 }}>
                           <div style={{ fontSize:15, fontWeight:700, color:COULEURS.navy, marginBottom:4 }}>{c.titre}</div>
                           <div style={{ fontSize:12, color:COULEURS.gris600, marginBottom:4 }}>
@@ -3637,13 +3762,30 @@ export default function DashboardApprenant() {
                                 ✅ Lu
                               </span>
                             )}
+                            {/* Un cadenas sans raison est incompréhensible : on NOMME le
+                                cours qui retient celui-ci, c'est la seule chose qui dit
+                                quoi faire pour l'ouvrir. */}
+                            {ferme && (
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#FEF3C7', color:'#92400E', borderRadius:20, padding:'2px 8px', fontWeight:700 }}>
+                                🔒 {c.bloque_par?.titre ? `Terminez d'abord « ${c.bloque_par.titre} »` : 'Pas encore accessible'}
+                              </span>
+                            )}
+                            {/* Prévenir AVANT : savoir que ce cours ouvre la suite change
+                                la façon de le lire. */}
+                            {!ferme && c.lecture_sequentielle && !termine && (
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#FFF7ED', color:'#9A3412', borderRadius:20, padding:'2px 8px', fontWeight:700 }}>
+                                ⭐ À terminer pour débloquer la suite
+                              </span>
+                            )}
                           </div>
                         </div>
                         <button
-                          onClick={() => setCoursOuvertLive(c)}
-                          style={{ ...S.btn(tc.accent, true), background:termine ? COULEURS.gris200 : tc.accent, color:termine ? COULEURS.gris600 : '#fff' }}
+                          disabled={ferme}
+                          title={ferme && c.bloque_par?.titre ? `Terminez d'abord « ${c.bloque_par.titre} »` : undefined}
+                          onClick={() => { if (!ferme) setCoursOuvertLive(c); }}
+                          style={{ ...S.btn(tc.accent, true), background: ferme ? COULEURS.gris100 : termine ? COULEURS.gris200 : tc.accent, color: ferme ? COULEURS.gris400 : termine ? COULEURS.gris600 : '#fff', cursor: ferme ? 'not-allowed' : 'pointer' }}
                         >
-                          {termine ? '🔄 Revoir' : '▶ Ouvrir'}
+                          {ferme ? '🔒 Verrouillé' : termine ? '🔄 Revoir' : '▶ Ouvrir'}
                         </button>
                       </div>
                     );
@@ -3715,7 +3857,7 @@ export default function DashboardApprenant() {
                           </div>
                           {f.url ? (
                             <a
-                              href={`${_API}/api/upload/download?url=${encodeURIComponent(f.url)}&nom=${encodeURIComponent(f.nom)}`}
+                              href={urlTelecharger(f.url, f.nom)}
                               download={f.nom}
                               style={{ width:'100%', padding:'9px', borderRadius:8, background:couleurTheme, color:'#fff', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6, textDecoration:'none', boxSizing:'border-box', fontFamily:'"Plus Jakarta Sans",sans-serif' }}
                             >
@@ -3755,16 +3897,22 @@ export default function DashboardApprenant() {
       const blocs    = exerciceOuvert.blocs || [];
       const dureeTotal = blocs.reduce((s, b) => s + (b.dureeMin || 0), 0);
 
+      /* SEULES LES QUESTIONS À OPTIONS SONT NOTÉES. Une question ouverte n'a pas de
+         bonne réponse — elle se prépare et se discute en classe —, donc elle ne peut
+         être ni juste ni fausse. La compter dans le total la rendait automatiquement
+         fausse : un bloc de cinq questions ouvertes affichait « 0/5 · 0% » et donnait à
+         l'apprenant le sentiment d'avoir tout raté. */
       function scoreQuizBloc(bloc) {
-        const q = bloc.questions || [];
-        const bonnes = q.filter(q => exoReponses[`${bloc.id}_${q.id}`] === q.correct).length;
-        return { bonnes, total: q.length, pct: q.length > 0 ? Math.round(bonnes / q.length * 100) : 0 };
+        const notables = (bloc.questions || []).filter(q => (q.options || []).filter(Boolean).length > 0);
+        const bonnes = notables.filter(q => exoReponses[`${bloc.id}_${q.id}`] === q.correct).length;
+        return { bonnes, total: notables.length, pct: notables.length > 0 ? Math.round(bonnes / notables.length * 100) : 0 };
       }
 
       return (
         <>
           <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.65)', zIndex:1000, backdropFilter:'blur(3px)' }} />
-          <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,760px)', background:'#fff', zIndex:1001, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
+          {/* 836 px : les 760 d'origine élargis de 10%. Les blocs de cours portent des vidéos, des images et des tableaux de quiz qui se serraient dans le panneau ; le plafond à 92vw reste, pour que le panneau ne couvre jamais tout l'écran. */}
+          <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,836px)', background:'#fff', zIndex:1001, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
 
             {/* Header */}
             <div style={{ background:'linear-gradient(135deg,#059669,#10B981)', padding:'20px 24px', flexShrink:0 }}>
@@ -3777,7 +3925,7 @@ export default function DashboardApprenant() {
                   <div style={{ display:'flex', gap:14, fontSize:12, color:'rgba(255,255,255,0.75)' }}>
                     <span>⏱ {dureeTotal} min</span>
                     <span>📦 {blocs.length} bloc{blocs.length > 1 ? 's' : ''}</span>
-                    {exoTermines[exerciceOuvert.id] && <span style={{ color:'#A7F3D0', fontWeight:700 }}>✅ Terminé</span>}
+                    {terminesLive[exerciceOuvert.id] && <span style={{ color:'#A7F3D0', fontWeight:700 }}>✅ Terminé</span>}
                   </div>
                 </div>
                 <button onClick={() => setExerciceOuvert(null)} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:8, width:34, height:34, color:'#fff', fontSize:16, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
@@ -3859,10 +4007,133 @@ export default function DashboardApprenant() {
                       )}
 
                       {/* Vidéo */}
+                      {/* Lecteur intégré plutôt qu'un lien sortant. `urlEmbedVideo`
+                          convertit les URL YouTube/Vimeo en URL embarquables ; un fichier
+                          hébergé (.mp4) passe par la balise `<video>`. Même traitement que
+                          la bibliothèque communautaire, plus bas dans ce fichier. */}
                       {b.type === 'video' && (
-                        <div style={{ background:'#1E293B', borderRadius:10, padding:'36px 20px', textAlign:'center' }}>
-                          <div style={{ fontSize:44, marginBottom:8 }}>🎬</div>
-                          <a href={b.url} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#8B5CF6', color:'#fff', borderRadius:8, padding:'10px 20px', fontWeight:700, fontSize:14, textDecoration:'none' }}>▶ Regarder la vidéo</a>
+                        b.url ? (
+                          /* `urlEmbedVideo` rend `null` quand l'URL n'est PAS une
+                             plateforme reconnue — c'est son contrat. Le test `!== b.url`
+                             était donc VRAI pour un fichier téléversé (`null !== l'url`),
+                             et on affichait `<iframe src={null}>` : un cadre vide. Toute
+                             vidéo déposée depuis un ordinateur était invisible chez
+                             l'apprenant, sans erreur ni message. On teste la présence de
+                             l'URL d'intégration, pas une différence. */
+                          urlEmbedVideo(b.url) ? (
+                            <iframe src={urlEmbedVideo(b.url)} title={b.titre || 'Vidéo du cours'}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen
+                              style={{ width:'100%', aspectRatio:'16/9', borderRadius:10, border:'none' }} />
+                          ) : (
+                            <video src={b.url} controls style={{ width:'100%', maxHeight:380, borderRadius:10, background:'#000' }} />
+                          )
+                        ) : (
+                          <div style={{ background:'#1E293B', borderRadius:10, padding:'28px 20px', textAlign:'center', color:'rgba(255,255,255,0.6)', fontSize:13 }}>
+                            🎬 Aucune vidéo jointe à ce bloc.
+                          </div>
+                        )
+                      )}
+
+                      {/* IMAGE — un schéma, une consigne visuelle. Cliquable pour
+                          l'agrandir : une illustration lue à 300 px ne sert à rien. */}
+                      {b.type === 'image' && (
+                        b.url ? (
+                          <a href={b.url} target="_blank" rel="noreferrer" style={{ display:'block' }}>
+                            <img src={b.url} alt={b.titre || 'Illustration du cours'}
+                              style={{ width:'100%', maxHeight:420, objectFit:'contain', borderRadius:10, background:COULEURS.gris50, cursor:'zoom-in' }} />
+                          </a>
+                        ) : (
+                          <div style={{ background:COULEURS.gris50, borderRadius:10, padding:'24px', textAlign:'center', fontSize:13, color:COULEURS.gris400 }}>
+                            🖼️ Aucune image jointe à ce bloc.
+                          </div>
+                        )
+                      )}
+
+                      {/* SPEAKING — la consigne du coach. La réponse orale se dépose
+                          depuis l'onglet Devoirs, qui sait déjà enregistrer un audio. */}
+                      {b.type === 'speaking' && (
+                        <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10, padding:'16px 20px' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                            <span style={{ fontSize:26 }}>🎤</span>
+                            <div style={{ fontWeight:700, color:'#991B1B' }}>{b.titre || 'Expression orale'}</div>
+                          </div>
+                          {b.contenu
+                            ? <div style={{ fontSize:13.5, color:'#7F1D1D', lineHeight:1.65, whiteSpace:'pre-wrap' }}>{b.contenu}</div>
+                            : <div style={{ fontSize:12, color:COULEURS.gris400 }}>Aucune consigne renseignée.</div>}
+
+                          {/* S'ENTRAÎNER À VOIX HAUTE, ICI MÊME.
+                              On réutilise l'enregistreur des devoirs (`startRecording`), avec une clé
+                              préfixée pour ne pas mélanger les deux états. L'enregistrement SERT À
+                              S'ÉCOUTER : un bloc de cours n'est pas évalué, rien n'est soumis au coach.
+                              Un speaking à corriger se crée comme DEVOIR — ce circuit existe déjà et
+                              porte, lui, la notation et le retour du coach. */}
+                          {(() => {
+                            const cle = `cours_${b.id}`;
+                            const rec = recState[cle] || {};
+                            const audio = submitBlocs[cle]?.audioUrl;
+                            return (
+                              <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #FECACA' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                                  {!rec.recording ? (
+                                    <button type="button" onClick={() => startRecording(cle)} disabled={rec.uploading}
+                                      style={{ padding:'8px 16px', borderRadius:8, border:'none', background: rec.uploading ? COULEURS.gris200 : '#DC2626', color:'#fff', fontSize:12.5, fontWeight:700, cursor: rec.uploading ? 'wait' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                      {rec.uploading ? '⏳ Envoi…' : audio ? '🎤 Réenregistrer' : "🎤 M'entraîner"}
+                                    </button>
+                                  ) : (
+                                    <button type="button" onClick={() => stopRecording(cle)}
+                                      style={{ padding:'8px 16px', borderRadius:8, border:'none', background:'#1E293B', color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                      ⏹ Arrêter ({rec.seconds || 0}s)
+                                    </button>
+                                  )}
+                                  <span style={{ fontSize:11, color:'#9A3412' }}>
+                                    {rec.recording ? '🔴 Enregistrement en cours…' : "Pour vous écouter — rien n'est envoyé au coach."}
+                                  </span>
+                                </div>
+                                {audio && !rec.recording && <audio src={audio} controls style={{ width:'100%', marginTop:10 }} />}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* AUDIO ET DOCUMENT ÉTAIENT ABSENTS DE CETTE MODALE.
+                          Le coach peut créer sept types de blocs ; celle-ci n'en rendait
+                          que quatre (texte, vidéo, lien, quiz). Un bloc audio ou document
+                          n'affichait donc RIEN DU TOUT — pas même un lien mort : le
+                          contenu existait en base et restait invisible à l'apprenant.
+                          Les deux rendus sont ceux du lecteur live, pour que la même
+                          leçon se lise pareil quel que soit l'écran par lequel on l'ouvre. */}
+                      {b.type === 'audio' && (
+                        <div style={{ background:'#F0FDF4', borderRadius:10, padding:'16px 20px' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10 }}>
+                            <span style={{ fontSize:28 }}>🎧</span>
+                            <div style={{ fontWeight:700, color:COULEURS.navy }}>{b.titre}</div>
+                          </div>
+                          {b.url
+                            ? <audio src={b.url} controls style={{ width:'100%' }} />
+                            : <div style={{ fontSize:12, color:COULEURS.gris400 }}>Aucun fichier audio joint à ce bloc.</div>}
+                        </div>
+                      )}
+
+                      {b.type === 'document' && (
+                        <div style={{ background:'#FFF7ED', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
+                          <div style={{ fontSize:36 }}>📄</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontWeight:600, color:COULEURS.navy, marginBottom:4 }}>{b.fichier || b.titre}</div>
+                            {b.url ? (
+                              <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
+                                {/* « Ouvrir » passait l'URL Cloudinary brute : sur un .docx ou un
+                                    .pptx, livrés en type `raw`, le navigateur recevait un
+                                    401 et affichait une page d'erreur. Le relais signe la
+                                    requête et rend le fichier avec son vrai type. */}
+                                <a href={urlOuvrir(b.url, b.fichier || b.titre)} target="_blank" rel="noreferrer" style={{ fontSize:13, color:'#F59E0B', fontWeight:600 }}>👁 Ouvrir</a>
+                                <a href={urlTelecharger(b.url, b.fichier || b.titre || 'document')}
+                                  style={{ fontSize:13, color:'#F59E0B', fontWeight:600 }}>⬇ Télécharger</a>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize:12, color:COULEURS.gris400 }}>Aucun fichier joint à ce bloc.</div>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -3887,8 +4158,17 @@ export default function DashboardApprenant() {
                               return (
                                 <div key={q.id} style={{ marginBottom:14, padding:'12px 14px', borderRadius:10, background: soumis ? (estBon ? '#F0FDF4' : '#FFF5F5') : '#F8FAFC', border:`1px solid ${soumis ? (estBon ? '#6EE7B7' : '#FECACA') : COULEURS.gris200}` }}>
                                   <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:8 }}>{qi + 1}. {q.texte}</div>
+                                  {/* SANS OPTION, LA QUESTION EST OUVERTE : elle se prépare,
+                                      et sa réponse se discute en classe. Elle n'affichait
+                                      rien du tout — le texte de la question suivi du vide,
+                                      comme un bloc cassé. */}
+                                  {(q.options || []).filter(Boolean).length === 0 ? (
+                                    <div style={{ fontSize:12.5, color:'#1D4ED8', background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:8, padding:'9px 12px' }}>
+                                      💬 Question ouverte — préparez votre réponse pour le cours.
+                                    </div>
+                                  ) : (
                                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                                    {q.options.map(opt => {
+                                    {(q.options || []).filter(Boolean).map(opt => {
                                       const sel = choix === opt;
                                       const correct = opt === q.correct;
                                       let bg = '#fff', bord = COULEURS.gris200, txt = COULEURS.gris600;
@@ -3904,6 +4184,7 @@ export default function DashboardApprenant() {
                                       );
                                     })}
                                   </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -3919,14 +4200,24 @@ export default function DashboardApprenant() {
                                   Recommencer
                                 </button>
                               </div>
-                            ) : (
-                              <button
-                                disabled={b.questions.some(q => !exoReponses[`${b.id}_${q.id}`])}
-                                onClick={() => setExoSoumis(p => ({ ...p, [b.id]: true }))}
-                                style={{ padding:'10px 20px', borderRadius:8, border:'none', background: b.questions.some(q => !exoReponses[`${b.id}_${q.id}`]) ? COULEURS.gris200 : col, color: b.questions.some(q => !exoReponses[`${b.id}_${q.id}`]) ? COULEURS.gris400 : '#fff', fontSize:13, fontWeight:700, cursor: b.questions.some(q => !exoReponses[`${b.id}_${q.id}`]) ? 'not-allowed' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
-                                ✓ Valider mes réponses
-                              </button>
-                            )}
+                            ) : (() => {
+                              /* ON N'ATTEND QUE LES QUESTIONS NOTABLES. Le bouton exigeait une réponse à
+                                 TOUTES les questions du bloc. Une question ouverte ne peut pas en recevoir :
+                                 une seule suffisait à désactiver « Valider » pour toujours, et le quiz entier
+                                 devenait impossible à soumettre. S'il n'y a QUE des questions ouvertes, il n'y
+                                 a rien à corriger : le bouton disparaît au lieu de promettre une note qui ne
+                                 viendra pas. */
+                              const notables = b.questions.filter(q => (q.options || []).filter(Boolean).length > 0);
+                              if (notables.length === 0) return null;
+                              const incomplet = notables.some(q => !exoReponses[`${b.id}_${q.id}`]);
+                              return (
+                                <button disabled={incomplet}
+                                  onClick={() => setExoSoumis(p => ({ ...p, [b.id]: true }))}
+                                  style={{ padding:'10px 20px', borderRadius:8, border:'none', background: incomplet ? COULEURS.gris200 : col, color: incomplet ? COULEURS.gris400 : '#fff', fontSize:13, fontWeight:700, cursor: incomplet ? 'not-allowed' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                  ✓ Valider mes réponses
+                                </button>
+                              );
+                            })()}
                           </div>
                         );
                       })()}
@@ -3939,12 +4230,21 @@ export default function DashboardApprenant() {
             {/* Pied */}
             <div style={{ padding:'14px 22px', borderTop:'1px solid #D1FAE5', background:'#F0FDF4', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
               <div style={{ fontSize:12, color:'#065F46' }}>
-                {exoTermines[exerciceOuvert.id] ? '✅ Exercice marqué comme terminé' : 'Marque l\'exercice comme terminé quand tu as tout fait.'}
+                {terminesLive[exerciceOuvert.id] ? '✅ Cours marqué comme terminé' : 'Marque le cours comme terminé quand tu as tout lu.'}
               </div>
               <button
-                onClick={() => { setExoTermines(p => ({ ...p, [exerciceOuvert.id]: !p[exerciceOuvert.id] })); }}
-                style={{ padding:'9px 18px', borderRadius:8, border:'none', background: exoTermines[exerciceOuvert.id] ? COULEURS.gris200 : COULEURS.succes, color: exoTermines[exerciceOuvert.id] ? COULEURS.gris600 : '#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
-                {exoTermines[exerciceOuvert.id] ? '↩ Marquer non terminé' : '✅ Marquer comme terminé'}
+                /* MARQUER EST DÉFINITIF — le serveur refuse tout retour en arrière
+                   (`DELETE /contenus/:id/lu` répond 403). Proposer « Marquer non
+                   terminé » aurait donc toujours échoué ; le bouton se désactive une
+                   fois le cours terminé, et la confirmation prévient avant le clic. */
+                disabled={!!terminesLive[exerciceOuvert.id]}
+                onClick={() => {
+                  if (terminesLive[exerciceOuvert.id]) return;
+                  if (!window.confirm("Marquer ce cours comme terminé ?\n\nC'est définitif : votre coach le verra dans son suivi de lecture.")) return;
+                  marquerCoursTermine(exerciceOuvert.id);
+                }}
+                style={{ padding:'9px 18px', borderRadius:8, border:'none', background: terminesLive[exerciceOuvert.id] ? COULEURS.gris200 : COULEURS.succes, color: terminesLive[exerciceOuvert.id] ? COULEURS.gris600 : '#fff', fontSize:13, fontWeight:700, cursor: terminesLive[exerciceOuvert.id] ? 'default' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                {terminesLive[exerciceOuvert.id] ? '✅ Terminé' : '✅ Marquer comme terminé'}
               </button>
             </div>
           </div>
@@ -4081,7 +4381,7 @@ export default function DashboardApprenant() {
           };
           const r = await fetch(`${_API}/api/elearning/devoirs/${d.id}/rendre`, {
             method: 'POST',
-            headers: { 'Content-Type':'application/json', Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
+            headers: { 'Content-Type':'application/json', Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`, 'X-Plateforme': 'bet-elearning' },
             body: JSON.stringify(body),
           });
           const json = await r.json();
@@ -4436,10 +4736,15 @@ export default function DashboardApprenant() {
 
       function fermerTout() { setSessionDetail(null); setCoursOuvertLive(null); }
 
+      /* SEULES LES QUESTIONS À OPTIONS SONT NOTÉES. Une question ouverte n'a pas de
+         bonne réponse — elle se prépare et se discute en classe —, donc elle ne peut
+         être ni juste ni fausse. La compter dans le total la rendait automatiquement
+         fausse : un bloc de cinq questions ouvertes affichait « 0/5 · 0% » et donnait à
+         l'apprenant le sentiment d'avoir tout raté. */
       function scoreQuizL(bloc) {
-        const q = bloc.questions || [];
-        const bonnes = q.filter(q => reponsesQuizLive[`${bloc.id}_${q.id}`] === q.correct).length;
-        return { bonnes, total: q.length, pct: q.length > 0 ? Math.round(bonnes/q.length*100) : 0 };
+        const notables = (bloc.questions || []).filter(q => (q.options || []).filter(Boolean).length > 0);
+        const bonnes = notables.filter(q => reponsesQuizLive[`${bloc.id}_${q.id}`] === q.correct).length;
+        return { bonnes, total: notables.length, pct: notables.length > 0 ? Math.round(bonnes / notables.length * 100) : 0 };
       }
 
       // ── VUE LECTEUR DE COURS ──
@@ -4451,8 +4756,12 @@ export default function DashboardApprenant() {
 
         return (
           <>
-            <div onClick={fermerTout} style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.65)', zIndex:1200, backdropFilter:'blur(3px)' }} />
-            <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,780px)', background:'#fff', zIndex:1201, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
+            {/* LE FOND NE FERME PLUS. Un clic à côté suffisait à refermer le lecteur,
+                et avec lui les réponses de quiz saisies et non validées — un geste
+                involontaire effaçait le travail en cours sans rien demander. On sort par
+                le bouton, qui est explicite et au même endroit à chaque fois. */}
+            <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.65)', zIndex:1200, backdropFilter:'blur(3px)' }} />
+            <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,870px)', background:'#fff', zIndex:1201, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
 
               {/* Header */}
               <div style={{ background:`linear-gradient(135deg, ${typeI.accent}, ${COULEURS.navy})`, padding:'20px 24px', flexShrink:0 }}>
@@ -4539,17 +4848,106 @@ export default function DashboardApprenant() {
                           </div>
                         )}
                         {/* VIDÉO */}
+                        {/* Lecteur intégré, comme dans la modale de cours. */}
                         {b.type === 'video' && (
-                          <div style={{ background:'#1E293B', borderRadius:10, padding:'40px 20px', textAlign:'center' }}>
-                            <div style={{ fontSize:48, marginBottom:8 }}>🎬</div>
-                            <a href={b.url} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:8, background:bt.couleur, color:'#fff', borderRadius:8, padding:'10px 20px', fontWeight:700, fontSize:14, textDecoration:'none' }}>▶ Regarder la vidéo</a>
+                          b.url ? (
+                            /* `urlEmbedVideo` rend `null` quand l'URL n'est PAS une
+                             plateforme reconnue — c'est son contrat. Le test `!== b.url`
+                             était donc VRAI pour un fichier téléversé (`null !== l'url`),
+                             et on affichait `<iframe src={null}>` : un cadre vide. Toute
+                             vidéo déposée depuis un ordinateur était invisible chez
+                             l'apprenant, sans erreur ni message. On teste la présence de
+                             l'URL d'intégration, pas une différence. */
+                          urlEmbedVideo(b.url) ? (
+                              <iframe src={urlEmbedVideo(b.url)} title={b.titre || 'Vidéo du cours'}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen
+                                style={{ width:'100%', aspectRatio:'16/9', borderRadius:10, border:'none' }} />
+                            ) : (
+                              <video src={b.url} controls style={{ width:'100%', maxHeight:380, borderRadius:10, background:'#000' }} />
+                            )
+                          ) : (
+                            <div style={{ background:'#1E293B', borderRadius:10, padding:'28px 20px', textAlign:'center', color:'rgba(255,255,255,0.6)', fontSize:13 }}>
+                              🎬 Aucune vidéo jointe à ce bloc.
+                            </div>
+                          )
+                        )}
+                      {/* IMAGE — un schéma, une consigne visuelle. Cliquable pour
+                            l'agrandir : une illustration lue à 300 px ne sert à rien. */}
+                        {b.type === 'image' && (
+                          b.url ? (
+                            <a href={b.url} target="_blank" rel="noreferrer" style={{ display:'block' }}>
+                              <img src={b.url} alt={b.titre || 'Illustration du cours'}
+                                style={{ width:'100%', maxHeight:420, objectFit:'contain', borderRadius:10, background:COULEURS.gris50, cursor:'zoom-in' }} />
+                            </a>
+                          ) : (
+                            <div style={{ background:COULEURS.gris50, borderRadius:10, padding:'24px', textAlign:'center', fontSize:13, color:COULEURS.gris400 }}>
+                              🖼️ Aucune image jointe à ce bloc.
+                            </div>
+                          )
+                        )}
+
+                        {/* SPEAKING — la consigne du coach. La réponse orale se dépose
+                            depuis l'onglet Devoirs, qui sait déjà enregistrer un audio. */}
+                        {b.type === 'speaking' && (
+                          <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10, padding:'16px 20px' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                              <span style={{ fontSize:26 }}>🎤</span>
+                              <div style={{ fontWeight:700, color:'#991B1B' }}>{b.titre || 'Expression orale'}</div>
+                            </div>
+                            {b.contenu
+                              ? <div style={{ fontSize:13.5, color:'#7F1D1D', lineHeight:1.65, whiteSpace:'pre-wrap' }}>{b.contenu}</div>
+                              : <div style={{ fontSize:12, color:COULEURS.gris400 }}>Aucune consigne renseignée.</div>}
+
+                            {/* S'ENTRAÎNER À VOIX HAUTE, ICI MÊME.
+                                On réutilise l'enregistreur des devoirs (`startRecording`), avec une clé
+                                préfixée pour ne pas mélanger les deux états. L'enregistrement SERT À
+                                S'ÉCOUTER : un bloc de cours n'est pas évalué, rien n'est soumis au coach.
+                                Un speaking à corriger se crée comme DEVOIR — ce circuit existe déjà et
+                                porte, lui, la notation et le retour du coach. */}
+                            {(() => {
+                              const cle = `cours_${b.id}`;
+                              const rec = recState[cle] || {};
+                              const audio = submitBlocs[cle]?.audioUrl;
+                              return (
+                                <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #FECACA' }}>
+                                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                                    {!rec.recording ? (
+                                      <button type="button" onClick={() => startRecording(cle)} disabled={rec.uploading}
+                                        style={{ padding:'8px 16px', borderRadius:8, border:'none', background: rec.uploading ? COULEURS.gris200 : '#DC2626', color:'#fff', fontSize:12.5, fontWeight:700, cursor: rec.uploading ? 'wait' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                        {rec.uploading ? '⏳ Envoi…' : audio ? '🎤 Réenregistrer' : "🎤 M'entraîner"}
+                                      </button>
+                                    ) : (
+                                      <button type="button" onClick={() => stopRecording(cle)}
+                                        style={{ padding:'8px 16px', borderRadius:8, border:'none', background:'#1E293B', color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                        ⏹ Arrêter ({rec.seconds || 0}s)
+                                      </button>
+                                    )}
+                                    <span style={{ fontSize:11, color:'#9A3412' }}>
+                                      {rec.recording ? '🔴 Enregistrement en cours…' : "Pour vous écouter — rien n'est envoyé au coach."}
+                                    </span>
+                                  </div>
+                                  {audio && !rec.recording && <audio src={audio} controls style={{ width:'100%', marginTop:10 }} />}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
+
                         {/* AUDIO */}
+                        {/* UN VRAI LECTEUR, pas un lien qui quitte le cours. Le bloc
+                            n'offrait qu'un « ▶ Écouter » ouvrant un onglet : l'apprenant
+                            perdait sa place dans la leçon pour écouter trente secondes.
+                            Le `<audio>` intégré est déjà utilisé plus bas dans ce même
+                            fichier (bibliothèque communautaire) — on s'aligne dessus. */}
                         {b.type === 'audio' && (
-                          <div style={{ background:'#F0FDF4', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
-                            <div style={{ fontSize:36 }}>🎧</div>
-                            <div><div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:4 }}>{b.titre}</div><a href={b.url} target="_blank" rel="noreferrer" style={{ fontSize:13, color:'#059669', fontWeight:600 }}>▶ Écouter</a></div>
+                          <div style={{ background:'#F0FDF4', borderRadius:10, padding:'16px 20px' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10 }}>
+                              <span style={{ fontSize:28 }}>🎧</span>
+                              <div style={{ fontWeight:700, color:COULEURS.navy }}>{b.titre}</div>
+                            </div>
+                            {b.url
+                              ? <audio src={b.url} controls style={{ width:'100%' }} />
+                              : <div style={{ fontSize:12, color:COULEURS.gris400 }}>Aucun fichier audio joint à ce bloc.</div>}
                           </div>
                         )}
                         {/* LIEN */}
@@ -4560,10 +4958,28 @@ export default function DashboardApprenant() {
                           </div>
                         )}
                         {/* DOCUMENT */}
+                        {/* LE BOUTON NE FAISAIT RIEN : un `<button>` sans `onClick` ni
+                            `href`. Tout document déposé par le coach dans un cours — PDF,
+                            Word, Excel — était donc inaccessible à l'apprenant, alors que
+                            le fichier existait bel et bien. On passe par la même route de
+                            téléchargement que les fichiers de séance (`/api/upload/download`),
+                            qui force l'enregistrement sous le nom d'origine. */}
                         {b.type === 'document' && (
                           <div style={{ background:'#FFF7ED', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
                             <div style={{ fontSize:36 }}>📄</div>
-                            <div><div style={{ fontWeight:600, color:COULEURS.navy, marginBottom:4 }}>{b.fichier || b.titre}</div><button style={{ fontSize:13, color:'#F59E0B', fontWeight:600, background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'"Plus Jakarta Sans",sans-serif' }}>⬇ Télécharger</button></div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontWeight:600, color:COULEURS.navy, marginBottom:4 }}>{b.fichier || b.titre}</div>
+                              {b.url ? (
+                                <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
+                                  <a href={urlOuvrir(b.url, b.fichier || b.titre)} target="_blank" rel="noreferrer"
+                                    style={{ fontSize:13, color:'#F59E0B', fontWeight:600 }}>👁 Ouvrir</a>
+                                  <a href={urlTelecharger(b.url, b.fichier || b.titre || 'document')}
+                                    style={{ fontSize:13, color:'#F59E0B', fontWeight:600 }}>⬇ Télécharger</a>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize:12, color:COULEURS.gris400 }}>Aucun fichier joint à ce bloc.</div>
+                              )}
+                            </div>
                           </div>
                         )}
                         {/* QUIZ */}
@@ -4579,8 +4995,15 @@ export default function DashboardApprenant() {
                                 return (
                                   <div key={q.id} style={{ marginBottom:18, padding:'14px 16px', borderRadius:10, background:soumis?(estBon?'#F0FDF4':'#FFF5F5'):COULEURS.gris50, border:`1px solid ${soumis?(estBon?'#6EE7B7':'#FECACA'):COULEURS.gris200}` }}>
                                     <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:10 }}>{qi+1}. {q.texte}</div>
+                                    {/* Même règle que dans le modal de cours : sans option,
+                                        la question est ouverte et se prépare pour le cours. */}
+                                    {(q.options || []).filter(Boolean).length === 0 ? (
+                                      <div style={{ fontSize:12.5, color:'#1D4ED8', background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:8, padding:'9px 12px' }}>
+                                        💬 Question ouverte — préparez votre réponse pour le cours.
+                                      </div>
+                                    ) : (
                                     <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-                                      {q.options.map(opt => {
+                                      {(q.options || []).filter(Boolean).map(opt => {
                                         const selec = choix === opt;
                                         const estCorr = opt === q.correct;
                                         let bg='#fff', bord=COULEURS.gris200, txtC=COULEURS.gris600;
@@ -4594,6 +5017,7 @@ export default function DashboardApprenant() {
                                         );
                                       })}
                                     </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -4608,13 +5032,24 @@ export default function DashboardApprenant() {
                                     Recommencer
                                   </button>
                                 </div>
-                              ) : (
-                                <button disabled={b.questions.some(q => !reponsesQuizLive[`${b.id}_${q.id}`])}
-                                  onClick={() => setQuizSoumisLive(p => ({ ...p, [b.id]:true }))}
-                                  style={{ padding:'10px 20px', borderRadius:8, border:'none', background:b.questions.some(q=>!reponsesQuizLive[`${b.id}_${q.id}`])?COULEURS.gris200:bt.couleur, color:b.questions.some(q=>!reponsesQuizLive[`${b.id}_${q.id}`])?COULEURS.gris400:'#fff', fontSize:13, fontWeight:700, cursor:b.questions.some(q=>!reponsesQuizLive[`${b.id}_${q.id}`])?'not-allowed':'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
-                                  ✓ Valider mes réponses
-                                </button>
-                              )}
+                              ) : (() => {
+                                /* ON N'ATTEND QUE LES QUESTIONS NOTABLES. Le bouton exigeait une réponse à
+                                   TOUTES les questions du bloc. Une question ouverte ne peut pas en recevoir :
+                                   une seule suffisait à désactiver « Valider » pour toujours, et le quiz entier
+                                   devenait impossible à soumettre. S'il n'y a QUE des questions ouvertes, il n'y
+                                   a rien à corriger : le bouton disparaît au lieu de promettre une note qui ne
+                                   viendra pas. */
+                                const notables = b.questions.filter(q => (q.options || []).filter(Boolean).length > 0);
+                                if (notables.length === 0) return null;
+                                const incomplet = notables.some(q => !reponsesQuizLive[`${b.id}_${q.id}`]);
+                                return (
+                                  <button disabled={incomplet}
+                                    onClick={() => setQuizSoumisLive(p => ({ ...p, [b.id]: true }))}
+                                    style={{ padding:'10px 20px', borderRadius:8, border:'none', background: incomplet ? COULEURS.gris200 : bt.couleur, color: incomplet ? COULEURS.gris400 : '#fff', fontSize:13, fontWeight:700, cursor: incomplet ? 'not-allowed' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                                    ✓ Valider mes réponses
+                                  </button>
+                                );
+                              })()}
                             </div>
                           );
                         })()}
@@ -4661,7 +5096,7 @@ export default function DashboardApprenant() {
       return (
         <>
           <div onClick={fermerTout} style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.65)', zIndex:1200, backdropFilter:'blur(3px)' }} />
-          <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,680px)', background:'#fff', zIndex:1201, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
+          <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,870px)', background:'#fff', zIndex:1201, display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)', fontFamily:'"Plus Jakarta Sans",sans-serif', overflow:'hidden' }}>
 
             {/* Header */}
             <div style={{ background:'linear-gradient(135deg,#003087,#0891B2)', padding:'20px 24px', flexShrink:0 }}>
@@ -4928,7 +5363,7 @@ export default function DashboardApprenant() {
                   try {
                     const r = await fetch(`${_API}/api/apprenants/contenus/${c.id}/lu`, {
                       method: 'POST',
-                      headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
+                      headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}`, 'X-Plateforme': 'bet-elearning' },
                       body: JSON.stringify({ classe_id: apprenant?.groupe_id || null }),
                     });
                     if (!r.ok) {

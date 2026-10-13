@@ -96,7 +96,7 @@ export function ThemeProvider({ children }) {
         await Promise.race([
           fetch(`${API_URL}/api/admin/utilisateurs/${userId}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' },
             body: JSON.stringify({ couleur: c }),
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),

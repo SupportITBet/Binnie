@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { useNotifications } from '../../contexts/NotificationsContext';
+import { CATEGORIES_NOTIF, CATEGORIE_AUTRE, categorieNotif, compterParCategorie, libelleSource } from '../../utils/categoriesNotif';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAgeInterface } from '../../hooks/useAgeInterface';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -35,6 +36,10 @@ export default function PageNotifications() {
   const { profile } = useAuth();
   const { notifs, nbNonLus, marquerLue, toutMarquerLu, COULEUR_TYPE } = useNotifications();
   const [filtre, setFiltre] = useState('tous');
+  /* Le filtre par CATÉGORIE MÉTIER, distinct du filtre par état (lu / alerte / info).
+     Il est devenu nécessaire quand la direction s'est mise à tout recevoir : sans lui,
+     un paiement à vérifier se perd entre quarante séances créées. */
+  const [categorie, setCategorie] = useState('toutes');
   const [notifDetail, setNotifDetail] = useState(null);
   const _ui = useAgeInterface(profile);
   const menuRole = profile?.role === 'apprenant' ? _ui.menuRole : undefined;
@@ -45,13 +50,14 @@ export default function PageNotifications() {
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin,   setDateFin]   = useState('');
 
-  useEffect(() => { setPage(1); }, [dateDebut, dateFin, filtre]);
+  useEffect(() => { setPage(1); }, [dateDebut, dateFin, filtre, categorie]);
 
   const notifsFiltrees = notifs.filter(n => {
     if (filtre === 'non_lu' && n.lu) return false;
     if (filtre === 'alerte' && n.type !== 'alerte') return false;
     if (filtre === 'info'   && n.type !== 'info')   return false;
     if (filtre === 'succes' && n.type !== 'succes') return false;
+    if (categorie !== 'toutes' && categorieNotif(n).cle !== categorie) return false;
     if (dateDebut && new Date(n.date) < new Date(dateDebut)) return false;
     if (dateFin   && new Date(n.date) > new Date(`${dateFin}T23:59:59`)) return false;
     return true;
@@ -61,6 +67,8 @@ export default function PageNotifications() {
   const totalPages = Math.max(1, Math.ceil(total / PAR_PAGE));
   const pageActuelle = Math.min(page, totalPages);
   const notifsPage  = notifsFiltrees.slice((pageActuelle - 1) * PAR_PAGE, pageActuelle * PAR_PAGE);
+
+  const comptesCategories = compterParCategorie(notifs);
 
   const stats = [
     { label: 'Total',    valeur: notifs.length,                             couleur: COULEURS.blanc },
@@ -181,6 +189,30 @@ export default function PageNotifications() {
           ))}
         </div>
 
+        {/* Filtre par catégorie métier */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+          {[{ cle: 'toutes', libelle: 'Toutes', icone: '🔔', couleur: COULEURS.navy }, ...CATEGORIES_NOTIF, CATEGORIE_AUTRE].map(c => {
+            const n = c.cle === 'toutes' ? notifs.length : (comptesCategories[c.cle] || 0);
+            // Une catégorie vide n'est pas proposée : un onglet qui ne mène nulle part
+            // encombre autant que le bruit qu'on cherche à écarter.
+            if (c.cle !== 'toutes' && n === 0) return null;
+            const actif = categorie === c.cle;
+            return (
+              <button key={c.cle} onClick={() => setCategorie(c.cle)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 20,
+                  border: `1.5px solid ${actif ? c.couleur : COULEURS.gris200}`,
+                  background: actif ? `${c.couleur}15` : COULEURS.blanc,
+                  color: actif ? c.couleur : COULEURS.gris600,
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: '"Plus Jakarta Sans", sans-serif',
+                }}>
+                <span>{c.icone}</span>{c.libelle}
+                <span style={{ background: actif ? c.couleur : COULEURS.gris100, color: actif ? '#fff' : COULEURS.gris600, borderRadius: 10, padding: '1px 7px', fontSize: 10 }}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Filtre par date */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
           <label style={{ fontSize: 12, color: COULEURS.gris600, fontWeight: 600 }}>Du</label>
@@ -223,6 +255,25 @@ export default function PageNotifications() {
                         <span style={S.badgeType(n.type)}>
                           {n.type === 'alerte' ? 'Alerte' : n.type === 'succes' ? 'Succès' : 'Info'}
                         </span>
+                        {/* La catégorie métier, et l'origine. `source` ne filtre plus
+                            la liste (le cloisonnement par plateforme a été levé) : elle
+                            sert maintenant à dire d'où vient la notification. */}
+                        {(() => {
+                          const c = categorieNotif(n);
+                          return (
+                            <span style={{ padding: '2px 8px', borderRadius: 10, background: `${c.couleur}15`, color: c.couleur, fontSize: 10, fontWeight: 700 }}>
+                              {c.icone} {c.libelle}
+                            </span>
+                          );
+                        })()}
+                        {(() => {
+                          const src = libelleSource(n.source);
+                          return src ? (
+                            <span style={{ padding: '2px 8px', borderRadius: 10, border: `1px solid ${src.couleur}40`, color: src.couleur, fontSize: 10, fontWeight: 600 }}>
+                              {src.lib}
+                            </span>
+                          ) : null;
+                        })()}
                         <span style={S.notifDate}>{fmtDate(n.date)}</span>
                         {!n.lu && (
                           <button

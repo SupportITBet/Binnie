@@ -20,6 +20,20 @@ const SENDER_NAME     = process.env.BREVO_SENDER_NAME  || "Binnie's English Trai
    tableau de bord). Un repli doit être une valeur juste, pas un pense-bête. */
 const DASH_URL  = process.env.DASHBOARD_URL || "https://app.binnie.purepro-technologie.ci";
 const FRONT_URL = process.env.FRONTEND_URL  || "https://binniesenglish.net";
+/* BET E-LEARNING EST UNE AUTRE APPLICATION, sur un autre domaine. Un apprenant inscrit en
+   e-learning qui recevait le lien de `DASH_URL` atterrissait sur la page de connexion du
+   présentiel, où son compte n'ouvre rien.
+
+   LE REPLI EST L'ADRESSE DE PRODUCTION, pas `localhost`. Une variable oubliée arrive bien
+   plus souvent sur un serveur que sur un poste de développement, et les conséquences n'ont
+   rien de comparable : en développement on voit tout de suite que le lien est faux, tandis
+   qu'un e-mail parti en production avec `http://localhost:3002` envoie l'apprenant sur sa
+   propre machine - et il ne reviendra pas demander pourquoi. Le développement, lui, pose
+   `ELEARNING_URL=http://localhost:3002` dans son `.env`.
+
+   Le domaine de MARQUE et non celui de l'hébergeur : un lien « voici vos accès » pointant
+   vers `purepro-technologie.ci` se lit comme une tentative d'hameçonnage. */
+const ELEARNING_URL = process.env.ELEARNING_URL || "https://elearning.binniesenglish.net";
 /* Le lien de désinscription vise le SERVEUR, jamais le site : il doit fonctionner depuis
    un client mail, sans dépendre du chargement d'une application React - et la page qu'il
    visait côté site n'a d'ailleurs jamais existé. */
@@ -307,7 +321,15 @@ export async function sendAccessRegeneratedEmail({ prenom, nom, email, mdpTemp }
 /* ═══════════════════════════════════════════════════════════════
    EMAIL BIENVENUE APPRENANT
 ═══════════════════════════════════════════════════════════════ */
-export async function sendApprenantWelcomeEmail({ prenom, nom, email, mdpTemp, compteExistant = false }) {
+/**
+ * @param {('dash'|'bet-elearning')} plateforme - vers quelle application pointe le bouton
+ *   « Se connecter ». `dash` PAR DÉFAUT : les trois appels existants viennent du présentiel
+ *   et ne passent pas ce paramètre, leur comportement est inchangé.
+ */
+export async function sendApprenantWelcomeEmail({ prenom, nom, email, mdpTemp, compteExistant = false, plateforme = 'dash' }) {
+  const urlConnexion = plateforme === 'bet-elearning'
+    ? `${ELEARNING_URL}/connexion`
+    : `${DASH_URL}/connexion/apprenant`;
   const identifiantsBlock = compteExistant
     ? `<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:14px;padding:24px 28px;margin-bottom:28px;">
         <div style="font-size:11px;font-weight:800;color:#16a34a;text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px;">🔐 Vos identifiants de connexion</div>
@@ -357,7 +379,7 @@ export async function sendApprenantWelcomeEmail({ prenom, nom, email, mdpTemp, c
       ${identifiantsBlock}
 
       <div style="text-align:center;margin-bottom:32px;">
-        <a href="${DASH_URL}/connexion/apprenant"
+        <a href="${urlConnexion}"
            style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#011451,#0c33ac);color:#fff;text-decoration:none;border-radius:12px;font-weight:800;font-size:15px;">
           🚀 Accéder à mon espace apprenant
         </a>

@@ -32,6 +32,7 @@ import { v2 as cloudinary } from "cloudinary";
 import supabase from "../config/supabase.js";
 import { authenticateAdmin, authenticateApprenant, requirePermission } from "../middlewares/requireAdmin.js";
 import { notifyRole, notifyUser } from "../services/notifyRole.js";
+import { envoyerEmailPublication } from "../services/emailPublication.js";
 import { attribuerPoints, verifierBadges } from "../services/gamification.js";
 import { traiterClotureSeanceRemplacement } from "./remplacements.js";
 import { enregistrerMouvementTresorerie } from "./comptabilite.js";
@@ -287,7 +288,14 @@ router.post("/seances", authenticateAdmin, requirePermission("planning", "create
         const dateLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
         const heureLabel = `${heure_debut}–${heure_fin}`;
         const msgAppr = `Une nouvelle session a été planifiée le ${dateLabel} de ${heureLabel}.`;
-        const msgAdmin = `Session planifiée le ${dateLabel} (${heureLabel}) dans la classe ${classe_id}.`;
+        /* Le message administratif nommait la classe par son UUID : « dans la classe
+           8f3c-… ». Illisible, et sans valeur pour qui reçoit la notification — il faut
+           alors aller chercher de quelle classe il s'agit. On résout le nom. */
+        const { data: classeSeance } = await supabase
+          .from("classes_elearning").select("nom, entreprise_nom").eq("id", classe_id).maybeSingle();
+        const nomClasseSeance = classeSeance?.nom || "classe inconnue";
+        const msgAdmin = `Session planifiée le ${dateLabel} (${heureLabel}) dans la classe "${nomClasseSeance}"`
+          + `${classeSeance?.entreprise_nom ? ` - ${classeSeance.entreprise_nom}` : ""}.`;
 
         // Apprenants actifs de la classe (via utilisateurs pour s'assurer que le compte existe)
         const { data: inscrits, error: errInscrits } = await supabase
@@ -329,6 +337,11 @@ router.post("/seances", authenticateAdmin, requirePermission("planning", "create
           notifyRole(["pedagogical_advisor", "admin_pa_advisor"], notifAdmin),
           notifyRole(["onboarding", "admin_onboarding"], notifAdmin),
           notifyRole(["assistant_elearning", "admin_elearning"], notifAdmin),
+          /* La supervision suit l'activité pédagogique : ce qui se programme, et pour
+             quelle classe. Les quatre noms sont nécessaires — les rôles réels et les
+             façades portées côté bet-elearning ; n'en citer qu'une moitié laisse l'autre
+             moitié des comptes muette. */
+          notifyRole(["superviseur", "admin_superviseur", "deputy_superviseur", "admin_deputy_superviseur"], notifAdmin),
         ]);
         results.forEach((r, i) => {
           if (r.status === 'rejected') console.warn(`[seance notif admin ${i}]`, r.reason);
@@ -1400,12 +1413,79 @@ router.get("/contenus/:id/lus", authenticateAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/* ── GET /api/elearning/contenus/:id/lecteurs ───────────────────────────────
+   QUI A LU, ET SURTOUT QUI N'A PAS ENCORE OUVERT.
+   `/contenus/:id/lus` ne rend que les lecteurs : un coach y voit trois noms sans
+   savoir s'il manque deux apprenants ou vingt. C'est pourtant la seule question
+   utile — relancer ceux qui n'ont pas ouvert. Même réponse que `/:id/lecteurs`
+   côté dash (coursElearning.js), appliquée aux tables e-learning. */
+router.get("/contenus/:id/lecteurs", authenticateAdmin, async (req, res) => {
+  try {
+    const { data: contenu } = await supabase
+      .from("contenus_classes_elearning")
+      .select("id, titre, classe_id, classe_ids")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (!contenu) return res.status(404).json({ error: "Contenu introuvable" });
+    /* Toutes les classes visées, pas seulement la première : un contenu diffusé à
+       trois classes n'est pas « lu par 4/8 » mais par 4 sur l'ensemble de ses
+       destinataires, sinon le coach relance les mauvaises personnes. */
+    const classesVisees = (contenu.classe_ids?.length ? contenu.classe_ids : [contenu.classe_id]).filter(Boolean);
+    if (!classesVisees.length) {
+      return res.json({ titre: contenu.titre, lecteurs: [], en_attente: [], total: 0, lus: 0 });
+    }
+
+    const [{ data: inscrits }, { data: lectures }, { data: classes }] = await Promise.all([
+      supabase.from("classes_elearning_apprenants")
+        .select("apprenant_id, nom_complet, email, classe_id")
+        .in("classe_id", classesVisees)
+        .eq("statut", "actif"),
+      supabase.from("contenus_lus").select("apprenant_id, lu_le").eq("contenu_id", req.params.id),
+      /* Le nom de la classe accompagne chaque apprenant : sur un contenu diffusé à
+         plusieurs classes, « Awa n'a pas ouvert » ne dit pas laquelle relancer. */
+      supabase.from("classes_elearning").select("id, nom").in("id", classesVisees),
+    ]);
+    const nomClasse = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
+
+    const luPar = Object.fromEntries((lectures || []).map(l => [l.apprenant_id, l.lu_le]));
+    const lecteurs = [], en_attente = [];
+    for (const i of inscrits || []) {
+      /* Un apprenant sans compte ouvert ne PEUT pas avoir lu : le ranger parmi ceux
+         « en attente » serait exact mais trompeur — on le marque pour que le coach
+         sache que c'est l'accès qui manque, pas la bonne volonté. */
+      const fiche = {
+        apprenant_id: i.apprenant_id || null,
+        nom_complet:  i.nom_complet || "",
+        email:        i.email || "",
+        classe:       nomClasse[i.classe_id] || "",
+        sans_compte:  !i.apprenant_id,
+      };
+      const le = i.apprenant_id ? luPar[i.apprenant_id] : null;
+      if (le) lecteurs.push({ ...fiche, lu_le: le });
+      else    en_attente.push(fiche);
+    }
+    lecteurs.sort((a, b) => String(b.lu_le).localeCompare(String(a.lu_le)));
+
+    res.json({
+      titre: contenu.titre,
+      lecteurs,
+      en_attente,
+      total: (inscrits || []).length,
+      lus:   lecteurs.length,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get("/contenus", authenticateAdmin, async (req, res) => {
   try {
     const coachId  = req.query.coach_id || req.profil?.id;
     if (!coachId) return res.status(400).json({ error: "coach_id requis" });
     let q = supabase.from("contenus_classes_elearning").select("*").eq("coach_id", coachId).order("created_at", { ascending: true });
-    if (req.query.classe_id) q = q.eq("classe_id", req.query.classe_id);
+    /* `contains` et non `eq` : un contenu vise maintenant plusieurs classes, et
+       `classe_id` ne porte plus que la première d'entre elles. Filtrer dessus
+       masquerait un contenu diffusé à la classe demandée dès qu'une autre classe
+       figure en tête de liste. */
+    if (req.query.classe_id) q = q.contains("classe_ids", [req.query.classe_id]);
     const { data, error } = await q;
     if (error) throw error;
     res.json({ contenus: data || [] });
@@ -1418,20 +1498,49 @@ router.post("/contenus", authenticateAdmin, requirePermission("mediatheque", "cr
     if (!coachId) return res.status(401).json({ error: "Non authentifié" });
     const { titre, categorie, type_contenu, semaine, statut, est_visible, blocs, objectifs, duree_estimee, ordre, classe_id } = req.body;
     if (!titre) return res.status(400).json({ error: "Titre requis" });
-    const { data, error } = await supabase.from("contenus_classes_elearning").insert({
+    /* On accepte `classe_ids` (plusieurs destinataires) comme `classe_id` (un
+       seul, ancien appelant) : un client pas encore déployé continue de créer
+       ses contenus. `classe_id` reste alimentée avec la première de la liste —
+       l'espace apprenant la lit encore directement. */
+    const classeIds = Array.isArray(req.body.classe_ids)
+      ? [...new Set(req.body.classe_ids.filter(Boolean))]
+      : (classe_id ? [classe_id] : []);
+    /* AU MOINS UNE CLASSE, brouillon compris. Un contenu sans destinataire
+       n'apparaît dans aucune médiathèque — elle filtre par classe —, si bien que
+       son auteur lui-même ne le retrouvait plus. Un contenu se rattache d'abord,
+       se rédige ensuite. */
+    if (!classeIds.length) {
+      return res.status(400).json({ error: "Choisissez au moins une classe destinataire" });
+    }
+    const aInserer = {
       coach_id:      coachId,
-      classe_id:     classe_id || null,
+      classe_id:     classeIds[0],
+      classe_ids:    classeIds,
       titre,
       categorie:     categorie     || '',
       type_contenu:  type_contenu  || 'lecon',
       semaine:       semaine       || 1,
-      statut:        statut        || 'brouillon',
-      est_visible:   est_visible   ?? false,
+      lecture_sequentielle: req.body.lecture_sequentielle === true,
+      /* UN CONTENU SANS BLOC RESTE BROUILLON, quoi qu'on demande. Publier une
+         coquille vide notifie toute la classe d'un cours qui s'ouvre sur rien,
+         et l'envoi n'est pas rattrapable. Même règle que côté dash. */
+      statut:        (blocs || []).length ? (statut || 'brouillon') : 'brouillon',
+      est_visible:   (blocs || []).length ? (est_visible ?? false)  : false,
       blocs:         blocs         || [],
       objectifs:     objectifs     || '',
       duree_estimee: duree_estimee || 30,
       ordre:         ordre         || 1,
-    }).select().single();
+    };
+    let { data, error } = await supabase.from("contenus_classes_elearning").insert(aInserer).select().single();
+    /* La colonne `lecture_sequentielle` est livrée par un SQL à part
+       (Backend/sql/contenus_classes_elearning_lecture_sequentielle.sql). Tant qu'il n'est
+       pas joué, on rejoue SANS elle plutôt que de faire échouer toute création de contenu
+       pour un réglage facultatif — le coach ne comprendrait pas pourquoi son cours est
+       refusé. */
+    if (error && (error.code === "42703" || /lecture_sequentielle/.test(error.message || ""))) {
+      const { lecture_sequentielle: _absent, ...sansColonne } = aInserer;
+      ({ data, error } = await supabase.from("contenus_classes_elearning").insert(sansColonne).select().single());
+    }
     if (error) throw error;
     res.status(201).json({ contenu: data });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1440,13 +1549,119 @@ router.post("/contenus", authenticateAdmin, requirePermission("mediatheque", "cr
 router.patch("/contenus/:id", authenticateAdmin, requirePermission("mediatheque", "update"), async (req, res) => {
   try {
     const coachId = req.profil?.id;
-    const allowed = ["titre","categorie","type_contenu","semaine","statut","est_visible","blocs","objectifs","duree_estimee","ordre","classe_id"];
+    const allowed = ["titre","categorie","type_contenu","semaine","statut","est_visible","blocs","objectifs","duree_estimee","ordre","lecture_sequentielle"];
     const payload = { updated_at: new Date().toISOString() };
     allowed.forEach(k => { if (req.body[k] !== undefined) payload[k] = req.body[k]; });
-    const { data, error } = await supabase.from("contenus_classes_elearning")
+    /* Les destinataires se modifient par `classe_ids` ; `classe_id` suit avec la
+       première de la liste, pour l'espace apprenant qui la lit encore. On refuse
+       de vider la liste : un contenu sans classe disparaît de la médiathèque, qui
+       filtre par classe, et son auteur ne le retrouve plus. */
+    if (Array.isArray(req.body.classe_ids)) {
+      const ids = [...new Set(req.body.classe_ids.filter(Boolean))];
+      if (!ids.length) return res.status(400).json({ error: "Un contenu doit viser au moins une classe" });
+      payload.classe_ids = ids;
+      payload.classe_id  = ids[0];
+    } else if (req.body.classe_id !== undefined) {
+      if (!req.body.classe_id) return res.status(400).json({ error: "Un contenu doit viser au moins une classe" });
+      payload.classe_ids = [req.body.classe_id];
+      payload.classe_id  = req.body.classe_id;
+    }
+    /* L'état AVANT la mise à jour : la notification de publication ne doit partir qu'au
+       PASSAGE en publié. Republier après une correction de virgule ne doit pas réalerter
+       toute la classe — même règle que côté dash (coursElearning.js). */
+    const { data: avant } = await supabase.from("contenus_classes_elearning")
+      .select("est_visible, titre, classe_id, classe_ids, blocs").eq("id", req.params.id).maybeSingle();
+
+    /* Même garde-fou qu'à la création : on ne publie pas un contenu vide. Les
+       blocs peuvent venir de la requête (on les remplace) ou rester ceux déjà
+       en base (on ne touche qu'au statut) — c'est le résultat qui compte. */
+    const blocsApres = req.body.blocs !== undefined ? (req.body.blocs || []) : (avant?.blocs || []);
+    if ((payload.est_visible === true || payload.statut === "publie") && !blocsApres.length) {
+      return res.status(409).json({
+        error: "Ce contenu n'a aucun bloc : il s'ouvrirait sur une page vide. Ajoutez au moins un bloc avant de publier.",
+        code:  "CONTENU_VIDE",
+      });
+    }
+
+    let { data, error } = await supabase.from("contenus_classes_elearning")
       .update(payload).eq("id", req.params.id).eq("coach_id", coachId).select().single();
+    // Même repli qu'à la création tant que le SQL de lecture séquentielle n'est pas joué :
+    // une modification de titre ne doit pas échouer à cause d'un réglage facultatif.
+    if (error && (error.code === "42703" || /lecture_sequentielle/.test(error.message || ""))) {
+      const { lecture_sequentielle: _absent, ...sansColonne } = payload;
+      ({ data, error } = await supabase.from("contenus_classes_elearning")
+        .update(sansColonne).eq("id", req.params.id).eq("coach_id", coachId).select().single());
+    }
     if (error) throw error;
     res.json({ contenu: data });
+
+    const classesVisees = (data.classe_ids?.length ? data.classe_ids : [data.classe_id]).filter(Boolean);
+    if (!avant?.est_visible && data.est_visible && classesVisees.length) {
+      /* ── PUBLIER UN COURS SE SAIT AU-DELÀ DE LA CLASSE ──
+         Seuls les apprenants étaient prévenus. Or publier est l'acte par lequel le coach
+         met un contenu en circulation : l'encadrement le suit — l'onboarding et
+         l'assistante pour le démarrage des apprenants, le PA et la supervision pour
+         l'activité pédagogique. Aucun d'eux ne le voyait, et personne ne savait si un
+         coach alimentait réellement sa médiathèque.
+         Résolu avant la boucle des apprenants pour que le nom des classes figure dans le
+         message : « publié dans Anglais Moov A2 » se lit, un UUID non. */
+      const { data: classesNommees } = await supabase
+        .from("classes_elearning").select("nom").in("id", classesVisees);
+      const libClasses = (classesNommees || []).map(c => c.nom).filter(Boolean).join(", ") || "sa classe";
+      const notifEncadrement = {
+        type:    "cours",
+        titre:   `📚 Cours publié - ${data.titre}`,
+        message: `Un coach vient de publier « ${data.titre} » dans ${libClasses}.`,
+        meta:    { contenu_id: data.id, classe_ids: classesVisees },
+      };
+      await Promise.allSettled([
+        notifyRole(["onboarding", "admin_onboarding"], notifEncadrement),
+        /* Quatre noms pour l'assistante : AUCUN compte ne porte `assistant_elearning`,
+           `ROLE_MAP_BET` y résout `commercial` et `corporate`. N'en citer qu'un
+           écrirait une notification que personne ne recevrait. */
+        notifyRole(["assistant_elearning", "commercial", "corporate", "admin_elearning"], notifEncadrement),
+        notifyRole(["pedagogical_advisor", "admin_pa_advisor"], notifEncadrement),
+        notifyRole(["superviseur", "admin_superviseur", "deputy_superviseur", "admin_deputy_superviseur"], notifEncadrement),
+      ]).then(rs => rs.forEach((r, i) => {
+        if (r.status === "rejected") console.error(`[contenu publie] notif encadrement ${i}:`, r.reason);
+      }));
+
+      /* Les apprenants de TOUTES les classes visées, prévenus dans leur espace. On
+         notifie les COMPTES, pas les inscriptions : un apprenant sans accès ouvert
+         n'a pas de cloche à remplir. `in` plutôt qu'une requête par classe — un
+         apprenant inscrit dans deux classes visées ne doit recevoir qu'une
+         notification, d'où le dédoublonnage qui suit. */
+      const { data: inscrits } = await supabase
+        .from("classes_elearning_apprenants")
+        .select("apprenant_id")
+        .in("classe_id", classesVisees)
+        .eq("statut", "actif");
+      const ids = [...new Set((inscrits || []).map(i => i.apprenant_id).filter(Boolean))];
+      if (ids.length) {
+        await supabase.from("notifications").insert(ids.map(id => ({
+          user_id: id,
+          type:    "cours",
+          titre:   `📚 Nouveau contenu : ${data.titre}`,
+          message: `Votre coach a publié « ${data.titre} ». Retrouvez-le dans Mes cours.`,
+          meta:    { contenu_id: data.id, classe_id: data.classe_id, classe_ids: classesVisees },
+          source:  "bet-elearning",
+          lu:      false,
+        }))).then(({ error: e }) => { if (e) console.error("[contenu publie] notifs:", e.message); });
+      }
+
+      // L'e-mail ne part que si le coach l'a demandé, et une seule fois par contenu :
+      // le service refuse tout second envoi, quel que soit le nombre de republications.
+      if (req.body.envoyer_email) {
+        envoyerEmailPublication({
+          ressourceType: "contenu",
+          ressourceId:   data.id,
+          titre:         `📚 Nouveau contenu : ${data.titre}`,
+          message:       `Votre coach a publié « ${data.titre} ». Retrouvez-le dès maintenant dans votre espace.`,
+          groupeIds:     classesVisees,
+          acteurId:      coachId,
+        }).catch(e => console.error("[contenu publie] email:", e.message));
+      }
+    }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1496,8 +1711,58 @@ router.post("/fichiers", authenticateAdmin, requirePermission("fichiers_partages
     }).select().single();
     if (error) throw error;
     res.status(201).json({ fichier: data });
+
+    /* ── PARTAGER UN FICHIER NE PRÉVENAIT PERSONNE ──
+       Le coach déposait un support et attendait que ses apprenants le trouvent par
+       eux-mêmes, en passant par l'onglet Ressources. Un document arrivé entre deux séances
+       restait donc invisible jusqu'à ce que quelqu'un pense à aller voir.
+       On ne notifie QUE si le fichier est visible : un dépôt masqué est un brouillon, et
+       annoncer un document que personne ne peut ouvrir est pire que de se taire.
+       Après la réponse : le partage ne doit ni échouer ni attendre pour une notification. */
+    if (data.visible) {
+      notifierPartageFichier(data, coachId).catch(e => console.error("[fichiers] notifs:", e.message));
+    }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+/**
+ * Qui prévenir quand un support devient accessible à une classe.
+ *
+ * Les apprenants d'abord — c'est pour eux. Puis l'encadrement, qui suit ce que le coach
+ * met à disposition : l'assistante et l'onboarding pour le démarrage, le PA et la
+ * supervision pour l'activité pédagogique. Mêmes destinataires que la publication d'un
+ * cours, parce que c'est le même geste : mettre une ressource en circulation.
+ */
+async function notifierPartageFichier(fichier, coachId) {
+  const { data: classe } = await supabase
+    .from("classes_elearning").select("nom, entreprise_nom").eq("id", fichier.classe_id).maybeSingle();
+  const nomClasse = classe?.nom || "votre classe";
+
+  await notifierApprenantsClasse(fichier.classe_id, {
+    type:    "ressource",
+    titre:   "📎 Nouveau document partagé",
+    message: `Votre coach a partagé « ${fichier.nom} » dans ${nomClasse}. Retrouvez-le dans vos ressources.`,
+    meta:    { fichier_id: fichier.id, classe_id: fichier.classe_id },
+  });
+
+  const notif = {
+    type:    "ressource",
+    titre:   `📎 Document partagé - ${nomClasse}`,
+    message: `Un coach a partagé « ${fichier.nom} » dans ${nomClasse}`
+           + `${classe?.entreprise_nom ? ` - ${classe.entreprise_nom}` : ""}.`,
+    meta:    { fichier_id: fichier.id, classe_id: fichier.classe_id, coach_id: coachId },
+  };
+  await Promise.allSettled([
+    notifyRole(["onboarding", "admin_onboarding"], notif),
+    /* Quatre noms pour l'assistante : aucun compte ne porte `assistant_elearning`,
+       `ROLE_MAP_BET` y résout `commercial` et `corporate`. */
+    notifyRole(["assistant_elearning", "commercial", "corporate", "admin_elearning"], notif),
+    notifyRole(["pedagogical_advisor", "admin_pa_advisor"], notif),
+    notifyRole(["superviseur", "admin_superviseur", "deputy_superviseur", "admin_deputy_superviseur"], notif),
+  ]).then(rs => rs.forEach((r, i) => {
+    if (r.status === "rejected") console.error(`[fichiers] notif encadrement ${i}:`, r.reason);
+  }));
+}
 
 router.patch("/fichiers/:id", authenticateAdmin, requirePermission("fichiers_partages", "update"), async (req, res) => {
   try {
@@ -1506,10 +1771,20 @@ router.patch("/fichiers/:id", authenticateAdmin, requirePermission("fichiers_par
     if (req.body.visible !== undefined) payload.visible   = req.body.visible;
     if (req.body.nom     !== undefined) payload.nom       = req.body.nom;
     if (req.body.categorie !== undefined) payload.categorie = req.body.categorie;
+    /* L'état AVANT : on ne notifie qu'au PASSAGE de masqué à visible. Un fichier déjà
+       visible qu'on renomme ne doit pas réalerter toute la classe — c'est la même règle
+       que pour la publication d'un cours. */
+    const { data: avant } = await supabase.from("fichiers_classes_elearning")
+      .select("visible").eq("id", req.params.id).maybeSingle();
+
     const { data, error } = await supabase.from("fichiers_classes_elearning")
       .update(payload).eq("id", req.params.id).eq("coach_id", coachId).select().single();
     if (error) throw error;
     res.json({ fichier: data });
+
+    if (!avant?.visible && data.visible) {
+      notifierPartageFichier(data, coachId).catch(e => console.error("[fichiers PATCH] notifs:", e.message));
+    }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1545,6 +1820,23 @@ function devoirExpire(d) {
 // ⚠️ Ne PAS utiliser notifyRole(['apprenant'], ...) ici : le rôle "apprenant" est partagé avec
 // dash en base - cibler classes_elearning_apprenants garantit qu'on ne notifie que les vrais
 // comptes apprenants de la classe concernée sur bet-elearning, jamais ceux de dash.
+/**
+ * Ce que l'apprenant doit lire quand un devoir est publié.
+ *
+ * Le message annonçait « à rendre pour le … » même sur un devoir PROGRAMMÉ, dont la date
+ * d'ouverture est dans le futur : l'apprenant allait l'ouvrir, trouvait porte close, et
+ * n'avait aucun moyen de savoir si c'était une panne ou une attente. On dit quand il
+ * s'ouvre, et seulement ensuite quand il se rend.
+ */
+function messageDevoirApprenant(d) {
+  const jour = (v) => new Date(v).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const ouvreePlusTard = d.date_ouverture && new Date(`${d.date_ouverture}T${(d.heure_ouverture || "00:00").slice(0, 5)}:00`) > new Date();
+  const limite = d.date_limite ? ` À rendre pour le ${jour(d.date_limite)}.` : "";
+  return ouvreePlusTard
+    ? `"${d.titre}" a été programmé par votre coach. Il s'ouvrira le ${jour(d.date_ouverture)} à ${(d.heure_ouverture || "00:00").slice(0, 5)}.${limite}`
+    : `"${d.titre}" a été publié par votre coach.${limite || " À rendre prochainement."}`;
+}
+
 async function notifierApprenantsClasse(classeId, { type = "info", titre, message, meta }) {
   try {
     const { data: apprenants, error } = await supabase
@@ -1626,11 +1918,24 @@ router.post("/devoirs", authenticateAdmin, requirePermission("devoirs_evaluation
       const notif = { type: "devoir", titre: "📝 Nouveau devoir publié", message: msg, meta: { devoir_id: data.id, classe_id: data.classe_id } };
       await Promise.all([
         notifyRole(["onboarding", "admin_onboarding"], notif),
-        notifyRole(["assistant_elearning", "admin_elearning"], notif),
+        /* Quatre noms pour l'assistante : aucun compte ne porte `assistant_elearning`,
+           `ROLE_MAP_BET` y résout `commercial` et `corporate`. N'en citer qu'un écrivait
+           une notification que personne ne recevait. */
+        notifyRole(["assistant_elearning", "commercial", "corporate", "admin_elearning"], notif),
+        /* LE PA MANQUAIT. Il reçoit la publication d'un cours mais pas celle d'un devoir,
+           alors que les deux relèvent du même suivi pédagogique. */
+        notifyRole(["pedagogical_advisor", "admin_pa_advisor"], notif),
+        /* La supervision reçoit ce que le coach met réellement en circulation. Un devoir
+           resté en brouillon ne la concerne pas : il n'est encore demandé à personne.
+           Les quatre noms de rôle sont nécessaires — les rôles réels et les façades
+           portées côté bet-elearning ; n'en citer qu'une moitié laisse l'autre moitié des
+           comptes muette. */
+        notifyRole(["superviseur", "admin_superviseur", "deputy_superviseur", "admin_deputy_superviseur"], notif),
         notifierApprenantsClasse(data.classe_id, {
           type:    "devoir",
-          titre:   "📝 Nouveau devoir",
-          message: `"${data.titre}" a été publié par votre coach - à rendre pour le ${data.date_limite || "bientôt"}.`,
+          titre:   data.date_ouverture && new Date(`${data.date_ouverture}T${(data.heure_ouverture || "00:00").slice(0, 5)}:00`) > new Date()
+            ? "🗓 Devoir programmé" : "📝 Nouveau devoir",
+          message: messageDevoirApprenant(data),
           meta:    { devoir_id: data.id, classe_id: data.classe_id },
         }),
       ]);
@@ -1701,11 +2006,24 @@ router.patch("/devoirs/:id", authenticateAdmin, requirePermission("devoirs_evalu
       const notif = { type: "devoir", titre: "📝 Devoir publié", message: msg, meta: { devoir_id: data.id, classe_id: data.classe_id } };
       await Promise.all([
         notifyRole(["onboarding", "admin_onboarding"], notif),
-        notifyRole(["assistant_elearning", "admin_elearning"], notif),
+        /* Quatre noms pour l'assistante : aucun compte ne porte `assistant_elearning`,
+           `ROLE_MAP_BET` y résout `commercial` et `corporate`. N'en citer qu'un écrivait
+           une notification que personne ne recevait. */
+        notifyRole(["assistant_elearning", "commercial", "corporate", "admin_elearning"], notif),
+        /* LE PA MANQUAIT. Il reçoit la publication d'un cours mais pas celle d'un devoir,
+           alors que les deux relèvent du même suivi pédagogique. */
+        notifyRole(["pedagogical_advisor", "admin_pa_advisor"], notif),
+        /* La supervision reçoit ce que le coach met réellement en circulation. Un devoir
+           resté en brouillon ne la concerne pas : il n'est encore demandé à personne.
+           Les quatre noms de rôle sont nécessaires — les rôles réels et les façades
+           portées côté bet-elearning ; n'en citer qu'une moitié laisse l'autre moitié des
+           comptes muette. */
+        notifyRole(["superviseur", "admin_superviseur", "deputy_superviseur", "admin_deputy_superviseur"], notif),
         notifierApprenantsClasse(data.classe_id, {
           type:    "devoir",
-          titre:   "📝 Nouveau devoir",
-          message: `"${data.titre}" a été publié par votre coach - à rendre pour le ${data.date_limite || "bientôt"}.`,
+          titre:   data.date_ouverture && new Date(`${data.date_ouverture}T${(data.heure_ouverture || "00:00").slice(0, 5)}:00`) > new Date()
+            ? "🗓 Devoir programmé" : "📝 Nouveau devoir",
+          message: messageDevoirApprenant(data),
           meta:    { devoir_id: data.id, classe_id: data.classe_id },
         }),
       ]);
@@ -1938,6 +2256,28 @@ router.post("/devoirs/:id/rendre", authenticateApprenant, (req, res) => {
         rendu_at:        new Date().toISOString(),
         note:            noteAuto,
       };
+
+      /* ── UN DEVOIR CORRIGÉ NE SE RÉÉCRIT PLUS ──
+         L'`upsert` ci-dessous ÉCRASE le rendu précédent : c'est voulu, l'apprenant doit
+         pouvoir revenir sur sa copie tant qu'elle n'a pas été vue. Mais rien ne vérifiait
+         l'état de ce rendu, si bien qu'une re-soumission après correction remplaçait la
+         copie ET la note déjà donnée par le coach, sans trace ni message.
+         Même garde que côté dash (apprenants.js, POST /evaluations/:evalId/soumettre),
+         où la règle est annoncée à l'apprenant au moment où il rend : « vous pourrez
+         encore la modifier tant que votre coach ne l'a pas corrigée ». */
+      const { data: rendüExistant } = await supabase
+        .from("devoirs_rendus_elearning")
+        .select("statut, note")
+        .eq("devoir_id", req.params.id)
+        .eq("inscription_id", inscription_id)
+        .maybeSingle();
+
+      if (rendüExistant?.statut === "corrige") {
+        return res.status(403).json({
+          error: "Ce devoir a déjà été corrigé par votre coach - vous ne pouvez plus le modifier.",
+          code:  "DEJA_CORRIGE",
+        });
+      }
 
       const { data, error } = await supabase.from("devoirs_rendus_elearning")
         .upsert(payload, { onConflict: "devoir_id,inscription_id" }).select().single();

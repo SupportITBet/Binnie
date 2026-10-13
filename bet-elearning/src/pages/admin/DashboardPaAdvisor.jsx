@@ -8,6 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { COULEURS } from '../../constants/couleurs';
 import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererPDF';
 import { ModalDetailApprenant } from './DashboardAdminShared';
+import SelecteurCoach from '../../components/shared/SelecteurCoach';
 import { dureeReelleMin } from '../../components/shared/DerouleReel';
 import { estRole } from '../../constants/roles';
 import PastilleGroupe from '../../components/shared/PastilleGroupe';
@@ -15,7 +16,7 @@ import BadgeCategorieCoach, { FlecheTendance } from '../../components/shared/Bad
 import { NOTE_COULEUR, NOTE_FOND } from '../../utils/categorieCoach';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 const SUP_COLOR = '#7C3AED'; // dupliqué de DashboardSuperviseur.jsx (couleur de la marque "Superviseur")
 // dupliqué de DashboardSuperviseur.jsx - utilisé par OngletRapportsSuperviseurPA (lecture des rapports transmis par le Superviseur)
 function supAuthHdrs() {
@@ -2060,15 +2061,27 @@ export function OngletClassesPAAdvisor() {
     !rechercheApp || (a.nom_complet||'').toLowerCase().includes(rechercheApp.toLowerCase()) || (a.email||'').toLowerCase().includes(rechercheApp.toLowerCase())
   );
 
+  const [apprenantsTous, setApprenantsTous] = useState([]);
+  const [moisDispo, setMoisDispo] = useState({ courant: null, suivant: null });
+
   useEffect(() => {
     Promise.all([
       fetch(`${_API_URL_ADMIN}/api/classes-elearning`, { headers: _authHdrsAdmin() }).then(r => r.json()),
       fetch(`${_API_URL_ADMIN}/api/classes-elearning/sans-coach`, { headers: _authHdrsAdmin() }).then(r => r.json()),
       fetch(`${_API_URL_ADMIN}/api/classes-elearning/coaches-elearning`, { headers: _authHdrsAdmin() }).then(r => r.json()),
-    ]).then(([dc, ds, dco]) => {
+      /* LES APPRENANTS, POUR LEURS OBJECTIFS. Choisir un coach sans savoir ce que les
+         apprenants de la classe veulent atteindre, c'est choisir au hasard : deux classes
+         de même niveau n'appellent pas le même coach si l'une prépare un IELTS et l'autre
+         des réunions commerciales. */
+      fetch(`${_API_URL_ADMIN}/api/classes-elearning/apprenants/tous`, { headers: _authHdrsAdmin() }).then(r => r.json()),
+    ]).then(([dc, ds, dco, dap]) => {
       setClasses(dc.classes || []);
       setSansCoach(ds.classes || []);
       setCoaches(dco.coaches || []);
+      // Les deux mois viennent du serveur : le filtre « Ce mois / Mois prochain » doit
+      // nommer les mêmes mois que ceux sur lesquels les disponibilités ont été comptées.
+      setMoisDispo({ courant: dco.mois_courant || null, suivant: dco.mois_suivant || null });
+      setApprenantsTous(Array.isArray(dap.apprenants) ? dap.apprenants : []);
     }).catch(() => {}).finally(() => setChargement(false));
   }, []);
 
@@ -2339,98 +2352,39 @@ export function OngletClassesPAAdvisor() {
                         <div style={{ padding:'16px', borderRadius:10, background:'#FEF3C7', color:'#92400E', fontSize:13 }}>
                           ⚠️ Aucun coach habilité e-learning disponible.
                         </div>
-                      ) : (() => {
-                        const meilleur = coaches[0];
-                        const ROLE_LIB = { coach:'Coach', professeur_titulaire:'Titulaire', professeur_remplacant:'Remplaçant' };
-                        const TYPE_LIB = { permanent:'Permanent', freelance:'Freelance', consultant:'Consultant', vacataire:'Vacataire' };
-                        const COLORS = ['#6366F1','#0891B2','#059669','#F97316','#8B5CF6','#EC4899','#DC2626','#0EA5E9'];
-                        const couleurCo = co => COLORS[(co.prenom||'A').charCodeAt(0) % COLORS.length];
+                      ) : (
+                        <>
+                          {/* La sélection se faisait sur une ligne portant nom, rôle et e-mail :
+                              de quoi NOMMER un coach, pas de quoi en CHOISIR un. `SelecteurCoach`
+                              montre ce sur quoi la décision repose vraiment - charge actuelle,
+                              disponibilités du mois, niveaux enseignés, spécialité, note et
+                              catégorie de contrat - et les trois filtres qui vont avec. */}
+                          <SelecteurCoach
+                            coaches={coaches}
+                            moisCourant={moisDispo.courant}
+                            moisSuivant={moisDispo.suivant}
+                            niveauClasse={c.niveau || null}
+                            /* L'emploi du temps de la classe, pour que chaque carte dise si
+                               le coach couvre CES créneaux-là. Sans lui, on lisait « 10
+                               créneaux en octobre » sans savoir s'ils tombaient le lundi
+                               matin ou le samedi soir. */
+                            horaireClasse={Array.isArray(c.horaire) ? c.horaire : []}
+                            coachSelectionne={selectedCoach}
+                            onSelectionner={(id) => setCoachChoisi(prev => ({ ...prev, [c.id]: id }))}
+                            accent="#6366F1"
+                          />
 
-                        return (
-                          <>
-                            {/* Meilleur choix */}
-                            <div style={{ marginBottom:14 }}>
-                              <div style={{ fontSize:10, fontWeight:800, color:'#92400E', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
-                                <span style={{ background:'#FEF3C7', border:'1px solid #FDE68A', borderRadius:20, padding:'2px 10px' }}>🏆 MEILLEUR CHOIX</span>
-                              </div>
-                              <div
-                                onClick={() => setCoachChoisi(prev => ({ ...prev, [c.id]: meilleur.id }))}
-                                style={{ background: selectedCoach === meilleur.id ? 'linear-gradient(135deg,#EEF2FF,#E0E7FF)' : 'linear-gradient(135deg,#F0FDF4,#DCFCE7)', border:`2px solid ${selectedCoach === meilleur.id ? '#6366F1' : '#86EFAC'}`, borderRadius:12, padding:'14px 18px', cursor:'pointer', display:'flex', alignItems:'center', gap:14, transition:'all 0.15s' }}>
-                                <PastilleGroupe nom={`${meilleur.prenom || ''} ${meilleur.nom || ''}`} url={meilleur.avatar_url} taille={46} accent={couleurCo(meilleur)} />
-                                <div style={{ flex:1 }}>
-                                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3, flexWrap:'wrap' }}>
-                                    <span style={{ fontSize:14, fontWeight:800, color:'#1E293B' }}>{meilleur.prenom} {meilleur.nom}</span>
-                                    <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'1px 8px', fontSize:10, fontWeight:800 }}>RECOMMANDÉ</span>
-                                    <BadgeCategorieCoach note={meilleur.note_moyenne} taille="sm" avecNote />
-                                  </div>
-                                  <div style={{ fontSize:12, color:'#475569', marginBottom:5 }}>
-                                    {ROLE_LIB[meilleur.role] || meilleur.role}{meilleur.type_coach ? ` · ${TYPE_LIB[meilleur.type_coach] || meilleur.type_coach}` : ''}
-                                  </div>
-                                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                                    <span style={{ background:'#EEF2FF', color:'#4338CA', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:700 }}>✓ Habilité e-learning</span>
-                                    {meilleur.email && <span style={{ background:'#F1F5F9', color:'#475569', borderRadius:6, padding:'2px 8px', fontSize:10 }}>{meilleur.email}</span>}
-                                  </div>
-                                </div>
-                                <div style={{ width:22, height:22, borderRadius:'50%', border:`2.5px solid ${selectedCoach === meilleur.id ? '#6366F1' : '#86EFAC'}`, background: selectedCoach === meilleur.id ? '#6366F1' : '#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                  {selectedCoach === meilleur.id && <div style={{ width:8, height:8, borderRadius:'50%', background:'#fff' }} />}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Tous les coachs */}
-                            {coaches.length > 1 && (
-                              <div>
-                                <div style={{ fontSize:10, fontWeight:800, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8 }}>
-                                  📋 TOUS LES COACHS DISPONIBLES ({coaches.length})
-                                </div>
-                                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                                  {coaches.map((co, idx) => {
-                                    const sel = selectedCoach === co.id;
-                                    return (
-                                      <div key={co.id}
-                                        onClick={() => setCoachChoisi(prev => ({ ...prev, [c.id]: co.id }))}
-                                        style={{ background: sel ? '#EEF2FF' : '#FAFAFA', border:`1.5px solid ${sel ? '#6366F1' : '#E5E7EB'}`, borderRadius:10, padding:'12px 16px', cursor:'pointer', display:'flex', alignItems:'center', gap:12, transition:'all 0.12s' }}
-                                        onMouseEnter={e => { if (!sel) e.currentTarget.style.borderColor='#A5B4FC'; }}
-                                        onMouseLeave={e => { if (!sel) e.currentTarget.style.borderColor='#E5E7EB'; }}>
-                                        <PastilleGroupe nom={`${co.prenom || ''} ${co.nom || ''}`} url={co.avatar_url} taille={38} accent={couleurCo(co)} />
-                                        <div style={{ flex:1 }}>
-                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
-                                            <span style={{ fontSize:13, fontWeight:700, color:'#1E293B' }}>{co.prenom} {co.nom}</span>
-                                            {idx === 0 && <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'1px 7px', fontSize:10, fontWeight:700 }}>RECOMMANDÉ</span>}
-                                            {/* LA CATÉGORIE DE CONTRAT, au moment où l'on choisit. C'est le
-                                                critère de la direction : assigner sans la voir, c'est décider
-                                                à l'aveugle alors que le superviseur, lui, l'a sous les yeux. */}
-                                            <BadgeCategorieCoach note={co.note_moyenne} taille="xs" avecNote />
-                                          </div>
-                                          <div style={{ fontSize:11, color:'#6B7280' }}>
-                                            {ROLE_LIB[co.role] || co.role}{co.type_coach ? ` · ${TYPE_LIB[co.type_coach] || co.type_coach}` : ''}
-                                            {co.nb_observations > 0
-                                              ? ` · ${co.nb_observations} observation${co.nb_observations > 1 ? 's' : ''}`
-                                              : ' · jamais observé'}
-                                          </div>
-                                        </div>
-                                        <div style={{ width:20, height:20, borderRadius:'50%', border:`2.5px solid ${sel ? '#6366F1' : '#D1D5DB'}`, background: sel ? '#6366F1' : '#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                          {sel && <div style={{ width:7, height:7, borderRadius:'50%', background:'#fff' }} />}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Bouton confirmer */}
-                            <div style={{ marginTop:16, display:'flex', justifyContent:'flex-end' }}>
-                              <button
-                                onClick={() => assignerCoach(c.id)}
-                                disabled={!selectedCoach || isSaving}
-                                style={{ padding:'11px 24px', borderRadius:10, border:'none', background: !selectedCoach || isSaving ? '#E5E7EB' : 'linear-gradient(135deg,#6366F1,#4F46E5)', color: !selectedCoach || isSaving ? '#9CA3AF' : '#fff', fontWeight:700, fontSize:13, cursor: !selectedCoach || isSaving ? 'not-allowed' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif', boxShadow: !selectedCoach || isSaving ? 'none' : '0 4px 14px rgba(99,102,241,0.4)', transition:'all 0.15s' }}>
-                                {isSaving ? '⏳ Assignation en cours…' : `✅ Confirmer l'assignation${selectedCoach ? ` - ${coaches.find(co=>co.id===selectedCoach)?.prenom||''}` : ''}`}
-                              </button>
-                            </div>
-                          </>
-                        );
-                      })()}
+                          {/* Bouton confirmer */}
+                          <div style={{ marginTop:16, display:'flex', justifyContent:'flex-end' }}>
+                            <button
+                              onClick={() => assignerCoach(c.id)}
+                              disabled={!selectedCoach || isSaving}
+                              style={{ padding:'11px 24px', borderRadius:10, border:'none', background: !selectedCoach || isSaving ? '#E5E7EB' : 'linear-gradient(135deg,#6366F1,#4F46E5)', color: !selectedCoach || isSaving ? '#9CA3AF' : '#fff', fontWeight:700, fontSize:13, cursor: !selectedCoach || isSaving ? 'not-allowed' : 'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif', boxShadow: !selectedCoach || isSaving ? 'none' : '0 4px 14px rgba(99,102,241,0.4)', transition:'all 0.15s' }}>
+                              {isSaving ? '⏳ Assignation en cours…' : `✅ Confirmer l'assignation${selectedCoach ? ` - ${coaches.find(co=>co.id===selectedCoach)?.prenom||''}` : ''}`}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

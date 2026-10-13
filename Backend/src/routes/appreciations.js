@@ -39,6 +39,84 @@ const tableAbsente = (e) =>
 ══════════════════════════════════════════════════════════════ */
 router.get("/a-noter", authenticateUser, async (req, res) => {
   try {
+    /* ══ LA BRANCHE BET E-LEARNING ══════════════════════════════════════════════
+       Tout ce qui suit interroge `groupes_apprenants`, `groupes_presences` et
+       `seances` : les tables du PRÉSENTIEL. Un apprenant e-learning n'y figure
+       nulle part, si bien que `gaIds` était toujours vide et que la route lui
+       rendait `{ seances: [] }` — il n'a jamais pu noter son coach, et le PA comme
+       le superviseur n'ont jamais eu la moindre note à lire de ce côté.
+
+       Les tables d'ici sont `classes_elearning_apprenants`, `presences_elearning`
+       et `seances_elearning`. La table d'écriture, elle, est commune : ses colonnes
+       `groupe_id` et `ga_id` accueillent indifféremment une classe ou un groupe —
+       c'est d'ailleurs ce que suppose déjà la lecture côté supervision (GET /),
+       qui résout `groupe_id` dans l'une ou l'autre paire selon l'en-tête. */
+    if (req.headers["x-plateforme"] === "bet-elearning") {
+      const [parId, parEmail] = await Promise.all([
+        supabase.from("classes_elearning_apprenants").select("id, classe_id").eq("apprenant_id", req.user.id),
+        req.user.email
+          ? supabase.from("classes_elearning_apprenants").select("id, classe_id").ilike("email", req.user.email)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const rowsId = parId.data || [];
+      const vusE   = new Set(rowsId.map(r => r.id));
+      const inscrs = [...rowsId, ...(parEmail.data || []).filter(r => !vusE.has(r.id))];
+      const inscrIds = inscrs.map(r => r.id);
+      if (!inscrIds.length) return res.json({ seances: [] });
+
+      /* Seules les séances SUIVIES comptent : un absent n'a rien vu, sa note ne
+         vaudrait rien et fausserait la moyenne du coach. Ici le rapprochement est
+         direct — `presences_elearning.seance_id` est renseigné, contrairement au
+         présentiel où il faut passer par la paire (groupe, date). */
+      const { data: presences } = await supabase
+        .from("presences_elearning")
+        .select("seance_id, inscription_id, statut")
+        .in("inscription_id", inscrIds)
+        .in("statut", ["present", "retard"]);
+      if (!presences?.length) return res.json({ seances: [] });
+
+      const seanceIds = [...new Set(presences.map(p => p.seance_id).filter(Boolean))];
+      if (!seanceIds.length) return res.json({ seances: [] });
+
+      const { data: seances } = await supabase
+        .from("seances_elearning")
+        .select("id, titre, date_seance, heure_debut, duree_h, classe_id, coach_id, type_cours, statut")
+        .in("id", seanceIds)
+        .eq("statut", "realisee")
+        .order("date_seance", { ascending: false })
+        .limit(200);
+      const candidates = seances || [];
+      if (!candidates.length) return res.json({ seances: [] });
+
+      const coachIdsE = [...new Set(candidates.map(s => s.coach_id).filter(Boolean))];
+      const classeIds = [...new Set(candidates.map(s => s.classe_id).filter(Boolean))];
+      const [dejaRes, { data: coachs }, { data: classes }] = await Promise.all([
+        supabase.from("appreciations_apprenants").select("seance_id")
+          .eq("apprenant_id", req.user.id).in("seance_id", candidates.map(s => s.id)),
+        coachIdsE.length ? supabase.from("utilisateurs").select("id, nom, prenom").in("id", coachIdsE) : { data: [] },
+        classeIds.length ? supabase.from("classes_elearning").select("id, nom").in("id", classeIds)    : { data: [] },
+      ]);
+      const { data: deja, error: errDeja } = dejaRes;
+      if (errDeja && !tableAbsente(errDeja)) throw errDeja;
+
+      const notees   = new Set((deja || []).map(a => a.seance_id));
+      const nomCoach = Object.fromEntries((coachs  || []).map(c => [c.id, `${c.prenom || ""} ${c.nom || ""}`.trim()]));
+      const nomClasse = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
+      const inscrParClasse = Object.fromEntries(inscrs.map(r => [r.classe_id, r.id]));
+
+      return res.json({
+        seances: candidates.filter(s => !notees.has(s.id)).map(s => ({
+          ...s,
+          // `groupe_id` et `ga_id` : les noms que l'écran et la route d'écriture
+          // attendent, quelle que soit la plateforme d'origine.
+          groupe_id:  s.classe_id,
+          coach_nom:  s.coach_id  ? (nomCoach[s.coach_id]    || null) : null,
+          groupe_nom: s.classe_id ? (nomClasse[s.classe_id]  || null) : null,
+          ga_id:      inscrParClasse[s.classe_id] || null,
+        })),
+      });
+    }
+
     // 1. Les rattachements de l'apprenant à ses classes. Les lignes de présence
     //    portent `ga_id`, pas l'identifiant du compte.
     //
@@ -136,6 +214,61 @@ router.post("/", authenticateUser, async (req, res) => {
     if (!seance_id) return res.status(400).json({ error: "seance_id requis" });
     if (!Number.isFinite(n) || n < 1 || n > 5) {
       return res.status(400).json({ error: "La note doit être comprise entre 1 et 5" });
+    }
+
+    /* ══ LA BRANCHE BET E-LEARNING ══════════════════════════════════════════════
+       Même raison que dans /a-noter : la vérification qui suit cherche la séance et
+       l'inscription dans les tables du présentiel, où un apprenant e-learning
+       n'existe pas. Sa note était donc refusée avant même d'être écrite.
+       La ligne enregistrée reste identique — `groupe_id` reçoit la classe et `ga_id`
+       l'inscription — ce que la lecture côté supervision sait déjà interpréter. */
+    if (req.headers["x-plateforme"] === "bet-elearning") {
+      const { data: sE } = await supabase
+        .from("seances_elearning").select("id, classe_id, coach_id, statut, date_seance")
+        .eq("id", seance_id).maybeSingle();
+      if (!sE) return res.status(404).json({ error: "Séance introuvable" });
+
+      const { data: parId } = await supabase
+        .from("classes_elearning_apprenants").select("id, nom_complet")
+        .eq("apprenant_id", req.user.id).eq("classe_id", sE.classe_id);
+      let insc = parId?.[0] || null;
+      if (!insc && req.user.email) {
+        const { data: parMail } = await supabase
+          .from("classes_elearning_apprenants").select("id, nom_complet")
+          .ilike("email", req.user.email).eq("classe_id", sE.classe_id);
+        insc = parMail?.[0] || null;
+      }
+      if (!insc) return res.status(403).json({ error: "Vous n'êtes pas inscrit à cette classe" });
+
+      /* Présent ou en retard, comme côté dash : un absent n'a rien vu de la séance.
+         Le rapprochement est direct, `presences_elearning` portant `seance_id`. */
+      const { data: pres } = await supabase
+        .from("presences_elearning").select("statut")
+        .eq("inscription_id", insc.id).eq("seance_id", seance_id).maybeSingle();
+      if (!pres || !["present", "retard"].includes(pres.statut)) {
+        return res.status(403).json({ error: "Seuls les apprenants présents à cette séance peuvent la noter" });
+      }
+
+      const { data: dE, error: eE } = await supabase
+        .from("appreciations_apprenants")
+        .insert({
+          seance_id,
+          coach_id:      sE.coach_id  || null,
+          groupe_id:     sE.classe_id || null,
+          apprenant_id:  req.user.id,
+          ga_id:         insc.id,
+          nom_apprenant: insc.nom_complet || null,
+          note: n,
+          commentaire: (commentaire || "").trim().slice(0, 1000) || null,
+        })
+        .select().single();
+      if (eE) {
+        if (tableAbsente(eE)) return res.status(503).json({ error: "Les appréciations ne sont pas encore activées." });
+        // 23505 : une note existe déjà pour cette séance - on ne note qu'une fois.
+        if (eE.code === "23505") return res.status(409).json({ error: "Vous avez déjà noté cette séance." });
+        throw eE;
+      }
+      return res.status(201).json({ appreciation: dE });
     }
 
     const { data: seance } = await supabase

@@ -36,7 +36,7 @@ export default function PhotoClasseEntete({ classe, modifiable = false, onChange
   const enregistrer = async (url) => {
     const r = await fetch(`${API_URL}/api/classes-elearning/${classe.id}`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${jeton()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${jeton()}`, 'Content-Type': 'application/json', 'X-Plateforme': 'bet-elearning' },
       body: JSON.stringify({ photo_url: url }),
     });
     const d = await r.json().catch(() => ({}));

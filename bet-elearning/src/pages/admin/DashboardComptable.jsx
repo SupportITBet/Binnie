@@ -11,7 +11,7 @@ import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererP
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 // ── Mock Comptable Trésorier ──────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────

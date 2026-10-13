@@ -6,7 +6,7 @@ import { exporterExcelStyle } from '../../utils/genererPDF';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip } from 'recharts';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 export function OngletELearning({ ongletActif = 'overview' }) {
   const EL_COLOR = '#0D9488';

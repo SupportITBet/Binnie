@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { COULEURS } from '../../constants/couleurs';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererPDF';
 import { genererRecuVersement } from '../../utils/recuVersement';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAlerte } from '../../contexts/ConfirmContext';
+import { useAlerte, useConfirm } from '../../contexts/ConfirmContext';
+import { BadgeStatutVersement, VignettesPreuves, estVerse } from '../../components/shared/PreuvesPaiement';
 import * as XLSX from 'xlsx';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
@@ -380,6 +382,7 @@ function ModalDetailBeneficiaire({ benef, classe, couleurEnt, onFermer, onStatut
   const [presencesMoisFil,  setPresencesMoisFil]  = useState('');
   const [resultats,         setResultats]         = useState(null);
   const [resultatsMoisFil,  setResultatsMoisFil]  = useState('');
+  const [testsNiveau,       setTestsNiveau]       = useState(null);
 
   useEffect(() => {
     if (!benef.id) return;
@@ -389,6 +392,21 @@ function ModalDetailBeneficiaire({ benef, classe, couleurEnt, onFermer, onStatut
         .then(r => r.ok ? r.json() : Promise.reject(r.status))
         .then(d => setPresencesBenef(d.presences || []))
         .catch(e => { console.error('[RH presences] erreur', e); setPresencesBenef([]); });
+    }
+    /* L'HISTORIQUE DES TESTS, ET PAS SEULEMENT LE DERNIER NIVEAU. Un apprenant en passe
+       plusieurs au fil de sa formation - à l'entrée, puis à chaque changement de classe -
+       et le RH qui finance a de quoi vouloir suivre cette progression, que la seule
+       mention « Niveau CECR : A1 » de l'onglet Infos ne raconte pas.
+       La route passe par l'ID DU BÉNÉFICIAIRE et non par son e-mail : elle vérifie côté
+       serveur qu'il appartient bien à cette entreprise avant de répondre. */
+    /* Chargé pour « tests » ET pour « competences » : ce dernier s'appuie dessus pour
+       dater le niveau affiché et dire de quel test il provient. */
+    if ((tab === 'tests' || tab === 'competences') && testsNiveau === null) {
+      setTestsNiveau(null);
+      fetch(`${API_URL}/api/entreprise/elearning/beneficiaires/${benef.id}/tests`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : { tests: [] })
+        .then(d => setTestsNiveau(Array.isArray(d.tests) ? d.tests : []))
+        .catch(() => setTestsNiveau([]));
     }
     if (tab === 'evaluations') {
       setResultats(null);
@@ -415,6 +433,7 @@ function ModalDetailBeneficiaire({ benef, classe, couleurEnt, onFermer, onStatut
   const TABS = [
     { id:'infos',        lib:'Infos',         icone:'ℹ️' },
     { id:'competences',  lib:'Compétences',   icone:'🎯' },
+    { id:'tests',        lib:'Test de niveau', icone:'📈' },
     { id:'evaluations',  lib:'Évaluations',   icone:'📊' },
     { id:'presences',    lib:'Présences',     icone:'✅' },
     { id:'acces',        lib:'Accès',         icone:'🔐' },
@@ -562,6 +581,88 @@ function ModalDetailBeneficiaire({ benef, classe, couleurEnt, onFermer, onStatut
           )}
 
           {/* ── COMPÉTENCES ── */}
+          {/* ── TEST DE NIVEAU : l'historique, et la progression qu'il raconte ── */}
+          {tab === 'tests' && (
+            testsNiveau === null ? (
+              <div style={{ textAlign:'center', padding:'40px 0', color:COULEURS.gris400 }}>Chargement…</div>
+            ) : testsNiveau.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px 24px', background:COULEURS.gris50, borderRadius:14, border:`2px dashed ${COULEURS.gris200}` }}>
+                <div style={{ fontSize:36, marginBottom:10 }}>📈</div>
+                <div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucun test de niveau enregistré</div>
+                <div style={{ fontSize:12, color:COULEURS.gris600 }}>
+                  Les résultats apparaîtront ici après le passage du test de placement.
+                </div>
+              </div>
+            ) : (
+              <>
+                {testsNiveau.length > 1 && (
+                  <div style={{ background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:14, padding:'16px 20px', marginBottom:18 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#6D28D9', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>
+                      Progression · {testsNiveau.length} tests
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      {[...testsNiveau].reverse().map((t, i, arr) => (
+                        <span key={t.id || i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ padding:'5px 14px', borderRadius:9, background: i === arr.length-1 ? couleurEnt : COULEURS.blanc, color: i === arr.length-1 ? '#fff' : COULEURS.navy, border:`1px solid ${i === arr.length-1 ? couleurEnt : COULEURS.gris200}`, fontSize:14, fontWeight:800 }}>
+                            {t.niveau || '?'}
+                          </span>
+                          {i < arr.length-1 && <span style={{ color:'#A78BFA', fontSize:15 }}>→</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                  {testsNiveau.map((t, i) => (
+                    <div key={t.id || i} style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderLeft:`3px solid ${i === 0 ? couleurEnt : COULEURS.gris200}`, borderRadius:14, padding:'16px 20px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom: (t.score != null || t.by_category) ? 12 : 0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <span style={{ fontSize:20, fontWeight:800, color: NIV_COULEUR_ENT[t.niveau] || couleurEnt }}>{t.niveau || '-'}</span>
+                          <span style={{ padding:'3px 10px', borderRadius:20, background:'#EDE9FE', color:'#5B21B6', fontSize:10, fontWeight:700 }}>{t.libelle_origine}</span>
+                          {i === 0 && <span style={{ padding:'3px 10px', borderRadius:20, background:'#D1FAE5', color:'#065F46', fontSize:10, fontWeight:700 }}>Le plus récent</span>}
+                        </div>
+                        <span style={{ fontSize:12, color:COULEURS.gris600 }}>{t.date ? fmtDateFr(t.date) : '-'}</span>
+                      </div>
+                      {(t.score != null || t.points || t.reponses || t.duree_min) && (
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:10 }}>
+                          {[
+                            t.score != null && { l:'Score',           v:`${t.score}%` },
+                            t.points        && { l:'Points',          v:t.points },
+                            t.reponses      && { l:'Bonnes réponses', v:t.reponses },
+                            t.duree_min     && { l:'Durée',           v:`${t.duree_min} min` },
+                          ].filter(Boolean).map(k => (
+                            <div key={k.l} style={{ background:COULEURS.gris50, borderRadius:8, padding:'8px 12px' }}>
+                              <div style={{ fontSize:13, fontWeight:800, color:COULEURS.navy }}>{k.v}</div>
+                              <div style={{ fontSize:9.5, color:COULEURS.gris400, textTransform:'uppercase', letterSpacing:'0.04em', marginTop:2 }}>{k.l}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {t.by_category && Object.keys(t.by_category).length > 0 && (
+                        <div style={{ marginTop:12 }}>
+                          {Object.entries(t.by_category).map(([cat, val]) => {
+                            const pct = typeof val === 'number' ? val : (val?.pourcentage ?? val?.score ?? 0);
+                            return (
+                              <div key={cat} style={{ marginBottom:7 }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, marginBottom:3 }}>
+                                  <span style={{ color:COULEURS.gris600, textTransform:'capitalize' }}>{cat}</span>
+                                  <span style={{ fontWeight:700, color: pct >= 70 ? '#059669' : pct >= 50 ? '#F59E0B' : '#DC2626' }}>{Math.round(pct)}%</span>
+                                </div>
+                                <div style={{ height:5, background:COULEURS.gris100, borderRadius:3, overflow:'hidden' }}>
+                                  <div style={{ height:'100%', width:`${Math.min(100, Math.max(0, pct))}%`, background: pct >= 70 ? '#059669' : pct >= 50 ? '#F59E0B' : '#DC2626', borderRadius:3 }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )
+          )}
+
           {tab === 'competences' && (
             <div style={{ maxWidth:900 }}>
               {/* Niveau CECR */}
@@ -571,7 +672,15 @@ function ModalDetailBeneficiaire({ benef, classe, couleurEnt, onFermer, onStatut
                     {[
                       { label:'Niveau actuel', val: niv, couleur: NIV_COULEUR_ENT[niv] || couleurEnt, desc: { A0:'Faux débutant', A1:'Débutant', A2:'Élémentaire', B1:'Intermédiaire', B2:'Inter. supérieur', C1:'Avancé', C2:'Maîtrise' }[niv] },
                       { label:'Langue', val: benef.langue_souhaitee || 'Anglais', couleur: couleurEnt, desc: 'Langue de formation' },
-                      { label:'Source évaluation', val: 'Test BET', couleur:'#7C3AED', desc: 'Test de placement initial' },
+                      /* « Test de placement initial » était écrit en dur : après un second
+                         test - et il y en a un à chaque changement de classe - cette carte
+                         affirmait encore que le niveau venait du tout premier. On lit donc
+                         le test le plus récent, quand l'onglet voisin l'a chargé. */
+                      { label:'Source évaluation', val: testsNiveau?.[0]?.libelle_origine || 'Test BET',
+                        couleur:'#7C3AED',
+                        desc: testsNiveau?.length > 1
+                          ? `Dernier des ${testsNiveau.length} tests · ${fmtDateFr(testsNiveau[0].date)}`
+                          : testsNiveau?.[0]?.date ? `Test du ${fmtDateFr(testsNiveau[0].date)}` : 'Test de placement' },
                     ].map(k => (
                       <div key={k.label} style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:14, padding:'18px 20px', borderTop:`4px solid ${k.couleur}` }}>
                         <div style={{ fontSize:22, fontWeight:900, color:k.couleur, marginBottom:4 }}>{k.val}</div>
@@ -605,7 +714,10 @@ function ModalDetailBeneficiaire({ benef, classe, couleurEnt, onFermer, onStatut
                   </div>
 
                   <div style={{ background:`${couleurEnt}08`, border:`1px solid ${couleurEnt}20`, borderRadius:12, padding:'12px 16px', fontSize:12, color:COULEURS.gris600, lineHeight:1.6 }}>
-                    💡 Le niveau <strong style={{ color:COULEURS.navy }}>{niv}</strong> a été attribué lors du test de placement BET. L'évolution vers le niveau supérieur sera réévaluée en cours de formation.
+                    💡 Le niveau <strong style={{ color:COULEURS.navy }}>{niv}</strong>
+                    {testsNiveau?.length > 1
+                      ? <> est le résultat du dernier des <strong style={{ color:COULEURS.navy }}>{testsNiveau.length} tests</strong> passés{testsNiveau[0]?.date ? ` le ${fmtDateFr(testsNiveau[0].date)}` : ''}. Le détail de la progression est dans l'onglet « Test de niveau ».</>
+                      : <> a été attribué lors du test de placement BET{testsNiveau?.[0]?.date ? ` du ${fmtDateFr(testsNiveau[0].date)}` : ''}. L'évolution vers le niveau supérieur sera réévaluée en cours de formation.</>}
                   </div>
                 </>
               ) : (
@@ -1191,7 +1303,9 @@ function ModalDetailClasse({ classe, couleurEnt, onFermer, onOuvrirBenef }) {
         <div style={{ background:`linear-gradient(135deg, ${couleurEnt}DD, ${couleurEnt})`, padding:'22px 28px', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div style={{ display:'flex', gap:14, alignItems:'center' }}>
-              <div style={{ width:52, height:52, borderRadius:14, background:'rgba(255,255,255,0.2)', border:'2px solid rgba(255,255,255,0.35)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>🏫</div>
+              {/* La photo de la classe plutôt qu'une icône identique pour toutes :
+                  le RH reconnaît ainsi ses classes d'un coup d'œil. */}
+              <PastilleGroupe nom={classe.nom || 'Classe'} url={classe.photo_url} taille={52} accent={couleurEnt} agrandissable />
               <div>
                 <div style={{ fontSize:19, fontWeight:800, color:'#fff' }}>{classe.nom}</div>
                 <div style={{ display:'flex', gap:8, marginTop:5, flexWrap:'wrap', alignItems:'center' }}>
@@ -3197,7 +3311,10 @@ function OngletAcces({ classes }) {
   );
 }
 
-// ── onglet : Contrat & Paiements (lecture seule côté RH) ────────────────────────
+// ── onglet : Contrat & Paiements ───────────────────────────────────────────────
+// Le RH DÉCLARE ses versements avec justificatifs ; il ne les valide pas. Chaque
+// déclaration part en 'declare' et attend qu'une vérificatrice de BET ouvre la
+// pièce jointe - jusque-là elle ne compte dans aucun total.
 const MODES_PAIEMENT_LIB = { virement: 'Virement bancaire', cheque: 'Chèque', especes: 'Espèces', mobile_money: 'Mobile Money' };
 function fmtFCFA(v) { return `${(v || 0).toLocaleString('fr-FR')} FCFA`; }
 
@@ -3205,17 +3322,24 @@ function OngletPaiementsEntreprise({ couleurEnt, contrat, contratsHistorique, no
   const [paiements, setPaiements] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [paiementDetail, setPaiementDetail] = useState(null);
+  const [modalDeclaration, setModalDeclaration] = useState(false);
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/entreprise/elearning/mes-paiements`, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(d => setPaiements(d.paiements || []))
-      .catch(() => {})
-      .finally(() => setChargement(false));
-  }, []);
+  const recharger = () => fetch(`${API_URL}/api/entreprise/elearning/mes-paiements`, { headers: authHeaders() })
+    .then(r => r.json())
+    .then(d => setPaiements(d.paiements || []))
+    .catch(() => {});
+
+  useEffect(() => { recharger().finally(() => setChargement(false)); }, []);
 
   const montantContrat = contrat?.montant_ht || 0;
-  const totalEncaisse   = paiements.reduce((s, p) => s + (p.montant || 0), 0);
+  /* SEULS LES VERSEMENTS VALIDÉS COMPTENT. La somme portait auparavant sur tous
+     les paiements indistinctement - c'était sans conséquence tant que toute ligne
+     naissait 'recu', mais une déclaration en attente gonflerait désormais le
+     « Total versé » et ferait croire au RH que son solde est éteint avant
+     vérification. Le backend applique la même règle pour la trésorerie. */
+  const totalEncaisse   = paiements.filter(estVerse).reduce((s, p) => s + (p.montant || 0), 0);
+  const enAttente       = paiements.filter(p => p.statut === 'declare');
+  const totalEnAttente  = enAttente.reduce((s, p) => s + (p.montant || 0), 0);
   const soldeRestant    = Math.max(0, montantContrat - totalEncaisse);
   const pctPaie         = montantContrat > 0 ? Math.round((totalEncaisse / montantContrat) * 100) : 0;
 
@@ -3246,33 +3370,67 @@ function OngletPaiementsEntreprise({ couleurEnt, contrat, contratsHistorique, no
         </div>
       </div>
 
+      {/* Rappel des déclarations en cours de vérification */}
+      {enAttente.length > 0 && (
+        <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 14, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 22 }}>🕐</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>
+              {enAttente.length} versement{enAttente.length > 1 ? 's' : ''} en cours de vérification · {fmtFCFA(totalEnAttente)}
+            </div>
+            <div style={{ fontSize: 11, color: '#B45309', marginTop: 2 }}>
+              Ces montants n'apparaîtront dans votre total versé qu'une fois les justificatifs vérifiés par BET.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Historique des versements */}
       <div style={{ background: COULEURS.blanc, borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1px solid ${COULEURS.gris200}`, overflow: 'hidden', marginBottom: 24 }}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${COULEURS.gris200}`, fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>
-          🧾 Historique des versements ({paiements.length})
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${COULEURS.gris200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>
+            🧾 Historique des versements ({paiements.length})
+          </span>
+          <button onClick={() => setModalDeclaration(true)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: couleurEnt, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+            💳 Déclarer un versement
+          </button>
         </div>
         {chargement ? (
           <div style={{ textAlign: 'center', padding: 32, color: COULEURS.gris400 }}>Chargement…</div>
         ) : paiements.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 32, color: COULEURS.gris400 }}>Aucun versement enregistré pour le moment.</div>
+          <div style={{ textAlign: 'center', padding: '32px 24px' }}>
+            <div style={{ fontSize: 34, marginBottom: 8 }}>💳</div>
+            <div style={{ fontWeight: 600, color: COULEURS.navy, marginBottom: 4 }}>Aucun versement enregistré pour le moment.</div>
+            <div style={{ fontSize: 12, color: COULEURS.gris400 }}>
+              Vous avez effectué un paiement ? Déclarez-le avec sa preuve, BET le vérifiera.
+            </div>
+          </div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr 90px', padding: '9px 20px', background: COULEURS.gris50, fontSize: 10, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>Date</span><span>Montant</span><span>Mode</span><span>Référence</span><span>Reçu</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.3fr 110px 100px 90px', padding: '9px 20px', background: COULEURS.gris50, fontSize: 10, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span>Date</span><span>Montant</span><span>Mode</span><span>Référence</span><span>Statut</span><span>Preuve</span><span>Reçu</span>
             </div>
             {paiements.map(p => (
-              <div key={p.id} onClick={() => setPaiementDetail(p)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr 90px', padding: '12px 20px', borderTop: `1px solid ${COULEURS.gris100}`, fontSize: 13, alignItems: 'center', cursor: 'pointer' }}
+              <div key={p.id} onClick={() => setPaiementDetail(p)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.3fr 110px 100px 90px', padding: '12px 20px', borderTop: `1px solid ${COULEURS.gris100}`, fontSize: 13, alignItems: 'center', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = COULEURS.gris50}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <span style={{ color: COULEURS.gris600 }}>{p.date}</span>
-                <span style={{ fontWeight: 700, color: '#059669' }}>{fmtFCFA(p.montant)}</span>
+                <span style={{ fontWeight: 700, color: estVerse(p) ? '#059669' : COULEURS.gris600 }}>{fmtFCFA(p.montant)}</span>
                 <span style={{ color: COULEURS.gris600 }}>{MODES_PAIEMENT_LIB[p.mode] || p.mode || '-'}</span>
                 <span style={{ color: COULEURS.gris600, fontSize: 12 }}>{p.reference || '-'}</span>
-                <button onClick={e => { e.stopPropagation(); genererRecuVersement(p, entreprise, { montantContrat, soldeRestant }); }}
-                  title="Imprimer le reçu"
-                  style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${couleurEnt}`, background: COULEURS.blanc, color: couleurEnt, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', width: 'fit-content' }}>
-                  🖨️ Imprimer
-                </button>
+                <span><BadgeStatutVersement statut={p.statut} compact /></span>
+                <span onClick={e => e.stopPropagation()}><VignettesPreuves preuves={p.preuves} taille={30} /></span>
+                {/* Un reçu n'a de sens que pour un versement vérifié : l'imprimer
+                    sur une déclaration en attente produirait une pièce comptable
+                    pour de l'argent que BET n'a pas confirmé avoir reçu. */}
+                {estVerse(p) ? (
+                  <button onClick={e => { e.stopPropagation(); genererRecuVersement(p, entreprise, { montantContrat, soldeRestant }); }}
+                    title="Imprimer le reçu"
+                    style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${couleurEnt}`, background: COULEURS.blanc, color: couleurEnt, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', width: 'fit-content' }}>
+                    🖨️ Imprimer
+                  </button>
+                ) : <span style={{ fontSize: 11, color: COULEURS.gris400 }}>—</span>}
               </div>
             ))}
           </>
@@ -3314,28 +3472,235 @@ function OngletPaiementsEntreprise({ couleurEnt, contrat, contratsHistorique, no
               <button onClick={() => setPaiementDetail(null)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 32, height: 32, color: '#fff', fontSize: 16, cursor: 'pointer' }}>×</button>
             </div>
             <div style={{ padding: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0 12px' }}>
+                <span style={{ fontSize: 12, color: COULEURS.gris600 }}>Statut</span>
+                <BadgeStatutVersement statut={paiementDetail.statut} />
+              </div>
               {[
                 { lbl: 'Montant', val: fmtFCFA(paiementDetail.montant) },
                 { lbl: 'Date du versement', val: paiementDetail.date },
                 { lbl: 'Mode de paiement', val: MODES_PAIEMENT_LIB[paiementDetail.mode] || paiementDetail.mode || '-' },
                 { lbl: 'Référence', val: paiementDetail.reference || '-' },
                 { lbl: 'Note', val: paiementDetail.note || '-' },
+                ...(paiementDetail.declare_par_nom ? [{ lbl: 'Déclaré par', val: paiementDetail.declare_par_nom }] : []),
+                ...(paiementDetail.statut === 'recu' && paiementDetail.valide_par_nom
+                  ? [{ lbl: 'Validé par', val: paiementDetail.valide_par_nom }] : []),
               ].map(({ lbl, val }) => (
                 <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${COULEURS.gris100}`, fontSize: 13 }}>
                   <span style={{ color: COULEURS.gris600 }}>{lbl}</span>
                   <span style={{ fontWeight: 700, color: COULEURS.navy }}>{val}</span>
                 </div>
               ))}
+
+              {/* Le motif du rejet, écrit en toutes lettres : sans lui le RH
+                  redéclare à l'identique et la même pièce revient en boucle. */}
+              {paiementDetail.statut === 'rejete' && paiementDetail.motif_rejet && (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#991B1B', marginBottom: 4 }}>⚠️ Motif du rejet</div>
+                  <div style={{ fontSize: 12, color: '#7F1D1D', lineHeight: 1.5 }}>{paiementDetail.motif_rejet}</div>
+                </div>
+              )}
+
+              {(paiementDetail.preuves || []).length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                    Justificatifs ({paiementDetail.preuves.length})
+                  </div>
+                  <VignettesPreuves preuves={paiementDetail.preuves} taille={40} vertical />
+                </div>
+              )}
             </div>
             <div style={{ padding: '14px 24px', borderTop: `1px solid ${COULEURS.gris200}`, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={() => setPaiementDetail(null)} style={{ padding: '9px 18px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>Fermer</button>
-              <button onClick={() => genererRecuVersement(paiementDetail, entreprise, { montantContrat, soldeRestant })} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: couleurEnt, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-                🖨️ Imprimer le reçu
-              </button>
+              {estVerse(paiementDetail) && (
+                <button onClick={() => genererRecuVersement(paiementDetail, entreprise, { montantContrat, soldeRestant })} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: couleurEnt, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                  🖨️ Imprimer le reçu
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {modalDeclaration && (
+        <ModalDeclarationVersement
+          couleurEnt={couleurEnt}
+          nomEntreprise={nomEntreprise}
+          soldeRestant={soldeRestant}
+          onFermer={() => setModalDeclaration(false)}
+          onDeclare={() => { setModalDeclaration(false); recharger(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Déclaration d'un versement par le RH de l'entreprise.
+ *
+ * Les pièces partent À LA SÉLECTION, pas à la validation du formulaire : le RH
+ * voit immédiatement si son PDF est passé, et l'envoi du formulaire ne porte
+ * plus que des URL déjà obtenues - une déclaration ne peut donc pas être
+ * enregistrée en référençant une pièce dont l'envoi a échoué.
+ */
+function ModalDeclarationVersement({ couleurEnt, nomEntreprise, soldeRestant, onFermer, onDeclare }) {
+  const alerte = useAlerte();
+  const confirm = useConfirm();
+  const [form, setForm] = useState({ montant: '', date: new Date().toISOString().slice(0, 10), mode: 'virement', reference: '', note: '' });
+  const [preuves, setPreuves] = useState([]);
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [enregistrement, setEnregistrement] = useState(false);
+
+  const MAX_MO = 5;   // la limite de multer côté backend (entreprise.js)
+
+  async function ajouterFichiers(e) {
+    const fichiers = Array.from(e.target.files || []);
+    e.target.value = '';   // permet de resélectionner le même fichier après un retrait
+    if (fichiers.length === 0) return;
+
+    setEnvoiEnCours(true);
+    for (const f of fichiers) {
+      if (f.size > MAX_MO * 1024 * 1024) {
+        await alerte(`« ${f.name} » dépasse ${MAX_MO} Mo. Compressez le fichier ou envoyez une photo de moins bonne définition.`, { titre: 'Fichier trop lourd', danger: true });
+        continue;
+      }
+      try {
+        const fd = new FormData();
+        fd.append('preuve', f);
+        const r = await fetch(`${API_URL}/api/entreprise/elearning/preuve-paiement`, { method: 'POST', headers: authHeaders(), body: fd });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Envoi impossible');
+        setPreuves(prev => [...prev, d.preuve]);
+      } catch (err) {
+        await alerte(`« ${f.name} » n'a pas pu être envoyé : ${err.message}`, { titre: 'Pièce jointe refusée', danger: true });
+      }
+    }
+    setEnvoiEnCours(false);
+  }
+
+  const montantNum = Number(form.montant) || 0;
+  const pretAEnvoyer = montantNum > 0 && form.date && preuves.length > 0 && !envoiEnCours && !enregistrement;
+
+  async function envoyer() {
+    if (!pretAEnvoyer) return;
+    const ok = await confirm(
+      `Déclarer un versement de ${fmtFCFA(montantNum)} avec ${preuves.length} justificatif${preuves.length > 1 ? 's' : ''} ?\n\nBET vérifiera vos pièces avant de l'enregistrer sur votre contrat.`,
+      { titre: 'Confirmer la déclaration', confirmLabel: 'Déclarer le versement', danger: false }
+    );
+    if (!ok) return;
+
+    setEnregistrement(true);
+    try {
+      const r = await fetch(`${API_URL}/api/entreprise/elearning/mes-paiements`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, montant: montantNum, preuves }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Déclaration impossible');
+      await alerte('Votre versement a été déclaré. BET vérifiera vos justificatifs et vous serez notifié dès validation.', { titre: '✅ Déclaration envoyée' });
+      onDeclare();
+    } catch (err) {
+      await alerte(err.message, { titre: 'Déclaration impossible', danger: true });
+      setEnregistrement(false);
+    }
+  }
+
+  const styleChamp = { width: '100%', padding: '9px 11px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, fontSize: 13, fontFamily: '"Plus Jakarta Sans", sans-serif', boxSizing: 'border-box', outline: 'none' };
+  const styleLabel = { fontSize: 10, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,35,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1150, padding: 20 }} onClick={onFermer}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: COULEURS.blanc, borderRadius: 16, width: 560, maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+
+        <div style={{ background: `linear-gradient(135deg, ${couleurEnt}CC, ${couleurEnt})`, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>💳 Déclarer un versement</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.78)', marginTop: 3 }}>
+              {nomEntreprise}{soldeRestant > 0 ? ` · solde restant ${fmtFCFA(soldeRestant)}` : ''}
+            </div>
+          </div>
+          <button onClick={onFermer} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 32, height: 32, color: '#fff', fontSize: 16, cursor: 'pointer' }}>×</button>
+        </div>
+
+        <div style={{ padding: 24, overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={styleLabel}>Montant versé (FCFA) *</label>
+              <input type="number" min="1" value={form.montant} placeholder="ex : 950 000"
+                onChange={e => setForm(f => ({ ...f, montant: e.target.value }))} style={styleChamp} />
+            </div>
+            <div>
+              <label style={styleLabel}>Date du versement *</label>
+              <input type="date" value={form.date} max={new Date().toISOString().slice(0, 10)}
+                onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={styleChamp} />
+            </div>
+            <div>
+              <label style={styleLabel}>Mode de paiement</label>
+              <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))} style={{ ...styleChamp, background: '#fff' }}>
+                {Object.entries(MODES_PAIEMENT_LIB).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={styleLabel}>Référence</label>
+              <input type="text" value={form.reference} placeholder="ex : VIR-2026-087"
+                onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} style={styleChamp} />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 18 }}>
+            <label style={styleLabel}>Commentaire</label>
+            <textarea rows={2} value={form.note} placeholder="Précision utile à la vérification (banque émettrice, échéance concernée…)"
+              onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ ...styleChamp, resize: 'vertical' }} />
+          </div>
+
+          {/* Les justificatifs */}
+          <div style={{ border: `1.5px dashed ${preuves.length ? '#86EFAC' : COULEURS.gris200}`, background: preuves.length ? '#F0FDF4' : COULEURS.gris50, borderRadius: 12, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: COULEURS.navy, marginBottom: 4 }}>
+              📎 Preuves de paiement *
+            </div>
+            <div style={{ fontSize: 11, color: COULEURS.gris600, marginBottom: 12 }}>
+              Ordre de virement, avis de débit, reçu… · JPG, PNG ou PDF · {MAX_MO} Mo maximum par fichier
+            </div>
+
+            {preuves.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 12 }}>
+                {preuves.map((p, i) => (
+                  <div key={p.url + i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`, borderRadius: 8, padding: '7px 10px' }}>
+                    {(p.type || '').startsWith('image/')
+                      ? <img src={p.url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                      : <span style={{ fontSize: 18, width: 32, textAlign: 'center', flexShrink: 0 }}>📄</span>}
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: COULEURS.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nom}</span>
+                    <span style={{ fontSize: 10, color: COULEURS.gris400, flexShrink: 0 }}>{Math.round((p.taille || 0) / 1024)} Ko</span>
+                    <button onClick={() => setPreuves(prev => prev.filter((_, j) => j !== i))} title="Retirer"
+                      style={{ background: 'none', border: 'none', color: '#DC2626', fontSize: 15, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${couleurEnt}`, background: COULEURS.blanc, color: couleurEnt, fontSize: 12, fontWeight: 700, cursor: envoiEnCours ? 'wait' : 'pointer' }}>
+              {envoiEnCours ? '⏳ Envoi en cours…' : (preuves.length ? '+ Ajouter une autre pièce' : '+ Joindre une pièce')}
+              <input type="file" accept="image/*,application/pdf" multiple disabled={envoiEnCours}
+                onChange={ajouterFichiers} style={{ display: 'none' }} />
+            </label>
+          </div>
+        </div>
+
+        <div style={{ padding: '14px 24px', borderTop: `1px solid ${COULEURS.gris200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: COULEURS.gris400 }}>
+            {preuves.length === 0 ? 'Une pièce justificative au moins est requise.' : 'BET vérifiera vos pièces avant validation.'}
+          </span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onFermer} style={{ padding: '9px 18px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>Annuler</button>
+            <button onClick={envoyer} disabled={!pretAEnvoyer}
+              style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: pretAEnvoyer ? couleurEnt : COULEURS.gris200, color: '#fff', cursor: pretAEnvoyer ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', whiteSpace: 'nowrap' }}>
+              {enregistrement ? '⏳ Envoi…' : '✅ Déclarer le versement'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

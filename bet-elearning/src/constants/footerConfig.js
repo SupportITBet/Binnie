@@ -57,7 +57,7 @@ export async function fetchFooterConfig(token) {
 export async function saveFooterConfig(cfg, token) {
   const r = await fetch(`${API_URL}/api/config-footer-elearning`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' },
     body: JSON.stringify(cfg),
   });
   const d = await r.json();

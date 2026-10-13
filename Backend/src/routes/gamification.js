@@ -36,6 +36,11 @@ router.get("/admin/:apprenantId", authenticateAdmin, async (req, res) => {
 ══════════════════════════════════════════════════════════ */
 router.post("/onboarding-complete", authenticateUser, async (req, res) => {
   try {
+    /* IDEMPOTENT. La route n'avait aucun garde-fou : chaque validation réattribuait 10
+       points, et il suffisait de rouvrir le guide depuis son profil pour en regagner.
+       Le guide se termine une fois ; la deuxième fois, on répond simplement « c'est
+       déjà fait ». */
+    if (await onboardingDejaFait(req.user.id)) return res.json({ ok: true, deja_fait: true });
     await attribuerPoints(req.user.id, "onboarding", null, 10, "Guide de bienvenue terminé");
     res.json({ ok: true });
   } catch (err) {
@@ -43,6 +48,38 @@ router.post("/onboarding-complete", authenticateUser, async (req, res) => {
     res.status(500).json({ error: "Erreur interne" });
   }
 });
+
+/* ══════════════════════════════════════════════════════════
+   GET /api/gamification/onboarding-complete - ce guide a-t-il déjà été terminé ?
+
+   L'écran ne gardait cette information QUE dans `localStorage`. Elle est donc attachée au
+   navigateur, pas au compte : le même apprenant rouvrait les quatre étapes sur son
+   téléphone, chez lui, après un nettoyage de cache — et à chaque fois le guide se
+   présentait comme s'il découvrait la plateforme. Le fait était pourtant déjà enregistré
+   côté serveur depuis la validation ; il n'était simplement jamais relu.
+══════════════════════════════════════════════════════════ */
+router.get("/onboarding-complete", authenticateUser, async (req, res) => {
+  try {
+    res.json({ fait: await onboardingDejaFait(req.user.id) });
+  } catch (err) {
+    console.error("[gamification/onboarding-complete GET]", err.message);
+    /* En cas de panne on répond « pas fait » : revoir le guide une fois de trop est sans
+       gravité, le cacher à quelqu'un qui ne l'a jamais vu l'est davantage. */
+    res.json({ fait: false });
+  }
+});
+
+/** La trace durable du guide terminé : la transaction de points écrite à sa validation. */
+async function onboardingDejaFait(apprenantId) {
+  const { data } = await supabase
+    .from("points_transactions")
+    .select("id")
+    .eq("apprenant_id", apprenantId)
+    .eq("source_type", "onboarding")
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
 
 /* ══════════════════════════════════════════════════════════
    POST /api/gamification/chat-message - l'apprenant vient d'envoyer un message dans le chat

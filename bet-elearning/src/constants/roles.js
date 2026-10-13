@@ -77,6 +77,14 @@ export const GROUPES_ROLE = {
   marketing:                ['marketing'],
   professeur_titulaire:     ['coach', 'professeur_titulaire'],
   professeur_remplacant:    ['professeur_remplacant'],
+  /* LES APPRENANTS N'AVAIENT PAS DE FAMILLE, alors que `roleBetDe` reconnaît trois noms
+     de rôle par tranche d'âge (`apprenant_adulte`, `apprenant_enfant`,
+     `apprenant_adolescent`) en plus d'`apprenant`. Un compte portant l'un des trois était
+     donc validé à la connexion puis refusé par `RoutePrivee` — dont les routes exigent
+     `['apprenant']` — et renvoyé au portail générique `/connexion` au lieu de sa page.
+     Mêmes conséquences à la déconnexion : `ROLE_LOGIN[role]` ne connaissait pas ces noms
+     et retombait sur le même portail. Une seule famille règle les deux. */
+  apprenant:                ['apprenant', 'apprenant_adulte', 'apprenant_enfant', 'apprenant_adolescent'],
 };
 
 /**
@@ -243,6 +251,19 @@ export const ROLE_LOGIN = {
   // Les coachs (professeur_titulaire/remplaçant) passent par le portail unique /connexion,
   // pas de page de connexion dédiée - volontaire, cf. demande explicite.
 };
+
+/* ── DEUX LECTURES QUI PASSENT PAR LA FAMILLE ──
+   `ROLE_LOGIN[role]` et `ROLE_REDIRECT[role]` sont indexées par nom de FAMILLE. Lues en
+   direct avec le rôle d'un compte, elles rendent `undefined` dès que ce rôle est une
+   variante (un apprenant par tranche d'âge, un `coach` plutôt qu'un
+   `professeur_titulaire`), et le `|| '/connexion'` des appelants renvoie alors au portail
+   générique — un repli silencieux qui ressemble à un bug d'authentification alors que
+   c'est une clé manquante.
+
+   Ces deux fonctions résolvent la famille d'abord. Le repli reste possible et explicite
+   pour qui n'a vraiment pas de page dédiée (les coachs, par choix). */
+export const pageConnexionDe = (role) => ROLE_LOGIN[role] || ROLE_LOGIN[familleDe(role)] || null;
+export const pageAccueilDe   = (role) => ROLE_REDIRECT[role] || ROLE_REDIRECT[familleDe(role)] || null;
 
 /* Le libellé affiché dans l'en-tête. Il doit dire le MÉTIER, pas la famille d'écrans :
    un administrateur s'affichait « Manager BET » tant que les deux partageaient une façade. */

@@ -94,7 +94,7 @@ export async function chargerCompetences(token) {
 export async function sauverCompetences(data, token) {
   const r = await fetch(`${API_URL}/api/config-competences-elearning`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' },
     body: JSON.stringify({ data }),
   });
   const d = await r.json();

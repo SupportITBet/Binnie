@@ -78,8 +78,7 @@ export default function MonProfilModal({ ouvert, onClose, onEnregistre, accent =
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${conf.jeton()}`,
-        },
+          Authorization: `Bearer ${conf.jeton()}`, 'X-Plateforme': 'bet-elearning' },
         body: JSON.stringify({ surnom: surnom.trim() || null }),
       });
       const d = await r.json().catch(() => ({}));

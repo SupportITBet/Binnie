@@ -4,8 +4,7 @@ import { COULEURS } from '../../constants/couleurs';
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const _authHdrsAdmin = () => ({
   'Content-Type': 'application/json',
-  Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}`,
-});
+  Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
 
 const fmtDateSup = (d) =>
   (d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '-');

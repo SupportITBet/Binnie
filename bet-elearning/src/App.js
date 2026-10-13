@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UsersProvider } from './contexts/UsersContext';
 import { MessagerieProvider } from './contexts/MessagerieContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
-import { ROLE_REDIRECT, ROLE_LOGIN, estRole } from './constants/roles';
+import { pageAccueilDe, pageConnexionDe, estRole } from './constants/roles';
 import { LangueProvider } from './contexts/LangueContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ConfirmProvider } from './contexts/ConfirmContext';
@@ -89,7 +89,7 @@ function RoutePrivee({ children, rolesAutorises }) {
   if (loading) return <Chargement />;
   if (!profile) {
     const loginPage = rolesAutorises?.length === 1
-      ? (ROLE_LOGIN[rolesAutorises[0]] || '/connexion')
+      ? (pageConnexionDe(rolesAutorises[0]) || '/connexion')
       : '/connexion';
     return <Navigate to={loginPage} replace />;
   }
@@ -104,7 +104,7 @@ function RoutePrivee({ children, rolesAutorises }) {
      qu'aucun accès n'est perdu. Restreindre une route à un seul rôle reste possible : il
      suffit d'y nommer ce rôle, qui n'est la famille de personne d'autre. */
   if (rolesAutorises && !estRole(profile.role, rolesAutorises)) {
-    return <Navigate to={ROLE_REDIRECT[profile.role] || '/connexion'} replace />;
+    return <Navigate to={pageAccueilDe(profile.role) || '/connexion'} replace />;
   }
 
   return children;
@@ -114,7 +114,7 @@ function RedirectRacine() {
   const { profile, loading } = useAuth();
   if (loading) return <Chargement />;
   if (!profile) return <Navigate to="/connexion" replace />;
-  return <Navigate to={ROLE_REDIRECT[profile.role] || '/connexion'} replace />;
+  return <Navigate to={pageAccueilDe(profile.role) || '/connexion'} replace />;
 }
 
 /* ADMIS SUR LES ROUTES /admin/* — un nom par métier, plus les anciens noms de façade.

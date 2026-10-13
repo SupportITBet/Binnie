@@ -36,7 +36,7 @@ import { COULEURS } from '../../constants/couleurs';
  */
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}` });
+const _hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
 
 /* Les mêmes configurations que dash, aux mêmes valeurs : un statut « en_cours » doit se lire
    « En cours » et s'afficher en orange des deux côtés, sinon la même demande paraît différente

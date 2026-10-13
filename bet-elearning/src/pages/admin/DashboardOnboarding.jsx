@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import * as XLSX_ADMIN from 'xlsx';
-import { useAlerte } from '../../contexts/ConfirmContext';
+import { useAlerte, useConfirm } from '../../contexts/ConfirmContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { estRole } from '../../constants/roles';
@@ -18,7 +18,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid,
 import { PaginationSimple, ModalDetailApprenant, OngletSessionsClasse } from './DashboardAdminShared';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 function _trancheDepuisNaissance(dateStr) {
   if (!dateStr) return null;
@@ -32,14 +32,36 @@ function _trancheDepuisNaissance(dateStr) {
 
 // ── Jours de la semaine disponibles ──────────────────────────────────────────
 // ── Parcours Inscriptions E-Learning ─────────────────────────────────────────
+/* LE PARCOURS, DANS L'ORDRE, ET QUI TIENT LA MAIN À CHAQUE ÉTAPE :
+ *
+ *   recu  →  verifie  →  transmis_placement  →  teste  →  transmis_onboarding  →  assigne  →  actif
+ *   └─────── assistante e-learning ───────┘   agent    └─ assistante ─┘   └──── onboarding ────┘
+ *                                           placement
+ *
+ * `transmis_onboarding` a été intercalé entre `teste` et `assigne`. Sans lui, un dossier
+ * apparaissait chez l'Onboarding dès sa création et le bouton « Assigner » s'affichait dès
+ * `transmis_placement`, c'est-à-dire AVANT que le test de niveau ait eu lieu - alors que
+ * c'est précisément le résultat du test qui fonde le choix de la classe.
+ * Désormais le passage de main est explicite : l'assistante lit le résultat du test et
+ * transmet ; tant qu'elle ne l'a pas fait, l'Onboarding ne voit pas le dossier.
+ *
+ * `statut` est une colonne TEXTE sans contrainte en base (vérifié) : l'ajout de cette
+ * valeur n'a demandé aucune migration. */
 const STATUT_PARCOURS = {
   recu:                { lib:'Reçu',               ic:'📥', bg:'#EFF6FF', txt:'#1D4ED8', next:'verifie'             },
   verifie:             { lib:'Vérifié',             ic:'✅', bg:'#F0FDF4', txt:'#15803D', next:'transmis_placement'  },
   transmis_placement:  { lib:'Transmis → Placement',ic:'🎯', bg:'#FEF3C7', txt:'#B45309', next:null                 },
-  teste:               { lib:'Testé',               ic:'📝', bg:'#EDE9FE', txt:'#5B21B6', next:'assigne'            },
+  teste:               { lib:'Testé',               ic:'📝', bg:'#EDE9FE', txt:'#5B21B6', next:'transmis_onboarding' },
+  transmis_onboarding: { lib:'Transmis → Onboarding',ic:'📨',bg:'#FFF7ED', txt:'#C2410C', next:'assigne'            },
   assigne:             { lib:'Assigné → Classe',    ic:'🏫', bg:`#E0F2FE`, txt:'#0369A1', next:'actif'              },
   actif:               { lib:'Actif',               ic:'🟢', bg:'#D1FAE5', txt:'#065F46', next:null                 },
 };
+
+/* Ce que l'Onboarding a le droit de voir dans Parcours : son travail commence à la
+ * transmission par l'assistante. Les étapes antérieures - dossier reçu, vérifié, parti au
+ * test - ne le regardent pas et encombraient sa liste de dossiers sur lesquels il n'avait
+ * rien à faire. Les statuts postérieurs restent visibles : c'est son propre historique. */
+const STATUTS_VISIBLES_ONBOARDING = ['transmis_onboarding', 'assigne', 'actif'];
 
 const SOURCE_PARCOURS_LIB = {
   entreprise_portail: '🏢 Portail entreprise',
@@ -81,7 +103,7 @@ export function OngletInscriptionOnboarding() {
 
   const FORM0 = {
     entreprise_id:'', entreprise_nom:'', nom_complet:'', email:'', telephone:'', date_naissance:'',
-    poste:'', departement:'', niveau_declare:'', notes_onboarding:'',
+    poste:'', departement:'', niveau_declare:'', notes_onboarding:'', objectif_client:'',
     // Enfant/ado/parent - déjà supportés par le backend (POST /api/inscriptions-elearning) et par
     // le mode Import fichier, mais jamais exposés jusqu'ici dans le formulaire "Saisie manuelle".
     profil_type:'adulte', etablissement:'', classe:'',
@@ -401,6 +423,19 @@ export function OngletInscriptionOnboarding() {
             </div>
           )}
 
+          {/* L'OBJECTIF, posé dès la saisie. C'est lui que le conseiller pédagogique lira
+              pour choisir le coach de la classe : le demander plus tard, c'est le demander
+              quand la décision est déjà prise. */}
+          <div style={{ marginBottom:16 }}>
+            <label style={lbl}>🎯 Objectif du bénéficiaire</label>
+            <textarea style={{ ...inp, height:64, resize:'vertical' }} value={form.objectif_client}
+              onChange={e => setF('objectif_client', e.target.value)}
+              placeholder="Ex. Préparer un entretien d'embauche en anglais · IELTS 7.0 avant mars" />
+            <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:4, lineHeight:1.5 }}>
+              Lu par le conseiller pédagogique pour choisir le coach, puis par le coach lui-même.
+            </div>
+          </div>
+
           <div style={{ marginBottom:20 }}>
             <label style={lbl}>Notes pour l'Onboarding</label>
             <textarea style={{ ...inp, height:64, resize:'vertical' }} value={form.notes_onboarding} onChange={e => setF('notes_onboarding', e.target.value)} placeholder="Contexte particulier, urgence, disponibilités…" />
@@ -544,7 +579,100 @@ export function OngletInscriptionOnboarding() {
    UN CHAMP VIDE EST AFFICHÉ VIDE, jamais masqué : savoir qu'une date de naissance manque
    fait partie de la décision - c'est elle qui range un apprenant en enfant, ado ou adulte.
 ═══════════════════════════════════════════════════════════════════════════ */
-function DossierInscription({ insc, tests = [], couleur }) {
+/* ───────────────────────────────────────────────────────────────────────────
+   L'OBJECTIF DU CLIENT - le champ le plus déterminant du dossier.
+   ───────────────────────────────────────────────────────────────────────────
+   C'est ce texte que le conseiller pédagogique lit pour choisir le coach d'une classe, et
+   que le coach lira ensuite pour savoir ce qu'on attend de lui. Un niveau CECR dit où en
+   est l'apprenant ; l'objectif dit où il veut aller - « préparer un entretien chez Orange »
+   et « IELTS 7.0 avant mars » appellent deux coachs différents à niveau égal.
+
+   AMBRE QUAND IL EST VIDE, et le dit franchement. Un champ facultatif affiché en gris se
+   laisse ignorer ; celui-ci ne doit pas l'être.
+
+   Porté de `ObjectifClientBloc` (dash/CommercialDashboard.jsx) - même notion, même nom de
+   colonne, même comportement des deux côtés.
+─────────────────────────────────────────────────────────────────────────── */
+function BlocObjectifClient({ insc, onMaj }) {
+  const [edite, setEdite] = useState(false);
+  const [texte, setTexte] = useState(insc?.objectif_client || '');
+  const [occupe, setOccupe] = useState(false);
+
+  const vide = !(insc?.objectif_client || '').trim();
+
+  async function enregistrer() {
+    const valeur = texte.trim();
+    setOccupe(true);
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/inscriptions-elearning/${insc.id}`, {
+        method: 'PATCH', headers: _authHdrsAdmin(),
+        body: JSON.stringify({ objectif_client: valeur || null }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Enregistrement impossible');
+      // Remonté au parent : la modale ne se recharge pas, et sans cela on écrirait un
+      // objectif sans le voir apparaître.
+      onMaj?.(valeur || null);
+      setEdite(false);
+      toast.success(valeur ? 'Objectif enregistré ✓' : 'Objectif effacé');
+    } catch (e) {
+      toast.error(e.message || 'Enregistrement impossible');
+    } finally { setOccupe(false); }
+  }
+
+  return (
+    <div style={{ background: vide ? '#FFFBEB' : '#F5F3FF', borderRadius: 12, padding: '14px 17px',
+      border: `1.5px solid ${vide ? '#FDE68A' : '#DDD6FE'}`, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: edite ? 10 : 6 }}>
+        <span style={{ fontSize: 15 }}>🎯</span>
+        <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase',
+          color: vide ? '#92400E' : '#6D28D9' }}>
+          Objectif du client
+        </div>
+        {!edite && (
+          <button onClick={() => { setTexte(insc?.objectif_client || ''); setEdite(true); }}
+            style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 11px', borderRadius: 7,
+              border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc,
+              color: COULEURS.gris600, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {vide ? '+ Renseigner' : '✏️ Modifier'}
+          </button>
+        )}
+      </div>
+
+      {edite ? (
+        <>
+          <textarea value={texte} onChange={e => setTexte(e.target.value)} autoFocus rows={3}
+            placeholder="Ex. Préparer un entretien d'embauche en anglais chez Orange · IELTS 7.0 avant mars"
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #DDD6FE',
+              fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical' }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button onClick={() => setEdite(false)} disabled={occupe}
+              style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${COULEURS.gris200}`,
+                background: COULEURS.blanc, color: COULEURS.gris600, fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+            <button onClick={enregistrer} disabled={occupe}
+              style={{ padding: '7px 16px', borderRadius: 8, border: 'none',
+                background: occupe ? COULEURS.gris200 : '#7C3AED', color: '#fff', fontSize: 12,
+                fontWeight: 700, cursor: occupe ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+              {occupe ? '…' : 'Enregistrer'}
+            </button>
+          </div>
+        </>
+      ) : vide ? (
+        <div style={{ fontSize: 12.5, color: '#92400E', lineHeight: 1.6 }}>
+          Non renseigné. C'est ce texte que le conseiller pédagogique lit pour choisir le coach
+          — sans lui, l'affectation se fait à l'aveugle.
+        </div>
+      ) : (
+        <div style={{ fontSize: 13.5, color: COULEURS.navy, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+          {insc.objectif_client}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DossierInscription({ insc, tests = [], couleur, onMajObjectif }) {
   if (!insc) return null;
 
   const mail = (insc.email || '').trim().toLowerCase();
@@ -631,7 +759,11 @@ function DossierInscription({ insc, tests = [], couleur }) {
         </div>
       </div>
 
-      {/* LE TEST EN PREMIER, ou son absence annoncée : c'est le seul élément qui peut
+      {/* L'OBJECTIF EN TÊTE, avant même le test : c'est lui qui orientera le choix du
+          coach, et il se corrige ici sans quitter l'écran d'assignation. */}
+      <BlocObjectifClient insc={insc} onMaj={onMajObjectif} />
+
+      {/* LE TEST ENSUITE, ou son absence annoncée : c'est le seul élément qui peut
           rendre l'assignation prématurée. */}
       {test ? (
         <div style={{ ...carte, borderLeft: `4px solid ${COULEURS.succes}`, marginBottom: 12,
@@ -661,8 +793,8 @@ function DossierInscription({ insc, tests = [], couleur }) {
           display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ fontSize: 20 }}>⏳</div>
           <div style={{ fontSize: 12.5, color: '#78350F', lineHeight: 1.6 }}>
-            <strong>Aucun test de niveau rapproché.</strong> Rien n'empêche l'assignation, mais
-            la classe sera choisie sur le niveau déclaré, pas sur un niveau mesuré.
+            <strong>Aucun test de niveau rapproché.</strong> La classe se choisit sur le niveau
+            mesuré : tant que le résultat n'est pas revenu, l'assignation reste fermée.
             {!mail && <> Ce dossier n'a pas d'adresse e-mail propre : le rapprochement est impossible.</>}
           </div>
         </div>
@@ -714,7 +846,16 @@ export function OngletParcoursInscriptions() {
      Le filtre reste un filtre - un clic sur la même puce le retire. */
   const { profile: _profilCourant } = useAuth();
   const _estOnboarding = estRole(_profilCourant?.role, 'admin_onboarding');
-  const [filtreStatut,   setFiltreStatut]   = useState(_estOnboarding ? 'teste' : '');
+  /* Les trois actions qui font AVANCER un dossier passent par une confirmation : chacune
+     est irréversible depuis cet écran, et elles se déclenchent d'un seul clic sur une
+     ligne de tableau — l'erreur de ligne voisine est la plus facile à commettre. */
+  const confirm = useConfirm();
+  /* Le filtre d'ouverture de l'Onboarding pointe sur l'étape où son travail commence.
+     Il valait `teste`, l'ancienne porte d'entrée ; depuis l'introduction de
+     `transmis_onboarding`, un dossier transmis passait directement derrière ce filtre et
+     la liste s'affichait vide — « Aucun dossier ne correspond aux filtres » — alors que
+     le compteur juste au-dessus en annonçait un. */
+  const [filtreStatut,   setFiltreStatut]   = useState(_estOnboarding ? 'transmis_onboarding' : '');
   const [filtreEnt,      setFiltreEnt]      = useState('');
   const [recherche,      setRecherche]      = useState('');
   const [filtreDateDebut, setFiltreDateDebut] = useState('');
@@ -769,7 +910,13 @@ export function OngletParcoursInscriptions() {
   }
   const [classeChoisie,  setClasseChoisie]  = useState('');
   const [modeNouvelleClasse, setModeNouvelleClasse] = useState(false);
-  const FORM_CL0 = { nom:'', niveau:'', type_cours:'en_ligne', date_debut:'', date_fin:'', capacite_max:10 };
+  const FORM_CL0 = { nom:'', niveau:'', type_cours:'en_ligne', date_debut:'', date_fin:'', capacite_max:10, photo_url:null };
+  /* LES CRÉNEAUX MANQUAIENT À CE RACCOURCI. Le formulaire complet de création exige au
+     moins un créneau et enregistre `horaire` ; ce chemin-ci - « créer la classe et y
+     assigner l'apprenant » - n'en proposait aucun, si bien que la classe naissait avec
+     `horaire: []`. L'onglet Disponibilités restait alors vide pour toujours, chez
+     l'assistante comme chez le RH, sans que rien n'indique pourquoi. */
+  const [creneauxRapide, setCreneauxRapide] = useState([{ jour:'Lundi', debut:'09:00', fin:'11:00' }]);
   const [formClasse,     setFormClasse]     = useState(FORM_CL0);
   const [saving,         setSaving]         = useState(false);
 
@@ -873,6 +1020,14 @@ export function OngletParcoursInscriptions() {
   // ── Actions individuelles ────────────────────────────────────────────────
   async function valider(id) {
     if (saving) return;
+    /* CONFIRMER AVANT DE VALIDER. La validation fait AVANCER le dossier d'un cran : elle
+       n'est pas annulable depuis cet écran, et un clic de trop sur une ligne voisine se
+       rattrape en remontant au serveur. */
+    const x = inscriptions.find(i => i.id === id);
+    const ok = await confirm(
+      `Valider le dossier de ${x?.nom_complet || 'ce bénéficiaire'} ? Il passera au statut « Vérifié » et pourra être transmis au test de niveau.`,
+      { titre: 'Valider le dossier', confirmLabel: 'Valider' });
+    if (!ok) return;
     setSaving(true);
     const r = await fetch(`${_API_URL_ADMIN}/api/inscriptions-elearning/${id}/valider`, { method:'PATCH', headers:_authHdrsAdmin(), body:'{}' });
     const d = await r.json();
@@ -884,6 +1039,13 @@ export function OngletParcoursInscriptions() {
 
   async function transmettre(id) {
     if (saving) return;
+    /* La transmission SORT le dossier de votre main : l'Agent Placement Test en devient
+       responsable et le dossier n'est plus modifiable au même titre. */
+    const x = inscriptions.find(i => i.id === id);
+    const ok = await confirm(
+      `Transmettre ${x?.nom_complet || 'ce bénéficiaire'} à l'Agent Placement Test ? Le dossier sort de votre file et attendra le résultat du test.`,
+      { titre: 'Transmettre au test de niveau', confirmLabel: 'Transmettre' });
+    if (!ok) return;
     setSaving(true);
     const r = await fetch(`${_API_URL_ADMIN}/api/inscriptions-elearning/${id}/transmettre`, { method:'PATCH', headers:_authHdrsAdmin(), body:'{}' });
     const d = await r.json();
@@ -893,10 +1055,57 @@ export function OngletParcoursInscriptions() {
     showFlash('Transmis à l\'Agent Placement Test.');
   }
 
+  /* Le second passage de main : le test est revenu, l'assistante en a pris
+     connaissance et confie le dossier à l'Onboarding pour l'assignation en classe.
+     C'est ce geste qui fait APPARAÎTRE le dossier chez l'Onboarding - avant lui,
+     celui-ci ne le voit pas (STATUTS_VISIBLES_ONBOARDING). */
+  async function transmettreOnboarding(id) {
+    if (saving) return;
+    const x = inscriptions.find(i => i.id === id);
+    const niveau = x?.niveau_cecr_estime || x?.niveau || null;
+    const ok = await confirm(
+      `Transmettre ${x?.nom_complet || 'ce bénéficiaire'} à l'Onboarding pour l'assignation en classe ?` +
+      (niveau ? `\n\nNiveau retenu : ${niveau}.` : '') +
+      `\n\nLe dossier sort de votre file et apparaîtra dans le Parcours de l'Onboarding.`,
+      { titre: 'Transmettre à l\'Onboarding', confirmLabel: 'Transmettre', danger: false });
+    if (!ok) return;
+    setSaving(true);
+    const r = await fetch(`${_API_URL_ADMIN}/api/inscriptions-elearning/${id}/transmettre-onboarding`, { method:'PATCH', headers:_authHdrsAdmin(), body:'{}' });
+    const d = await r.json();
+    setSaving(false);
+    if (!r.ok) return showFlash(d.error, true);
+    setInscriptions(prev => prev.map(i => i.id === id ? d.inscription : i));
+    showFlash('Transmis à l\'Onboarding pour l\'assignation en classe.');
+  }
+
+  /* Un dossier parti au test depuis longtemps sans résultat n'est plus contournable
+     (le test est bloquant) : il se relance. On notifie l'Agent Placement plutôt que
+     d'ouvrir une porte dérobée vers l'assignation. */
+  async function relancerPlacement(x) {
+    if (saving) return;
+    const ok = await confirm(
+      `Relancer l'Agent Placement Test au sujet de ${x.nom_complet} ?\n\nLe dossier attend son résultat de test depuis le ${(x.date_transmission || x.created_at || '').slice(0, 10) || '—'}.`,
+      { titre: 'Relancer le test de niveau', confirmLabel: 'Relancer', danger: false });
+    if (!ok) return;
+    setSaving(true);
+    const r = await fetch(`${_API_URL_ADMIN}/api/inscriptions-elearning/${x.id}/relancer-placement`, { method:'POST', headers:_authHdrsAdmin(), body:'{}' });
+    const d = await r.json();
+    setSaving(false);
+    if (!r.ok) return showFlash(d.error, true);
+    showFlash('L\'Agent Placement Test a été relancé.');
+  }
+
   async function assigner() {
     if (!classeChoisie || !modalAssigner || saving) return;
-    setSaving(true);
     const classe = classes.find(c => c.id === classeChoisie);
+    /* L'ASSIGNATION CRÉE LE COMPTE DE L'APPRENANT et le rattache à la classe : c'est le
+       geste le moins réversible du parcours. On rappelle la classe choisie dans la question
+       - se tromper de ligne dans un menu déroulant est l'erreur la plus courante ici. */
+    const ok = await confirm(
+      `Assigner ${modalAssigner.nom_complet} à la classe « ${classe?.nom || '—'} » ? Son compte apprenant sera créé et le conseiller pédagogique sera prévenu.`,
+      { titre: 'Assigner à la classe', confirmLabel: 'Assigner' });
+    if (!ok) return;
+    setSaving(true);
     const r = await fetch(`${_API_URL_ADMIN}/api/inscriptions-elearning/${modalAssigner.id}/assigner`, {
       method:'PATCH', headers:_authHdrsAdmin(),
       body: JSON.stringify({ classe_id: classeChoisie, classe_nom: classe?.nom }),
@@ -921,6 +1130,7 @@ export function OngletParcoursInscriptions() {
         entreprise_id:  modalAssigner.entreprise_id || null,
         entreprise_nom: modalAssigner.entreprise_nom || null,
         niveau:         formClasse.niveau || modalAssigner.niveau_detecte || null,
+        horaire:        creneauxRapide.map(c => ({ jour: c.jour, debut: c.debut, fin: c.fin })),
       }),
     });
     const dc = await rc.json();
@@ -1079,6 +1289,12 @@ export function OngletParcoursInscriptions() {
 
   // ── Filtrage ──────────────────────────────────────────────────────────────
   const liste = inscriptions.filter(x => {
+    /* L'ONBOARDING NE VOIT RIEN AVANT LA TRANSMISSION. Son travail commence quand
+       l'assistante lui passe la main, test de niveau en main ; les dossiers encore
+       en cours de vérification ou partis au test ne lui demandent aucune action et
+       n'ont donc pas à occuper sa liste. Le filtre est aussi appliqué aux compteurs
+       et à la sélection ci-dessous, sinon ils compteraient des lignes invisibles. */
+    if (_estOnboarding && !STATUTS_VISIBLES_ONBOARDING.includes(x.statut)) return false;
     if (filtreStatut && x.statut !== filtreStatut) return false;
     if (filtreEnt   && x.entreprise_id !== filtreEnt) return false;
     if (filtreDateDebut && (!x.created_at || x.created_at.slice(0,10) < filtreDateDebut)) return false;
@@ -1094,8 +1310,13 @@ export function OngletParcoursInscriptions() {
   const pageSure = Math.min(page, nbPages);
   const listeAffichee = liste.slice((pageSure - 1) * PAR_PAGE, pageSure * PAR_PAGE);
 
-  const stats = inscriptions.reduce((acc, x) => { acc[x.statut] = (acc[x.statut]||0)+1; return acc; }, {});
-  const nbEntreprises = [...new Set(inscriptions.map(x=>x.entreprise_nom).filter(Boolean))].length;
+  /* Les compteurs comptent ce que l'utilisateur peut voir. Sur le périmètre complet,
+     l'Onboarding lisait « 1 Transmis → Placement » pour un dossier absent de sa liste. */
+  const inscriptionsVisibles = _estOnboarding
+    ? inscriptions.filter(x => STATUTS_VISIBLES_ONBOARDING.includes(x.statut))
+    : inscriptions;
+  const stats = inscriptionsVisibles.reduce((acc, x) => { acc[x.statut] = (acc[x.statut]||0)+1; return acc; }, {});
+  const nbEntreprises = [...new Set(inscriptionsVisibles.map(x=>x.entreprise_nom).filter(Boolean))].length;
   const tousSelectionnes = listeAffichee.length > 0 && listeAffichee.every(x => selection.has(x.id));
   const inp = { padding:'8px 12px', borderRadius:8, border:`1px solid ${COULEURS.gris200}`, fontSize:12, fontFamily:'"Plus Jakarta Sans",sans-serif', color:COULEURS.navy, background:COULEURS.blanc, boxSizing:'border-box' };
   const lbl = { fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.04em', display:'block', marginBottom:5 };
@@ -1115,7 +1336,7 @@ export function OngletParcoursInscriptions() {
         <div>
           <div style={{ fontSize:16, fontWeight:800, color:COULEURS.navy }}>📋 Parcours Inscriptions</div>
           <div style={{ fontSize:12, color:COULEURS.gris600, marginTop:2 }}>
-            {inscriptions.length} dossier{inscriptions.length!==1?'s':''} reçus · {nbEntreprises} entreprise{nbEntreprises!==1?'s':''}
+            {inscriptionsVisibles.length} dossier{inscriptionsVisibles.length!==1?'s':''} reçus · {nbEntreprises} entreprise{nbEntreprises!==1?'s':''}
           </div>
         </div>
         {/* LA CRÉATION D'UN DOSSIER N'EST PLUS DU RESSORT DE L'ONBOARDING.
@@ -1141,9 +1362,13 @@ export function OngletParcoursInscriptions() {
         )}
       </div>
 
-      {/* KPIs pipeline */}
+      {/* KPIs pipeline - les étapes antérieures à la transmission sont retirées chez
+          l'Onboarding : elles affichaient 0 en permanence et, une fois cliquées, menaient
+          à une liste vide, puisque ces dossiers ne lui sont pas visibles. */}
       <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
-        {Object.entries(STATUT_PARCOURS).map(([key, cfg]) => (
+        {Object.entries(STATUT_PARCOURS)
+          .filter(([key]) => !_estOnboarding || STATUTS_VISIBLES_ONBOARDING.includes(key))
+          .map(([key, cfg]) => (
           <div key={key} onClick={() => setFiltreStatut(filtreStatut===key ? '' : key)}
             style={{ flex:'1 1 120px', background: filtreStatut===key ? cfg.bg : COULEURS.blanc, border:`1.5px solid ${filtreStatut===key ? cfg.txt+'60' : COULEURS.gris200}`, borderRadius:10, padding:'10px 14px', cursor:'pointer', transition:'all 0.15s' }}>
             <div style={{ fontSize:18, marginBottom:3 }}>{cfg.ic}</div>
@@ -1362,7 +1587,11 @@ export function OngletParcoursInscriptions() {
           <div style={{ fontSize:14, fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>
             {filtreStatut || filtreEnt || recherche || filtreDateDebut || filtreDateFin ? 'Aucun dossier ne correspond aux filtres' : 'Aucun dossier reçu pour l\'instant'}
           </div>
-          <div style={{ fontSize:13, color:COULEURS.gris600 }}>Les inscriptions envoyées par les entreprises apparaîtront ici.</div>
+          <div style={{ fontSize:13, color:COULEURS.gris600 }}>
+            {_estOnboarding
+              ? 'Les dossiers apparaîtront ici dès que l\'assistante e-learning vous les aura transmis, test de niveau à l\'appui.'
+              : 'Les inscriptions envoyées par les entreprises apparaîtront ici.'}
+          </div>
         </div>
       ) : (
         <div style={{ background:COULEURS.blanc, borderRadius:14, overflow:'hidden', border:`1px solid ${COULEURS.gris200}`, boxShadow:'0 2px 8px rgba(0,0,0,0.05)' }}>
@@ -1456,15 +1685,34 @@ export function OngletParcoursInscriptions() {
                       🎯 → Placement
                     </button>
                   )}
-                  {/* « transmis_placement » EST ACCEPTÉ en plus de « teste » : le test de
-                      niveau n'a aucun pouvoir de blocage dans ce parcours, et un dossier
-                      dont le résultat ne revient jamais restait sans aucune action possible,
-                      pour personne. Le dossier affiche alors franchement qu'aucun test n'a
-                      été rapproché. */}
-                  {['teste', 'transmis_placement'].includes(x.statut) && (
+                  {/* LE TEST EST BLOQUANT. « transmis_placement » était auparavant accepté
+                      au même titre que « teste », au motif qu'un résultat qui ne revient
+                      jamais ne devait bloquer personne - mais c'est le niveau mesuré qui
+                      fonde le choix de la classe, assigner avant le test revenait à choisir
+                      sur un niveau déclaré. Un dossier en attente l'affiche désormais comme
+                      tel, et se relance (bouton ci-dessous) plutôt que de se contourner. */}
+                  {!_estOnboarding && x.statut === 'teste' && (
+                    <button onClick={() => transmettreOnboarding(x.id)} disabled={saving}
+                      style={{ padding:'4px 9px', borderRadius:6, border:'none', background:'#C2410C', color:'#fff', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                      📨 → Onboarding
+                    </button>
+                  )}
+                  {/* Assigner appartient à l'ONBOARDING, comme Valider et Transmettre
+                      appartiennent à l'assistante. L'assistante voit l'avancement du
+                      dossier, elle n'en choisit pas la classe. */}
+                  {_estOnboarding && x.statut === 'transmis_onboarding' && (
                     <button onClick={() => { setModalAssigner(x); setClasseChoisie(''); }}
                       style={{ padding:'4px 9px', borderRadius:6, border:'none', background:couleurTheme, color:'#fff', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
                       🏫 Assigner
+                    </button>
+                  )}
+                  {/* La porte de sortie d'un test qui ne revient pas : relancer l'Agent
+                      Placement, et non passer outre. */}
+                  {!_estOnboarding && x.statut === 'transmis_placement' && (
+                    <button onClick={() => relancerPlacement(x)} disabled={saving}
+                      title="Le dossier attend le résultat du test de niveau"
+                      style={{ padding:'4px 9px', borderRadius:6, border:'1px solid #FCD34D', background:'#FFFBEB', color:'#B45309', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                      🔔 Relancer le test
                     </button>
                   )}
                   <button onClick={() => setModalDetail(x)}
@@ -1734,7 +1982,13 @@ export function OngletParcoursInscriptions() {
                   de choisir une classe sans rouvrir la fiche ailleurs. Tout ce que porte
                   `inscriptions_elearning` est désormais sous les yeux au moment du choix,
                   avec le résultat du test de niveau quand il est revenu. */}
-              <DossierInscription insc={modalAssigner} tests={testsNiveau} couleur={couleurTheme} />
+              <DossierInscription insc={modalAssigner} tests={testsNiveau} couleur={couleurTheme}
+                onMajObjectif={(v) => {
+                  // La modale ET la ligne du tableau derrière elle : sans la seconde, la
+                  // liste garderait l'ancien objectif jusqu'au prochain rechargement.
+                  setModalAssigner(m => (m ? { ...m, objectif_client: v } : m));
+                  setInscriptions(prev => prev.map(x => x.id === modalAssigner.id ? { ...x, objectif_client: v } : x));
+                }} />
 
               {/* Toggle mode */}
               <div style={{ display:'flex', gap:8, marginBottom:20 }}>
@@ -1851,6 +2105,14 @@ export function OngletParcoursInscriptions() {
                   <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:9, padding:'10px 14px', marginBottom:16, fontSize:12, color:'#1D4ED8' }}>
                     ℹ️ Une nouvelle classe sera créée et <strong>{modalAssigner.nom_complet}</strong> y sera inscrit(e) directement. Le coach sera assigné ultérieurement.
                   </div>
+                  {/* LA PHOTO SE POSE À LA CRÉATION, ici comme dans le formulaire complet.
+                      Ce raccourci « créer et assigner » la sautait : une classe née par ce
+                      chemin restait sans photo pour toujours, alors qu'elle s'affiche
+                      partout - fiche de classe, listes, chat de groupe. */}
+                  <div style={{ display:'flex', justifyContent:'center', marginBottom:14 }}>
+                    <ChampPhotoClasse valeur={formClasse.photo_url} nom={formClasse.nom} accent={couleurTheme}
+                      onChange={url => setFormClasse(f => ({ ...f, photo_url: url }))} />
+                  </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
                     <div style={{ gridColumn:'1/-1' }}>
                       <label style={lbl}>Nom de la classe *</label>
@@ -1880,6 +2142,33 @@ export function OngletParcoursInscriptions() {
                       <input type='number' min={1} max={50} style={{ ...inp, width:'100%' }} value={formClasse.capacite_max} onChange={e => setFormClasse(f=>({...f,capacite_max:Number(e.target.value)}))} />
                     </div>
                   </div>
+                  {/* Emploi du temps — même éditeur que le formulaire complet de création.
+                      Sans lui, la classe naissait sans aucun créneau et son onglet
+                      Disponibilités restait vide chez tous les profils. */}
+                  <div style={{ borderTop:`1px solid ${COULEURS.gris200}`, paddingTop:16, marginBottom:16 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:COULEURS.navy }}>📅 Emploi du temps</div>
+                      <button type='button' onClick={() => setCreneauxRapide(c => [...c, { jour:'Lundi', debut:'09:00', fin:'11:00' }])}
+                        style={{ background:couleurTheme, color:'#fff', border:'none', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                        + Ajouter un créneau
+                      </button>
+                    </div>
+                    {creneauxRapide.map((cr, i) => (
+                      <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:8, marginBottom:8, alignItems:'center' }}>
+                        <select style={{ ...inp, padding:'7px 10px' }} value={cr.jour}
+                          onChange={e => setCreneauxRapide(c => c.map((x, j) => j === i ? { ...x, jour: e.target.value } : x))}>
+                          {JOURS_SEMAINE.map(j => <option key={j} value={j}>{j}</option>)}
+                        </select>
+                        <input style={{ ...inp, padding:'7px 10px' }} type='time' value={cr.debut}
+                          onChange={e => setCreneauxRapide(c => c.map((x, j) => j === i ? { ...x, debut: e.target.value } : x))} />
+                        <input style={{ ...inp, padding:'7px 10px' }} type='time' value={cr.fin}
+                          onChange={e => setCreneauxRapide(c => c.map((x, j) => j === i ? { ...x, fin: e.target.value } : x))} />
+                        <button type='button' onClick={() => setCreneauxRapide(c => c.filter((_, j) => j !== i))} disabled={creneauxRapide.length === 1}
+                          style={{ background:'#FEE2E2', border:'none', borderRadius:6, width:30, height:30, cursor: creneauxRapide.length === 1 ? 'not-allowed' : 'pointer', color:'#DC2626', fontSize:16, opacity: creneauxRapide.length === 1 ? 0.4 : 1 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+
                   <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
                     <button type='button' onClick={() => setModeNouvelleClasse(false)} style={{ padding:'10px 18px', borderRadius:9, border:`1px solid ${COULEURS.gris200}`, background:COULEURS.blanc, color:COULEURS.gris600, fontWeight:600, fontSize:13, cursor:'pointer', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>← Retour</button>
                     <button type='submit' disabled={saving}
@@ -1906,7 +2195,15 @@ const TYPE_CL_TAG  = { en_ligne:'#0EA5E9', presentiel:'#10B981', hybride:'#8B5CF
 function ModalNouvelleClasse({ onFermer, onCreee }) {
   const { couleurTheme, couleurThemeFonce } = useTheme();
   const [entreprises, setEntreprises] = useState([]);
-  const [coachs,      setCoachs]      = useState([]);
+  const [beneficiaires, setBeneficiaires] = useState([]); // pour compter les licences consommées
+  const [chargementListes, setChargementListes] = useState(true);
+  /* Ce que l'entreprise sélectionnée a déjà : ses classes et, dans chacune, ses
+     apprenants. On crée rarement une classe dans le vide — on la crée à côté de celles
+     qui existent, et c'est en les voyant qu'on choisit son nom, son niveau et sa
+     capacité sans doublonner une classe déjà ouverte. */
+  const [entClasses, setEntClasses] = useState(null); // null = pas encore chargé
+  const [entCharge,  setEntCharge]  = useState(false);
+  const [rechercheEnt, setRechercheEnt] = useState('');
   const [saving,      setSaving]      = useState(false);
   const [flash,       setFlash]       = useState(null);
 
@@ -1914,7 +2211,7 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
     entreprise_id: '', entreprise_nom: '',
     nom: '', niveau: 'A1', type_cours: 'en_ligne',
     date_debut: '', date_fin: '', capacite_max: 10,
-    coach_id: '', photo_url: null,
+    photo_url: null,
   };
   const [form, setForm] = useState(FORM0);
 
@@ -1922,15 +2219,43 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
   const CRENEAU0 = { jour: 'Lundi', debut: '09:00', fin: '11:00' };
   const [creneaux, setCreneaux] = useState([{ ...CRENEAU0 }]);
 
+  /* Les erreurs étaient avalées par un `.catch(() => {})` : une liste vide ne se
+     distinguait pas d'un appel qui a échoué, et on cherchait longtemps pourquoi le
+     select restait désespérément vide. Elles s'affichent maintenant. */
   useEffect(() => {
-    Promise.all([
-      fetch(`${_API_URL_ADMIN}/api/entreprise/admin/liste`, { headers: _authHdrsAdmin() }),
-      fetch(`${_API_URL_ADMIN}/api/coachs`,                 { headers: _authHdrsAdmin() }),
-    ]).then(async ([r1, r2]) => {
-      const d1 = await r1.json(); setEntreprises(d1.entreprises || d1 || []);
-      const d2 = await r2.json(); setCoachs(d2.coachs || d2 || []);
-    }).catch(() => {});
+    let vivant = true;
+    fetch(`${_API_URL_ADMIN}/api/entreprise/admin/liste`, { headers: _authHdrsAdmin() })
+      .then(async r => {
+        const d = await r.json().catch(() => ({}));
+        if (!vivant) return;
+        if (!r.ok) setFlash(`Entreprises non chargées : ${d.error || `erreur ${r.status}`}`);
+        setEntreprises(Array.isArray(d.entreprises) ? d.entreprises : []);
+        setBeneficiaires(Array.isArray(d.beneficiaires) ? d.beneficiaires : []);
+      })
+      .catch(e => { if (vivant) setFlash(`Impossible de joindre le serveur : ${e.message}`); })
+      .finally(() => { if (vivant) setChargementListes(false); });
+    return () => { vivant = false; };
   }, []);
+
+  /* Les classes de l'entreprise choisie, avec leurs apprenants. Une seule route les
+     renvoie imbriqués ; la charger à la sélection plutôt qu'au montage évite de tirer
+     les classes de toutes les entreprises pour n'en afficher qu'une. */
+  useEffect(() => {
+    if (!form.entreprise_id) { setEntClasses(null); setRechercheEnt(''); return; }
+    let vivant = true;
+    setEntCharge(true);
+    setEntClasses(null);
+    fetch(`${_API_URL_ADMIN}/api/entreprise/admin/${form.entreprise_id}/classes`, { headers: _authHdrsAdmin() })
+      .then(async r => {
+        const d = await r.json().catch(() => ({}));
+        if (!vivant) return;
+        if (!r.ok) { setFlash(`Classes de l'entreprise non chargées : ${d.error || `erreur ${r.status}`}`); setEntClasses([]); return; }
+        setEntClasses(Array.isArray(d.classes) ? d.classes : []);
+      })
+      .catch(() => { if (vivant) setEntClasses([]); })
+      .finally(() => { if (vivant) setEntCharge(false); });
+    return () => { vivant = false; };
+  }, [form.entreprise_id]);
 
   function setF(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -1947,7 +2272,6 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
     setSaving(true);
     setFlash(null);
     try {
-      const coachChoisi = coachs.find(c => c.id === form.coach_id);
       const payload = {
         nom:            form.nom.trim(),
         entreprise_id:  form.entreprise_id  || null,
@@ -1957,8 +2281,9 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
         date_debut:     form.date_debut     || null,
         date_fin:       form.date_fin       || null,
         capacite_max:   Number(form.capacite_max) || 10,
-        coach_id:       form.coach_id       || null,
-        coach_nom:      coachChoisi ? `${coachChoisi.prenom||''} ${coachChoisi.nom||''}`.trim() : null,
+        /* LE COACH NE S'ASSIGNE PLUS ICI. La classe naît sans titulaire et part au PA,
+           qui dispose des charges, des disponibilités et des contrats pour trancher —
+           ce que ce formulaire n'a jamais eu sous les yeux. */
         horaire:        creneaux.map(c => ({ jour: c.jour, debut: c.debut, fin: c.fin })),
         photo_url:      form.photo_url || null,
       };
@@ -1984,7 +2309,11 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.65)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:1200, overflowY:'auto', padding:'24px 16px', backdropFilter:'blur(2px)' }}
       onClick={onFermer}>
-      <div style={{ background:COULEURS.blanc, borderRadius:18, width:620, maxWidth:'96vw', boxShadow:'0 32px 80px rgba(0,0,0,0.35)', marginBottom:24 }}
+      {/* 620 px forçaient tous les champs en colonne unique : la fiche tenait sur deux
+          écrans et l'emploi du temps n'était jamais visible en même temps que les dates
+          qu'il doit respecter. La fiche entreprise, qui liste maintenant classes et
+          apprenants, demande en plus de la largeur pour rester lisible. */}
+      <div style={{ background:COULEURS.blanc, borderRadius:18, width:'80vw', maxWidth:'80vw', boxShadow:'0 32px 80px rgba(0,0,0,0.35)', marginBottom:24 }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -2001,10 +2330,20 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
             <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#991B1B', marginBottom:16 }}>{flash}</div>
           )}
 
-          {/* Entreprise */}
+          {/* ── ENTREPRISE + SA FICHE ──
+              Le select ne donnait qu'un nom. Or c'est au moment de créer la classe qu'on
+              a besoin de savoir à qui on la rattache : combien de licences ont déjà été
+              consommées sur le contrat, si l'entreprise est encore active, qui prévenir
+              côté RH. Ces données arrivaient déjà dans la même réponse et n'étaient pas
+              affichées — on allait les chercher dans un autre onglet, ou on ne les
+              vérifiait pas. */}
           <div style={{ ...row, gridTemplateColumns:'1fr' }}>
             <div>
-              <label style={lbl}>Entreprise (optionnel)</label>
+              <label style={lbl}>
+                Entreprise (optionnel)
+                {chargementListes && <span style={{ color:COULEURS.gris400, fontWeight:500, textTransform:'none', letterSpacing:0 }}> — chargement…</span>}
+                {!chargementListes && entreprises.length === 0 && <span style={{ color:'#B45309', fontWeight:700, textTransform:'none', letterSpacing:0 }}> — aucune entreprise enregistrée</span>}
+              </label>
               <select style={inp} value={form.entreprise_id}
                 onChange={e => {
                   const ent = entreprises.find(x => x.id === e.target.value);
@@ -2012,10 +2351,195 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
                   setF('entreprise_nom', ent?.nom || '');
                 }}>
                 <option value=''>- Aucune / Particuliers -</option>
-                {entreprises.map(e => <option key={e.id} value={e.id}>{e.nom}</option>)}
+                {entreprises.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.nom}{e.ville ? ` - ${e.ville}` : ''}{e.statut && e.statut !== 'actif' ? `  (${e.statut.replace('_', ' ')})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
+
+          {(() => {
+            const ent = entreprises.find(x => x.id === form.entreprise_id);
+            if (!ent) return null;
+            /* Les licences consommées : les bénéficiaires actifs rattachés à cette
+               entreprise, que la même route renvoie déjà. Créer une classe pour une
+               entreprise dont le contrat est saturé est le genre d'erreur qu'on ne
+               découvre qu'à la facturation. */
+            const consommees = beneficiaires.filter(b => b.entreprise_id === ent.id && b.statut !== 'retire' && b.statut !== 'inactif').length;
+            const licences   = Number(ent.nb_licences) || 0;
+            const sature     = licences > 0 && consommees >= licences;
+            const actif      = ent.statut === 'actif';
+            const fmtDate    = (d) => d ? new Date(d).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' }) : null;
+            const fmtMontant = (m) => m ? `${Number(m).toLocaleString('fr-FR')} ${ent.devise || 'FCFA'}` : null;
+
+            const champ = (libelle, valeur) => valeur ? (
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:COULEURS.gris400, textTransform:'uppercase', letterSpacing:'0.05em' }}>{libelle}</div>
+                <div style={{ fontSize:12.5, color:COULEURS.navy, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis' }}>{valeur}</div>
+              </div>
+            ) : null;
+
+            return (
+              <div style={{ marginBottom:14, borderRadius:12, border:`1px solid ${COULEURS.gris200}`, background:COULEURS.gris50, overflow:'hidden' }}>
+
+                {/* Identité */}
+                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderBottom:`1px solid ${COULEURS.gris200}`, background:COULEURS.blanc }}>
+                  {ent.logo_url ? (
+                    <img src={ent.logo_url} alt="" style={{ width:42, height:42, borderRadius:10, objectFit:'cover', flexShrink:0, background:COULEURS.gris100 }} />
+                  ) : (
+                    <div style={{ width:42, height:42, borderRadius:10, flexShrink:0, background:ent.couleur || couleurTheme, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:15 }}>
+                      {ent.initiales || (ent.nom || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:800, color:COULEURS.navy }}>{ent.nom}</div>
+                    <div style={{ fontSize:11.5, color:COULEURS.gris600 }}>
+                      {[ent.secteur, ent.ville].filter(Boolean).join(' · ') || 'Secteur non renseigné'}
+                    </div>
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:999, flexShrink:0,
+                    background: actif ? '#D1FAE5' : '#FEF3C7', color: actif ? '#065F46' : '#92400E' }}>
+                    {actif ? '✅ Active' : `⏳ ${(ent.statut || 'statut inconnu').replace('_', ' ')}`}
+                  </span>
+                </div>
+
+                {/* Contrat & contact */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, padding:'12px 16px' }}>
+                  {champ('Licences', licences
+                    ? `${consommees} / ${licences} utilisée${consommees > 1 ? 's' : ''}`
+                    : `${consommees} apprenant${consommees > 1 ? 's' : ''} (contrat sans plafond)`)}
+                  {champ('Formule', ent.package_elearning)}
+                  {champ('Contrat', fmtMontant(ent.montant_contrat))}
+                  {champ('Période', [fmtDate(ent.date_debut_contrat), fmtDate(ent.date_fin_contrat)].filter(Boolean).join(' → '))}
+                  {champ('Effectif', ent.nb_employes ? `${ent.nb_employes} salariés` : null)}
+                  {champ('RCCM', ent.rccm)}
+                  {champ('Référent RH', ent.referent_rh_nom)}
+                  {champ('Contact', ent.referent_rh_email || ent.referent_rh_telephone)}
+                  {champ('Adresse', ent.adresse)}
+                  {champ('Site', ent.site_web)}
+                </div>
+
+                {/* Ce qui doit arrêter la main avant de créer la classe */}
+                {(sature || !actif || ent.acces_elearning === false) && (
+                  <div style={{ padding:'10px 16px', borderTop:`1px solid ${COULEURS.gris200}`, background:'#FFFBEB', fontSize:12, color:'#92400E', lineHeight:1.6 }}>
+                    {!actif && <div>⚠️ Cette entreprise n'est pas encore validée — la classe sera créée, mais le contrat n'est pas confirmé.</div>}
+                    {ent.acces_elearning === false && <div>⚠️ L'accès e-learning est désactivé pour cette entreprise : ses apprenants ne pourront pas se connecter.</div>}
+                    {sature && <div>⚠️ Les {licences} licences du contrat sont déjà consommées. Inscrire de nouveaux apprenants dépassera le contrat.</div>}
+                  </div>
+                )}
+
+                {ent.notes && (
+                  <div style={{ padding:'10px 16px', borderTop:`1px solid ${COULEURS.gris200}`, fontSize:12, color:COULEURS.gris600, lineHeight:1.6, background:COULEURS.blanc }}>
+                    📝 {ent.notes}
+                  </div>
+                )}
+
+                {/* ── CE QUE L'ENTREPRISE A DÉJÀ ──
+                    Ses classes, et dans chacune ses apprenants. On ne crée presque jamais
+                    une classe dans le vide : on la crée à côté de celles qui existent. Sans
+                    cette vue il fallait quitter le formulaire pour aller voir ailleurs, ou
+                    créer à l'aveugle — d'où les doublons de niveau et les capacités mal
+                    dimensionnées. */}
+                <div style={{ borderTop:`1px solid ${COULEURS.gris200}`, background:COULEURS.blanc }}>
+
+                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', flexWrap:'wrap' }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:COULEURS.navy }}>
+                      🏫 Classes de {ent.nom}
+                      {entClasses && (
+                        <span style={{ color:COULEURS.gris400, fontWeight:600 }}>
+                          {' '}— {entClasses.length} classe{entClasses.length > 1 ? 's' : ''} ·{' '}
+                          {entClasses.reduce((t, c) => t + (c.apprenants?.length || 0), 0)} apprenant
+                          {entClasses.reduce((t, c) => t + (c.apprenants?.length || 0), 0) > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {/* La recherche porte sur les DEUX listes à la fois : on cherche
+                        « Konaté » sans savoir dans quelle classe il est, ou « B1 » pour
+                        voir si ce niveau existe déjà. Une classe est gardée si elle
+                        correspond elle-même, ou si l'un de ses apprenants correspond. */}
+                    <input
+                      value={rechercheEnt}
+                      onChange={e => setRechercheEnt(e.target.value)}
+                      placeholder="🔍 Rechercher une classe, un apprenant, un niveau…"
+                      style={{ ...inp, width:'auto', flex:1, minWidth:220, padding:'7px 12px', fontSize:12.5 }} />
+                  </div>
+
+                  {entCharge ? (
+                    <div style={{ padding:'0 16px 14px', fontSize:12.5, color:COULEURS.gris400 }}>Chargement des classes…</div>
+                  ) : !entClasses?.length ? (
+                    <div style={{ padding:'0 16px 14px', fontSize:12.5, color:COULEURS.gris400 }}>
+                      Aucune classe pour cette entreprise — ce sera la première.
+                    </div>
+                  ) : (() => {
+                    const q = rechercheEnt.trim().toLowerCase();
+                    const correspond = (txt) => !q || String(txt || '').toLowerCase().includes(q);
+                    const visibles = entClasses
+                      .map(c => {
+                        const classeOk = correspond(c.nom) || correspond(c.niveau) || correspond(c.coach_nom) || correspond(c.statut);
+                        const apps = (c.apprenants || []).filter(a =>
+                          classeOk || correspond(a.nom_complet) || correspond(a.email) || correspond(a.niveau_cecr));
+                        return { ...c, _apps: apps, _garde: classeOk || apps.length > 0 };
+                      })
+                      .filter(c => c._garde);
+
+                    if (!visibles.length) return (
+                      <div style={{ padding:'0 16px 14px', fontSize:12.5, color:COULEURS.gris400 }}>
+                        Aucune classe ni apprenant ne correspond à « {rechercheEnt} ».
+                      </div>
+                    );
+
+                    return (
+                      <div style={{ maxHeight:260, overflowY:'auto', padding:'0 16px 14px', display:'flex', flexDirection:'column', gap:8 }}>
+                        {visibles.map(c => {
+                          const pleine = c.capacite_max && (c.apprenants?.length || 0) >= c.capacite_max;
+                          return (
+                            <div key={c.id} style={{ border:`1px solid ${COULEURS.gris200}`, borderRadius:10, overflow:'hidden' }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:COULEURS.gris50, flexWrap:'wrap' }}>
+                                <span style={{ fontSize:12.5, fontWeight:800, color:COULEURS.navy }}>{c.nom}</span>
+                                {c.niveau && <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 8px', borderRadius:999, background:'#DBEAFE', color:'#1E40AF' }}>{c.niveau}</span>}
+                                <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 8px', borderRadius:999,
+                                  background: c.statut === 'actif' ? '#D1FAE5' : '#FEF3C7', color: c.statut === 'actif' ? '#065F46' : '#92400E' }}>
+                                  {c.statut === 'actif' ? 'Active' : c.statut === 'clos' ? '🔒 Clôturée' : c.statut}
+                                </span>
+                                {/* Le coach se lit ici, là où il compte : sur les classes
+                                    déjà ouvertes. C'est le PA qui l'assigne. */}
+                                <span style={{ fontSize:11.5, color:COULEURS.gris600 }}>
+                                  {c.coach_nom ? `👤 ${c.coach_nom}` : '👤 sans coach'}
+                                </span>
+                                <span style={{ marginLeft:'auto', fontSize:11.5, fontWeight:700, color: pleine ? '#B45309' : COULEURS.gris600 }}>
+                                  {c.apprenants?.length || 0}{c.capacite_max ? ` / ${c.capacite_max}` : ''} {pleine ? '· complète' : 'places'}
+                                </span>
+                              </div>
+                              {c._apps.length === 0 ? (
+                                <div style={{ padding:'7px 12px', fontSize:11.5, color:COULEURS.gris400 }}>Aucun apprenant inscrit.</div>
+                              ) : (
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:6, padding:'8px 12px' }}>
+                                  {c._apps.map(a => (
+                                    <span key={a.id} title={[a.email, a.niveau_cecr].filter(Boolean).join(' · ')}
+                                      style={{ fontSize:11.5, padding:'3px 10px', borderRadius:999, background:COULEURS.gris50, border:`1px solid ${COULEURS.gris200}`, color:COULEURS.navy, display:'inline-flex', alignItems:'center', gap:5 }}>
+                                      {/* Un apprenant sans compte ouvert ne peut pas se
+                                          connecter : le signaler ici évite de l'inscrire
+                                          dans une nouvelle classe sans voir qu'il n'a
+                                          toujours pas d'accès. */}
+                                      {a.acces_elearning ? '✅' : '🔑'} {a.nom_complet || a.email}
+                                      {a.niveau_cecr && <span style={{ color:COULEURS.gris400 }}>· {a.niveau_cecr}</span>}
+                                      {a.statut && a.statut !== 'actif' && <span style={{ color:'#B45309', fontWeight:700 }}>· {a.statut}</span>}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* La photo, juste avant le nom : c'est le couple qui identifie la classe, et
               elle habille aussi le fil de discussion de cette classe. */}
@@ -2065,19 +2589,6 @@ function ModalNouvelleClasse({ onFermer, onCreee }) {
             <div>
               <label style={lbl}>Date de fin</label>
               <input style={inp} type='date' value={form.date_fin} onChange={e => setF('date_fin', e.target.value)} />
-            </div>
-          </div>
-
-          {/* Coach */}
-          <div style={{ ...row, gridTemplateColumns:'1fr', marginBottom:20 }}>
-            <div>
-              <label style={lbl}>Coach (optionnel)</label>
-              <select style={inp} value={form.coach_id} onChange={e => setF('coach_id', e.target.value)}>
-                <option value=''>- À assigner plus tard -</option>
-                {coachs.map(c => (
-                  <option key={c.id} value={c.id}>{c.prenom} {c.nom} {c.niveau ? `(${c.niveau})` : ''}</option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -3189,13 +3700,22 @@ const ETAPES_DEMARRAGE = [
  * un geste à faire. `kit` et `planning` restent manuels : aucun envoi automatique n'existe
  * pour eux aujourd'hui.
  */
-const checklistReelle = (a) => ({
-  ...(a.suivi_checklist || {}),
-  bienvenue: !!a.apprenant_id,
-  acces:     !!a.apprenant_id,
-});
+/* ⚠️ ON NE DÉDUIT PLUS L'ENVOI DE L'EXISTENCE DU COMPTE.
+   Ces deux étapes étaient cochées dès qu'un `apprenant_id` existait, au motif que « le
+   compte est créé à l'ajout, donc sa présence vaut preuve d'envoi ». C'était vrai chez
+   dash, qui appelle `sendApprenantWelcomeEmail` ; c'était FAUX ici, où l'assignation créait
+   le compte sans jamais envoyer d'e-mail. La checklist affichait donc 50 % de démarrage
+   accompli sur des dossiers où l'apprenant n'avait rien reçu.
+   L'envoi est désormais réel et INSCRIT dans `suivi_checklist` au moment où il réussit :
+   on lit le fait au lieu de le supposer. Un apprenant sans adresse réelle - identifiant
+   dérivé de son téléphone - reste décoché, ce qui est exact : on ne lui a rien écrit. */
+/* Exportées : la pastille de l'onglet « Suivi démarrage » compte les mêmes dossiers
+   incomplets que l'écran lui-même. Recopier la règle ailleurs la ferait diverger du jour
+   où une étape s'ajoute à la checklist, et la pastille annoncerait un reste-à-faire qui
+   ne correspondrait plus à ce qu'on voit en ouvrant l'onglet. */
+export const checklistReelle = (a) => ({ ...(a.suivi_checklist || {}) });
 
-const pctDemarrage = (cl) => {
+export const pctDemarrage = (cl) => {
   const faites = ETAPES_DEMARRAGE.filter(i => (cl || {})[i.id]).length;
   return Math.round((faites / ETAPES_DEMARRAGE.length) * 100);
 };
@@ -3278,6 +3798,18 @@ const PAR_PAGE_SUIVI = 10;
 export function OngletSuiviDemarrage() {
   const { couleurTheme } = useTheme();
   const { apprenants, setApprenants, chargement } = useApprenantsOnboarding();
+  /* Le coach n'est pas porté par l'inscription mais par la CLASSE : on le résout ici
+     plutôt que d'afficher un tiret, comme le fait déjà « Mes apprenants » côté
+     commercial. Savoir qui encadre un apprenant fait partie du suivi de démarrage. */
+  const [coachParClasse, setCoachParClasse] = useState({});
+  useEffect(() => {
+    let vivant = true;
+    fetch(`${_API_URL_ADMIN}/api/classes-elearning`, { headers: _authHdrsAdmin() })
+      .then(r => r.ok ? r.json() : { classes: [] })
+      .then(d => { if (vivant) setCoachParClasse(Object.fromEntries((d.classes || []).map(c => [c.id, c.coach_nom]))); })
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, []);
   const [filtre, setFiltre] = useState('tous');
   const [du, setDu] = useState('');
   const [au, setAu] = useState('');
@@ -3296,9 +3828,20 @@ export function OngletSuiviDemarrage() {
 
   /* Coche optimiste : l'écran répond tout de suite, et on remet la valeur d'avant si le
      serveur refuse. Attendre la réponse donnerait une case qui met une seconde à réagir. */
+  /* Seules `kit` et `planning` se cochent à la main. `bienvenue` et `acces` sont écrites
+     par le serveur quand l'e-mail de bienvenue part réellement : les rendre cliquables
+     laisserait cocher « e-mail envoyé » sans qu'aucun e-mail ne soit parti - exactement le
+     mensonge qu'on vient de retirer de cet écran. Le serveur les refuse de toute façon ;
+     le dire ici évite un clic sans effet. */
+  const ETAPES_AUTO = ['bienvenue', 'acces'];
+
   async function basculer(gaId, itemId) {
     const cible = apprenants.find(a => a.id === gaId);
     if (!cible) return;
+    if (ETAPES_AUTO.includes(itemId)) {
+      toast('Cette étape se coche toute seule quand l\'e-mail de bienvenue part.', { icon: '✉️' });
+      return;
+    }
     const avant = cible.suivi_checklist || {};
     const apres = { ...avant, [itemId]: !avant[itemId] };
     setApprenants(prev => prev.map(a => a.id === gaId ? { ...a, suivi_checklist: apres } : a));
@@ -3382,7 +3925,15 @@ export function OngletSuiviDemarrage() {
                 {visibles.map(a => {
                   const cl = checklistReelle(a);
                   const pct = pctDemarrage(cl);
-                  const nom = `${a.prenom_apprenant || ''} ${a.nom_apprenant || ''}`.trim() || '?';
+                  /* LES CHAMPS SUIVENT LA TABLE. Cet écran lisait encore
+                     `prenom_apprenant`/`nom_apprenant`/`groupe_nom` - les colonnes de
+                     `groupes_apprenants`, la table de dash - alors que sa source a été
+                     rebranchée sur `classes_elearning_apprenants`, qui porte `nom_complet`
+                     et `classe_nom`. Résultat : toutes les lignes affichaient « ? » en nom
+                     et « — » en classe, sur des données pourtant bien chargées.
+                     Les anciens noms restent en repli : ils ne coûtent rien et couvrent
+                     les enregistrements qui les porteraient encore. */
+                  const nom = (a.nom_complet || `${a.prenom_apprenant || ''} ${a.nom_apprenant || ''}`).trim() || '?';
                   const teinte = pct === 100 ? COULEURS.succes : pct >= 50 ? couleurTheme : COULEURS.attention;
                   return (
                     <tr key={a.id} onClick={() => setOuvert(a.id === ouvert ? null : a.id)}
@@ -3399,8 +3950,8 @@ export function OngletSuiviDemarrage() {
                           <span style={{ fontWeight: 700, color: COULEURS.navy }}>{nom}</span>
                         </div>
                       </td>
-                      <td style={td}>{a.groupe_nom || '—'}</td>
-                      <td style={td}>{a.coach_nom || '—'}</td>
+                      <td style={td}>{a.classe_nom || a.groupe_nom || '—'}</td>
+                      <td style={td}>{a.coach_nom || coachParClasse[a.classe_id] || '—'}</td>
                       <td style={{ ...td, fontSize: 11, color: COULEURS.gris400 }}>{_dateCourte(a.date_ajout)}</td>
                       <td style={td}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3430,7 +3981,7 @@ export function OngletSuiviDemarrage() {
           <div style={{ marginTop: 16, background: COULEURS.blanc, border: `1.5px solid ${couleurTheme}40`, borderRadius: 12, padding: '16px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10 }}>
               <strong style={{ fontSize: 14, color: COULEURS.navy }}>
-                {`${a.prenom_apprenant || ''} ${a.nom_apprenant || ''}`.trim()}
+                {(a.nom_complet || `${a.prenom_apprenant || ''} ${a.nom_apprenant || ''}`).trim()}
               </strong>
               <button onClick={() => setOuvert(null)}
                 style={{ border: 'none', background: 'none', color: COULEURS.gris400, fontSize: 18, cursor: 'pointer' }}>✕</button>
@@ -3565,6 +4116,9 @@ const PAR_PAGE_MES_APP = 15;
 
 export function OngletMesApprenantsOnboarding() {
   const { couleurTheme } = useTheme();
+  // La fiche complète, la même que celle du PA et de l'assistante : un seul dossier lu
+  // par tout le monde, plutôt qu'un tableau de cinq colonnes sans profondeur.
+  const [detailApprenant, setDetailApprenant] = useState(null);
   const [apprenants, setApprenants] = useState(null);
   const [recherche, setRecherche] = useState('');
   const [filtreStatut, setFiltreStatut] = useState('tous');
@@ -3653,7 +4207,10 @@ export function OngletMesApprenantsOnboarding() {
                 </thead>
                 <tbody>
                   {visibles.map(a => (
-                    <tr key={a.id} style={{ borderTop:`1px solid ${COULEURS.gris100}` }}>
+                    <tr key={a.id} onClick={() => setDetailApprenant(a)}
+                      style={{ borderTop:`1px solid ${COULEURS.gris100}`, cursor:'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.background = COULEURS.gris50}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                       <td style={{ padding:'10px 14px' }}>
                         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                           <PastilleGroupe nom={nomDe(a)} url={a.avatar_url} taille={30} accent={couleurTheme} />
@@ -3691,6 +4248,15 @@ export function OngletMesApprenantsOnboarding() {
             </div>
           )}
         </>
+      )}
+
+      {detailApprenant && (
+        <ModalDetailApprenant
+          apprenant={detailApprenant}
+          groupe={{ nom: detailApprenant.classe_nom, id: detailApprenant.classe_id }}
+          entreprise={detailApprenant.entreprise_nom ? { nom: detailApprenant.entreprise_nom } : null}
+          onFermer={() => setDetailApprenant(null)}
+        />
       )}
     </div>
   );

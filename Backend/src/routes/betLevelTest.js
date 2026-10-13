@@ -137,6 +137,29 @@ router.patch("/:id/corriger", authenticateAdmin, requirePermission("examens", "u
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    /* ── LE NIVEAU CORRIGÉ REDESCEND SUR LA FICHE DE L'APPRENANT ──
+       Même raison qu'après un test de placement (placementRoutes.js) : la fiche d'un
+       apprenant portait le niveau de son assignation initiale et plus jamais celui de ses
+       tests suivants, si bien que l'onglet « Compétences » - entièrement dérivé de
+       `niveau_cecr` - décrivait un niveau que l'onglet « Test de niveau » contredisait.
+       Ce circuit-ci est le test passé en ligne, l'autre celui de l'Agent Placement : les
+       deux attribuent un niveau définitif, les deux doivent le propager.
+
+       Seules les inscriptions ACTIVES sont touchées - une ligne `transfere` ou `retire`
+       conserve le niveau qu'elle avait quand l'apprenant a quitté la classe. Non bloquant :
+       la correction est déjà enregistrée, un échec ici ne doit pas la faire échouer. */
+    if (data.email) {
+      supabase
+        .from("classes_elearning_apprenants")
+        .update({ niveau_cecr: level })
+        .ilike("email", data.email)
+        .eq("statut", "actif")
+        .then(({ error: errNiv }) => {
+          if (errNiv) console.error("[bet-level-test/corriger] propagation niveau_cecr:", errNiv.message);
+        });
+    }
+
     res.json({ result: data });
   } catch (err) {
     res.status(500).json({ error: "Erreur interne" });

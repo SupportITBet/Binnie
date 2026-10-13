@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const authHdrs = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const authHdrs = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 const CEFR_LEVELS = ['A1','A2','B1','B2','C1','C2'];
 const CEFR_META = {

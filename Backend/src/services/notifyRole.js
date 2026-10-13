@@ -1,5 +1,6 @@
 // Envoie des notifications aux utilisateurs actifs
 import supabase from "../config/supabase.js";
+import { plateformeCourante } from "./contextePlateforme.js";
 
 // Rôles qui n'existent QUE dans app_metadata.role (Supabase Auth) et jamais dans la
 // colonne utilisateurs.role - "super_admin" notamment n'a aucune ligne utilisateurs.role
@@ -15,7 +16,17 @@ const ROLES_AUTH_ONLY = ["super_admin", "admin_superviseur", "admin_pa_advisor",
 // résolus par ailleurs dans ce fichier. Le fetch apprenant (/api/apprenants/mes-notifs), lui,
 // n'applique un filtre sur `source` QUE si le paramètre est explicitement fourni - il n'est
 // jamais passé depuis EspaceApprenant.jsx, donc ce changement de défaut ne lui retire rien.
-async function _insertNotifs(userIds, { type = 'info', titre, message = null, meta = null, source = 'dash' }) {
+async function _insertNotifs(userIds, { type = 'info', titre, message = null, meta = null, source = null }) {
+  /* LA SOURCE VIENT DE LA REQUÊTE, plus d'un défaut écrit en dur.
+     Elle valait `'dash'` par défaut : sur 108 points d'appel, 107 ne la précisaient pas et
+     écrivaient donc `dash`, y compris quand l'action venait de bet-elearning. Les
+     notifications e-learning tombaient dans la cloche de dash, et inversement une fois le
+     filtre de lecture rétabli. `plateformeCourante()` lit l'en-tête `X-Plateforme` de la
+     requête en cours (AsyncLocalStorage), ce qui règle d'un coup les 108 appels et ceux à
+     venir — y compris dans les routes PARTAGÉES, où le fichier ne dit rien de la
+     plateforme puisqu'il répond aux deux.
+     Un appel qui précise `source` explicitement garde le dernier mot. */
+  source = source || plateformeCourante();
   if (!userIds?.length) return;
   const rows = userIds.map(id => ({ user_id: id, type, titre, message, meta, source, lu: false }));
   const { error } = await supabase.from('notifications').insert(rows);
@@ -41,12 +52,36 @@ async function _resoudreIdsParRoleAuth(rolesAuthOnly) {
   }
 }
 
+/**
+ * LA DIRECTION REÇOIT TOUT, et elle le reçoit d'ici plutôt que de 108 endroits.
+ *
+ * Audit du 11 octobre 2026 sur les 108 appels à `notifyRole` : `admin` était absent des
+ * destinataires de 97 d'entre eux, `super_admin` de 71. Coach assigné, apprenant assigné à
+ * une classe, classe créée, test de niveau terminé, honoraires transmis, remplacement
+ * confirmé - aucun ne remontait à l'Administrateur, la moitié pas au SuperAdmin. Chaque
+ * point d'appel avait été écrit en pensant au métier concerné, et la supervision s'ajoutait
+ * au cas par cas ; c'est cette recopie qui a produit la dérive.
+ *
+ * Les ajouter ici plutôt que dans chaque appel ferme le trou pour de bon : une notification
+ * écrite demain remonte sans qu'on ait à y penser. Deux comptes en base (un de chaque), donc
+ * aucun effet de volume.
+ */
+const ROLES_DIRECTION = ["super_admin", "admin"];
+
 /** Notifie tous les utilisateurs actifs d'un rôle (string) ou d'une liste de rôles (array).
  *  `excludeUserId` évite de notifier l'auteur de l'action lorsqu'il fait lui-même partie
- *  des rôles ciblés (ex: un admin_manager qui enregistre lui-même un versement). */
+ *  des rôles ciblés (ex: un admin_manager qui enregistre lui-même un versement).
+ *
+ *  `payload.supervision: false` retire la direction des destinataires. À réserver aux
+ *  notifications ADRESSÉES, dont le texte ne vaut que pour son destinataire - « Nouvel
+ *  apprenant dans VOTRE classe », « VOS honoraires » : les envoyer au SuperAdmin
+ *  produirait un message faux. Une notification de supervision, elle, n'a rien à exclure. */
 export async function notifyRole(roleOrRoles, payload, excludeUserId = null) {
   try {
-    const roles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
+    const { supervision = true, ...corps } = payload || {};
+    const demandes = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
+    const roles = supervision ? [...new Set([...demandes, ...ROLES_DIRECTION])] : demandes;
+    payload = corps;
     const rolesAuthOnly = roles.filter(r => ROLES_AUTH_ONLY.includes(r));
     const rolesTable    = roles.filter(r => !ROLES_AUTH_ONLY.includes(r));
 
@@ -231,7 +266,20 @@ export async function notifyOnboarding(onboardingId, payload) {
   } catch (err) { console.error('[notifyOnboarding]', err.message); }
 }
 
-/** Notifie les utilisateurs client_entreprise d'une entreprise précise */
+/** Notifie les utilisateurs client_entreprise d'une entreprise précise.
+ *
+ * LA SOURCE EST FORCÉE À 'bet-elearning', et c'est une correction, pas une
+ * préférence. `_insertNotifs` retombe sur 'dash' quand l'appelant ne dit rien -
+ * or AUCUN de ses appelants ne le disait, et l'espace RH entreprise n'existe
+ * que dans bet-elearning : son centre de notifications interroge
+ * `/api/notifications/mes-notifs?source=bet-elearning`
+ * (NotificationsContext.jsx:62), et le filtre écartait donc TOUTES les
+ * notifications destinées aux entreprises - versement enregistré, contrat
+ * renouvelé, bénéficiaire ajouté. Elles étaient écrites en base et invisibles
+ * dans la cloche. Il n'existe aucun écran entreprise dans dash, donc aucun cas
+ * où 'dash' serait le bon choix ici ; le défaut est posé au seul endroit qui
+ * connaît la réponse plutôt que recopié dans quatorze appels.
+ * Un appelant peut toujours l'écraser en passant `source` dans le payload. */
 export async function notifyEntreprise(entreprise_id, payload) {
   if (!entreprise_id) return;
   try {
@@ -242,7 +290,7 @@ export async function notifyEntreprise(entreprise_id, payload) {
       .eq('entreprise_id', entreprise_id)
       .eq('actif', true);
     if (error || !users?.length) return;
-    await _insertNotifs(users.map(u => u.id), payload);
+    await _insertNotifs(users.map(u => u.id), { source: 'bet-elearning', ...payload });
   } catch (err) {
     console.error('[notifyEntreprise]', err.message);
   }

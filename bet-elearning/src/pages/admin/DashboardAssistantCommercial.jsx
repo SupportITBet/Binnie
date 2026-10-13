@@ -13,7 +13,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 function authHeaders() {
   const t = localStorage.getItem('admin_token') || '';
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` };
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${t}`, 'X-Plateforme': 'bet-elearning' };
 }
 
 // ── Couleur accent du pôle commercial ────────────────────────────────────────

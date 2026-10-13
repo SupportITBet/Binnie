@@ -23,7 +23,7 @@ import { OngletDirectionMesTaches, OngletDirectionApprenants } from './Dashboard
 import { OngletMesTachesSav, OngletTableauBordSav, OngletDemandesSav, OngletRemboursementsSav, OngletSatisfactionSav } from './DashboardSav';
 import BetLevelTestsTab from '../../components/shared/BetLevelTestsTab';
 import { OngletEntreprises } from './DashboardAdminShared';
-import { OngletInscriptionOnboarding, OngletParcoursInscriptions, OngletClasses, OngletVueEnsembleOnboarding, OngletSuiviDemarrage, OngletMesTachesOnboarding, OngletMesApprenantsOnboarding, OngletCoachsOnboarding } from './DashboardOnboarding';
+import { OngletInscriptionOnboarding, OngletParcoursInscriptions, OngletClasses, OngletVueEnsembleOnboarding, OngletSuiviDemarrage, OngletMesTachesOnboarding, OngletMesApprenantsOnboarding, OngletCoachsOnboarding, checklistReelle, pctDemarrage } from './DashboardOnboarding';
 import OngletReaffectations from '../../components/shared/OngletReaffectations';
 import { OngletELearning } from './DashboardElearning';
 import { OngletAuditLogs, EquipePedagogique, OngletAdministrationBET, OngletVueEnsembleManager } from './DashboardManager';
@@ -31,7 +31,7 @@ import { OngletAuditLogs, EquipePedagogique, OngletAdministrationBET, OngletVueE
 import { fetchUpload } from "../../utils/fetchUpload";
 import { estRole, familleDe } from '../../constants/roles';
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 
 // Données mock admin
@@ -3859,7 +3859,7 @@ export default function DashboardAdmin() {
   const [placementAssignesCount, setPlacementAssignesCount] = useState(0);
   useEffect(() => {
     if (!estRole(profile?.role, 'admin_placement')) return;
-    const h = { 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` };
+    const h = { 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' };
     Promise.all([
       fetch(`${_API_URL_ADMIN}/api/placement/queue`,       { headers: h }),
       fetch(`${_API_URL_ADMIN}/api/placement/a-assigner`,  { headers: h }),
@@ -3902,7 +3902,7 @@ export default function DashboardAdmin() {
   const [elearningStats, setElearningStats] = useState({ apprenants:0, coachs:0, groupes:0, sessions:0 });
   useEffect(() => {
     if (!estRole(profile?.role, 'admin_elearning')) return;
-    const h = { 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` };
+    const h = { 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' };
     const maintenant = new Date();
     Promise.all([
       fetch(`${_API_URL_ADMIN}/api/classes-elearning`, { headers: h }),
@@ -3920,6 +3920,57 @@ export default function DashboardAdmin() {
       });
     }).catch(() => {});
   }, [profile?.role]);
+
+  /* ── LES PASTILLES DES ONGLETS DE L'ONBOARDING ──
+     Seules « Notifications » et « Messages » en portaient une. Les onglets qui appellent
+     une action — un dossier transmis qui attend sa classe, une entreprise à valider, un
+     double-dossier à réaffecter — n'en avaient aucune : il fallait les ouvrir un par un
+     pour savoir s'il s'y passait quelque chose.
+
+     On ne compte PAS le contenu des onglets (le nombre de classes, le nombre
+     d'apprenants). Une pastille permanente redevient du décor. Chaque chiffre ci-dessous
+     est un reste-à-faire, et il disparaît quand le travail est fait. */
+  const [badgesOnb, setBadgesOnb] = useState({});
+  const estOnboarding = estRole(profile?.role, 'admin_onboarding');
+  useEffect(() => {
+    if (!estOnboarding) return;
+    let vivant = true;
+    const h = _authHdrsAdmin();
+    const lire = (url, repli) => fetch(`${_API_URL_ADMIN}${url}`, { headers: h })
+      .then(r => r.ok ? r.json() : repli).catch(() => repli);
+    /* CHAQUE COMPTEUR LIT LA MÊME SOURCE QUE L'ONGLET QU'IL ANNONCE. Deux routes se
+       ressemblent et ne disent pas la même chose : `/api/parcours/mes-apprenants-onboarding`
+       rend les DOSSIERS qui attendent une affectation en classe, tandis que
+       `/api/classes-elearning/apprenants/tous` rend les apprenants DÉJÀ inscrits, dont on
+       suit le démarrage. Les confondre ferait annoncer un reste-à-faire qui ne correspond
+       pas à ce qu'on trouve en ouvrant l'onglet — une pastille qui ment est pire que pas
+       de pastille. */
+    Promise.all([
+      lire('/api/parcours/mes-apprenants-onboarding', { apprenants: [] }),
+      lire('/api/classes-elearning/apprenants/tous',  { apprenants: [] }),
+      lire('/api/entreprise/admin/liste',             { entreprises: [] }),
+      lire('/api/notifications/mes-notifs?limit=50',  { notifications: [] }),
+    ]).then(([dDossiers, dInscrits, dEnt, dNot]) => {
+      if (!vivant) return;
+      const aAffecter = (dDossiers.apprenants || []).length;
+      const suivisIncomplets = (dInscrits.apprenants || [])
+        .filter(a => pctDemarrage(checklistReelle(a)) < 100).length;
+      setBadgesOnb({
+        // Les dossiers transmis qui attendent leur classe : le cœur du métier, et rien
+        // ne l'annonçait tant qu'on n'avait pas ouvert l'onglet.
+        '/admin/onboarding/parcours':       aAffecter,
+        '/admin/onboarding/suivi':          suivisIncomplets,
+        // « Mes tâches » agrège exactement les deux lignes qu'il affiche.
+        '/admin/onboarding/taches':         aAffecter + suivisIncomplets,
+        '/admin/onboarding/entreprises':    (dEnt.entreprises || []).filter(e => e.statut === 'en_attente').length,
+        /* Le marqueur d'un double-dossier, comme dans l'onglet lui-même : une alerte non
+           lue portant `autre_assignation_id`. Lue = traitée. */
+        '/admin/onboarding/reaffectations': (dNot.notifications || [])
+          .filter(n => n.meta?.autre_assignation_id && !n.lu).length,
+      });
+    });
+    return () => { vivant = false; };
+  }, [estOnboarding]);
 
   const stats = estRole(profile?.role, 'admin_elearning')
     ? [
@@ -4123,7 +4174,7 @@ export default function DashboardAdmin() {
 
   return (
     <>
-    <TopNavLayout stats={stats}>
+    <TopNavLayout stats={stats} badges={badgesOnb}>
       <div style={styles.corps}>
 
           {/* ══ AGENT ONBOARDING - vues dédiées ══ */}
@@ -4141,6 +4192,11 @@ export default function DashboardAdmin() {
             <OngletRemplacements />
           ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/cahiers-coachs' ? (
             <OngletCahiersCoachs />
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/eval-apprenants' ? (
+            /* Même écran que chez le PA Advisor : une seule lecture des notes données par
+               les apprenants, plutôt que deux implémentations qui divergeraient. La route
+               autorise déjà le superviseur, seul l'accès manquait. */
+            <OngletEvaluationsApprenantsPA />
           ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/rapports-deputy' ? (
             <OngletRapportsDeputySuperviseur />
           ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/anomalies' ? (

@@ -154,21 +154,40 @@ router.post("/login", authLimiter, async (req, res) => {
     let profil = null;
     let source = null;
 
-    const { data: u } = await supabase
+    /* L'ERREUR DE LECTURE EST RÉCUPÉRÉE, et c'est tout sauf un détail : l'auto-réparation
+       plus bas se déclenche sur `!profil`, et elle ÉCRASE le profil existant. Tant que
+       l'erreur était jetée, un timeout ou une coupure réseau pendant cette lecture rendait
+       `data: null` exactement comme une ligne absente - le code concluait « ce profil
+       n'existe pas » et réécrivait par-dessus un profil bien vivant.
+
+       `.maybeSingle()` plutôt que `.single()` : ce dernier traite l'absence de ligne comme
+       une ERREUR (PGRST116), ce qui rendait les deux cas indiscernables au premier regard.
+       Avec maybeSingle, `data: null` sans erreur = pas de ligne ; une erreur = un vrai
+       problème, et on refuse plutôt que de « réparer » à l'aveugle. */
+    const { data: u, error: errLecture } = await supabase
       .from("utilisateurs")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (errLecture) {
+      console.error(`[LOGIN] lecture du profil ${user.email} échouée:`, errLecture.message);
+      return res.status(503).json({ error: "Service momentanément indisponible - réessayez dans un instant." });
+    }
 
     if (u) {
       profil = u;
       source = "utilisateurs";
     } else {
-      const { data: pa } = await supabase
+      const { data: pa, error: errPa } = await supabase
         .from("profils_admin")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+      if (errPa) {
+        console.error(`[LOGIN] lecture profils_admin ${user.email} échouée:`, errPa.message);
+        return res.status(503).json({ error: "Service momentanément indisponible - réessayez dans un instant." });
+      }
       if (pa) {
         profil = { ...pa, role: pa.profil_type };
         source = "profils_admin";
@@ -207,9 +226,20 @@ router.post("/login", authLimiter, async (req, res) => {
       };
       const nomMeta    = user.user_metadata?.nom    || user.email.split("@")[0];
       const prenomMeta = user.user_metadata?.prenom || "Admin";
+      /* INSERT ET NON UPSERT. L'upsert `onConflict: "id"` écrasait la ligne quand elle
+         existait - or toute cette branche repose sur la prémisse inverse, « le profil
+         n'est pas en base ». Quand la prémisse était fausse, la réparation détruisait
+         silencieusement ce qu'elle croyait absent : scope ramené à ["national"]
+         (le centre de la personne, perdu), département et mdp_temporaire réinitialisés.
+         C'est arrivé deux fois en production sur un compte commercial.
+
+         Avec `insert`, une ligne déjà présente fait échouer l'opération (code 23505) au
+         lieu de l'écraser. Ce cas ne devrait jamais se produire - la lecture ci-dessus
+         vient de rendre `null` sans erreur - mais s'il survient, mieux vaut un refus
+         bruyant qu'une perte de données muette. */
       const { data: created, error: createErr } = await supabase
         .from("utilisateurs")
-        .upsert({
+        .insert({
           id: user.id, email: user.email,
           nom: nomMeta, prenom: prenomMeta,
           role: roleFromAuth,
@@ -217,10 +247,16 @@ router.post("/login", authLimiter, async (req, res) => {
           departement: DEPT_PAR_ROLE[roleFromAuth] || null,
           actif: true,
           mdp_temporaire: false,
-        }, { onConflict: "id" })
+        })
         .select()
         .single();
       if (createErr || !created) {
+        // 23505 = la ligne existait bel et bien : la lecture avait menti, on ne touche à rien.
+        if (createErr?.code === "23505") {
+          console.error(`[LOGIN AUTO-REPAIR] ABANDON pour ${user.email} : le profil existe déjà alors que la lecture l'a rendu absent. Aucune donnée écrasée.`);
+          return res.status(503).json({ error: "Service momentanément indisponible - réessayez dans un instant." });
+        }
+        console.error(`[LOGIN AUTO-REPAIR] échec pour ${user.email}:`, createErr?.message);
         return res.status(403).json({ error: "Profil introuvable et impossible à recréer - contactez le support" });
       }
       await supabase.auth.admin.updateUserById(user.id, {

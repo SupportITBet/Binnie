@@ -10,7 +10,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 function authHeaders() {
   const token = localStorage.getItem('admin_token') || '';
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' };
 }
 
 // Mappe un utilisateur role=coach (API admin) → format attendu par le composant

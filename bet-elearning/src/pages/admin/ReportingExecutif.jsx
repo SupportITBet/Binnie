@@ -5,7 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { exporterExcelStyle } from '../../utils/genererPDF';
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}` });
+const _authHdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
 
 const COULEUR_NIV = { A1: '#10B981', A2: '#0891B2', B1: '#7C3AED', B2: '#D97706', C1: '#F59E0B', C2: '#DC2626' };
 const STATUT_CONTRAT = {

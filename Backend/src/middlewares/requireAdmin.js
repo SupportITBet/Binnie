@@ -55,21 +55,36 @@ export const authenticateAdmin = async (req, res, next) => {
   let profil = null;
   let roleEffectif = role;
 
-  const { data: u } = await supabase
+  /* L'ERREUR DE LECTURE EST RÉCUPÉRÉE. L'auto-réparation plus bas part de `!profil` et
+     réécrit le profil : tant que l'erreur était jetée, un timeout ou une coupure réseau
+     rendait `data: null` exactement comme une ligne absente, et ce middleware - qui
+     s'exécute à CHAQUE requête authentifiée, pas seulement au login - réécrivait par-dessus
+     un profil bien vivant. `.maybeSingle()` distingue enfin « pas de ligne » (data null,
+     pas d'erreur) de « la lecture a échoué » (erreur), deux cas que `.single()` confondait. */
+  const { data: u, error: errU } = await supabase
     .from("utilisateurs")
     .select("*")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  if (errU) {
+    console.error(`[authenticateAdmin] lecture du profil ${user.email} échouée:`, errU.message);
+    return res.status(503).json({ error: "Service momentanément indisponible - réessayez dans un instant." });
+  }
 
   if (u) {
     profil = u;
     roleEffectif = u.role;
   } else {
-    const { data: pa } = await supabase
+    const { data: pa, error: errPa } = await supabase
       .from("profils_admin")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+    if (errPa) {
+      console.error(`[authenticateAdmin] lecture profils_admin ${user.email} échouée:`, errPa.message);
+      return res.status(503).json({ error: "Service momentanément indisponible - réessayez dans un instant." });
+    }
     if (pa) {
       profil = pa;
       roleEffectif = pa.profil_type;
@@ -98,18 +113,31 @@ export const authenticateAdmin = async (req, res, next) => {
     };
     const nomMeta    = user.user_metadata?.nom    || user.email.split("@")[0];
     const prenomMeta = user.user_metadata?.prenom || "Admin";
-    const { data: created } = await supabase
+    /* INSERT ET NON UPSERT - même correction qu'au login (adminRoutes.js). L'upsert
+       `onConflict: "id"` écrasait la ligne quand elle existait, alors que toute cette
+       branche repose sur la prémisse inverse. Prémisse fausse = perte silencieuse :
+       le `scope` revenait à ["national"], effaçant le centre de la personne, et le
+       département comme `mdp_temporaire` étaient réinitialisés. Constaté deux fois en
+       production sur un compte commercial, sans aucune intervention humaine.
+       Avec `insert`, une ligne existante fait échouer l'opération (23505) plutôt que de
+       la remplacer : un refus visible vaut mieux qu'une donnée perdue en silence. */
+    const { data: created, error: errCreated } = await supabase
       .from("utilisateurs")
-      .upsert({
+      .insert({
         id: user.id, email: user.email,
         nom: nomMeta, prenom: prenomMeta,
         role, scope: ["national"],
         departement: DEPT_PAR_ROLE[role] || null,
         actif: true, mdp_temporaire: false,
-      }, { onConflict: "id" })
+      })
       .select()
       .single();
-    if (!created) {
+    if (errCreated || !created) {
+      if (errCreated?.code === "23505") {
+        console.error(`[MIDDLEWARE AUTO-REPAIR] ABANDON pour ${user.email} : le profil existe déjà alors que la lecture l'a rendu absent. Aucune donnée écrasée.`);
+        return res.status(503).json({ error: "Service momentanément indisponible - réessayez dans un instant." });
+      }
+      console.error(`[MIDDLEWARE AUTO-REPAIR] échec pour ${user.email}:`, errCreated?.message);
       return res.status(403).json({ error: "Profil introuvable - contactez le Super Admin" });
     }
     profil = created;

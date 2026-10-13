@@ -2,7 +2,22 @@
 import { Router } from "express";
 import supabase from "../config/supabase.js";
 import { authenticateAdmin, requirePermission } from "../middlewares/requireAdmin.js";
-import { notifyUser, notifyEntreprise, notifyRole } from "../services/notifyRole.js";
+import { notifyUser as _notifyUser, notifyEntreprise as _notifyEntreprise, notifyRole as _notifyRole } from "../services/notifyRole.js";
+
+/* ── TOUTE NOTIFICATION ÉCRITE ICI EST UNE NOTIFICATION BET E-LEARNING ──
+   `notifyRole` / `notifyUser` / `notifyEntreprise` écrivent `source: 'dash'` PAR DÉFAUT,
+   tandis que la cloche de bet-elearning n'interroge que `?source=bet-elearning` et que la
+   route filtre strictement dessus. Chaque appel de ce fichier qui oubliait la source
+   produisait donc une notification REÉLLEMENT CRÉÉE mais INVISIBLE pour son destinataire -
+   la panne était silencieuse des deux côtés.
+   On enveloppe à l'import plutôt que de corriger chaque appel : un appel ajouté demain
+   hérite du bon comportement sans qu'on ait à y penser. Une notification qui doit partir
+   vers dash peut toujours surcharger `source` explicitement. ── */
+const _SRC = { source: 'bet-elearning' };
+const notifyRole       = (r, p, x) => _notifyRole(r, { ..._SRC, ...p }, x);
+const notifyUser       = (u, p)    => _notifyUser(u, { ..._SRC, ...p });
+const notifyEntreprise = (e, p)    => _notifyEntreprise(e, { ..._SRC, ...p });
+
 import { logAudit } from "../middlewares/logAudit.js";
 import { notifierApprenants, notifierParentsMineurs } from "./remplacements.js";
 import { photoValide } from "../utils/photoUrl.js";
@@ -25,6 +40,28 @@ const ROLES_QUOTA = {
   pa:         ["pedagogical_advisor", "admin_pa_advisor"],
   onboarding: ["onboarding", "admin_onboarding"],
 };
+
+/* LA CHAÎNE DE SUPERVISION. Le superviseur et ses adjoints suivent l'activité
+   pédagogique sans en être les exécutants : ils ne reçoivent donc pas les messages qui
+   appellent une action — « classe à pourvoir » reste au PA, qui seul peut l'attribuer —
+   mais les faits, pour savoir ce qui s'ouvre, qui l'anime et qui y entre.
+
+   Les quatre noms sont nécessaires : `superviseur` / `deputy_superviseur` sont les rôles
+   réels, `admin_superviseur` / `admin_deputy_superviseur` les façades que porte un compte
+   côté bet-elearning. Notifier l'un sans l'autre laisse la moitié des comptes muets. */
+const ROLES_SUPERVISION = [
+  "superviseur", "admin_superviseur",
+  "deputy_superviseur", "admin_deputy_superviseur",
+];
+
+/* L'ASSISTANTE E-LEARNING. Elle reçoit le dossier, le vérifie, l'envoie au test et le
+   transmet à l'Onboarding : elle suit ses apprenants jusqu'à ce qu'ils démarrent, et
+   savoir qui les encadre en fait partie.
+   Les quatre noms sont nécessaires parce qu'AUCUN compte ne porte réellement
+   `assistant_elearning` : `ROLE_MAP_BET` résout `commercial`, `corporate` et
+   `admin_commercial` vers la même façade. Ne citer que le nom « officiel » ne notifierait
+   donc personne — c'est l'erreur qui rendait déjà muettes d'autres notifications. */
+const ROLES_ASSISTANTE = ["assistant_elearning", "commercial", "corporate", "admin_elearning"];
 
 // Vérifie le double quota (capacité de la classe ET quota de licences de l'entreprise) avant
 // d'ajouter/réactiver un apprenant. Retourne { bloque: false } si c'est OK, sinon
@@ -155,7 +192,34 @@ router.get("/", authenticateAdmin, async (req, res) => {
       (ents || []).forEach(e => { logos[e.id] = e.logo_url; });
     }
 
-    const classes = (data || []).map(c => ({ ...c, nb_apprenants: counts[c.id] || 0, entreprise_logo_url: c.entreprise_id ? (logos[c.entreprise_id] || null) : null }));
+    /* LE COACH, AU-DELÀ DE SON NOM. `classes_elearning` ne stocke que `coach_nom` -
+       une chaîne figée au moment de l'assignation. Les écrans qui listent les classes
+       veulent l'identifier d'un coup d'œil : son avatar et son e-mail de contact. On les
+       résout depuis `utilisateurs`, ce qui a l'avantage de rendre la version À JOUR si
+       le coach a changé de photo ou d'adresse depuis l'assignation. */
+    const coachIds = [...new Set((data || []).map(c => c.coach_id).filter(Boolean))];
+    let coachs = {};
+    if (coachIds.length) {
+      const { data: cos } = await supabase
+        .from("utilisateurs")
+        .select("id, email, avatar_url, nom, prenom")
+        .in("id", coachIds);
+      (cos || []).forEach(u => { coachs[u.id] = u; });
+    }
+
+    const classes = (data || []).map(c => {
+      const co = c.coach_id ? coachs[c.coach_id] : null;
+      return {
+        ...c,
+        nb_apprenants: counts[c.id] || 0,
+        entreprise_logo_url: c.entreprise_id ? (logos[c.entreprise_id] || null) : null,
+        // `coach_nom` reste la source si le compte a disparu : mieux vaut un nom figé
+        // que plus de coach du tout sur une classe qui en a un.
+        coach_nom:        co ? `${co.prenom || ""} ${co.nom || ""}`.trim() || c.coach_nom : c.coach_nom,
+        coach_email:      co?.email || null,
+        coach_avatar_url: co?.avatar_url || null,
+      };
+    });
     res.json({ classes });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -249,12 +313,20 @@ router.patch("/apprenants/:id/suivi", authenticateAdmin, requirePermission("clas
       return res.status(400).json({ error: "suivi_checklist doit être un objet." });
     }
 
-    const propre = {};
-    ETAPES_SUIVI_MANUELLES.forEach(k => { if (k in recu) propre[k] = !!recu[k]; });
+    /* ON FUSIONNE, ON NE REMPLACE PAS. `bienvenue` et `acces` sont écrites par le serveur
+       au moment où l'e-mail de bienvenue part réellement ; elles ne figurent pas dans les
+       étapes cochables à la main. Écrire l'objet reçu tel quel les effacerait au premier
+       clic sur « kit » ou « planning » - l'envoi déjà fait disparaîtrait de l'écran. */
+    const { data: avant } = await supabase
+      .from("classes_elearning_apprenants")
+      .select("suivi_checklist").eq("id", req.params.id).maybeSingle();
+
+    const fusion = { ...(avant?.suivi_checklist || {}) };
+    ETAPES_SUIVI_MANUELLES.forEach(k => { if (k in recu) fusion[k] = !!recu[k]; });
 
     const { data, error } = await supabase
       .from("classes_elearning_apprenants")
-      .update({ suivi_checklist: propre })
+      .update({ suivi_checklist: fusion })
       .eq("id", req.params.id)
       .select("id, suivi_checklist")
       .single();
@@ -350,7 +422,56 @@ router.get("/coaches-elearning", authenticateAdmin, async (req, res) => {
       (rapportsR.data || []).forEach(r => ajouter(r.coach_id, r.note_globale));
     }
 
+    /* ── CE QU'IL FAUT POUR CHOISIR, ET PAS SEULEMENT POUR NOMMER ──
+       Cette liste sert à assigner un coach à une classe. Le nom et l'e-mail ne suffisent
+       pas à décider : il faut savoir s'il est déjà chargé, s'il a renseigné ses
+       disponibilités pour le mois où la classe démarre, et ce qu'il enseigne.
+
+       Les DISPONIBILITÉS sont filtrées sur `plateforme = 'bet-elearning'` : la table est
+       partagée avec dash, et compter les créneaux du présentiel ferait passer pour
+       disponible un coach qui ne l'est que là-bas. On compte le mois courant ET le
+       suivant, parce qu'une classe qui démarre début novembre se prépare en octobre. */
+    const maintenant = new Date();
+    const moisCourant = maintenant.getMonth() + 1;
+    const anneeCourante = maintenant.getFullYear();
+    const moisSuivant = moisCourant === 12 ? 1 : moisCourant + 1;
+    const anneeSuivante = moisCourant === 12 ? anneeCourante + 1 : anneeCourante;
+
+    const vide2 = { data: [] };
+    const sur2 = (p) => p.then(r => (r?.error ? vide2 : r), () => vide2);
+    const [dispoR, classesR, contratsR] = await Promise.all([
+      /* `jour` et `creneau` EN PLUS DU COMPTE. On ne renvoyait qu'un total — « 10
+         créneaux en octobre » — alors que la question posée en assignant un coach est
+         précise : couvre-t-il le lundi et le jeudi de 9h à 11h, les horaires de CETTE
+         classe ? Un total n'y répond pas, et il fallait quitter l'écran pour aller lire
+         la grille du coach ailleurs. */
+      ids.length ? sur2(supabase.from("coach_disponibilites")
+        .select("coach_id, dispo, mois, annee, jour, creneau")
+        .in("coach_id", ids).eq("plateforme", "bet-elearning").eq("dispo", true)) : vide2,
+      // La charge réelle : les classes e-learning encore vivantes dont il est le coach.
+      sur2(supabase.from("classes_elearning").select("coach_id, statut").neq("statut", "archive")),
+      ids.length ? sur2(supabase.from("contrats_coachs").select("coach_id, statut").in("coach_id", ids)) : vide2,
+    ]);
+
+    const dispoCe = {}, dispoSuiv = {}, chargePar = {}, contratsPar = {};
+    // Le détail, à côté du compte : { coach_id: [{ jour, creneau }] }, une entrée par heure.
+    const detailCe = {}, detailSuiv = {};
+    (dispoR.data || []).forEach(d => {
+      if (d.mois === moisCourant && d.annee === anneeCourante) {
+        dispoCe[d.coach_id] = (dispoCe[d.coach_id] || 0) + 1;
+        (detailCe[d.coach_id] = detailCe[d.coach_id] || []).push({ jour: d.jour, creneau: d.creneau });
+      }
+      if (d.mois === moisSuivant && d.annee === anneeSuivante) {
+        dispoSuiv[d.coach_id] = (dispoSuiv[d.coach_id] || 0) + 1;
+        (detailSuiv[d.coach_id] = detailSuiv[d.coach_id] || []).push({ jour: d.jour, creneau: d.creneau });
+      }
+    });
+    (classesR.data || []).forEach(c => { if (c.coach_id) chargePar[c.coach_id] = (chargePar[c.coach_id] || 0) + 1; });
+    (contratsR.data || []).forEach(c => { if (c.coach_id) contratsPar[c.coach_id] = (contratsPar[c.coach_id] || 0) + 1; });
+
     res.json({
+      mois_courant: { mois: moisCourant, annee: anneeCourante },
+      mois_suivant: { mois: moisSuivant, annee: anneeSuivante },
       coaches: coaches.map(c => {
         const notes = notesPar[c.id] || [];
         return {
@@ -361,6 +482,12 @@ router.get("/coaches-elearning", authenticateAdmin, async (req, res) => {
             ? Math.round((notes.reduce((s, n) => s + n, 0) / notes.length) * 10) / 10
             : null,
           nb_observations: notes.length,
+          nb_classes:       chargePar[c.id]  || 0,
+          nb_contrats:      contratsPar[c.id] || 0,
+          dispos_ce_mois:   dispoCe[c.id]    || 0,
+          dispos_mois_prochain: dispoSuiv[c.id] || 0,
+          creneaux_ce_mois:       detailCe[c.id]   || [],
+          creneaux_mois_prochain: detailSuiv[c.id] || [],
         };
       }),
     });
@@ -645,14 +772,82 @@ router.post("/", authenticateAdmin, requirePermission("classes","create"), async
 
     if (error) return res.status(500).json({ error: error.message });
 
+    /* ── QUI PRÉVENIR À LA CRÉATION ──
+       Seul le coach l'était, et seulement s'il y en avait un. Depuis que l'onboarding
+       crée les classes SANS coach — c'est le PA qui l'assigne, lui seul voit les charges,
+       les disponibilités et les contrats —, le cas sans coach était devenu le cas normal
+       et ne prévenait plus personne : la classe restait en attente d'un titulaire sans
+       que celui qui doit l'attribuer sache qu'elle existe.
+
+       Deux messages distincts, et non un seul neutre : l'un informe, l'autre appelle une
+       action. Le second porte `coach_a_assigner` et le `classe_id` en méta pour ouvrir
+       directement l'écran d'assignation, comme le fait déjà l'assignation d'un apprenant
+       à une classe sans coach (inscriptionsElearning.js). */
+    const contexteClasse = `${data.niveau ? ` (${data.niveau})` : ""}${data.entreprise_nom ? ` - ${data.entreprise_nom}` : ""}`;
+    // `createdByNom` est déjà dérivé plus haut et inscrit dans `created_by_nom` : on le
+    // réutilise plutôt que de recalculer le même nom d'une seconde façon, qui finirait
+    // par diverger de ce que l'audit a enregistré.
+    const creeePar = createdByNom || "l'onboarding";
+    const debutLe = data.date_debut
+      ? ` Démarrage prévu le ${new Date(data.date_debut).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}.`
+      : "";
+
     if (data.coach_id) {
       await notifyUser(data.coach_id, {
         type:    "coach_assigne",
         titre:   `🏫 Nouvelle classe assignée - ${data.nom}`,
-        message: `Vous avez été assigné(e) comme coach de la classe "${data.nom}"${data.niveau ? ` (${data.niveau})` : ""}${data.entreprise_nom ? ` - ${data.entreprise_nom}` : ""}.`,
+        message: `Vous avez été assigné(e) comme coach de la classe "${data.nom}"${contexteClasse}.`,
         meta:    { classe_id: data.id, classe_nom: data.nom },
-        source:  "bet-elearning",
       }).catch(err => console.error("[classes-elearning] notifyUser coach", err.message));
+
+      await notifyRole(ROLES_QUOTA.pa, {
+        type:    "success",
+        titre:   `Nouvelle classe créée - ${data.nom}`,
+        message: `${creeePar} a créé la classe "${data.nom}"${contexteClasse}, avec ${data.coach_nom || "un coach"} comme coach.${debutLe}`,
+        meta:    { classe_id: data.id, classe_nom: data.nom },
+      }).catch(err => console.error("[classes-elearning] notifyRole PA", err.message));
+    } else {
+      await notifyRole(ROLES_QUOTA.pa, {
+        type:    "warning",
+        titre:   `⚠️ Classe sans coach - ${data.nom}`,
+        message: `${creeePar} a créé la classe "${data.nom}"${contexteClasse}, sans coach. À pourvoir pour que le programme démarre.${debutLe}`,
+        meta:    { classe_id: data.id, classe_nom: data.nom, coach_a_assigner: true },
+      }).catch(err => console.error("[classes-elearning] notifyRole PA sans coach", err.message));
+    }
+
+    /* La supervision est informée de TOUTE classe ouverte, pourvue ou non. L'état du
+       coach est dit dans le même message plutôt que dans deux notifications séparées :
+       c'est une seule information — une classe existe, voici qui l'anime ou non. */
+    await notifyRole(ROLES_SUPERVISION, {
+      type:    "info",
+      titre:   `🏫 Nouvelle classe - ${data.nom}`,
+      message: `${creeePar} a ouvert la classe "${data.nom}"${contexteClasse}. `
+             + `${data.coach_nom ? `Coach : ${data.coach_nom}.` : "Pas encore de coach."}${debutLe}`,
+      meta:    { classe_id: data.id, classe_nom: data.nom, sans_coach: !data.coach_id },
+    }).catch(err => console.error("[classes-elearning] notifyRole supervision", err.message));
+
+    /* ── ET LA RH DE L'ENTREPRISE ──
+       Une classe créée pour une entreprise la concerne directement : c'est sur son
+       contrat qu'elle est ouverte et ce sont ses salariés qui y entreront. Elle ne
+       l'apprenait qu'en ouvrant son espace, ou par un appel.
+
+       Le message ne parle PAS du coach, ni de son absence. Qui anime la classe est une
+       affaire interne tant que l'assignation n'est pas faite ; annoncer « sans coach »
+       à un client inquiète sur une étape qui n'est pas la sienne et dont il n'a aucune
+       prise. La RH sera prévenue de l'assignation quand elle aura eu lieu. */
+    if (data.entreprise_id) {
+      const creneaux = Array.isArray(data.horaire) ? data.horaire : [];
+      const quand = creneaux.length
+        ? ` Créneaux : ${creneaux.map(c => `${c.jour} ${c.debut}-${c.fin}`).join(", ")}.`
+        : "";
+      await notifyEntreprise(data.entreprise_id, {
+        type:    "info",
+        titre:   `🏫 Nouvelle classe ouverte - ${data.nom}`,
+        message: `La classe "${data.nom}"${data.niveau ? ` (${data.niveau})` : ""} a été ouverte pour votre entreprise`
+               + `${data.capacite_max ? `, ${data.capacite_max} places` : ""}.`
+               + `${debutLe}${quand} Vos bénéficiaires y seront inscrits au fur et à mesure.`,
+        meta:    { classe_id: data.id, classe_nom: data.nom, entreprise_id: data.entreprise_id },
+      }).catch(err => console.error("[classes-elearning] notifyEntreprise", err.message));
     }
 
     logAudit({
@@ -737,6 +932,89 @@ router.patch("/:id", authenticateAdmin, requirePermission("classes","update"), a
         meta:    { classe_id: data.id, classe_nom: data.nom },
         source:  "bet-elearning",
       }).catch(err => console.error("[classes-elearning] notifyUser coach", err.message));
+
+      /* ── L'ASSIGNATION SE SAIT AILLEURS QU'AU COACH ──
+         Seul le coach était prévenu. Or deux autres personnes attendent précisément
+         cette information :
+
+         · LA RH DE L'ENTREPRISE, parce que le coach est l'interlocuteur de ses salariés.
+           C'est aussi la suite de l'annonce d'ouverture de la classe, où l'on ne parle
+           délibérément pas du coach tant qu'il n'est pas désigné.
+         · L'ONBOARDING, qui a créé la classe en attendant qu'elle soit pourvue et n'avait
+           aucun retour : elle relançait le PA, ou ne savait pas que c'était fait.
+
+         Première assignation et remplacement ne se disent pas pareil : apprendre qu'« un
+         coach a été désigné » quand on en avait déjà un laisse croire à une erreur. */
+      const nomCoach = payload.coach_nom || data.coach_nom || "Un coach";
+      const remplacement = !!ancienCoachId;
+
+      if (data.entreprise_id) {
+        await notifyEntreprise(data.entreprise_id, {
+          type:    "info",
+          titre:   remplacement
+            ? `👤 Changement de coach - ${data.nom}`
+            : `👤 Coach désigné - ${data.nom}`,
+          message: remplacement
+            ? `${nomCoach} reprend l'animation de la classe "${data.nom}". Vos bénéficiaires en sont informés.`
+            : `${nomCoach} animera la classe "${data.nom}"${data.niveau ? ` (${data.niveau})` : ""}. C'est votre interlocuteur pédagogique pour cette classe.`,
+          meta:    { classe_id: data.id, classe_nom: data.nom, entreprise_id: data.entreprise_id },
+        }).catch(err => console.error("[classes-elearning PATCH] notifyEntreprise coach", err.message));
+      }
+
+      await notifyRole(ROLES_SUPERVISION, {
+        type:    "info",
+        titre:   remplacement
+          ? `👤 Coach remplacé - ${data.nom}`
+          : `👤 Coach assigné - ${data.nom}`,
+        message: `${nomCoach} ${remplacement ? "reprend" : "prend"} la classe "${data.nom}"`
+               + `${data.niveau ? ` (${data.niveau})` : ""}${data.entreprise_nom ? ` - ${data.entreprise_nom}` : ""}.`,
+        meta:    { classe_id: data.id, classe_nom: data.nom, coach_id: payload.coach_id },
+      }).catch(err => console.error("[classes-elearning PATCH] notifyRole supervision", err.message));
+
+      await notifyRole(ROLES_QUOTA.onboarding, {
+        type:    "success",
+        titre:   remplacement
+          ? `Coach remplacé - ${data.nom}`
+          : `✅ Classe pourvue - ${data.nom}`,
+        message: remplacement
+          ? `${nomCoach} reprend la classe "${data.nom}"${data.entreprise_nom ? ` - ${data.entreprise_nom}` : ""}.`
+          : `La classe "${data.nom}"${data.entreprise_nom ? ` - ${data.entreprise_nom}` : ""} a désormais un coach : ${nomCoach}. Le programme peut démarrer.`,
+        meta:    { classe_id: data.id, classe_nom: data.nom },
+      }).catch(err => console.error("[classes-elearning PATCH] notifyRole onboarding", err.message));
+
+      await notifyRole(ROLES_ASSISTANTE, {
+        type:    "info",
+        titre:   remplacement
+          ? `🔁 Coach remplacé - ${data.nom}`
+          : `✅ Coach désigné - ${data.nom}`,
+        message: `${nomCoach} ${remplacement ? "reprend" : "encadre"} la classe "${data.nom}"`
+               + `${data.entreprise_nom ? ` - ${data.entreprise_nom}` : ""}. Vos apprenants de cette classe sont concernés.`,
+        meta:    { classe_id: data.id, classe_nom: data.nom },
+      }).catch(err => console.error("[classes-elearning PATCH] notifyRole assistante", err.message));
+
+      /* ── ET LES PREMIERS CONCERNÉS : LES APPRENANTS ──
+         Ils l'apprenaient en voyant un nom inconnu ouvrir leur première séance. Le
+         remplacement définitif (`/suspendre-coach`) les prévient depuis toujours ; cette
+         route-ci, qui est pourtant LE chemin d'assignation du PA, ne le faisait pas.
+         Les parents des mineurs reçoivent le même message : sur un enfant, c'est le
+         parent qui lit la notification, et souvent le seul à avoir un compte. */
+      notifierApprenants(req.params.id, {
+        type:    "coach_change",
+        titre:   remplacement ? "🔁 Nouveau coach pour votre classe" : "👤 Votre coach est désigné",
+        message: remplacement
+          ? `${nomCoach} est désormais votre coach sur "${data.nom}".`
+          : `${nomCoach} sera votre coach sur "${data.nom}". Vous le retrouverez à votre première séance.`,
+        meta:    { classe_id: data.id, classe_nom: data.nom },
+      }).catch(err => console.error("[classes-elearning PATCH] notif apprenants", err.message));
+
+      notifierParentsMineurs(req.params.id, {
+        type:    "coach_change",
+        titre:   remplacement ? "🔁 Nouveau coach pour votre enfant" : "👤 Le coach de votre enfant est désigné",
+        message: remplacement
+          ? `${nomCoach} est désormais le coach de votre enfant sur "${data.nom}".`
+          : `${nomCoach} sera le coach de votre enfant sur "${data.nom}".`,
+        meta:    { classe_id: data.id, classe_nom: data.nom },
+      }).catch(err => console.error("[classes-elearning PATCH] notif parents", err.message));
 
       const { data: delegationsActives } = await supabase.from("delegations")
         .select("id, remplacement_id").eq("groupe_id", req.params.id).eq("statut", "active");
@@ -845,8 +1123,15 @@ router.patch("/:id/suspendre-coach", authenticateAdmin, requirePermission("class
       .update({ coach_id: nouveau_coach_id }).eq("classe_id", req.params.id);
     if (eDevoirs) console.error("[suspendre-coach] transfert devoirs:", eDevoirs.message);
 
+    /* `contains` et non `eq` : un contenu peut viser plusieurs classes, et
+       `classe_id` ne porte que la première. Filtrer dessus laissait au coach
+       suspendu les contenus où la classe transférée n'arrivait pas en tête.
+       Effet de bord assumé : un contenu partagé avec une classe NON transférée
+       suit quand même le nouveau titulaire — il n'existe qu'une colonne
+       `coach_id`, donc un contenu n'a qu'un propriétaire ; mieux vaut qu'il
+       reste modifiable par quelqu'un que par personne. */
     const { error: eContenus } = await supabase.from("contenus_classes_elearning")
-      .update({ coach_id: nouveau_coach_id }).eq("classe_id", req.params.id);
+      .update({ coach_id: nouveau_coach_id }).contains("classe_ids", [req.params.id]);
     if (eContenus) console.error("[suspendre-coach] transfert médiathèque:", eContenus.message);
 
     const { error: eFichiers } = await supabase.from("fichiers_classes_elearning")
@@ -982,6 +1267,48 @@ router.post("/:id/apprenants", authenticateAdmin, requirePermission("classes","u
 
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json({ inscription: data });
+
+    /* ── CETTE INSCRIPTION NE PRÉVENAIT PERSONNE ──
+       L'autre chemin d'entrée en classe — l'assignation d'un dossier depuis le parcours
+       d'onboarding — notifie le PA, l'assistante et l'entreprise. Celui-ci, l'ajout
+       direct d'un apprenant à une classe, n'écrivait aucune notification : un effectif
+       changeait sans que la supervision ni le coach ne l'apprennent.
+
+       Après la réponse, et non avant : l'inscription est faite, elle ne doit pas échouer
+       ni attendre parce qu'une notification se passe mal. */
+    (async () => {
+      const { data: classe } = await supabase
+        .from("classes_elearning")
+        .select("id, nom, niveau, coach_id, entreprise_id, entreprise_nom, capacite_max")
+        .eq("id", req.params.id).maybeSingle();
+      if (!classe) return;
+
+      const { count: effectif } = await supabase
+        .from("classes_elearning_apprenants")
+        .select("id", { count: "exact", head: true })
+        .eq("classe_id", classe.id).eq("statut", "actif");
+      const places = classe.capacite_max ? ` (${effectif ?? "?"}/${classe.capacite_max})` : "";
+
+      await notifyRole(ROLES_SUPERVISION, {
+        type:    "info",
+        titre:   `🎓 Nouvel apprenant - ${classe.nom}`,
+        message: `${nom_complet} a été inscrit(e) dans la classe "${classe.nom}"`
+               + `${classe.niveau ? ` (${classe.niveau})` : ""}${classe.entreprise_nom ? ` - ${classe.entreprise_nom}` : ""}${places}.`,
+        meta:    { classe_id: classe.id, classe_nom: classe.nom, inscription_id: data.id },
+      }).catch(err => console.error("[classes-elearning] notifyRole supervision apprenant", err.message));
+
+      /* Le coach aussi : c'est lui qui accueillera cette personne à la prochaine séance,
+         et il l'apprenait jusqu'ici en la voyant arriver. */
+      if (classe.coach_id) {
+        await notifyUser(classe.coach_id, {
+          type:    "apprenant_assigne",
+          titre:   `🎓 Nouvel apprenant dans ${classe.nom}`,
+          message: `${nom_complet} vient de rejoindre votre classe "${classe.nom}"${places}.`
+                 + `${niveau_cecr ? ` Niveau ${niveau_cecr}.` : ""}`,
+          meta:    { classe_id: classe.id, classe_nom: classe.nom, inscription_id: data.id },
+        }).catch(err => console.error("[classes-elearning] notifyUser coach apprenant", err.message));
+      }
+    })().catch(err => console.error("[classes-elearning] notifs inscription", err.message));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -991,10 +1318,20 @@ router.post("/:id/apprenants", authenticateAdmin, requirePermission("classes","u
 // Mettre à jour date_naissance + coordonnées parent sur un apprenant
 router.patch("/apprenants/:inscriptionId", authenticateAdmin, requirePermission("classes","update"), async (req, res) => {
   try {
+    /* Les champs de l'APPRENANT LUI-MÊME ont été ajoutés : `nom_complet`, `telephone`,
+       `objectif_client`. La liste ne portait que l'état civil des mineurs et les
+       coordonnées du parent - sur un adulte en entreprise, le cas courant, le formulaire
+       d'édition n'offrait donc aucun champ pertinent.
+
+       `email` reste HORS de cette liste, délibérément : c'est l'identifiant de connexion
+       de l'apprenant, et le changer ici ne changerait pas son compte Supabase Auth - il se
+       retrouverait avec une adresse affichée qui n'ouvre plus sa session. Cela relève d'un
+       geste dédié (« Modifier l'identifiant »), pas d'un champ de formulaire. */
     const allowed = [
       "date_naissance", "profil_type",
       "prenom_parent", "nom_parent", "email_parent", "telephone_parent", "classe",
       "niveau_cecr", "statut", "notes_internes",
+      "nom_complet", "telephone", "objectif_client",
     ];
     const payload = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) payload[k] = req.body[k] || null; });

@@ -118,6 +118,12 @@ function buildLogsQuery(req, includePlateforme) {
   if (req.query.module)      query = query.eq("module",      req.query.module);
   if (req.query.action_type) query = query.eq("action_type", req.query.action_type);
   if (req.query.acteur_id)   query = query.eq("acteur_id",   req.query.acteur_id);
+  /* `entite_id` : le journal d'UN dossier, et non celui de toute l'application.
+     Le filtre manquait - on pouvait restreindre par module, acteur, centre ou date, mais
+     pas par l'objet concerné, ce qui rendait impossible l'onglet « Historique » d'une
+     fiche apprenant : sans lui la requête ramène le journal entier, trié par date. */
+  if (req.query.entite_id)   query = query.eq("entite_id",   req.query.entite_id);
+  if (req.query.entite_type) query = query.eq("entite_type", req.query.entite_type);
   if (req.query.acteur_role) {
     query = query.eq("acteur_role", req.query.acteur_role);
   } else if (req.query.include_non_staff !== "true") {

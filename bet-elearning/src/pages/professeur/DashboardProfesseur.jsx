@@ -3,12 +3,14 @@ import toast from 'react-hot-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { COULEURS } from '../../constants/couleurs';
+import { urlOuvrir, urlTelecharger, extensionDe } from '../../utils/fichierUrl';
+import { urlEmbedVideo, estChaineYoutube, estFichierVideo, estFichierAudio } from '../../utils/urlVideo';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import SalleVirtuelle from '../../components/shared/SalleVirtuelle';
 import { SALLE_TEST, MODE_DEV } from '../../utils/genererSalleVirtuelle';
 import { fmtFCFA } from '../../mock/paiements';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAlerte } from '../../contexts/ConfirmContext';
+import { useAlerte, useConfirm } from '../../contexts/ConfirmContext';
 import { FIREBASE_ACTIF } from '../../services/firebase';
 import * as XLSX from 'xlsx';
 import { genererPDF, exporterExcelStyle, ligneTableau, fmtDatePDF } from '../../utils/genererPDF';
@@ -62,12 +64,25 @@ const STATUT_SESSION = {
   annulee:   { fond: '#FEE2E2', texte: '#991B1B', lib: 'Annulée' },
 };
 
+/* Aligné sur `TYPE_META` de la médiathèque de dash : mêmes libellés, mêmes emojis,
+   mêmes teintes. `video` et `quiz` manquaient alors que le formulaire de création les
+   propose — une vidéo déposée s'affichait donc avec la clé brute « video » sur fond gris,
+   seul type de la liste à ne pas être reconnu par son propre tableau. */
 const COULEUR_TYPE_CONTENU = {
-  lecon:    { fond: '#E0F2FE', texte: '#0E7490', lib: 'Leçon' },
-  exercice: { fond: '#FEF9C3', texte: '#92400E', lib: 'Exercice' },
-  devoir:   { fond: '#EDE9FE', texte: '#6D28D9', lib: 'Devoir' },
-  audio:    { fond: '#D1FAE5', texte: '#065F46', lib: 'Audio' },
+  lecon:    { fond: '#DBEAFE', texte: '#1E40AF', lib: 'Leçon',    emoji: '📖' },
+  audio:    { fond: '#EDE9FE', texte: '#6D28D9', lib: 'Audio',    emoji: '🎧' },
+  video:    { fond: '#FEE2E2', texte: '#B91C1C', lib: 'Vidéo',    emoji: '🎬' },
+  quiz:     { fond: '#CFFAFE', texte: '#0E7490', lib: 'Quiz',     emoji: '❓' },
+  exercice: { fond: '#FEF9C3', texte: '#92400E', lib: 'Exercice', emoji: '✏️' },
+  devoir:   { fond: '#F3E8FF', texte: '#7E22CE', lib: 'Devoir',   emoji: '📝' },
 };
+
+/* LES CLASSES DESTINATAIRES D'UN CONTENU, en une seule forme.
+   Un contenu créé avant le passage au multi-classe n'a qu'un `groupe_id`, un
+   nouveau porte `groupe_ids`. Les écrans n'ont pas à connaître les deux : ils
+   demandent la liste, et le repli sur l'ancien champ se fait ici. */
+const classesDuContenu = (c) => (c?.groupe_ids?.length ? c.groupe_ids : (c?.groupe_id ? [c.groupe_id] : []));
+const contenuViseClasse = (c, classeId) => classesDuContenu(c).includes(classeId);
 
 const PRESENCE_OPTIONS = [
   { val: 'present', label: 'Présent', fond: '#D1FAE5', texte: '#065F46' },
@@ -75,14 +90,137 @@ const PRESENCE_OPTIONS = [
   { val: 'retard',  label: 'Retard',  fond: '#FEF9C3', texte: '#92400E' },
 ];
 
+/* LES NEUF TYPES DE BLOCS, alignés sur la médiathèque de dash
+   (`EspaceProfesseur.jsx`, BLOCK_TYPES). Il en manquait deux ici :
+    · `image` — un schéma ou une consigne visuelle est souvent ce qui se comprend le plus
+      vite, et le coach n'avait aucun moyen d'en déposer dans un cours ;
+    · `speaking` — l'expression orale, qui appelle une consigne et une réponse audio de
+      l'apprenant, alors que le rendu de devoir sait déjà traiter l'audio. */
 const BLOCK_TYPES = {
-  texte:    { label: 'Texte / Cours',  icon: '📝', color: '#3B82F6' },
-  video:    { label: 'Vidéo',          icon: '🎬', color: '#8B5CF6' },
-  audio:    { label: 'Audio',          icon: '🎧', color: '#10B981' },
-  document: { label: 'Document',       icon: '📄', color: '#F59E0B' },
-  lien:     { label: 'Lien externe',   icon: '🔗', color: '#06B6D4' },
-  exercice: { label: 'Exercice',       icon: '✏️',  color: '#EC4899' },
-  quiz:     { label: 'Quiz / QCM',     icon: '🧩', color: '#F97316' },
+  texte:    { label: 'Texte / Cours',     icon: '📝', color: '#3B82F6' },
+  video:    { label: 'Vidéo',             icon: '🎬', color: '#8B5CF6' },
+  audio:    { label: 'Audio / Podcast',   icon: '🎧', color: '#10B981' },
+  document: { label: 'Document / PDF',    icon: '📄', color: '#F59E0B' },
+  image:    { label: 'Image / Schéma',    icon: '🖼️', color: '#DB2777' },
+  lien:     { label: 'Lien externe',      icon: '🔗', color: '#06B6D4' },
+  exercice: { label: 'Exercice',          icon: '✏️',  color: '#EC4899' },
+  speaking: { label: 'Speaking / Oral',   icon: '🎤', color: '#DC2626' },
+  quiz:     { label: 'Quiz / QCM',        icon: '🧩', color: '#F97316' },
+};
+
+/* Les blocs recevables selon le TYPE DE CONTENU, comme dash (`BLOCS_PAR_TYPE`).
+   Une leçon est le format composite : elle accepte tout. Une capsule audio ou vidéo est
+   mono-média — on n'y glisse pas un second média, mais le texte, l'image, le lien, le
+   quiz et l'exercice qui l'accompagnent y gardent tout leur sens. */
+const BLOCS_PAR_TYPE = {
+  lecon: Object.keys(BLOCK_TYPES),
+  audio: ['audio', 'texte', 'image', 'lien', 'quiz', 'exercice', 'speaking'],
+  video: ['video', 'texte', 'image', 'lien', 'quiz', 'exercice'],
+};
+const blocsAutorises = (typeContenu) => BLOCS_PAR_TYPE[typeContenu] || Object.keys(BLOCK_TYPES);
+
+/* Les trois types de contenu de la médiathèque, repris de dash. Les deux sélecteurs
+   n'offraient ici qu'une seule option — « Leçon » — alors que la colonne `type_contenu`
+   accepte déjà les trois et que l'apprenant les affiche distinctement. */
+const TYPES_CONTENU = [
+  { cle: 'lecon', emoji: '📖', label: 'Leçon', desc: 'Cours théorique' },
+  { cle: 'audio', emoji: '🎧', label: 'Audio', desc: 'Écoute & compréhension' },
+  { cle: 'video', emoji: '🎬', label: 'Vidéo', desc: 'Contenu vidéo' },
+];
+
+/* ═══ APERÇUS DES BLOCS ═══════════════════════════════════════════════════════
+   L'éditeur n'affichait qu'une ÉTIQUETTE : l'URL brute pour la vidéo, l'URL brute pour
+   l'audio, un nom de fichier pour le document. En cliquant « Modifier » un cours, le coach
+   ne pouvait donc pas relire ce qu'il avait déposé — ni vérifier que la vidéo était la
+   bonne, ni réécouter l'audio, ni ouvrir le PDF — avant de le publier à ses apprenants.
+   Mêmes composants que chez dash, mêmes règles : YouTube/Vimeo par intégration, fichiers
+   par `<video>`/`<audio>`, documents PAR LE RELAIS — Cloudinary répond 401 sur les PDF de
+   ce compte, un lien direct n'ouvrirait rien. */
+
+const ApercuVideoBloc = ({ bloc }) => {
+  const url = bloc?.url;
+  if (!url) return <div style={{ background: '#f3f4f6', borderRadius: 8, padding: 12, fontSize: 12, color: '#9ca3af' }}>🎬 Aucune vidéo déposée.</div>;
+  const embed = urlEmbedVideo(url);
+  if (embed) {
+    return (
+      <div style={{ borderRadius: 8, overflow: 'hidden', background: '#0f172a' }}>
+        <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%' }}>
+          <iframe src={embed} title={bloc.titre || 'Vidéo'} allowFullScreen
+            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }} />
+        </div>
+      </div>
+    );
+  }
+  if (estFichierVideo(url)) {
+    return <video src={url} controls preload="metadata" style={{ width: '100%', maxHeight: 320, borderRadius: 8, background: '#000', display: 'block' }} />;
+  }
+  /* Ni plateforme reconnue ni fichier lisible : on le DIT plutôt que d'afficher un lecteur
+     qui resterait noir — le coach croirait à une panne au lieu d'un lien inadapté. */
+  return (
+    <div style={{ background: '#fffbeb', border: '1px dashed #fcd34d', borderRadius: 8, padding: 12, fontSize: 12, color: '#92400e' }}>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>
+        {estChaineYoutube(url) ? 'Ce lien mène à une chaîne YouTube, pas à une vidéo' : 'Cette vidéo ne peut pas être lue ici'}
+      </div>
+      <a href={url} target="_blank" rel="noreferrer" style={{ color: '#b45309', fontWeight: 700, wordBreak: 'break-all' }}>{url} ↗</a>
+    </div>
+  );
+};
+
+const ApercuAudioBloc = ({ bloc }) => {
+  const url = bloc?.url;
+  if (!url) return <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12, fontSize: 12, color: '#9ca3af' }}>🎧 Aucun audio déposé.</div>;
+  const embed = urlEmbedVideo(url);
+  return (
+    <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12 }}>
+      <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        🎧 {bloc.titre || bloc.fichier || 'Audio'}
+      </div>
+      {embed ? (
+        <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 8, overflow: 'hidden', background: '#0f172a' }}>
+          <iframe src={embed} title={bloc.titre || 'Audio'} allowFullScreen
+            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }} />
+        </div>
+      ) : estFichierAudio(url) ? (
+        <audio src={url} controls preload="metadata" style={{ width: '100%' }} />
+      ) : (
+        <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#b45309', fontWeight: 700, wordBreak: 'break-all' }}>{url} ↗</a>
+      )}
+    </div>
+  );
+};
+
+const ApercuDocumentBloc = ({ bloc }) => {
+  const url = bloc?.url;
+  const nom = bloc?.fichier || bloc?.titre || 'Document';
+  if (!url) {
+    return (
+      <div style={{ background: '#fff1f2', borderRadius: 8, padding: 12, fontSize: 12, color: '#92400e', display: 'flex', gap: 10, alignItems: 'center' }}>
+        ⚠️ Aucun fichier joint à ce bloc — il s'afficherait vide chez vos apprenants.
+      </div>
+    );
+  }
+  // L'extension se lit sur le nom de FICHIER, sinon sur l'URL — jamais sur le titre.
+  const ext = extensionDe(bloc?.fichier) || extensionDe(url);
+  return (
+    <div style={{ background: '#fff1f2', borderRadius: 8, padding: 12 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: ext === 'pdf' ? 10 : 0 }}>
+        <span>📄</span>
+        <a href={urlOuvrir(url, nom)} target="_blank" rel="noreferrer"
+          style={{ fontSize: 12, color: '#dc2626', fontWeight: 700, wordBreak: 'break-word' }}>{nom}</a>
+        {bloc?.taille && <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0 }}>· {bloc.taille}</span>}
+        <a href={urlTelecharger(url, nom)} style={{ marginLeft: 'auto', fontSize: 12, color: '#dc2626', fontWeight: 700 }}>⬇ Télécharger</a>
+      </div>
+      {/* Le PDF se lit SUR PLACE : c'est le seul format que le navigateur rend nativement,
+          et c'est aussi le plus déposé. Pour un .docx ou un .pptx, le lien reste la seule
+          voie — aucun navigateur ne les affiche. */}
+      {ext === 'pdf' && (
+        <iframe title={nom} src={urlOuvrir(url, nom)}
+          style={{ width: '100%', height: 420, border: '1px solid #fecdd3', borderRadius: 8, background: '#fff' }} />
+      )}
+    </div>
+  );
 };
 
 // ── Composant principal ──────────────────────────────────────────────────────
@@ -125,7 +263,7 @@ const CATEGORIES_FICHIERS = [
 
 // ── API e-learning (données réelles) ─────────────────────────────────────────
 const _PROF_API  = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _profHdrs  = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token') || localStorage.getItem('bet_access_token') || ''}` });
+const _profHdrs  = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token') || localStorage.getItem('bet_access_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
 
 // ── Onglet Récompenses (gamification coach) ───────────────────────────────────
 function OngletRecompenses() {
@@ -1446,6 +1584,7 @@ export default function DashboardProfesseur() {
   const navigate  = useNavigate();
   const location  = useLocation();
   const alerte = useAlerte();
+  const confirmer = useConfirm();
 
   const section = CHEMIN_VERS_SECTION[location.pathname] || 'tableau_bord';
 
@@ -1481,7 +1620,7 @@ export default function DashboardProfesseur() {
   const [modalGroupeOnglet, setModalGroupeOnglet] = useState('apprenants');
   const [pageSociete,   setPageSociete]     = useState(1);
   const [modalSupport, setModalSupport]     = useState(false);
-  const [formSupport, setFormSupport]       = useState({ titre: '', description: '', type_contenu: 'lecon', module: '', semaine: 1, groupe_id: '', est_visible: false, fichier: null });
+  const [formSupport, setFormSupport]       = useState({ titre: '', description: '', type_contenu: 'lecon', module: '', semaine: 1, groupe_ids: [], est_visible: false, fichier: null });
   const [contenuEnEdition, setContenuEnEdition] = useState(null);
   const [contenusLocaux, setContenus]       = useState([]);
   const [previewMode, setPreviewMode]       = useState(false);
@@ -1489,17 +1628,26 @@ export default function DashboardProfesseur() {
   const [showBlocForm, setShowBlocForm]     = useState(false);
   const BLOC_FORM_VIDE = { type: 'texte', titre: '', dureeMin: 5, contenu: '', url: '', fichier: '', taille: '', sections: [], questions: [] };
   const [blocForm, setBlocForm]             = useState(BLOC_FORM_VIDE);
+  // L'envoi du fichier d'un bloc (document ou image) est asynchrone : on verrouille le
+  // champ pendant le téléversement plutôt que de laisser croire qu'il est déjà joint.
+  const [blocUpload, setBlocUpload]         = useState(false);
   const [blocQuizQ, setBlocQuizQ]           = useState({ texte: '', options: ['', '', '', ''], correct: '' });
   const [blocEnEdition, setBlocEnEdition]   = useState(null); // id du bloc en cours d'édition, null = nouveau
   const [moduleForm, setModuleForm]         = useState({ objectifs: '', dureeEstimee: 30, statut: 'brouillon' });
-  const [modalNouveauModule, setModalNouveauModule] = useState(false);
-  const [etapeModule, setEtapeModule]               = useState(1);
-  const FORM_MOD_VIDE = { groupe_id: '', titre: '', description: '', type_contenu: 'lecon', module: '', semaine: 1, objectifs: '', dureeEstimee: 30, statut: 'brouillon' };
-  const [formNouveauModule, setFormNouveauModule]   = useState(FORM_MOD_VIDE);
-  const [moduleLock, setModuleLock]         = useState(null); // { groupe_id, module } quand ouvert depuis un groupe de modules
-  const [modalChoixModule, setModalChoixModule] = useState(false);
+  /* L'étape du wizard de contenu : 1 = rédaction, 2 = récapitulatif avant diffusion.
+     Remplace `moduleLock`, qui n'existait que pour distinguer « nouveau support dans un
+     module existant » de « nouveau module » — distinction supprimée avec les deux
+     parcours de création. */
+  const [etapeContenu, setEtapeContenu] = useState(1);
   const [modalVoirContenu, setModalVoirContenu] = useState(null); // contenu object
+  const [actionMedia, setActionMedia] = useState(null); // id du contenu en cours de publication/suppression
+  const [rechercheMedia, setRechercheMedia] = useState('');
   const [lusParContenu, setLusParContenu]       = useState({}); // { [contenu_id]: [{ nom, prenom, lu_le }] }
+  /* Le taux de lecture par contenu, pour la colonne « LU PAR » du tableau. Distinct de
+     `lusParContenu`, qui ne porte le détail nominatif que du contenu actuellement ouvert :
+     ici on ne garde que le couple lus/total, chargé pour toute la médiathèque d'un coup. */
+  const [compteursLecture, setCompteursLecture] = useState({}); // { [contenu_id]: { lus, total } }
+  const [lecteursModal, setLecteursModal]       = useState(null); // { contenu, data, loading }
   const [fichiers, setFichiers]             = useState([]);
   const [groupeFichiers, setGroupeFichiers] = useState('grp-001');
   const [catFichiers, setCatFichiers]       = useState('tous');
@@ -1608,12 +1756,12 @@ export default function DashboardProfesseur() {
   const [filtreMediaGroupe, setFiltreMediaGroupe] = useState('tous');
   const [filtreMediaStatut, setFiltreMediaStatut] = useState('tous');
   const [filtreMediaClasseStatut, setFiltreMediaClasseStatut] = useState('actives'); // 'actives'|'terminees'|'toutes'
+  const [ouvrirFiltrePeriode, setOuvrirFiltrePeriode] = useState(false); // la rangée « période » reste repliée tant qu'elle n'est pas utilisée
   const [filtreFichiersClasseStatut, setFiltreFichiersClasseStatut] = useState('actives');
   const [filtreMediaPeriode, setFiltreMediaPeriode] = useState('tous'); // 'tous'|'mois'|'mois_dernier'|'3mois'|'annee'|'custom'
   const [filtreMediaDateDebut, setFiltreMediaDateDebut] = useState('');
   const [filtreMediaDateFin, setFiltreMediaDateFin]   = useState('');
   const [pageMedia, setPageMedia] = useState(1);
-  const MODULES_PAR_PAGE = 4;
   // ── Mes honoraires (réel, connecté à honoraires_elearning_mois / seances_elearning) ──
   const _MOIS_PAIE = ['','Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
   const [paieMois, setPaieMois] = useState(new Date().getMonth() + 1);
@@ -1901,6 +2049,10 @@ export default function DashboardProfesseur() {
         id:               c.id,
         professeur_id:    c.coach_id,
         groupe_id:        c.classe_id,   // dans le portail elearning classe_id = groupe_id UI
+        /* Les classes destinataires. `classe_id` ne porte plus que la première
+           d'entre elles : un contenu diffusé à trois classes n'apparaîtrait que
+           dans la médiathèque de la première si on continuait à la lire seule. */
+        groupe_ids:       c.classe_ids?.length ? c.classe_ids : (c.classe_id ? [c.classe_id] : []),
         type_contenu:     c.type_contenu || 'lecon',
         titre:            c.titre || '',
         description:      '',
@@ -1914,8 +2066,17 @@ export default function DashboardProfesseur() {
         dureeEstimee:     c.duree_estimee || 30,
         statut:           c.statut || 'brouillon',
         blocs:            c.blocs || [],
+        /* Les deux dates arrivaient du serveur et étaient jetées ici. Sans elles, le
+           tableau ne pouvait pas dire si un contenu datait de la semaine ou de l'an
+           dernier, ni lequel avait été retouché depuis sa création. */
+        created_at:       c.created_at || null,
+        updated_at:       c.updated_at || null,
+        lecture_sequentielle: c.lecture_sequentielle === true,
       }));
-      if (contenusDB.length > 0) setContenus(contenusDB);
+      if (contenusDB.length > 0) {
+        setContenus(contenusDB);
+        chargerCompteursLecture(contenusDB);
+      }
 
       const fichiersDB = (djF.fichiers || []).map(f => {
         const ext = (f.nom || '').split('.').pop().toLowerCase();
@@ -2137,9 +2298,12 @@ export default function DashboardProfesseur() {
     if (!modalVoirContenu?.id) return;
     const id = modalVoirContenu.id;
     setLusParContenu(p => ({ ...p, [id]: undefined })); // reset to "loading"
-    fetch(`${_PROF_API}/api/elearning/contenus/${id}/lus`, { headers: _profHdrs() })
+    /* `/lecteurs` et non `/lus` : la seconde ne rend que ceux qui ont ouvert, et un coach
+       y lisait trois noms sans savoir s'il manquait deux apprenants ou vingt. La question
+       utile est l'inverse — qui n'a PAS encore lu, pour le relancer. */
+    fetch(`${_PROF_API}/api/elearning/contenus/${id}/lecteurs`, { headers: _profHdrs() })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(d => setLusParContenu(p => ({ ...p, [id]: d.lus || [] })))
+      .then(d => setLusParContenu(p => ({ ...p, [id]: { lecteurs: d.lecteurs || [], en_attente: d.en_attente || [], total: d.total || 0 } })))
       .catch(() => setLusParContenu(p => ({ ...p, [id]: [] })));
   }, [modalVoirContenu?.id]);
 
@@ -2604,6 +2768,223 @@ export default function DashboardProfesseur() {
         .map(c => ({ ...c, _delegation: true, _lectureSeule: true }))
     : [];
   const mesContenus = [...contenusPerso, ...contenusDelegues];
+
+  /* ── TAUX DE LECTURE DE TOUTE LA MÉDIATHÈQUE ──────────────────────────────────
+     La donnée vit dans `contenus_lus` depuis le début et rien ne la montrait au coach
+     dans sa liste : il fallait ouvrir un contenu, un par un, pour savoir s'il avait été
+     lu. Un appel par contenu PUBLIÉ seulement — un brouillon n'est lu par personne, et
+     afficher « 0/12 » dessus ferait croire à un échec de diffusion. Un compteur qui
+     échoue est simplement absent : la liste s'affiche quand même. */
+  const chargerCompteursLecture = useCallback(async (liste) => {
+    const publies = (liste || []).filter(c => c.est_visible || c.statut === 'publie');
+    if (!publies.length) return;
+    const res = {};
+    await Promise.all(publies.map(async (c) => {
+      try {
+        const r = await fetch(`${_PROF_API}/api/elearning/contenus/${c.id}/lecteurs`, { headers: _profHdrs() });
+        if (!r.ok) return;
+        const d = await r.json();
+        res[c.id] = { lus: d.lus || 0, total: d.total || 0 };
+      } catch { /* un compteur manquant n'empêche pas d'afficher la liste */ }
+    }));
+    setCompteursLecture(prev => ({ ...prev, ...res }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── UN SEUL ÉCRAN DE CRÉATION, comme chez dash ───────────────────────────────
+     La création passait par deux modales successives : « Nouveau module » posait les
+     paramètres et enregistrait un contenu avec `blocs: []`, puis il fallait revenir au
+     tableau et cliquer « Modifier » pour ouvrir l'éditeur et y mettre quelque chose. Le
+     coach créait donc des coquilles vides, et une coquille oubliée reste en base sans
+     que rien ne le signale. On choisit ses classes et on rédige dans le même écran ; un
+     seul appel serveur, avec les blocs dedans. */
+  function ouvrirCreationContenu(classePreselectionnee) {
+    const parDefaut = classePreselectionnee
+      || mesGroupes.filter(g => g.est_actif && !g._delegation)[0]?.id
+      || '';
+    setContenuEnEdition(null);
+    setFormSupport({
+      titre: '', description: '', type_contenu: 'lecon', module: '', semaine: 1,
+      groupe_ids: parDefaut ? [parDefaut] : [], est_visible: false, fichier: null,
+    });
+    setModuleForm({ objectifs: '', dureeEstimee: 30, statut: 'brouillon' });
+    setBlocs([]); setShowBlocForm(false); setPreviewMode(false); setEtapeContenu(1);
+    setModalSupport(true);
+  }
+
+  function ouvrirEditionContenu(c) {
+    setContenuEnEdition(c.id);
+    setFormSupport({
+      titre: c.titre, description: c.description || '', type_contenu: c.type_contenu,
+      module: c.module || '', semaine: c.semaine || 1,
+      groupe_ids: classesDuContenu(c), est_visible: c.est_visible, fichier: null,
+    });
+    setModuleForm({ objectifs: c.objectifs || '', dureeEstimee: c.dureeEstimee || 30, statut: c.statut || 'publie' });
+    setBlocs(c.blocs || []); setShowBlocForm(false); setPreviewMode(false); setEtapeContenu(1);
+    setModalSupport(true);
+  }
+
+  /**
+   * La PORTÉE d'une action sur un contenu, en une phrase.
+   *
+   * « Publier ? » ne dit rien ; « Publier vers Anglais Moov A2 et Anglais Moov B1 — 14
+   * apprenants seront prévenus » dit exactement ce qui va se passer. Depuis que le même
+   * contenu part vers plusieurs classes, une confirmation qui ne chiffre pas sa portée
+   * laisse le coach deviner combien de personnes il vient d'alerter.
+   */
+  function porteeDuContenu(c) {
+    const ids = classesDuContenu(c);
+    const noms = ids.map(id => mesGroupes.find(g => g.id === id)?.nom).filter(Boolean);
+    const nbApprenants = new Set(
+      mesApprenants.filter(a => ids.includes(a.groupe_id)).map(a => a.id)
+    ).size;
+    return {
+      ids, noms, nbApprenants,
+      libClasses: noms.length ? noms.join(', ') : 'aucune classe',
+      libApprenants: `${nbApprenants} apprenant${nbApprenants > 1 ? 's' : ''}`,
+    };
+  }
+
+  /* Les DEUX listes comptent. Savoir que « 4 ont lu » n'aide pas à relancer ; savoir QUI
+     n'a pas ouvert, si. C'est pourquoi on appelle `/lecteurs` et non `/lus`. */
+  async function ouvrirLecteurs(contenu) {
+    setLecteursModal({ contenu, data: null, loading: true });
+    try {
+      const r = await fetch(`${_PROF_API}/api/elearning/contenus/${contenu.id}/lecteurs`, { headers: _profHdrs() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erreur');
+      setLecteursModal({ contenu, data: d, loading: false });
+      setCompteursLecture(prev => ({ ...prev, [contenu.id]: { lus: d.lus || 0, total: d.total || 0 } }));
+    } catch (e) {
+      toast.error(e.message || 'Impossible de charger les lectures');
+      setLecteursModal(null);
+    }
+  }
+
+  /* ── PUBLIER / DÉPUBLIER ET SUPPRIMER UN CONTENU ──────────────────────────────
+     Les routes `PATCH /contenus/:id` (champ `est_visible`) et `DELETE /contenus/:id`
+     existaient déjà ; aucun écran ne les appelait. La médiathèque n'était donc qu'une
+     liste de consultation, là où celle de dash diffuse.
+     `actionMedia` porte l'id en cours de traitement : il verrouille le seul contenu
+     concerné, pas toute la liste. */
+  async function basculerPublicationMedia(c) {
+    if (actionMedia) return;
+    const publier = !c.est_visible;
+    /* Publier ALERTE tous les apprenants des classes visées — notification dans leur
+       espace, et l'envoi n'est pas rattrapable. On annonce donc la portée RÉELLE avant de
+       la déclencher : vers quelles classes, et combien de personnes. */
+    const p = porteeDuContenu(c);
+    const nb = blocs => `${blocs} bloc${blocs > 1 ? 's' : ''}`;
+    const ok = publier
+      ? await confirmer(
+          `Publier « ${c.titre} » (${nb((c.blocs || []).length)}) ?\n\n`
+          + `Destinataires : ${p.libClasses}\n`
+          + `${p.libApprenants} recevront une notification dans leur espace.\n\n`
+          + `Cet envoi n'est pas annulable.`,
+          { titre: '📤 Publier ce contenu', confirmLabel: 'Publier maintenant', danger: false })
+      : await confirmer(
+          `Dépublier « ${c.titre} » ?\n\n`
+          + `Il disparaîtra de l'espace de : ${p.libClasses}\n`
+          + `${p.libApprenants} n'y auront plus accès.\n\n`
+          + `Le contenu n'est pas supprimé : vous pourrez le republier.`,
+          { titre: '📥 Repasser en brouillon', confirmLabel: 'Dépublier' });
+    if (!ok) return;
+
+    setActionMedia(c.id);
+    try {
+      const r = await fetch(`${_PROF_API}/api/elearning/contenus/${c.id}`, {
+        method: 'PATCH', headers: _profHdrs(),
+        body: JSON.stringify({ est_visible: publier, statut: publier ? 'publie' : 'brouillon', envoyer_email: false }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Opération impossible');
+      setContenus(prev => prev.map(x => x.id === c.id ? { ...x, est_visible: publier, statut: publier ? 'publie' : 'brouillon' } : x));
+      setModalVoirContenu(prev => prev && prev.id === c.id ? { ...prev, est_visible: publier } : prev);
+      /* La colonne « Lu par » ne se remplit que pour les contenus publiés, et son
+         compteur est chargé au démarrage. Sans ce rafraîchissement, un contenu publié
+         depuis le tableau afficherait « … » indéfiniment ; dépublié, il garderait un
+         compteur périmé en mémoire. */
+      if (publier) chargerCompteursLecture([{ id: c.id, est_visible: true }]);
+      else setCompteursLecture(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+      toast.success(publier ? 'Contenu publié — les apprenants sont prévenus.' : 'Contenu dépublié.');
+    } catch (e) {
+      toast.error(e.message || 'Opération impossible');
+    } finally { setActionMedia(null); }
+  }
+
+  /* ── RENDRE UN CONTENU OBLIGATOIRE, OU LE LIBÉRER ──
+     Un contenu « obligatoire » doit être terminé avant que ceux publiés APRÈS lui ne
+     s'ouvrent, pour les classes qu'il vise. Il sert à imposer un ordre là où il compte —
+     on ne commence pas le passé composé avant le présent — sans l'imposer partout.
+     Mise à jour optimiste : le basculement est un simple booléen, attendre l'aller-retour
+     ferait paraître figé un bouton qui doit répondre au clic. On revient en arrière si le
+     serveur refuse. */
+  async function basculerSequentielMedia(c) {
+    const nouveau = !c.lecture_sequentielle;
+    /* Ce bouton n'avait AUCUNE confirmation, et c'est pourtant celui dont l'effet est le
+       moins visible depuis l'écran du coach : rendre un contenu obligatoire FERME tous
+       ceux publiés après lui, pour des apprenants qui ne comprendront pas pourquoi. Un
+       clic de trop verrouillait un parcours entier sans rien afficher. */
+    const p = porteeDuContenu(c);
+    const ok = await confirmer(
+      nouveau
+        ? `Rendre « ${c.titre} » obligatoire ?\n\n`
+          + `Dans ${p.libClasses}, tous les cours publiés APRÈS celui-ci resteront fermés `
+          + `tant qu'un apprenant ne l'a pas marqué comme terminé.\n\n`
+          + `${p.libApprenants} sont concernés. Vous pourrez revenir en arrière à tout moment.`
+        : `Repasser « ${c.titre} » en lecture libre ?\n\n`
+          + `Les cours qu'il retenait s'ouvriront immédiatement pour ${p.libApprenants}, `
+          + `qu'ils l'aient terminé ou non.`,
+      { titre: nouveau ? '🔒 Lecture obligatoire' : '🔓 Lecture libre',
+        confirmLabel: nouveau ? 'Rendre obligatoire' : 'Libérer',
+        danger: false });
+    if (!ok) return;
+    setContenus(prev => prev.map(x => x.id === c.id ? { ...x, lecture_sequentielle: nouveau } : x));
+    try {
+      const r = await fetch(`${_PROF_API}/api/elearning/contenus/${c.id}`, {
+        method: 'PATCH', headers: _profHdrs(),
+        body: JSON.stringify({ lecture_sequentielle: nouveau }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Action refusée');
+      toast.success(nouveau
+        ? `« ${c.titre} » est maintenant obligatoire — les cours publiés après lui resteront fermés tant qu'il n'est pas terminé.`
+        : `« ${c.titre} » repasse en lecture libre.`);
+    } catch (e) {
+      setContenus(prev => prev.map(x => x.id === c.id ? { ...x, lecture_sequentielle: !nouveau } : x));
+      toast.error(e.message || 'Impossible de modifier ce réglage');
+    }
+  }
+
+  async function supprimerContenuMedia(c) {
+    if (actionMedia) return;
+    const p = porteeDuContenu(c);
+    const suivi = compteursLecture[c.id];
+    /* Supprimer un contenu DÉJÀ PUBLIÉ le retire de l'espace d'apprenants qui l'ont
+       peut-être déjà ouvert, et leur progression le concernant disparaît avec lui. Le
+       nombre de lectures déjà enregistrées est l'information qui fait hésiter — c'est
+       elle qu'il faut montrer, pas un avertissement générique. */
+    const ok = await confirmer(
+      `Supprimer définitivement « ${c.titre} » ?\n\n`
+      + (c.est_visible
+          ? `⚠️ Ce contenu est PUBLIÉ vers : ${p.libClasses}\n`
+            + `${p.libApprenants} le perdront immédiatement.\n`
+            + (suivi?.lus ? `${suivi.lus} l'ont déjà terminé — ces lectures seront perdues.\n` : '')
+          : `Ce contenu est en brouillon : personne ne le voit aujourd'hui.\n`)
+      + `\nLe contenu et ses ${(c.blocs || []).length} bloc${(c.blocs || []).length > 1 ? 's' : ''} seront perdus. Cette action est sans retour.`,
+      { titre: '🗑 Supprimer ce contenu', confirmLabel: 'Supprimer définitivement', danger: true });
+    if (!ok) return;
+    setActionMedia(c.id);
+    try {
+      const r = await fetch(`${_PROF_API}/api/elearning/contenus/${c.id}`, { method: 'DELETE', headers: _profHdrs() });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Suppression impossible');
+      setContenus(prev => prev.filter(x => x.id !== c.id));
+      setCompteursLecture(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+      setModalVoirContenu(null);
+      toast.success('Contenu supprimé.');
+    } catch (e) {
+      toast.error(e.message || 'Suppression impossible');
+    } finally { setActionMedia(null); }
+  }
   const mesNotes     = [];
   const mesDevoirs   = [];
 
@@ -3551,6 +3932,26 @@ export default function DashboardProfesseur() {
                                   </div>
                                 ))}
                               </div>
+
+                              {/* LES CRÉNEAUX DE LA CLASSE. Le coach ne les voyait nulle
+                                  part : `horaire` n'apparaissait dans AUCUN de ses écrans,
+                                  alors qu'en recevant une classe la première chose à savoir
+                                  est QUAND elle a lieu. Lecture seule - l'emploi du temps
+                                  est posé par l'Onboarding à la création. */}
+                              {Array.isArray(cl?.horaire) && cl.horaire.length > 0 ? (
+                                <div style={{ display:'flex', gap:7, marginTop:9, flexWrap:'wrap', alignItems:'center' }}>
+                                  <span style={{ fontSize:10, color:'rgba(255,255,255,0.65)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em' }}>📅 Créneaux</span>
+                                  {cl.horaire.map((h, i) => (
+                                    <span key={i} style={{ background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.28)', borderRadius:7, padding:'3px 10px', fontSize:11, fontWeight:700, color:'#fff', whiteSpace:'nowrap' }}>
+                                      {h.jour} {h.debut}–{h.fin}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={{ marginTop:9, fontSize:11, color:'rgba(255,255,255,0.6)' }}>
+                                  📅 Aucun créneau défini pour cette classe
+                                </div>
+                              )}
                             </div>
                             <button onClick={() => setModalGroupe(null)} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:8, width:32, height:32, color:'#fff', fontSize:16, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginLeft:12 }}>✕</button>
                           </div>
@@ -3975,15 +4376,30 @@ export default function DashboardProfesseur() {
             return true;
           }
 
+          /* La RECHERCHE manquait : la médiathèque de dash en a une, et passé une
+             vingtaine de contenus les filtres par classe et par période ne suffisent
+             plus à retrouver un titre précis. Elle porte sur ce qu'on a en tête en
+             cherchant — le titre, le module, la description, le type. */
+          const qMedia = (rechercheMedia || '').trim().toLowerCase();
           const contenusFiltres = mesContenus
-            .filter(c => filtreMediaGroupe === 'tous' || c.groupe_id === filtreMediaGroupe)
+            .filter(c => filtreMediaGroupe === 'tous' || contenuViseClasse(c, filtreMediaGroupe))
             .filter(c => filtreMediaStatut === 'tous' || (filtreMediaStatut === 'publie' ? c.est_visible : !c.est_visible))
-            .filter(c => matchPeriode(c.date_publication));
+            .filter(c => matchPeriode(c.date_publication))
+            .filter(c => !qMedia || `${c.titre || ''} ${c.module || ''} ${c.description || ''} ${c.type_contenu || ''}`
+              .toLowerCase().includes(qMedia));
 
-          const tousModules   = [...new Set(contenusFiltres.map(c => c.module))];
-          const nbPages       = Math.max(1, Math.ceil(tousModules.length / MODULES_PAR_PAGE));
+          /* LE TABLEAU EST À PLAT, comme celui de dash. Les contenus étaient regroupés
+             sous une ligne d'en-tête par module, ce qui imposait de paginer PAR MODULE :
+             quatre modules par page, quel que soit le nombre de contenus dessous. Le
+             module devient une simple mention sous le titre, et la pagination porte sur
+             ce qu'on parcourt réellement — les contenus. Elle n'apparaît qu'au-delà d'une
+             page, donc jamais pour une médiathèque de taille ordinaire. */
+          const CONTENUS_PAR_PAGE = 30;
+          const nbPages       = Math.max(1, Math.ceil(contenusFiltres.length / CONTENUS_PAR_PAGE));
           const pageCourante  = Math.min(pageMedia, nbPages);
-          const modulesPage   = tousModules.slice((pageCourante - 1) * MODULES_PAR_PAGE, pageCourante * MODULES_PAR_PAGE);
+          const contenusPage  = contenusFiltres.slice((pageCourante - 1) * CONTENUS_PAR_PAGE, pageCourante * CONTENUS_PAR_PAGE);
+          const nbPublies     = mesContenus.filter(c => c.est_visible).length;
+          const fmtDateTab    = (d) => d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
 
           function resetPage() { setPageMedia(1); }
 
@@ -4008,29 +4424,26 @@ export default function DashboardProfesseur() {
           <div>
             {/* En-tête */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              {/* Le compteur porte sur la MÉDIATHÈQUE, pas sur le filtre en cours : c'est
+                  l'état du fonds que le coach veut connaître d'un coup d'œil (« j'ai 24
+                  contenus, 18 sont publiés »), le résultat du filtre se lisant déjà dans
+                  le tableau juste dessous. La recherche a rejoint la carte de filtres,
+                  avec les autres critères. */}
               <div>
-                <div style={S.titreSec}>Médiathèque pédagogique</div>
-                <div style={{ fontSize: 12, color: COULEURS.gris400, marginTop: -10 }}>
-                  {contenusFiltres.length} cours · {mesGroupes.length} classe{mesGroupes.length > 1 ? 's' : ''}
-                  {filtreMediaPeriode !== 'tous' && <span style={{ marginLeft: 8, color: couleurTheme, fontWeight: 600 }}>· filtre date actif</span>}
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: COULEURS.navy }}>📚 Médiathèque</h2>
+                <div style={{ fontSize: 12.5, color: COULEURS.gris600, marginTop: 3 }}>
+                  {mesContenus.length} contenu{mesContenus.length > 1 ? 's' : ''} · {nbPublies} publié{nbPublies > 1 ? 's' : ''}
                 </div>
               </div>
+              {/* UN SEUL BOUTON, comme dans la médiathèque de dash. « Créer un module »
+                  et « Ajouter un support » exposaient une distinction interne — module
+                  d'un côté, support de l'autre — que le coach n'a pas à connaître : il
+                  dépose un contenu. Le parcours part du module, puis demande le support ;
+                  c'est l'ordre naturel et il n'a plus à être choisi d'avance. */}
               {!delegationActive ? (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    style={S.btn(COULEURS.navy)}
-                    onClick={() => {
-                      setFormNouveauModule({ ...FORM_MOD_VIDE, groupe_id: mesGroupes.filter(g => g.est_actif && !g._delegation)[0]?.id || '' });
-                      setEtapeModule(1);
-                      setModalNouveauModule(true);
-                    }}
-                  >
-                    📦 Créer un module
-                  </button>
-                  <button style={S.btn(couleurTheme)} onClick={() => setModalChoixModule(true)}>
-                    + Ajouter un support
-                  </button>
-                </div>
+                <button style={S.btn(couleurTheme)} onClick={() => ouvrirCreationContenu()}>
+                  + Nouveau contenu
+                </button>
               ) : (
                 <span style={{ fontSize:11, fontWeight:700, color:'#92400E', background:'#FEF3C7', padding:'5px 12px', borderRadius:8, border:'1px solid #FCD34D' }}>
                   🔒 Mode remplaçant - contenus en lecture seule
@@ -4038,40 +4451,45 @@ export default function DashboardProfesseur() {
               )}
             </div>
 
-            {/* ── Filtres ── */}
-            <div style={{ background: COULEURS.gris50, borderRadius: 12, padding: '14px 16px', marginBottom: 20, border: `1px solid ${COULEURS.gris200}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* ── FILTRES ──
+                Même carte que dash : la recherche en tête, puis les critères en pastilles,
+                du plus large au plus précis — famille de classes, classe, statut, période.
+                Les trois libellés en capitales qui titraient chaque rangée ont disparu :
+                une pastille « 🟢 Actives » ou « 📗 Publiés » se lit sans qu'on lui annonce
+                de quoi elle parle. */}
+            <div style={{ background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-              {/* Filtre classe */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Classe</div>
-                {/* Statut de classe - évite que la liste ne s'allonge indéfiniment avec des classes clôturées */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                  {[
-                    { id: 'actives',   lib: '🟢 Actives' },
-                    { id: 'terminees', lib: '🔒 Terminées' },
-                    { id: 'toutes',    lib: 'Toutes' },
-                  ].map(o => (
-                    <button key={o.id}
-                      onClick={() => { setFiltreMediaClasseStatut(o.id); setFiltreMediaGroupe('tous'); resetPage(); }}
-                      style={{
-                        padding: '4px 11px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                        border: `1.5px solid ${filtreMediaClasseStatut === o.id ? couleurTheme : COULEURS.gris200}`,
-                        background: filtreMediaClasseStatut === o.id ? couleurTheme : COULEURS.blanc,
-                        color: filtreMediaClasseStatut === o.id ? '#fff' : COULEURS.gris600,
-                        fontFamily: '"Plus Jakarta Sans", sans-serif',
-                      }}>
+              <input value={rechercheMedia} onChange={e => { setRechercheMedia(e.target.value); resetPage(); }}
+                placeholder="Rechercher un contenu…"
+                style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${COULEURS.gris200}`, fontSize: 13, outline: 'none', maxWidth: 320, fontFamily: '"Plus Jakarta Sans", sans-serif', boxSizing: 'border-box' }} />
+
+              {/* Famille de classes — une classe clôturée garde ses contenus (l'apprenant y
+                  accède toujours), on les range à part plutôt que de les cacher. La rangée
+                  « Terminées » ne s'affiche que s'il en existe. */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'actives',   lib: `✅ Actives (${mesGroupes.filter(g => g.est_actif).length})` },
+                  { id: 'terminees', lib: `🔒 Terminées (${mesGroupes.filter(g => g.statut === 'clos').length})` },
+                  { id: 'toutes',    lib: `Toutes mes classes (${mesGroupes.length})` },
+                ]
+                  .filter(o => o.id !== 'terminees' || mesGroupes.some(g => g.statut === 'clos'))
+                  .map(o => (
+                    <button key={o.id} style={btnFiltre(filtreMediaClasseStatut === o.id)}
+                      onClick={() => { setFiltreMediaClasseStatut(o.id); setFiltreMediaGroupe('tous'); resetPage(); }}>
                       {o.lib}
                     </button>
                   ))}
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button style={btnFiltre(filtreMediaGroupe === 'tous')} onClick={() => { setFiltreMediaGroupe('tous'); resetPage(); }}>
-                    Toutes ({mesContenus.length})
-                  </button>
-                  {mesGroupes
-                    .filter(g => filtreMediaClasseStatut === 'toutes' ? true : filtreMediaClasseStatut === 'terminees' ? g.statut === 'clos' : g.est_actif)
-                    .map(g => {
-                    const nb = mesContenus.filter(c => c.groupe_id === g.id).length;
+              </div>
+
+              {/* Classe */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button style={btnFiltre(filtreMediaGroupe === 'tous')} onClick={() => { setFiltreMediaGroupe('tous'); resetPage(); }}>
+                  Toutes ({mesContenus.length})
+                </button>
+                {mesGroupes
+                  .filter(g => filtreMediaClasseStatut === 'toutes' ? true : filtreMediaClasseStatut === 'terminees' ? g.statut === 'clos' : g.est_actif)
+                  .map(g => {
+                    const nb = mesContenus.filter(c => contenuViseClasse(c, g.id)).length;
                     return (
                       <button key={g.id} style={btnFiltre(filtreMediaGroupe === g.id)} onClick={() => { setFiltreMediaGroupe(g.id); resetPage(); }}>
                         {g.statut === 'clos' && '🔒 '}{g.nom.length > 28 ? g.nom.slice(0, 28) + '…' : g.nom}
@@ -4079,253 +4497,247 @@ export default function DashboardProfesseur() {
                       </button>
                     );
                   })}
-                </div>
               </div>
 
-              {/* Filtre statut */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Statut</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'tous',      label: 'Tous' },
-                    { id: 'publie',    label: '📗 Publiés' },
-                    { id: 'brouillon', label: '📝 Brouillons' },
-                  ].map(f => (
-                    <button key={f.id} style={btnFiltre(filtreMediaStatut === f.id)} onClick={() => { setFiltreMediaStatut(f.id); resetPage(); }}>
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
+              {/* Statut */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'tous',      label: 'Tous statuts' },
+                  { id: 'publie',    label: '✅ Publiés' },
+                  { id: 'brouillon', label: '📝 Brouillons' },
+                ].map(f => (
+                  <button key={f.id} style={btnFiltre(filtreMediaStatut === f.id)} onClick={() => { setFiltreMediaStatut(f.id); resetPage(); }}>
+                    {f.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Filtre période */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Période de publication</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {PERIODES.map(p => (
-                    <button key={p.id} style={btnFiltre(filtreMediaPeriode === p.id)} onClick={() => { setFiltreMediaPeriode(p.id); resetPage(); }}>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                {/* Champs date personnalisés */}
-                {filtreMediaPeriode === 'custom' && (
-                  <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 11, color: COULEURS.gris600, fontWeight: 600 }}>Du</span>
-                      <input
-                        type="date"
-                        value={filtreMediaDateDebut}
-                        onChange={e => { setFiltreMediaDateDebut(e.target.value); resetPage(); }}
-                        style={{ ...S.input, marginBottom: 0, padding: '5px 10px', fontSize: 12, width: 'auto' }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 11, color: COULEURS.gris600, fontWeight: 600 }}>au</span>
-                      <input
-                        type="date"
-                        value={filtreMediaDateFin}
-                        onChange={e => { setFiltreMediaDateFin(e.target.value); resetPage(); }}
-                        style={{ ...S.input, marginBottom: 0, padding: '5px 10px', fontSize: 12, width: 'auto' }}
-                      />
-                    </div>
-                    {(filtreMediaDateDebut || filtreMediaDateFin) && (
-                      <button
-                        onClick={() => { setFiltreMediaDateDebut(''); setFiltreMediaDateFin(''); resetPage(); }}
-                        style={{ fontSize: 11, color: COULEURS.gris400, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"Plus Jakarta Sans", sans-serif' }}
-                      >
+              {/* Période de publication — ce filtre n'existe pas chez dash ; il est conservé
+                  parce qu'il fonctionne et sert à retrouver ce qui a été déposé sur une
+                  période donnée. Il ne s'ouvre qu'à la demande pour ne pas alourdir la
+                  carte : fermé, il tient en une ligne qui rappelle le filtre actif. */}
+              <div style={{ borderTop: `1px solid ${COULEURS.gris100}`, paddingTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {filtreMediaPeriode === 'tous' && !ouvrirFiltrePeriode ? (
+                  <button onClick={() => setOuvrirFiltrePeriode(true)}
+                    style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, color: COULEURS.gris400, cursor: 'pointer', textDecoration: 'underline', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                    📅 Filtrer par période de publication
+                  </button>
+                ) : (
+                  <>
+                    {PERIODES.map(pe => (
+                      <button key={pe.id} style={btnFiltre(filtreMediaPeriode === pe.id)} onClick={() => { setFiltreMediaPeriode(pe.id); resetPage(); }}>
+                        {pe.label}
+                      </button>
+                    ))}
+                    {filtreMediaPeriode === 'custom' && (
+                      <>
+                        <span style={{ fontSize: 11, color: COULEURS.gris600, fontWeight: 600 }}>Du</span>
+                        <input type="date" value={filtreMediaDateDebut}
+                          onChange={e => { setFiltreMediaDateDebut(e.target.value); resetPage(); }}
+                          style={{ ...S.input, marginBottom: 0, padding: '5px 10px', fontSize: 12, width: 'auto' }} />
+                        <span style={{ fontSize: 11, color: COULEURS.gris600, fontWeight: 600 }}>au</span>
+                        <input type="date" value={filtreMediaDateFin}
+                          onChange={e => { setFiltreMediaDateFin(e.target.value); resetPage(); }}
+                          style={{ ...S.input, marginBottom: 0, padding: '5px 10px', fontSize: 12, width: 'auto' }} />
+                      </>
+                    )}
+                    {(filtreMediaPeriode !== 'tous' || filtreMediaDateDebut || filtreMediaDateFin) && (
+                      <button onClick={() => { setFiltreMediaPeriode('tous'); setFiltreMediaDateDebut(''); setFiltreMediaDateFin(''); resetPage(); }}
+                        style={{ fontSize: 11, color: COULEURS.gris400, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
                         Effacer
                       </button>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
 
             </div>
-
-            {/* Résultats vides */}
-            {contenusFiltres.length === 0 && (
-              <div style={S.vide}>
-                {mesContenus.length === 0 ? 'Aucun contenu pour vos groupes' : 'Aucun cours ne correspond à ce filtre'}
+            {/* ── DEUX VIDES DIFFÉRENTS ──
+                « Aucun contenu » et « aucun résultat » n'appellent pas la même réponse :
+                le premier demande de créer, le second d'élargir le filtre. Les confondre
+                sous un seul message laissait un coach devant un écran vide sans savoir
+                s'il devait déposer un cours ou simplement cliquer sur « Toutes ». */}
+            {mesContenus.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '56px 20px', border: `2px dashed ${COULEURS.gris200}`, borderRadius: 14 }}>
+                <div style={{ fontSize: 46, marginBottom: 12 }}>📚</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: COULEURS.gris600, marginBottom: 6 }}>Votre médiathèque est vide</div>
+                <div style={{ fontSize: 13, color: COULEURS.gris400, marginBottom: 20 }}>
+                  Déposez une leçon, un audio ou une vidéo, et choisissez la classe qui le recevra.
+                </div>
+                {!delegationActive && (
+                  <button style={S.btn(couleurTheme)} onClick={() => ouvrirCreationContenu()}>
+                    + Créer mon premier contenu
+                  </button>
+                )}
               </div>
-            )}
+            ) : contenusFiltres.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', border: `2px dashed ${COULEURS.gris200}`, borderRadius: 14, color: COULEURS.gris400, fontSize: 13 }}>
+                Aucun contenu ne correspond à ces filtres.
+              </div>
+            ) : (
+            /* ── TABLEAU À PLAT, celui de dash ──
+               Chaque colonne répond à une question que le coach se pose devant sa liste :
+               qu'est-ce que c'est, pour qui, combien de temps, qui l'a lu, de quand ça
+               date, qu'est-ce qui a bougé, où ça en est. Le module n'est plus un niveau
+               d'imbrication avec sa ligne d'en-tête bleue et son propre bouton d'ajout :
+               il devient une mention sous le titre. */
+            <div style={{ background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC' }}>
+                      {['TYPE', 'TITRE', 'CLASSES', 'DURÉE', 'LU PAR', 'CRÉÉ LE', 'MIS À JOUR', 'STATUT', 'ACTIONS'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10.5, fontWeight: 800, color: '#94A3B8', letterSpacing: '.05em', borderBottom: `1px solid ${COULEURS.gris200}`, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contenusPage.map((c, i) => {
+                      const ct     = COULEUR_TYPE_CONTENU[c.type_contenu] || { fond: COULEURS.gris100, texte: COULEURS.gris600, lib: c.type_contenu || '-', emoji: '📄' };
+                      const publie = !!c.est_visible;
+                      const classesCibles = classesDuContenu(c).map(id => mesGroupes.find(g => g.id === id)).filter(Boolean);
+                      const duree  = (c.blocs || []).reduce((t, b) => t + (Number(b.duree) || Number(b.dureeMin) || 0), 0) || c.dureeEstimee || 0;
+                      return (
+                        <tr key={c.id} style={{ background: i % 2 ? '#FAFAFA' : COULEURS.blanc }}>
 
-            {/* ── Tableau des contenus groupés par module ── */}
-            {contenusFiltres.length > 0 && (
-            <div style={{ border: `1px solid ${COULEURS.gris200}`, borderRadius: 12, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-                <thead>
-                  <tr style={{ background: COULEURS.gris50, borderBottom: `2px solid ${COULEURS.gris200}` }}>
-                    {['Type', 'Titre', 'Classe', 'Sem.', 'Publié le', 'Statut', 'Actions'].map((h, i) => (
-                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: COULEURS.gris400, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: i === 1 ? '30%' : 'auto' }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                {modulesPage.map((module, mi) => {
-                  const lignes = contenusFiltres.filter(c => c.module === module);
-                  const gpId   = lignes[0]?.groupe_id || mesGroupes[0]?.id || '';
-                  return (
-                    <tbody key={module}>
-                        {/* ── Ligne en-tête de module ── */}
-                        <tr style={{ background: '#F0F9FF', borderTop: mi > 0 ? `2px solid ${COULEURS.gris200}` : 'none' }}>
-                          <td colSpan={5} style={{ padding: '9px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ fontSize: 13, fontWeight: 800, color: COULEURS.navy }}>📚 {module || '- Sans module -'}</span>
-                              <span style={{ padding: '2px 8px', borderRadius: 20, background: '#DBEAFE', color: '#1E40AF', fontSize: 11, fontWeight: 700 }}>
-                                {lignes.length} cours
-                              </span>
-                            </div>
+                          {/* Type */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: ct.fond, color: ct.texte }}>
+                              {ct.emoji} {ct.lib}
+                            </span>
                           </td>
-                          <td colSpan={2} style={{ padding: '9px 14px', textAlign: 'right' }}>
-                            {!delegationActive && (
-                              <button
-                                style={{ ...S.btn(couleurTheme, true), fontSize: 11, padding: '4px 12px' }}
-                                onClick={() => {
-                                  setContenuEnEdition(null);
-                                  setFormSupport({ titre: '', description: '', type_contenu: 'lecon', module: module || '', semaine: 1, groupe_id: gpId, est_visible: false, fichier: null });
-                                  setModuleForm({ objectifs: '', dureeEstimee: 30, statut: 'brouillon' });
-                                  setModuleLock({ groupe_id: gpId, module: module || '' });
-                                  setBlocs([]); setShowBlocForm(false); setPreviewMode(false);
-                                  setModalSupport(true);
-                                }}
-                              >+ Ajouter un support</button>
+
+                          {/* Titre — cliquable, comme toute la ligne l'était avant */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9' }}>
+                            <button onClick={() => setModalVoirContenu(c)}
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 700, color: COULEURS.navy, fontSize: 13, textAlign: 'left', fontFamily: 'inherit' }}>
+                              {c.titre}
+                            </button>
+                            {c.module && <div style={{ fontSize: 11, color: COULEURS.gris400, fontWeight: 500, marginTop: 2 }}>📚 {c.module}</div>}
+                            {c._lectureSeule && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#6D28D9', background: '#EDE9FE', padding: '1px 7px', borderRadius: 20, marginTop: 4, display: 'inline-block' }}>
+                                🔒 Lecture seule
+                              </span>
                             )}
                           </td>
+
+                          {/* Classes — un contenu part maintenant vers plusieurs d'entre
+                              elles ; toutes sont listées, car c'est la portée réelle de ce
+                              qui a été publié. Sans destinataire, il n'est diffusé à
+                              personne et rien ne le signalait : il se confondait avec les
+                              autres dans la liste. */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9' }}>
+                            {classesCibles.length === 0 ? (
+                              <span style={{ fontSize: 11.5, color: '#B45309', fontWeight: 700 }}>Aucune classe - non diffusé</span>
+                            ) : (
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {classesCibles.map(g => (
+                                  <span key={g.id} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#F1F5F9', color: '#475569' }}>
+                                    {g.statut === 'clos' && '🔒 '}{g.nom.length > 22 ? g.nom.slice(0, 22) + '…' : g.nom}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Durée */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap', color: '#64748B' }}>{duree} min</td>
+
+                          {/* Lu par — la donnée vivait dans `contenus_lus` et rien ne la
+                              montrait dans la liste. Elle n'a de sens que sur un contenu
+                              publié : sur un brouillon, « 0/12 » ferait croire à un échec
+                              de diffusion alors que personne n'était censé le voir. */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
+                            {!publie ? (
+                              <span style={{ color: '#CBD5E1', fontSize: 11.5 }}>-</span>
+                            ) : (() => {
+                              const st = compteursLecture[c.id];
+                              if (!st) return <span style={{ color: '#CBD5E1', fontSize: 11.5 }}>…</span>;
+                              const pct = st.total ? Math.round((st.lus / st.total) * 100) : 0;
+                              return (
+                                <button onClick={() => ouvrirLecteurs(c)} title="Voir qui a lu, et qui n'a pas encore ouvert"
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>
+                                  <div style={{ fontSize: 12, fontWeight: 800, color: st.lus ? '#15803D' : '#B45309' }}>{st.lus}/{st.total}</div>
+                                  <div style={{ width: 56, height: 4, borderRadius: 99, background: '#E5E7EB', marginTop: 3, overflow: 'hidden' }}>
+                                    <div style={{ width: `${pct}%`, height: '100%', background: st.lus ? '#15803D' : '#E5E7EB' }} />
+                                  </div>
+                                </button>
+                              );
+                            })()}
+                          </td>
+
+                          {/* Créé le */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap', color: '#64748B', fontSize: 12 }}>
+                            {fmtDateTab(c.created_at)}
+                          </td>
+
+                          {/* Mis à jour — « — » plutôt que la date de création répétée : la
+                              colonne ne sert qu'à repérer ce qui a bougé depuis le dépôt. */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap', fontSize: 12 }}>
+                            {!c.updated_at || c.updated_at === c.created_at
+                              ? <span style={{ color: '#CBD5E1' }} title="Jamais retouché depuis sa création">—</span>
+                              : <span style={{ color: '#64748B' }}>{fmtDateTab(c.updated_at)}</span>}
+                          </td>
+
+                          {/* Statut */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: publie ? '#DCFCE7' : '#FEF3C7', color: publie ? '#15803D' : '#B45309' }}>
+                              {publie ? '✅ Publié' : '📝 Brouillon'}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td style={{ padding: '9px 12px', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>
+                            {/* Le compteur de la colonne « Lu par » ouvre le même écran,
+                                mais rien ne signalait qu'il était cliquable. */}
+                            {publie && (
+                              <button onClick={() => ouvrirLecteurs(c)} title="Voir qui a lu, et qui n'a pas encore ouvert"
+                                style={{ marginRight: 6, padding: '5px 11px', borderRadius: 7, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                👀 Lectures
+                              </button>
+                            )}
+                            {c._lectureSeule ? (
+                              <span style={{ fontSize: 11, color: COULEURS.gris400 }}>-</span>
+                            ) : (
+                              <>
+                                <button onClick={() => basculerSequentielMedia(c)}
+                                  title={c.lecture_sequentielle
+                                    ? 'Lecture obligatoire - cliquez pour repasser en lecture libre'
+                                    : "Rendre la lecture obligatoire : les cours publiés après celui-ci resteront fermés tant qu'il n'est pas terminé"}
+                                  style={{ marginRight: 6, padding: '5px 11px', borderRadius: 7,
+                                    border: `1px solid ${c.lecture_sequentielle ? '#F59E0B' : COULEURS.gris200}`,
+                                    background: c.lecture_sequentielle ? '#FFFBEB' : COULEURS.blanc,
+                                    color: c.lecture_sequentielle ? '#B45309' : '#9CA3AF',
+                                    fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  {c.lecture_sequentielle ? '🔒 Obligatoire' : '🔓 Libre'}
+                                </button>
+                                <button title="Modifier le contenu et ses parties"
+                                  onClick={() => ouvrirEditionContenu(c)}
+                                  style={{ marginRight: 6, padding: '5px 11px', borderRadius: 7, border: `1px solid ${couleurTheme}55`, background: COULEURS.blanc, color: couleurTheme, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  ✏️ Modifier
+                                </button>
+                                <button onClick={() => basculerPublicationMedia(c)} disabled={actionMedia === c.id}
+                                  title={publie ? 'Repasser en brouillon' : 'Publier vers la classe'}
+                                  style={{ marginRight: 6, padding: '5px 11px', borderRadius: 7, border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc, fontSize: 11.5, fontWeight: 700, cursor: actionMedia === c.id ? 'wait' : 'pointer', color: '#374151', fontFamily: 'inherit' }}>
+                                  {actionMedia === c.id ? '⏳' : publie ? 'Dépublier' : 'Publier'}
+                                </button>
+                                <button onClick={() => supprimerContenuMedia(c)} disabled={actionMedia === c.id}
+                                  title="Supprimer ce contenu"
+                                  style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid #FECACA', background: COULEURS.blanc, color: '#B91C1C', fontSize: 11.5, fontWeight: 700, cursor: actionMedia === c.id ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                                  🗑
+                                </button>
+                              </>
+                            )}
+                          </td>
+
                         </tr>
-
-                        {/* ── Lignes contenus ── */}
-                        {lignes.map((c, ci) => {
-                          const ct     = COULEUR_TYPE_CONTENU[c.type_contenu] || { fond: COULEURS.gris100, texte: COULEURS.gris600, lib: c.type_contenu };
-                          const groupe = mesGroupes.find(g => g.id === c.groupe_id);
-                          const datePub = c.date_publication
-                            ? new Date(c.date_publication).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : '-';
-                          const bgLigne = ci % 2 === 0 ? COULEURS.blanc : COULEURS.gris50;
-                          return (
-                            <tr key={c.id} onClick={() => setModalVoirContenu(c)} style={{ background: c._lectureSeule ? '#FAFAF9' : bgLigne, borderTop: `1px solid ${COULEURS.gris100}`, cursor: 'pointer' }}>
-
-                              {/* Type */}
-                              <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                <span style={{ padding: '3px 9px', borderRadius: 20, background: ct.fond, color: ct.texte, fontSize: 11, fontWeight: 700 }}>
-                                  {ct.lib}
-                                </span>
-                              </td>
-
-                              {/* Titre + description */}
-                              <td style={{ padding: '10px 14px' }}>
-                                <div style={{ fontWeight: 600, color: COULEURS.navy, marginBottom: 2 }}>{c.titre}</div>
-                                {c.description && (
-                                  <div style={{ fontSize: 11, color: COULEURS.gris400, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
-                                    {c.description}
-                                  </div>
-                                )}
-                                {c._lectureSeule && (
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#6D28D9', background: '#EDE9FE', padding: '1px 7px', borderRadius: 20, marginTop: 4, display: 'inline-block' }}>
-                                    🔒 Lecture seule
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Classe */}
-                              <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                <span style={{ fontSize: 12, color: COULEURS.gris600 }}>
-                                  {groupe?.nom ? (groupe.nom.length > 22 ? groupe.nom.slice(0, 22) + '…' : groupe.nom) : '-'}
-                                </span>
-                              </td>
-
-                              {/* Semaine */}
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: COULEURS.gris600 }}>S{c.semaine}</span>
-                              </td>
-
-                              {/* Date publication */}
-                              <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                <span style={{ fontSize: 11, color: COULEURS.gris400 }}>{datePub}</span>
-                              </td>
-
-                              {/* Statut toggle */}
-                              <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-                                {!c._lectureSeule ? (
-                                  <button
-                                    disabled={contenuIdsEnCours.has(c.id)}
-                                    onClick={async () => {
-                                      if (contenuIdsEnCours.has(c.id)) return;
-                                      setContenuIdsEnCours(prev => new Set(prev).add(c.id));
-                                      const newVal = !c.est_visible;
-                                      const ancien = c;
-                                      setContenus(prev => prev.map(x => x.id === c.id ? { ...x, est_visible: newVal, statut: newVal ? 'publie' : 'brouillon' } : x));
-                                      const token = localStorage.getItem('admin_token') || localStorage.getItem('bet_access_token');
-                                      if (token) {
-                                        try {
-                                          const r = await fetch(`${_PROF_API}/api/elearning/contenus/${c.id}`, {
-                                            method: 'PATCH', headers: _profHdrs(),
-                                            body: JSON.stringify({ est_visible: newVal, statut: newVal ? 'publie' : 'brouillon' }),
-                                          });
-                                          if (!r.ok) {
-                                            const d = await r.json().catch(() => ({}));
-                                            toast.error(d.error || 'Action refusée', { duration: 5000 });
-                                            setContenus(prev => prev.map(x => x.id === c.id ? ancien : x));
-                                          }
-                                        } catch {
-                                          toast.error('Impossible de joindre le serveur', { duration: 5000 });
-                                          setContenus(prev => prev.map(x => x.id === c.id ? ancien : x));
-                                        } finally {
-                                          setContenuIdsEnCours(prev => { const n = new Set(prev); n.delete(c.id); return n; });
-                                        }
-                                      } else {
-                                        setContenuIdsEnCours(prev => { const n = new Set(prev); n.delete(c.id); return n; });
-                                      }
-                                    }}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 20, border: `1.5px solid ${c.est_visible ? COULEURS.succes : COULEURS.gris200}`, background: c.est_visible ? '#F0FDF4' : COULEURS.gris50, color: c.est_visible ? COULEURS.succes : COULEURS.gris400, fontWeight: 700, fontSize: 11, cursor: contenuIdsEnCours.has(c.id) ? 'not-allowed' : 'pointer', opacity: contenuIdsEnCours.has(c.id) ? 0.6 : 1, fontFamily: '"Plus Jakarta Sans", sans-serif' }}
-                                  >
-                                    <span style={{ width: 24, height: 14, borderRadius: 7, background: c.est_visible ? COULEURS.succes : COULEURS.gris200, position: 'relative', display: 'inline-block', flexShrink: 0 }}>
-                                      <span style={{ position: 'absolute', top: 2, left: c.est_visible ? 12 : 2, width: 10, height: 10, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
-                                    </span>
-                                    {c.est_visible ? 'Publié' : 'Brouillon'}
-                                  </button>
-                                ) : (
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#7C3AED' }}>
-                                    {c.est_visible ? '📗 Publié' : '📝 Brouillon'}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Actions */}
-                              <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-                                {!c._lectureSeule ? (
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <button
-                                      style={{ ...S.btn(COULEURS.gris600, true), fontSize: 11, padding: '4px 10px' }}
-                                      onClick={() => {
-                                        setContenuEnEdition(c.id);
-                                        setFormSupport({ titre: c.titre, description: c.description || '', type_contenu: c.type_contenu, module: c.module || '', semaine: c.semaine || 1, groupe_id: c.groupe_id, est_visible: c.est_visible, fichier: null });
-                                        setModuleForm({ objectifs: c.objectifs || '', dureeEstimee: c.dureeEstimee || 30, statut: c.statut || 'publie' });
-                                        setBlocs(c.blocs || []); setShowBlocForm(false); setPreviewMode(false);
-                                        setModuleLock({ groupe_id: c.groupe_id, module: c.module || '' });
-                                        setModalSupport(true);
-                                      }}
-                                    >✏️ Modifier</button>
-                                    {!c.fichier_url && (
-                                      <button style={{ ...S.btn(couleurTheme, true), fontSize: 11, padding: '4px 10px' }}>⬆ Upload</button>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span style={{ fontSize: 11, color: COULEURS.gris400 }}>-</span>
-                                )}
-                              </td>
-
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  );
-                })}
-              </table>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
             )}
-
             {/* ── Pagination ── */}
             {nbPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 8, paddingTop: 20, borderTop: `1px solid ${COULEURS.gris200}` }}>
@@ -4366,8 +4778,85 @@ export default function DashboardProfesseur() {
 
                 {/* Info page */}
                 <span style={{ fontSize: 11, color: COULEURS.gris400, marginLeft: 8 }}>
-                  Page {pageCourante} / {nbPages} · {tousModules.length} module{tousModules.length > 1 ? 's' : ''}
+                  Page {pageCourante} / {nbPages} · {contenusFiltres.length} contenu{contenusFiltres.length > 1 ? 's' : ''}
                 </span>
+              </div>
+            )}
+
+            {/* ── QUI A LU ──
+                Les DEUX listes comptent. Savoir que « 4 ont lu » n'aide pas à relancer ;
+                savoir QUI n'a pas ouvert, si. */}
+            {lecteursModal && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: 9700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+                onClick={e => { if (e.target === e.currentTarget) setLecteursModal(null); }}>
+                <div style={{ background: COULEURS.blanc, borderRadius: 16, width: '100%', maxWidth: 620, maxHeight: '85vh', overflowY: 'auto', padding: 24, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 800, color: COULEURS.navy }}>👀 Lectures</h3>
+                  <p style={{ margin: '0 0 18px', fontSize: 12.5, color: COULEURS.gris600 }}>{lecteursModal.contenu.titre}</p>
+
+                  {lecteursModal.loading ? (
+                    <div style={{ textAlign: 'center', padding: 32, color: '#94A3B8' }}>⏳ Chargement…</div>
+                  ) : (() => {
+                    const d = lecteursModal.data || { lecteurs: [], en_attente: [], lus: 0, total: 0 };
+                    const pct = d.total ? Math.round((d.lus / d.total) * 100) : 0;
+                    return (
+                      <>
+                        <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                          <div style={{ fontSize: 20, fontWeight: 900, color: COULEURS.navy }}>{d.lus} / {d.total}</div>
+                          <div style={{ fontSize: 12, color: '#64748B', marginBottom: 7 }}>apprenants ont marqué ce contenu comme terminé</div>
+                          <div style={{ height: 6, borderRadius: 99, background: '#E5E7EB', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: '#15803D' }} />
+                          </div>
+                          {/* Dire ce que le chiffre mesure vraiment évite de le lire comme un
+                              taux d'assiduité : c'est l'apprenant qui clique « terminé ». */}
+                          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 7, lineHeight: 1.5 }}>
+                            Déclaratif : l'apprenant clique lui-même. Ce n'est pas une mesure du temps passé.
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 14 }}>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: '#15803D', marginBottom: 7 }}>✅ ONT TERMINÉ ({d.lecteurs.length})</div>
+                            {d.lecteurs.length === 0 ? (
+                              <div style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Personne pour l'instant.</div>
+                            ) : d.lecteurs.map((a, i2) => (
+                              <div key={i2} style={{ padding: '7px 10px', borderRadius: 8, background: '#F0FDF4', marginBottom: 5 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: COULEURS.navy }}>{a.nom_complet || a.email}</div>
+                                {/* La classe, parce qu'un contenu diffusé à plusieurs d'entre
+                                    elles rend « Awa a lu » insuffisant pour savoir où en est
+                                    chaque groupe. */}
+                                <div style={{ fontSize: 10.5, color: '#64748B' }}>
+                                  {[a.classe, a.lu_le ? new Date(a.lu_le).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '']
+                                    .filter(Boolean).join(' · ')}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: '#B45309', marginBottom: 7 }}>⏳ PAS ENCORE OUVERT ({d.en_attente.length})</div>
+                            {d.en_attente.length === 0 ? (
+                              <div style={{ fontSize: 12, color: '#15803D', fontWeight: 700 }}>Tout le monde a terminé 🎉</div>
+                            ) : d.en_attente.map((a, i2) => (
+                              <div key={i2} style={{ padding: '7px 10px', borderRadius: 8, background: '#FFFBEB', marginBottom: 5 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: COULEURS.navy }}>{a.nom_complet || a.email}</div>
+                                {/* Un apprenant sans compte ne PEUT pas avoir lu : le ranger
+                                    simplement parmi les retardataires ferait relancer
+                                    quelqu'un à qui il manque un accès, pas de la volonté. */}
+                                {a.sans_compte
+                                  ? <div style={{ fontSize: 10.5, color: '#B45309', fontWeight: 700 }}>{a.classe ? `${a.classe} · ` : ''}Compte non ouvert - accès à créer</div>
+                                  : <div style={{ fontSize: 10.5, color: '#64748B' }}>{[a.classe, a.email].filter(Boolean).join(' · ')}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  <button onClick={() => setLecteursModal(null)}
+                    style={{ width: '100%', marginTop: 18, padding: '10px 0', borderRadius: 8, border: '1.5px solid #E2E8F0', background: COULEURS.blanc, color: '#374151', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Fermer
+                  </button>
+                </div>
               </div>
             )}
 
@@ -5813,7 +6302,7 @@ export default function DashboardProfesseur() {
                       {/* Actions */}
                       <div style={{ display:'flex', gap:6 }}>
                         {f.url ? (
-                          <a href={f.url} target="_blank" rel="noreferrer" style={{ ...S.btn(couleurTheme, true), textDecoration:'none', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>⬇</a>
+                          <a href={urlTelecharger(f.url, f.nom)} style={{ ...S.btn(couleurTheme, true), textDecoration:'none', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>⬇</a>
                         ) : (
                           <button style={{ ...S.btn(couleurTheme, true), opacity:0.4, cursor:'not-allowed' }}>⬇</button>
                         )}
@@ -6256,13 +6745,34 @@ export default function DashboardProfesseur() {
       const LBL = { fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 };
       const INP = { ...S.input, marginBottom: 0 };
       const totalDuree = blocs.reduce((s, b) => s + (b.dureeMin || 0), 0);
-      const valide = formSupport.titre.trim();
+      /* UNE CLASSE AU MOINS, brouillon compris. Un contenu sans destinataire n'apparaît
+         dans aucune médiathèque — elle filtre par classe —, si bien que son auteur
+         lui-même ne le retrouvait plus. Il se rattache d'abord, se rédige ensuite. */
+      const classesChoisies = formSupport.groupe_ids || [];
+      const valide = formSupport.titre.trim() && classesChoisies.length > 0;
+      const peutPublierRecap = blocs.length > 0;
 
       async function doSave() {
         if (!valide || savingModule) return;
         setSavingModule(true);
         try {
-        const payload = { titre: formSupport.titre, description: formSupport.description, type_contenu: formSupport.type_contenu, module: formSupport.module, semaine: formSupport.semaine, groupe_id: formSupport.groupe_id, est_visible: formSupport.est_visible, objectifs: moduleForm.objectifs, dureeEstimee: moduleForm.dureeEstimee, statut: moduleForm.statut, blocs };
+        /* UN CONTENU SANS BLOC RESTE BROUILLON, quoi qu'on ait coché. Publier une
+           coquille vide notifie toute la classe d'un cours qui s'ouvre sur rien, et
+           l'envoi n'est pas rattrapable. Le serveur refuse aussi, c'est sa règle ; ici
+           on évite simplement au coach de se la faire opposer après coup. */
+        const peutPublier = blocs.length > 0;
+        const payload = {
+          titre: formSupport.titre, description: formSupport.description,
+          type_contenu: formSupport.type_contenu, module: formSupport.module,
+          semaine: formSupport.semaine,
+          /* `groupe_id` suit avec la première classe : plusieurs écrans la lisent
+             encore (planification d'une séance, fiche de classe). */
+          groupe_ids: classesChoisies, groupe_id: classesChoisies[0] || null,
+          est_visible: peutPublier && formSupport.est_visible,
+          objectifs: moduleForm.objectifs, dureeEstimee: moduleForm.dureeEstimee,
+          statut: peutPublier ? moduleForm.statut : 'brouillon',
+          blocs,
+        };
         const token = localStorage.getItem('admin_token') || localStorage.getItem('bet_access_token');
 
         if (!token) {
@@ -6284,7 +6794,7 @@ export default function DashboardProfesseur() {
             blocs:         payload.blocs,
             objectifs:     payload.objectifs || '',
             duree_estimee: payload.dureeEstimee,
-            classe_id:     payload.groupe_id || null,
+            classe_ids:    payload.groupe_ids,
           };
           let echec = false;
           try {
@@ -6317,7 +6827,7 @@ export default function DashboardProfesseur() {
           }
           if (echec) return;
         }
-        setModalSupport(false); setBlocs([]); setShowBlocForm(false); setPreviewMode(false); setModuleLock(null);
+        setModalSupport(false); setBlocs([]); setShowBlocForm(false); setPreviewMode(false); setEtapeContenu(1);
         } finally {
           setSavingModule(false);
         }
@@ -6325,88 +6835,154 @@ export default function DashboardProfesseur() {
 
       function moveBlocUp(i) { setBlocs(p => { const a = [...p]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; }); }
       function moveBlocDown(i) { setBlocs(p => { const a = [...p]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; }); }
-      function removeBloc(id) { setBlocs(p => p.filter(b => b.id !== id)); }
+      /* Supprimer un bloc partait sans un mot. Un bloc n'est pas une ligne : il peut
+         porter un quiz de dix questions, un fichier qu'on vient de téléverser, ou des
+         sections entières de texte. Le reconstruire coûte cher, le supprimer coûtait un
+         clic. On nomme ce qui part. */
+      async function removeBloc(id) {
+        const b = blocs.find(x => x.id === id);
+        if (!b) return;
+        const bt = BLOCK_TYPES[b.type] || BLOCK_TYPES.texte;
+        const detail = b.type === 'quiz' && b.questions?.length
+          ? `\n\nIl contient ${b.questions.length} question${b.questions.length > 1 ? 's' : ''}.`
+          : b.fichier
+            ? `\n\nLe fichier joint « ${b.fichier} » sera détaché du cours.`
+            : b.sections?.length
+              ? `\n\nIl contient ${b.sections.length} section${b.sections.length > 1 ? 's' : ''} de texte.`
+              : '';
+        const ok = await confirmer(
+          `Supprimer le bloc « ${b.titre || bt.label} » ?${detail}`,
+          { titre: '🗑 Supprimer ce bloc', confirmLabel: 'Supprimer', danger: true });
+        if (!ok) return;
+        setBlocs(p => p.filter(x => x.id !== id));
+      }
+
+      /* Fermer l'éditeur jette TOUT ce qui n'a pas été enregistré. Le ✕ et le fond cliquable
+         sont à un geste de distance d'un cours écrit pendant vingt minutes : on ne demande
+         qu'en cas de travail réel en cours, pour ne pas transformer une fermeture anodine
+         en question de plus. */
+      async function fermerEditeur() {
+        const aDuTravail = blocs.length > 0 || formSupport.titre.trim() || showBlocForm;
+        if (aDuTravail) {
+          const ok = await confirmer(
+            contenuEnEdition
+              ? `Fermer sans enregistrer ?\n\nLes modifications apportées à « ${formSupport.titre || 'ce contenu'} » seront perdues.`
+              : `Abandonner ce contenu ?\n\n« ${formSupport.titre || 'Sans titre'} » et ses ${blocs.length} bloc${blocs.length > 1 ? 's' : ''} ne seront pas enregistrés.`,
+            { titre: 'Quitter l\'éditeur', confirmLabel: 'Fermer sans enregistrer', danger: true });
+          if (!ok) return;
+        }
+        setModalSupport(false); setPreviewMode(false); setEtapeContenu(1);
+        setBlocs([]); setShowBlocForm(false);
+      }
 
       return (
       <>
-        <div onClick={() => { setModalSupport(false); setPreviewMode(false); setModuleLock(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,35,0.6)', zIndex: 1000, backdropFilter: 'blur(3px)' }} />
+        <div onClick={() => fermerEditeur()} style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,35,0.6)', zIndex: 1000, backdropFilter: 'blur(3px)' }} />
         <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '90vw', height: '90vh', maxHeight: '90vh', background: '#fff', borderRadius: 14, boxShadow: '0 32px 80px rgba(0,0,0,0.3)', zIndex: 1001, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
 
           {/* ── Header ── */}
           <div style={{ padding: '18px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 16, background: `linear-gradient(135deg, ${COULEURS.navy} 0%, #0E4F6B 100%)`, borderRadius: '14px 14px 0 0', flexShrink: 0 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.1em', marginBottom: 4 }}>{contenuEnEdition ? 'MODIFIER LE MODULE' : moduleLock ? 'NOUVEAU SUPPORT' : 'ÉDITEUR DE MODULE'}</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>{formSupport.titre || (moduleLock ? `Support - ${moduleLock.module}` : 'Nouveau module')}</div>
+              {/* « Module » et « support » ne nommaient qu'une mécanique interne : le
+                  coach dépose un contenu. Un seul mot, partout. */}
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                {contenuEnEdition ? 'MODIFIER LE CONTENU' : 'NOUVEAU CONTENU'}
+                <span style={{ marginLeft: 10, opacity: 0.8 }}>· Étape {etapeContenu} sur 2 — {etapeContenu === 1 ? 'Contenu' : 'Récapitulatif'}</span>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>{formSupport.titre || 'Nouveau contenu'}</div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 3 }}>⏱ {totalDuree} min estimées · 📦 {blocs.length} bloc{blocs.length > 1 ? 's' : ''}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button onClick={() => setPreviewMode(v => !v)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.3)', background: previewMode ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
                 {previewMode ? '✏️ Éditer' : '👁️ Aperçu'}
               </button>
-              <button onClick={() => { setModalSupport(false); setPreviewMode(false); setModuleLock(null); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 22, cursor: 'pointer', padding: 0 }}>✕</button>
+              <button onClick={() => fermerEditeur()} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 22, cursor: 'pointer', padding: 0 }}>✕</button>
             </div>
           </div>
 
-          {/* ── Body 2 colonnes ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: previewMode ? '1fr' : '310px 1fr', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+          {/* ── Body 2 colonnes (étape 1 : rédaction) ── */}
+          <div style={{ display: etapeContenu === 1 ? 'grid' : 'none', gridTemplateColumns: previewMode ? '1fr' : '310px 1fr', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
             {/* LEFT - Paramètres */}
             {!previewMode && (
               <div style={{ padding: 20, borderRight: '1px solid #e5e7eb', overflowY: 'auto', background: '#f9fafb', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{moduleLock ? 'Paramètres du support' : 'Paramètres du module'}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Paramètres du contenu</div>
 
-                <div><label style={LBL}>Titre *</label><input value={formSupport.titre} onChange={e => setFormSupport(p => ({ ...p, titre: e.target.value }))} style={INP} placeholder={moduleLock ? 'ex: Exercice de phonétique' : 'ex: Module 2 - Réunions professionnelles'} /></div>
+                <div><label style={LBL}>Titre *</label><input value={formSupport.titre} onChange={e => setFormSupport(p => ({ ...p, titre: e.target.value }))} style={INP} placeholder="ex: Compréhension orale - Réunions professionnelles" /></div>
 
                 <div><label style={LBL}>Description</label><textarea value={formSupport.description || ''} onChange={e => setFormSupport(p => ({ ...p, description: e.target.value }))} style={{ ...INP, minHeight: 60, resize: 'vertical', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }} placeholder="Résumé court du contenu de ce module…" /></div>
 
-                {/* Groupe + Type */}
-                {moduleLock ? (
-                  /* ── Badge module + classe - verrouillé mais déverrouillable ── */
-                  <div style={{ padding: '10px 14px', borderRadius: 10, background: '#EFF6FF', border: `1.5px solid ${couleurTheme}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: couleurTheme, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Module · Classe</div>
-                      <button onClick={() => setModuleLock(null)} style={{ fontSize: 10, fontWeight: 700, color: COULEURS.gris400, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>Changer</button>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ padding: '3px 10px', borderRadius: 20, background: couleurTheme, color: '#fff', fontSize: 12, fontWeight: 700 }}>
-                        📚 {moduleLock.module || '- Sans module -'}
-                      </span>
-                      <span style={{ padding: '3px 10px', borderRadius: 20, background: '#DBEAFE', color: '#1D4ED8', fontSize: 12, fontWeight: 600 }}>
-                        👥 {mesGroupes.find(g => g.id === moduleLock.groupe_id)?.nom || moduleLock.groupe_id}
-                      </span>
-                    </div>
+                {/* ── TYPE DE CONTENU ──
+                    En cartes et non en liste déroulante : le type commande les blocs
+                    recevables plus bas (une capsule vidéo n'accueille pas un second
+                    bloc vidéo), donc il se choisit en premier et doit rester visible.
+                    Changer de type alors qu'un bloc devenu interdit est en cours de
+                    saisie le ramène sur un type permis, sinon le formulaire se figerait
+                    sur des champs qui ne s'enregistrent plus. */}
+                <div>
+                  <label style={LBL}>Type de contenu *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 7 }}>
+                    {TYPES_CONTENU.map(t => {
+                      const actif = formSupport.type_contenu === t.cle;
+                      const col = COULEUR_TYPE_CONTENU[t.cle]?.texte || couleurTheme;
+                      return (
+                        <button key={t.cle} title={t.desc}
+                          onClick={() => {
+                            setFormSupport(p => ({ ...p, type_contenu: t.cle }));
+                            const permis = blocsAutorises(t.cle);
+                            if (!permis.includes(blocForm.type)) setBlocForm(f => ({ ...f, type: permis[0] }));
+                          }}
+                          style={{ padding: '9px 6px', borderRadius: 10, border: `2px solid ${actif ? col : COULEURS.gris200}`, background: actif ? col + '14' : '#fff', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                          <span style={{ fontSize: 20 }}>{t.emoji}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: actif ? col : '#374151' }}>{t.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                ) : null}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={LBL}>Type</label>
-                    <select style={{ ...INP, width: '100%' }} value={formSupport.type_contenu} onChange={e => setFormSupport(p => ({ ...p, type_contenu: e.target.value }))}>
-                      <option value="lecon">📖 Leçon</option>
-                    </select>
-                  </div>
-                  {!moduleLock ? (
-                    <div>
-                      <label style={LBL}>Groupe *</label>
-                      <select style={{ ...INP, width: '100%' }} value={formSupport.groupe_id} onChange={e => setFormSupport(p => ({ ...p, groupe_id: e.target.value }))}>
-                        <option value="">- Choisir -</option>
-                        {mesGroupes.filter(g => g.est_actif && !g._delegation).map(g => <option key={g.id} value={g.id}>{g.nom} · {g.tranche_age}</option>)}
-                      </select>
-                    </div>
-                  ) : (
-                    <div>
-                      <label style={LBL}>Semaine</label>
-                      <input type="number" min={1} max={52} value={formSupport.semaine} onChange={e => setFormSupport(p => ({ ...p, semaine: parseInt(e.target.value) || 1 }))} style={{ ...INP, width: '100%' }} />
-                    </div>
-                  )}
                 </div>
 
-                {!moduleLock ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
-                    <div><label style={LBL}>Module / Thème</label><input value={formSupport.module} onChange={e => setFormSupport(p => ({ ...p, module: e.target.value }))} style={INP} placeholder="ex: Module 3 : Temps du passé" /></div>
-                    <div><label style={LBL}>Semaine</label><input type="number" min={1} max={52} value={formSupport.semaine} onChange={e => setFormSupport(p => ({ ...p, semaine: parseInt(e.target.value) || 1 }))} style={INP} /></div>
+                {/* ── CLASSES DESTINATAIRES ──
+                    Le cœur du changement : un même contenu part vers autant de classes
+                    qu'on veut, au lieu d'être recopié pour chacune. Une seule version à
+                    corriger ensuite. Les classes closes restent proposées : leurs
+                    apprenants gardent l'accès à ce qu'on y publie. */}
+                <div>
+                  <label style={LBL}>
+                    Classes destinataires *
+                    {formSupport.groupe_ids?.length > 0 && (
+                      <span style={{ color: couleurTheme, marginLeft: 5 }}>
+                        ({formSupport.groupe_ids.length} sélectionnée{formSupport.groupe_ids.length > 1 ? 's' : ''})
+                      </span>
+                    )}
+                  </label>
+                  {mesGroupes.filter(g => !g._delegation).length === 0 ? (
+                    <div style={{ fontSize: 12.5, color: COULEURS.gris400, padding: '6px 0' }}>Aucune classe ne vous est assignée pour l'instant.</div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {mesGroupes.filter(g => !g._delegation).map(g => {
+                        const choisi = (formSupport.groupe_ids || []).includes(g.id);
+                        return (
+                          <button key={g.id}
+                            onClick={() => setFormSupport(p => {
+                              const ids = p.groupe_ids || [];
+                              return { ...p, groupe_ids: ids.includes(g.id) ? ids.filter(x => x !== g.id) : [...ids, g.id] };
+                            })}
+                            style={{ padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `2px solid ${choisi ? couleurTheme : COULEURS.gris200}`, background: choisi ? couleurTheme + '14' : '#fff', color: choisi ? couleurTheme : '#374151', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                            {choisi ? '✓ ' : ''}{g.statut === 'clos' ? '🔒 ' : ''}{g.nom}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 6, lineHeight: 1.5 }}>
+                    Une seule version du contenu : la corriger plus tard la corrigera pour toutes ces classes.
                   </div>
-                ) : null}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+                  <div><label style={LBL}>Module / Thème</label><input value={formSupport.module} onChange={e => setFormSupport(p => ({ ...p, module: e.target.value }))} style={INP} placeholder="ex: Module 3 : Temps du passé" /></div>
+                  <div><label style={LBL}>Semaine</label><input type="number" min={1} max={52} value={formSupport.semaine} onChange={e => setFormSupport(p => ({ ...p, semaine: parseInt(e.target.value) || 1 }))} style={INP} /></div>
+                </div>
 
                 <div>
                   <label style={LBL}>Objectifs pédagogiques</label>
@@ -6521,9 +7097,16 @@ export default function DashboardProfesseur() {
                           ))}
                         </div>
                       ) : <p style={{ margin: 0, color: b.contenu ? '#374151' : '#9ca3af', fontStyle: b.contenu ? 'normal' : 'italic', lineHeight: 1.6 }}>{b.contenu || 'Pas de contenu textuel'}</p>)}
-                      {b.type === 'video' && <div style={{ background: '#f3f4f6', borderRadius: 8, padding: 10 }}>🎬 <a href={b.url} target="_blank" rel="noreferrer" style={{ color: couleurTheme }}>{b.url || '-'}</a></div>}
-                      {b.type === 'audio' && <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 10, color: '#059669' }}>🎧 {b.url || '-'}</div>}
-                      {b.type === 'document' && <div style={{ background: '#fff1f2', borderRadius: 8, padding: 10, color: '#dc2626' }}>📄 {b.fichier || '-'} {b.taille && <span style={{ color: '#9ca3af' }}>· {b.taille}</span>}</div>}
+                      {/* APERÇUS RÉELS, et non plus des étiquettes : la vidéo se regarde,
+                          l'audio s'écoute, le PDF se lit sur place. */}
+                      {b.type === 'video'    && <ApercuVideoBloc bloc={b} />}
+                      {b.type === 'audio'    && <ApercuAudioBloc bloc={b} />}
+                      {b.type === 'document' && <ApercuDocumentBloc bloc={b} />}
+                      {/* Le bloc image n'avait AUCUN rendu : rien ne s'affichait, et le
+                          coach ne pouvait pas vérifier qu'il avait déposé le bon schéma. */}
+                      {b.type === 'image' && (b.url
+                        ? <img src={b.url} alt={b.titre || 'Illustration'} style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, background: '#f1f5f9', display: 'block' }} />
+                        : <div style={{ background: '#fdf2f8', borderRadius: 8, padding: 12, fontSize: 12, color: '#92400e' }}>⚠️ Aucune image déposée.</div>)}
                       {b.type === 'lien' && <div style={{ background: '#e0f2fe', borderRadius: 8, padding: 10 }}>🔗 <a href={b.url} target="_blank" rel="noreferrer" style={{ color: couleurTheme }}>{b.url || '-'}</a></div>}
                       {b.type === 'exercice' && (b.sections?.length > 0
                         ? <div style={{ background: '#fff7ed', borderRadius: 8, padding: 10, color: '#92400e' }}>{b.sections.map(sec => <div key={sec.id} style={{ marginBottom: 5 }}><strong>{sec.titre}</strong><pre style={{ fontFamily: 'inherit', margin: '3px 0 0', whiteSpace: 'pre-wrap', fontSize: 12 }}>{sec.contenu}</pre></div>)}</div>
@@ -6531,18 +7114,28 @@ export default function DashboardProfesseur() {
                       )}
                       {b.type === 'quiz' && b.questions?.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {b.questions.map((q, qi) => (
-                            <div key={q.id} style={{ padding: '8px 12px', borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                          {b.questions.map((q, qi) => {
+                            const opts = (q.options || []).filter(Boolean);
+                            return (
+                            <div key={q.id} style={{ padding: '8px 12px', borderRadius: 8, background: opts.length ? '#f0f9ff' : '#EFF6FF', border: `1px solid ${opts.length ? '#bae6fd' : '#BFDBFE'}` }}>
                               <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', marginBottom: 5 }}>Q{qi + 1}. {q.texte}</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                                {q.options.filter(Boolean).map((opt, oi) => (
-                                  <span key={oi} style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, background: opt === q.correct ? '#dcfce7' : '#f3f4f6', color: opt === q.correct ? '#166534' : '#6b7280', fontWeight: opt === q.correct ? 700 : 400 }}>
-                                    {opt === q.correct ? '✓ ' : ''}{opt}
-                                  </span>
-                                ))}
-                              </div>
+                              {/* Sans option, la question est ouverte : on le dit, sinon
+                                  l'aperçu montrait un titre suivi d'une ligne vide et le
+                                  coach croyait sa question incomplète. */}
+                              {opts.length === 0 ? (
+                                <div style={{ fontSize: 11, color: '#1D4ED8', fontWeight: 600 }}>💬 Question ouverte — réponse en classe</div>
+                              ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                  {opts.map((opt, oi) => (
+                                    <span key={oi} style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, background: opt === q.correct ? '#dcfce7' : '#f3f4f6', color: opt === q.correct ? '#166534' : '#6b7280', fontWeight: opt === q.correct ? 700 : 400 }}>
+                                      {opt === q.correct ? '✓ ' : ''}{opt}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -6564,9 +7157,15 @@ export default function DashboardProfesseur() {
                     )}
                   </div>
 
+                  {/* Les blocs proposés dépendent du TYPE DE CONTENU, comme chez dash :
+                      une capsule vidéo n'accueille pas un second bloc vidéo, et offrir
+                      les neuf types partout laissait composer des contenus incohérents
+                      que le lecteur de l'apprenant n'attendait pas. */}
                   <label style={LBL}>Type de bloc</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 7, marginBottom: 14 }}>
-                    {Object.entries(BLOCK_TYPES).map(([k, v]) => (
+                    {Object.entries(BLOCK_TYPES)
+                      .filter(([k]) => blocsAutorises(formSupport.type_contenu).includes(k))
+                      .map(([k, v]) => (
                       <button key={k} onClick={() => setBlocForm(f => ({ ...BLOC_FORM_VIDE, titre: f.titre, dureeMin: f.dureeMin, type: k }))}
                         style={{ padding: '8px 6px', borderRadius: 8, border: `1.5px solid ${blocForm.type === k ? v.color : '#e5e7eb'}`, background: blocForm.type === k ? v.color + '12' : '#fff', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
                         <span style={{ fontSize: 20 }}>{v.icon}</span>
@@ -6610,51 +7209,218 @@ export default function DashboardProfesseur() {
                     </div>
                   )}
 
-                  {(blocForm.type === 'video' || blocForm.type === 'audio' || blocForm.type === 'lien') && (
+                  {/* ── VIDÉO ET AUDIO : DÉPOSER UN FICHIER, OU COLLER UN LIEN ──
+                      Seul le lien était proposé. Un coach qui a enregistré sa capsule sur
+                      son ordinateur n'avait donc aucun moyen de la publier : il lui
+                      fallait d'abord la mettre en ligne ailleurs, sur un service qu'on ne
+                      lui fournit pas. Les deux voies coexistent, comme chez dash — le lien
+                      reste utile pour ce qui est déjà publié (YouTube, un podcast), et il
+                      serait absurde de réimporter une vidéo qui existe en ligne.
+                      Déposer un fichier efface le lien et réciproquement : un bloc ne
+                      porte qu'une source, et en garder deux laisserait le lecteur de
+                      l'apprenant choisir à notre place. */}
+                  {(blocForm.type === 'video' || blocForm.type === 'audio') && (
                     <div style={{ marginBottom: 10 }}>
-                      <label style={LBL}>URL {blocForm.type === 'video' ? 'vidéo (YouTube, Vimeo…)' : blocForm.type === 'audio' ? 'audio' : 'lien externe'}</label>
+                      <label style={LBL}>{blocForm.type === 'video' ? 'Vidéo' : 'Audio'}</label>
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px', borderRadius: 10, border: `2px dashed ${blocForm.fichier ? COULEURS.succes : '#d1d5db'}`, background: blocForm.fichier ? '#f0fdf4' : '#f9fafb', cursor: blocUpload ? 'wait' : 'pointer' }}>
+                        <span style={{ fontSize: 22 }}>{blocUpload ? '⏳' : blocForm.fichier ? '✅' : (blocForm.type === 'video' ? '🎬' : '🎧')}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: blocForm.fichier ? COULEURS.succes : '#6b7280' }}>
+                          {blocUpload ? 'Envoi en cours…' : (blocForm.fichier || 'Cliquez pour choisir un fichier')}
+                        </span>
+                        {/* La limite est annoncée AVANT l'envoi : la découvrir après deux
+                            minutes de téléversement raté est le pire moment. */}
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {blocForm.type === 'video' ? 'MP4, MOV, WEBM' : 'MP3, M4A, WAV, OGG'} · 20 Mo maximum
+                        </span>
+                        <input type="file" style={{ display: 'none' }} disabled={blocUpload}
+                          accept={blocForm.type === 'video' ? 'video/*' : 'audio/*'}
+                          onChange={async e => {
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            if (file.size > 20 * 1024 * 1024) {
+                              toast.error(`Ce fichier fait ${(file.size / 1048576).toFixed(1)} Mo, la limite est de 20 Mo. Mettez-le en ligne (YouTube, Vimeo…) et collez son lien ci-dessous.`, { duration: 8000 });
+                              return;
+                            }
+                            const t = file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} Mo` : `${Math.round(file.size / 1024)} Ko`;
+                            setBlocUpload(true);
+                            try {
+                              const fd = new FormData();
+                              fd.append('file', file);
+                              const tok = localStorage.getItem('admin_token') || '';
+                              const up = await fetchUpload(`${_PROF_API}/api/upload/fichier-classe`, {
+                                method: 'POST', headers: { Authorization: `Bearer ${tok}` }, body: fd,
+                              });
+                              const d = await up.json().catch(() => ({}));
+                              if (!up.ok || !d.url) throw new Error(d.error || "Échec de l'envoi");
+                              setBlocForm(f => ({ ...f, fichier: file.name, taille: t, url: d.url }));
+                            } catch (err) {
+                              toast.error(err.message || "Impossible d'envoyer ce fichier");
+                            } finally { setBlocUpload(false); }
+                          }} />
+                      </label>
+                      {blocForm.fichier && (
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>✅ {blocForm.fichier}{blocForm.taille ? ` · ${blocForm.taille}` : ''}</span>
+                          <button onClick={() => setBlocForm(f => ({ ...f, fichier: '', taille: '', url: '' }))}
+                            style={{ background: 'none', border: 'none', color: '#B91C1C', fontSize: 11, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
+                            Retirer
+                          </button>
+                        </div>
+                      )}
+                      <label style={{ ...LBL, marginTop: 12 }}>…ou coller un lien</label>
+                      <input type="url" value={blocForm.fichier ? '' : blocForm.url}
+                        disabled={!!blocForm.fichier}
+                        onChange={e => setBlocForm(f => ({ ...f, url: e.target.value, fichier: '', taille: '' }))}
+                        style={{ ...INP, background: blocForm.fichier ? '#f3f4f6' : undefined, cursor: blocForm.fichier ? 'not-allowed' : undefined }}
+                        placeholder={blocForm.type === 'video' ? 'https://youtube.com/…' : 'https://…'} />
+                      {blocForm.fichier && (
+                        <div style={{ fontSize: 10.5, color: '#9ca3af', marginTop: 4 }}>
+                          Retirez le fichier pour utiliser un lien à la place.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {blocForm.type === 'lien' && (
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={LBL}>URL du lien externe</label>
                       <input type="url" value={blocForm.url} onChange={e => setBlocForm(f => ({ ...f, url: e.target.value }))} style={INP} placeholder="https://…" />
                     </div>
                   )}
 
-                  {blocForm.type === 'document' && (
+                  {/* LE FICHIER EST RÉELLEMENT TÉLÉVERSÉ.
+                      Le champ ne gardait que `file.name` et la taille : aucun envoi, donc
+                      aucune URL. Le bloc Document était par construction vide côté
+                      apprenant, et son bouton « Télécharger » ne pouvait mener nulle part.
+                      Même route que les fichiers de classe (`/api/upload/fichier-classe`). */}
+                  {(blocForm.type === 'document' || blocForm.type === 'image') && (
                     <div style={{ marginBottom: 10 }}>
-                      <label style={LBL}>Fichier</label>
-                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px', borderRadius: 10, border: `2px dashed ${blocForm.fichier ? COULEURS.succes : '#d1d5db'}`, background: blocForm.fichier ? '#f0fdf4' : '#f9fafb', cursor: 'pointer' }}>
-                        <span style={{ fontSize: 22 }}>{blocForm.fichier ? '✅' : '📄'}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: blocForm.fichier ? COULEURS.succes : '#6b7280' }}>{blocForm.fichier || 'Cliquez pour choisir'}</span>
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>PDF, DOCX, XLSX, PPTX</span>
-                        <input type="file" style={{ display: 'none' }} accept=".pdf,.docx,.xlsx,.pptx"
-                          onChange={e => { const file = e.target.files[0]; if (file) { const t = file.size > 1048576 ? `${(file.size/1048576).toFixed(1)} Mo` : `${Math.round(file.size/1024)} Ko`; setBlocForm(f => ({ ...f, fichier: file.name, taille: t })); } }} />
+                      <label style={LBL}>{blocForm.type === 'image' ? 'Image' : 'Fichier'}</label>
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px', borderRadius: 10, border: `2px dashed ${blocForm.url ? COULEURS.succes : '#d1d5db'}`, background: blocForm.url ? '#f0fdf4' : '#f9fafb', cursor: blocUpload ? 'wait' : 'pointer' }}>
+                        <span style={{ fontSize: 22 }}>{blocUpload ? '⏳' : blocForm.url ? '✅' : (blocForm.type === 'image' ? '🖼️' : '📄')}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: blocForm.url ? COULEURS.succes : '#6b7280' }}>
+                          {blocUpload ? 'Envoi en cours…' : (blocForm.fichier || 'Cliquez pour choisir')}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {blocForm.type === 'image' ? 'JPG, PNG, WEBP' : 'PDF, DOCX, XLSX, PPTX'}
+                        </span>
+                        <input type="file" style={{ display: 'none' }} disabled={blocUpload}
+                          accept={blocForm.type === 'image' ? 'image/*' : '.pdf,.docx,.xlsx,.pptx'}
+                          onChange={async e => {
+                            const file = e.target.files[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            const t = file.size > 1048576 ? `${(file.size/1048576).toFixed(1)} Mo` : `${Math.round(file.size/1024)} Ko`;
+                            setBlocUpload(true);
+                            try {
+                              const fd = new FormData();
+                              fd.append('file', file);
+                              const tok = localStorage.getItem('admin_token') || '';
+                              const up = await fetchUpload(`${_PROF_API}/api/upload/fichier-classe`, {
+                                method: 'POST', headers: { Authorization: `Bearer ${tok}` }, body: fd,
+                              });
+                              const d = await up.json().catch(() => ({}));
+                              if (!up.ok || !d.url) throw new Error(d.error || "Échec de l'envoi");
+                              setBlocForm(f => ({ ...f, fichier: file.name, taille: t, url: d.url }));
+                            } catch (err) {
+                              toast.error(err.message || "Impossible d'envoyer ce fichier");
+                            } finally { setBlocUpload(false); }
+                          }} />
                       </label>
+                      {blocForm.url && (
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+                          ✅ Fichier envoyé — il sera accessible à vos apprenants.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SPEAKING : une consigne, et c'est l'apprenant qui produit l'audio. */}
+                  {blocForm.type === 'speaking' && (
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={LBL}>Consigne d'expression orale</label>
+                      <textarea value={blocForm.contenu} onChange={e => setBlocForm(f => ({ ...f, contenu: e.target.value }))}
+                        style={{ ...INP, minHeight: 80, resize: 'vertical', width: '100%', boxSizing: 'border-box', fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+                        placeholder="Ex : présentez votre parcours professionnel en 2 minutes, en utilisant le passé composé." />
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+                        🎤 L'apprenant répondra en s'enregistrant depuis son espace.
+                      </div>
                     </div>
                   )}
 
                   {blocForm.type === 'quiz' && (
                     <div style={{ marginBottom: 10 }}>
                       <label style={{ ...LBL, marginBottom: 8 }}>Questions ({blocForm.questions.length})</label>
-                      {blocForm.questions.map((q, qi) => (
-                        <div key={q.id} style={{ padding: '8px 10px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', marginBottom: 6, fontSize: 12 }}>
-                          <div style={{ fontWeight: 600 }}>Q{qi + 1}. {q.texte}</div>
-                          <div style={{ color: '#6b7280', marginTop: 2 }}>✓ {q.correct}</div>
-                        </div>
-                      ))}
+                      {/* LES OPTIONS SONT FACULTATIVES, et c'est tout l'enjeu.
+                          Sans options, la question est OUVERTE — « What is the video
+                          about ? » — et se lit chez l'apprenant comme un sujet à préparer,
+                          dont la réponse se discute en classe. Exiger une bonne réponse
+                          interdisait purement et simplement ce cas, qui est le plus courant
+                          dans les devoirs de l'équipe : le coach ne pouvait poser que des
+                          QCM auto-corrigés. Même règle que côté dash. */}
+                      {blocForm.questions.map((q, qi) => {
+                        const ouverte = !(q.options || []).filter(Boolean).length;
+                        return (
+                          <div key={q.id} style={{ padding: '8px 10px', borderRadius: 8, background: ouverte ? '#EFF6FF' : '#f0fdf4', border: `1px solid ${ouverte ? '#BFDBFE' : '#bbf7d0'}`, marginBottom: 6, fontSize: 12 }}>
+                            <div style={{ fontWeight: 600 }}>Q{qi + 1}. {q.texte}</div>
+                            <div style={{ color: ouverte ? '#1D4ED8' : '#6b7280', marginTop: 2 }}>
+                              {ouverte ? '💬 Question ouverte — réponse en classe' : `✓ ${q.correct}`}
+                            </div>
+                          </div>
+                        );
+                      })}
                       <div style={{ background: '#fff', borderRadius: 8, padding: 12, border: '1px solid #e5e7eb' }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Nouvelle question</div>
-                        <input value={blocQuizQ.texte} onChange={e => setBlocQuizQ(q => ({ ...q, texte: e.target.value }))} style={{ ...INP, marginBottom: 8 }} placeholder="Texte de la question" />
+                        <input value={blocQuizQ.texte} onChange={e => setBlocQuizQ(q => ({ ...q, texte: e.target.value }))} style={{ ...INP, marginBottom: 8 }} placeholder="Texte de la question (ex : What is the video about ?)" />
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
                           {[0,1,2,3].map(idx => (
-                            <input key={idx} value={blocQuizQ.options[idx]} onChange={e => { const o = [...blocQuizQ.options]; o[idx] = e.target.value; setBlocQuizQ(q => ({ ...q, options: o })); }} style={INP} placeholder={`Option ${idx + 1}`} />
+                            <input key={idx} value={blocQuizQ.options[idx]} onChange={e => { const o = [...blocQuizQ.options]; o[idx] = e.target.value; setBlocQuizQ(q => ({ ...q, options: o })); }} style={INP} placeholder={`Option ${idx + 1} (facultatif)`} />
                           ))}
                         </div>
                         <select value={blocQuizQ.correct} onChange={e => setBlocQuizQ(q => ({ ...q, correct: e.target.value }))} style={{ ...INP, marginBottom: 8, width: '100%' }}>
-                          <option value="">- Bonne réponse -</option>
+                          <option value="">- Aucune : question ouverte -</option>
                           {blocQuizQ.options.filter(Boolean).map((o, idx) => <option key={idx} value={o}>{o}</option>)}
                         </select>
-                        <button onClick={() => { if (!blocQuizQ.texte || !blocQuizQ.correct) return; setBlocForm(f => ({ ...f, questions: [...f.questions, { ...blocQuizQ, id: Date.now() }] })); setBlocQuizQ({ texte: '', options: ['', '', '', ''], correct: '' }); }} style={{ ...S.btn(couleurTheme, true), opacity: (!blocQuizQ.texte || !blocQuizQ.correct) ? 0.5 : 1 }}>+ Ajouter</button>
+                        <div style={{ fontSize: 11, color: COULEURS.gris400, marginBottom: 8, lineHeight: 1.5 }}>
+                          Laissez les options vides pour une question ouverte : l'apprenant la prépare, vous la corrigez en classe.
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!blocQuizQ.texte.trim()) { toast.error('Texte de la question requis'); return; }
+                            const options = blocQuizQ.options.filter(o => String(o).trim());
+                            /* Des options SANS bonne réponse ne forment ni un QCM ni une
+                               question ouverte : l'apprenant choisirait sans que rien ne
+                               puisse être corrigé. On tranche plutôt que de laisser passer. */
+                            if (options.length && !blocQuizQ.correct) {
+                              toast.error('Indiquez la bonne réponse, ou retirez les options pour une question ouverte');
+                              return;
+                            }
+                            setBlocForm(f => ({ ...f, questions: [...f.questions, { ...blocQuizQ, options, correct: options.length ? blocQuizQ.correct : '', id: Date.now() }] }));
+                            setBlocQuizQ({ texte: '', options: ['', '', '', ''], correct: '' });
+                          }}
+                          style={{ ...S.btn(couleurTheme, true), opacity: blocQuizQ.texte.trim() ? 1 : 0.5 }}>
+                          + Ajouter cette question
+                        </button>
                       </div>
                     </div>
                   )}
+
+                  {/* ── UN BLOC MÉDIA SANS SOURCE NE PEUT PAS ÊTRE AJOUTÉ ──
+                      Seul le titre était exigé. On pouvait donc déposer un bloc
+                      « Document » intitulé « intro » sans aucun fichier : il partait en
+                      base avec `url: ""`, s'affichait chez l'apprenant comme un document
+                      vide, et le coach croyait l'avoir joint. Le manque se constatait des
+                      semaines plus tard, côté apprenant. */}
+                  {(() => {
+                    const BESOIN_SOURCE = { video: 'une vidéo ou un lien', audio: 'un audio ou un lien', document: 'un fichier', image: 'une image', lien: 'une URL' };
+                    const manque = BESOIN_SOURCE[blocForm.type] && !blocForm.url;
+                    return manque ? (
+                      <div style={{ marginTop: 12, padding: '9px 13px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FCD34D', fontSize: 12, color: '#92400E', fontWeight: 600 }}>
+                        ⚠️ Ajoutez {BESOIN_SOURCE[blocForm.type]} — sans source, ce bloc s'afficherait vide chez vos apprenants.
+                      </div>
+                    ) : null;
+                  })()}
 
                   <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                     <button
@@ -6669,8 +7435,11 @@ export default function DashboardProfesseur() {
                         setBlocForm(BLOC_FORM_VIDE);
                         setShowBlocForm(false);
                       }}
-                      disabled={!blocForm.titre}
-                      style={{ ...S.btn(COULEURS.succes), opacity: blocForm.titre ? 1 : 0.45, cursor: blocForm.titre ? 'pointer' : 'not-allowed' }}
+                      disabled={!blocForm.titre || (['video', 'audio', 'document', 'image', 'lien'].includes(blocForm.type) && !blocForm.url)}
+                      style={(() => {
+                        const pret = blocForm.titre && !(['video', 'audio', 'document', 'image', 'lien'].includes(blocForm.type) && !blocForm.url);
+                        return { ...S.btn(COULEURS.succes), opacity: pret ? 1 : 0.45, cursor: pret ? 'pointer' : 'not-allowed' };
+                      })()}
                     >
                       {blocEnEdition ? '✓ Enregistrer les modifications' : '✓ Ajouter ce bloc'}
                     </button>
@@ -6681,14 +7450,105 @@ export default function DashboardProfesseur() {
             </div>
           </div>
 
+          {/* ── ÉTAPE 2 : RÉCAPITULATIF ──
+              Ce qu'on relit avant de diffuser. Publier notifie tous les apprenants de
+              toutes les classes cochées, et rien ne rattrape un envoi : la portée réelle
+              de l'action s'annonce donc avant qu'on la déclenche, pas après. */}
+          {etapeContenu === 2 && (() => {
+            const nomsClasses = classesChoisies.map(id => mesGroupes.find(g => g.id === id)?.nom).filter(Boolean);
+            const nbApprenants = new Set(
+              mesApprenants.filter(a => classesChoisies.includes(a.groupe_id)).map(a => a.id)
+            ).size;
+            const vaPublier = peutPublierRecap && formSupport.est_visible;
+            const ligne = (lib, val) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '7px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
+                <span style={{ color: COULEURS.gris400 }}>{lib}</span>
+                <span style={{ fontWeight: 700, color: COULEURS.navy, textAlign: 'right' }}>{val}</span>
+              </div>
+            );
+            return (
+              <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
+
+                <div style={{ padding: '14px 18px', borderRadius: 12, background: '#F8FAFC', border: '2px solid #E2E8F0' }}>
+                  <div style={{ fontSize: 10, color: COULEURS.gris400, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 7 }}>DESTINATAIRES</div>
+                  {nomsClasses.length === 0 ? (
+                    <div style={{ fontSize: 13, color: '#B45309', fontWeight: 700 }}>Aucune classe choisie — revenez à l'étape précédente.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {nomsClasses.map(n => (
+                          <span key={n} style={{ fontSize: 12, fontWeight: 700, padding: '3px 11px', borderRadius: 999, background: couleurTheme + '15', color: couleurTheme }}>{n}</span>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 12, color: COULEURS.gris600 }}>
+                        {nbApprenants} apprenant{nbApprenants > 1 ? 's' : ''} concerné{nbApprenants > 1 ? 's' : ''}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  {ligne('Titre', formSupport.titre || '—')}
+                  {ligne('Type', `${TYPES_CONTENU.find(t => t.cle === formSupport.type_contenu)?.emoji || ''} ${COULEUR_TYPE_CONTENU[formSupport.type_contenu]?.lib || formSupport.type_contenu}`)}
+                  {ligne('Module / Thème', formSupport.module || '— aucun —')}
+                  {ligne('Semaine', `S${formSupport.semaine}`)}
+                  {ligne('Blocs', `${blocs.length} · ${totalDuree} min`)}
+                </div>
+
+                {/* Le garde-fou s'explique ici plutôt que de refuser silencieusement :
+                    un coach qui a coché « Publié » doit comprendre pourquoi son contenu
+                    partira en brouillon. */}
+                {blocs.length === 0 ? (
+                  <div style={{ padding: '12px 16px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #FCD34D', fontSize: 12.5, color: '#92400E', lineHeight: 1.6 }}>
+                    <strong>Aucun bloc.</strong> Ce contenu sera enregistré en brouillon, même si « Publié »
+                    est coché : un cours qui s'ouvre sur une page vide ne doit pas être annoncé aux apprenants.
+                    Vous pourrez le publier dès qu'il aura au moins un bloc.
+                  </div>
+                ) : vaPublier ? (
+                  <div style={{ padding: '12px 16px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #FDBA74', fontSize: 12.5, color: '#9A3412', lineHeight: 1.6 }}>
+                    <strong>Publication immédiate.</strong> Tous les apprenants {nomsClasses.length > 1 ? 'de ces classes' : 'de cette classe'} recevront
+                    une notification dans leur espace. Cet envoi n'est pas annulable.
+                  </div>
+                ) : (
+                  <div style={{ padding: '12px 16px', borderRadius: 10, background: '#F1F5F9', border: `1px solid ${COULEURS.gris200}`, fontSize: 12.5, color: '#475569', lineHeight: 1.6 }}>
+                    <strong>Enregistré en brouillon.</strong> Personne n'est prévenu. Vous le publierez depuis la
+                    médiathèque quand il sera prêt.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ── Footer ── */}
           <div style={{ padding: '14px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb', flexShrink: 0 }}>
-            <span style={{ fontSize: 12, color: COULEURS.gris400 }}>* Titre obligatoire</span>
+            <span style={{ fontSize: 12, color: COULEURS.gris400 }}>
+              {valide ? '' : '* Titre et au moins une classe destinataire'}
+            </span>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setModalSupport(false); setPreviewMode(false); setModuleLock(null); }} disabled={savingModule} style={S.btnGhost}>Annuler</button>
-              <button disabled={!valide || savingModule} onClick={doSave} style={{ ...S.btn(COULEURS.succes), opacity: (valide && !savingModule) ? 1 : 0.45, cursor: (valide && !savingModule) ? 'pointer' : 'not-allowed' }}>
-                {savingModule ? '⏳ Envoi en cours…' : (contenuEnEdition ? '✅ Enregistrer les modifications' : '🚀 Publier le module')}
-              </button>
+              {etapeContenu === 1 ? (
+                <button onClick={() => fermerEditeur()} disabled={savingModule} style={S.btnGhost}>Annuler</button>
+              ) : (
+                <button onClick={() => setEtapeContenu(1)} disabled={savingModule} style={S.btnGhost}>← Retour</button>
+              )}
+              {etapeContenu === 1 ? (
+                <button
+                  disabled={!valide}
+                  /* Un bloc à moitié saisi serait perdu au passage à l'étape suivante :
+                     le formulaire de bloc n'est pas remonté dans `blocs` tant qu'on n'a
+                     pas validé. Mieux vaut le dire que le laisser disparaître. */
+                  onClick={() => { if (showBlocForm) { toast.error('Finalisez ou annulez le bloc en cours'); return; } setEtapeContenu(2); }}
+                  style={{ ...S.btn(couleurTheme), opacity: valide ? 1 : 0.45, cursor: valide ? 'pointer' : 'not-allowed' }}>
+                  Suivant →
+                </button>
+              ) : (
+                <button disabled={!valide || savingModule} onClick={doSave}
+                  style={{ ...S.btn(COULEURS.succes), opacity: (valide && !savingModule) ? 1 : 0.45, cursor: (valide && !savingModule) ? 'pointer' : 'not-allowed' }}>
+                  {savingModule ? '⏳ Envoi en cours…'
+                    : contenuEnEdition ? '✅ Enregistrer les modifications'
+                    : (peutPublierRecap && formSupport.est_visible) ? '🚀 Créer et publier'
+                    : '💾 Créer en brouillon'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -6701,7 +7561,7 @@ export default function DashboardProfesseur() {
     {modalVoirContenu && (() => {
       const c      = modalVoirContenu;
       const ct     = COULEUR_TYPE_CONTENU[c.type_contenu] || { fond: COULEURS.gris100, texte: COULEURS.gris600, lib: c.type_contenu };
-      const groupe = mesGroupes.find(g => g.id === c.groupe_id);
+      const classesCibles = classesDuContenu(c).map(id => mesGroupes.find(g => g.id === id)).filter(Boolean);
       const blocs  = c.blocs || [];
       const datePub = c.date_publication
         ? new Date(c.date_publication).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -6717,7 +7577,13 @@ export default function DashboardProfesseur() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <span style={{ padding: '3px 10px', borderRadius: 20, background: ct.fond, color: ct.texte, fontSize: 11, fontWeight: 700 }}>{ct.lib}</span>
               {c.module && <span style={{ padding: '3px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: 600 }}>📚 {c.module}</span>}
-              <span style={{ padding: '3px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>👥 {groupe?.nom || '-'}</span>
+              {/* Toutes les classes visées : sur un contenu diffusé à plusieurs, n'en
+                  montrer qu'une laissait croire à une portée bien plus étroite. */}
+              {classesCibles.length === 0 ? (
+                <span style={{ padding: '3px 10px', borderRadius: 20, background: 'rgba(253,186,116,0.25)', color: '#FDBA74', fontSize: 11, fontWeight: 700 }}>👥 Aucune classe</span>
+              ) : classesCibles.map(g => (
+                <span key={g.id} style={{ padding: '3px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>👥 {g.nom}</span>
+              ))}
               <span style={{ padding: '3px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Semaine {c.semaine}</span>
               <span style={{ padding: '3px 10px', borderRadius: 20, background: c.est_visible ? '#D1FAE5' : 'rgba(255,255,255,0.1)', color: c.est_visible ? '#065F46' : 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 700 }}>
                 {c.est_visible ? '📗 Publié' : '📝 Brouillon'}
@@ -6847,7 +7713,11 @@ export default function DashboardProfesseur() {
             {/* ── Section Lu par les apprenants ── */}
             <div style={{ padding: '0 24px 16px', borderTop: `1px solid ${COULEURS.gris200}`, background: '#FAFAFA' }}>
             <div style={{ paddingTop: 16 }}>{(() => {
-              const lus = lusParContenu[c.id];
+              /* `lus` porte désormais { lecteurs, en_attente, total } : on garde le nom
+                 pour ne pas réécrire le bloc, et on expose les deux listes. */
+              const suivi = lusParContenu[c.id];
+              const lus = suivi?.lecteurs;
+              const enAttente = suivi?.en_attente || [];
               return (
                 <div style={{ borderRadius: 12, border: `1px solid ${COULEURS.gris200}`, overflow: 'hidden' }}>
                   <div style={{ padding: '12px 16px', background: '#F0FDF4', borderBottom: lus?.length ? `1px solid #A7F3D0` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -6856,7 +7726,7 @@ export default function DashboardProfesseur() {
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#065F46' }}>Lu par les apprenants</span>
                     </div>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#059669', background: '#D1FAE5', borderRadius: 20, padding: '2px 10px' }}>
-                      {lus === undefined ? '…' : lus.length}
+                      {lus === undefined ? '…' : `${lus.length} / ${suivi?.total ?? lus.length}`}
                     </span>
                   </div>
                   {lus === undefined ? (
@@ -6883,6 +7753,45 @@ export default function DashboardProfesseur() {
                       ))}
                     </div>
                   )}
+
+                  {/* ── CEUX QUI N'ONT PAS ENCORE OUVERT ──
+                      C'est la liste qui sert : savoir qui relancer. Elle n'existait pas,
+                      l'écran ne montrant que les lecteurs. Un apprenant sans compte ouvert
+                      est signalé à part : ce n'est pas qu'il tarde, c'est qu'il ne peut
+                      pas — et cela se règle par l'assistante, pas par un rappel. */}
+                  {enAttente.length > 0 && (
+                    <>
+                      <div style={{ padding: '12px 16px', background: '#FFFBEB', borderTop: '1px solid #FDE68A', borderBottom: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 16 }}>⏳</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>Pas encore ouvert</span>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#B45309', background: '#FEF3C7', borderRadius: 20, padding: '2px 10px' }}>
+                          {enAttente.length}
+                        </span>
+                      </div>
+                      <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {enAttente.map((a, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', borderRadius: 8, background: i % 2 === 0 ? '#F9FAFB' : '#fff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#92400E' }}>
+                                {(a.nom_complet?.[0] || '?').toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: COULEURS.navy }}>{a.nom_complet || a.email}</div>
+                                {a.email && <div style={{ fontSize: 11, color: COULEURS.gris400 }}>{a.email}</div>}
+                              </div>
+                            </div>
+                            {a.sans_compte && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#991B1B', background: '#FEE2E2', borderRadius: 20, padding: '2px 9px' }}>
+                                sans accès
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })()}</div></div>
@@ -6894,18 +7803,30 @@ export default function DashboardProfesseur() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setModalVoirContenu(null)} style={S.btnGhost}>Fermer</button>
+
+              {/* PUBLIER / DÉPUBLIER ET SUPPRIMER — ils manquaient alors que les routes
+                  les acceptaient déjà. Un contenu créé en brouillon n'avait aucun moyen
+                  d'être publié depuis cet écran : le coach devait rouvrir l'éditeur
+                  complet pour changer une case. Même geste que dans la médiathèque de
+                  dash, confirmation comprise — publier alerte toute une classe,
+                  supprimer est sans retour. */}
+              {!c._lectureSeule && (
+                <>
+                  <button onClick={() => supprimerContenuMedia(c)} disabled={actionMedia === c.id}
+                    style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #FCA5A5', background: '#FFF5F5', color: '#991B1B', fontSize: 13, fontWeight: 700, cursor: actionMedia === c.id ? 'wait' : 'pointer', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                    🗑 Supprimer
+                  </button>
+                  <button onClick={() => basculerPublicationMedia(c)} disabled={actionMedia === c.id}
+                    style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: c.est_visible ? '#F59E0B' : COULEURS.succes, color: '#fff', fontSize: 13, fontWeight: 700, cursor: actionMedia === c.id ? 'wait' : 'pointer', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                    {actionMedia === c.id ? '⏳…' : c.est_visible ? '🚫 Dépublier' : '✅ Publier'}
+                  </button>
+                </>
+              )}
+
               {!c._lectureSeule && (
                 <button
                   style={S.btn(couleurTheme)}
-                  onClick={() => {
-                    setModalVoirContenu(null);
-                    setContenuEnEdition(c.id);
-                    setFormSupport({ titre: c.titre, description: c.description || '', type_contenu: c.type_contenu, module: c.module || '', semaine: c.semaine || 1, groupe_id: c.groupe_id, est_visible: c.est_visible, fichier: null });
-                    setModuleForm({ objectifs: c.objectifs || '', dureeEstimee: c.dureeEstimee || 30, statut: c.statut || 'publie' });
-                    setBlocs(c.blocs || []); setShowBlocForm(false); setPreviewMode(false);
-                    setModuleLock({ groupe_id: c.groupe_id, module: c.module || '' });
-                    setModalSupport(true);
-                  }}
+                  onClick={() => { setModalVoirContenu(null); ouvrirEditionContenu(c); }}
                 >✏️ Modifier</button>
               )}
             </div>
@@ -6916,319 +7837,16 @@ export default function DashboardProfesseur() {
       );
     })()}
 
-    {/* ══════════ MODAL CHOIX DE MODULE - Ajouter un support ══════════ */}
-    {modalChoixModule && (() => {
-      // Tous les modules disponibles dans la médiathèque du prof
-      const modulesDispos = [...new Set(contenusLocaux
-        .filter(c => mesGroupes.some(g => g.id === c.groupe_id))
-        .map(c => c.module)
-      )].filter(Boolean);
-
-      function ouvrirAvecModule(nomModule, groupeId) {
-        setContenuEnEdition(null);
-        setFormSupport({ titre: '', description: '', type_contenu: 'lecon', module: nomModule, semaine: 1, groupe_id: groupeId, est_visible: false, fichier: null });
-        setModuleForm({ objectifs: '', dureeEstimee: 30, statut: 'brouillon' });
-        setModuleLock({ groupe_id: groupeId, module: nomModule });
-        setBlocs([]); setShowBlocForm(false); setPreviewMode(false);
-        setModalChoixModule(false);
-        setModalSupport(true);
-      }
-
-      return (
-      <>
-        <div onClick={() => setModalChoixModule(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,35,0.6)', zIndex: 1000, backdropFilter: 'blur(3px)' }} />
-        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(96vw,480px)', maxHeight: '88vh', background: '#fff', borderRadius: 14, boxShadow: '0 32px 80px rgba(0,0,0,0.3)', zIndex: 1001, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-
-          {/* Header */}
-          <div style={{ padding: '18px 24px', background: `linear-gradient(135deg, ${COULEURS.navy} 0%, #0E4F6B 100%)`, borderRadius: '14px 14px 0 0', flexShrink: 0, position: 'relative' }}>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', marginBottom: 4 }}>AJOUTER UN SUPPORT</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Choisir un module</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>Le support sera rattaché au module sélectionné</div>
-            <button onClick={() => setModalChoixModule(false)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 22, cursor: 'pointer', padding: 0 }}>✕</button>
-          </div>
-
-          {/* Liste des modules */}
-          <div style={{ overflowY: 'auto', flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {modulesDispos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 16px', color: COULEURS.gris400, fontSize: 13 }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>📚</div>
-                Aucun module existant. Commencez par créer un module.
-              </div>
-            ) : (
-              modulesDispos.map(nomModule => {
-                const contenusModule = contenusLocaux.filter(c => c.module === nomModule && mesGroupes.some(g => g.id === c.groupe_id));
-                const groupeId = contenusModule[0]?.groupe_id || mesGroupes[0]?.id || '';
-                const groupe = mesGroupes.find(g => g.id === groupeId);
-                const nbSupports = contenusModule.length;
-                return (
-                  <div
-                    key={nomModule}
-                    onClick={() => ouvrirAvecModule(nomModule, groupeId)}
-                    style={{
-                      padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
-                      border: `1.5px solid ${COULEURS.gris200}`,
-                      background: COULEURS.gris50,
-                      display: 'flex', alignItems: 'center', gap: 14, transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.border = `1.5px solid ${couleurTheme}`; e.currentTarget.style.background = '#EFF6FF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.border = `1.5px solid ${COULEURS.gris200}`; e.currentTarget.style.background = COULEURS.gris50; }}
-                  >
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-                      📚
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomModule}</div>
-                      <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 2 }}>
-                        👥 {groupe?.nom || '-'} · {nbSupports} support{nbSupports > 1 ? 's' : ''}
-                      </div>
-                    </div>
-                    <span style={{ color: couleurTheme, fontSize: 18, flexShrink: 0 }}>→</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Footer */}
-          <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={() => setModalChoixModule(false)} style={S.btnGhost}>Annuler</button>
-          </div>
-
-        </div>
-      </>
-      );
-    })()}
-
-    {/* ══════════ MODAL CRÉER NOUVEAU MODULE (2 étapes) ══════════ */}
-    {modalNouveauModule && (() => {
-      const fm  = formNouveauModule;
-      const setFm = setFormNouveauModule;
-      const LBL = { fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 };
-      const INP = { ...S.input, marginBottom: 0 };
-      const groupeChoisi = mesGroupes.find(g => g.id === fm.groupe_id);
-      const valide = fm.titre.trim() && fm.groupe_id;
-
-      async function sauvegarderModule() {
-        if (!valide || savingModule) return;
-        setSavingModule(true);
-        try {
-        const token = localStorage.getItem('admin_token') || localStorage.getItem('bet_access_token');
-        const newItem = {
-          id: `cnt-${Date.now()}`,
-          professeur_id: profile?.id || 'teacher-001',
-          groupe_id: fm.groupe_id,
-          type_contenu: fm.type_contenu,
-          titre: fm.titre,
-          description: '',
-          module: fm.module,
-          semaine: fm.semaine,
-          fichier_url: null,
-          est_visible: fm.statut === 'publie',
-          date_publication: new Date().toISOString(),
-          version: 1,
-          objectifs: fm.objectifs,
-          dureeEstimee: fm.dureeEstimee,
-          statut: fm.statut,
-          blocs: [],
-        };
-
-        if (!token) {
-          setContenus(prev => [...prev, newItem]);
-        } else {
-          try {
-            const r = await fetch(`${_PROF_API}/api/elearning/contenus`, {
-              method: 'POST', headers: _profHdrs(),
-              body: JSON.stringify({
-                titre:         fm.titre,
-                categorie:     fm.module || '',
-                type_contenu:  fm.type_contenu,
-                semaine:       fm.semaine,
-                statut:        fm.statut,
-                est_visible:   fm.statut === 'publie',
-                objectifs:     fm.objectifs || '',
-                duree_estimee: fm.dureeEstimee,
-                classe_id:     fm.groupe_id || null,
-                blocs:         [],
-              }),
-            });
-            const d = await r.json().catch(() => ({}));
-            if (r.ok) {
-              setContenus(prev => [...prev, { ...newItem, id: d.contenu?.id || newItem.id }]);
-            } else {
-              toast.error(d.error || 'Création refusée', { duration: 5000 });
-              return;
-            }
-          } catch (e) {
-            toast.error('Impossible de joindre le serveur', { duration: 5000 });
-            return;
-          }
-        }
-        setModalNouveauModule(false);
-        } finally {
-          setSavingModule(false);
-        }
-      }
-
-      return (
-      <>
-        <div onClick={() => setModalNouveauModule(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,35,0.6)', zIndex: 1000, backdropFilter: 'blur(3px)' }} />
-        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '90vw', height: '90vh', maxHeight: '90vh', background: '#fff', borderRadius: 14, boxShadow: '0 32px 80px rgba(0,0,0,0.3)', zIndex: 1001, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-
-          {/* Header */}
-          <div style={{ padding: '18px 24px', background: `linear-gradient(135deg, ${COULEURS.navy} 0%, #0E4F6B 100%)`, borderRadius: '14px 14px 0 0', flexShrink: 0, position: 'relative' }}>
-            {/* Indicateur d'étapes */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              {[1, 2].map(n => (
-                <span key={n} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: etapeModule >= n ? couleurTheme : 'rgba(255,255,255,0.2)', color: etapeModule >= n ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${etapeModule >= n ? couleurTheme : 'rgba(255,255,255,0.3)'}` }}>
-                    {n}
-                  </span>
-                  {n < 2 && <span style={{ display: 'inline-block', height: 2, width: 24, background: etapeModule > 1 ? couleurTheme : 'rgba(255,255,255,0.25)', borderRadius: 1 }} />}
-                </span>
-              ))}
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 8 }}>
-                {etapeModule === 1 ? 'Choix de la classe' : 'Paramètres du module'}
-              </span>
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>
-              {etapeModule === 1 ? '📚 Nouveau module - Choisir une classe' : `📦 ${fm.titre || 'Paramètres du module'}`}
-            </div>
-            <button onClick={() => setModalNouveauModule(false)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 22, cursor: 'pointer', padding: 0 }}>✕</button>
-          </div>
-
-          {/* Body */}
-          <div style={{ overflowY: 'auto', flex: 1, padding: 24 }}>
-
-            {/* ── ÉTAPE 1 : Choix de la classe ── */}
-            {etapeModule === 1 && (
-              <div>
-                <div style={{ fontSize: 12, color: COULEURS.gris400, marginBottom: 16, lineHeight: 1.6 }}>
-                  Sélectionnez la classe pour laquelle vous créez ce module.
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {mesGroupes.filter(g => g.est_actif && !g._delegation).map(g => {
-                    const actif = fm.groupe_id === g.id;
-                    const nbAppr = mesApprenants.filter(a => a.groupe_id === g.id).length;
-                    return (
-                      <div
-                        key={g.id}
-                        onClick={() => setFm(p => ({ ...p, groupe_id: g.id }))}
-                        style={{
-                          padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
-                          border: `2px solid ${actif ? couleurTheme : COULEURS.gris200}`,
-                          background: actif ? '#EFF6FF' : COULEURS.gris50,
-                          display: 'flex', alignItems: 'center', gap: 14, transition: 'all 0.15s',
-                        }}
-                      >
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: actif ? couleurTheme : COULEURS.gris200, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                          👥
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: actif ? couleurTheme : COULEURS.navy }}>{g.nom}</div>
-                          <div style={{ fontSize: 11, color: COULEURS.gris400, marginTop: 2 }}>
-                            {g.tranche_age} · {g.niveau} · {nbAppr} apprenant{nbAppr > 1 ? 's' : ''}
-                          </div>
-                        </div>
-                        {actif && <span style={{ color: couleurTheme, fontSize: 20, flexShrink: 0 }}>✓</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ── ÉTAPE 2 : Paramètres du module ── */}
-            {etapeModule === 2 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                {/* Classe choisie - lecture seule avec lien retour */}
-                {groupeChoisi && (
-                  <div style={{ padding: '10px 14px', borderRadius: 10, background: '#EFF6FF', border: `1px solid ${couleurTheme}`, fontSize: 12, color: COULEURS.navy, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18 }}>👥</span>
-                    <div>
-                      <strong>{groupeChoisi.nom}</strong>
-                      <span style={{ color: COULEURS.gris400 }}> · {groupeChoisi.tranche_age}</span>
-                    </div>
-                    <button onClick={() => setEtapeModule(1)} style={{ marginLeft: 'auto', fontSize: 11, color: couleurTheme, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>Changer →</button>
-                  </div>
-                )}
-
-                <div>
-                  <label style={LBL}>Titre *</label>
-                  <input value={fm.titre} onChange={e => setFm(p => ({ ...p, titre: e.target.value }))} style={INP} placeholder="ex: Leçon 1 - Hello World! Se présenter en anglais" />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={LBL}>Type</label>
-                    <select style={{ ...INP, width: '100%' }} value={fm.type_contenu} onChange={e => setFm(p => ({ ...p, type_contenu: e.target.value }))}>
-                      <option value="lecon">📖 Leçon</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={LBL}>Semaine</label>
-                    <input type="number" min={1} max={52} value={fm.semaine} onChange={e => setFm(p => ({ ...p, semaine: parseInt(e.target.value) || 1 }))} style={{ ...INP, width: '100%' }} />
-                  </div>
-                </div>
-
-                <div>
-                  <label style={LBL}>Module / Thème</label>
-                  <input value={fm.module} onChange={e => setFm(p => ({ ...p, module: e.target.value }))} style={INP} placeholder="ex: Module 1 : Premiers mots" />
-                </div>
-
-                <div>
-                  <label style={LBL}>Objectifs pédagogiques</label>
-                  <textarea value={fm.objectifs} onChange={e => setFm(p => ({ ...p, objectifs: e.target.value }))} style={{ ...INP, minHeight: 80, resize: 'vertical', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }} placeholder={"- Maîtriser le vocabulaire des réunions\n- Animer une réunion formelle\n- Comprendre les expressions clés"} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={LBL}>Durée estimée (min)</label>
-                    <input type="number" min={5} value={fm.dureeEstimee} onChange={e => setFm(p => ({ ...p, dureeEstimee: parseInt(e.target.value) || 30 }))} style={{ ...INP, width: '100%' }} />
-                  </div>
-                  <div>
-                    <label style={LBL}>Statut</label>
-                    <select value={fm.statut} onChange={e => setFm(p => ({ ...p, statut: e.target.value }))} style={{ ...INP, width: '100%' }}>
-                      <option value="brouillon">📝 Brouillon</option>
-                      <option value="publie">✅ Publié</option>
-                      <option value="archive">📦 Archivé</option>
-                    </select>
-                  </div>
-                </div>
-
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div style={{ padding: '14px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb', flexShrink: 0 }}>
-            {etapeModule === 1 ? (
-              <button onClick={() => setModalNouveauModule(false)} style={S.btnGhost}>Annuler</button>
-            ) : (
-              <button onClick={() => setEtapeModule(1)} style={S.btnGhost}>← Retour</button>
-            )}
-            {etapeModule === 1 ? (
-              <button
-                onClick={() => { if (fm.groupe_id) setEtapeModule(2); }}
-                style={{ ...S.btn(couleurTheme), opacity: fm.groupe_id ? 1 : 0.45, cursor: fm.groupe_id ? 'pointer' : 'not-allowed' }}
-              >
-                Suivant →
-              </button>
-            ) : (
-              <button
-                onClick={sauvegarderModule}
-                disabled={!valide || savingModule}
-                style={{ ...S.btn(COULEURS.succes), opacity: (valide && !savingModule) ? 1 : 0.45, cursor: (valide && !savingModule) ? 'pointer' : 'not-allowed' }}
-              >
-                {savingModule ? '⏳ Envoi en cours…' : '✅ Créer le module'}
-              </button>
-            )}
-          </div>
-
-        </div>
-      </>
-      );
-    })()}
+    {/* LES DEUX MODALES DE CRÉATION ONT DISPARU, et c'est le but.
+        · « Choix de module » servait à rattacher un nouveau support à un module
+          existant ; plus rien ne l'ouvrait depuis que le bouton « Ajouter un
+          support » a été retiré.
+        · « Nouveau module » posait les paramètres puis enregistrait un contenu
+          SANS AUCUN BLOC. Il fallait ensuite rouvrir l'éditeur pour y mettre
+          quelque chose, si bien que la création se faisait en deux temps et
+          laissait des coquilles vides en base.
+        L'éditeur (`modalSupport`) fait désormais les deux : on y choisit ses
+        classes, on y rédige, et un seul appel serveur part avec les blocs. */}
 
     {/* ══════════ MODAL CRÉER DEVOIR / ÉVALUATION / EXERCICE / EXAMEN ══════════ */}
     {modalCreer && (() => {
@@ -8628,7 +9246,7 @@ export default function DashboardProfesseur() {
                 </div>
                 {/* Contenus liés */}
                 {f.groupe_id && (() => {
-                  const disponibles = mesContenus.filter(c => c.groupe_id === f.groupe_id);
+                  const disponibles = mesContenus.filter(c => contenuViseClasse(c, f.groupe_id));
                   if (disponibles.length === 0) return null;
                   const CT = { lecon: { bg:'#E0F2FE', txt:'#0E7490', ic:'📖' }, exercice: { bg:'#D1FAE5', txt:'#065F46', ic:'✏️' }, devoir: { bg:'#FEF3C7', txt:'#92400E', ic:'📝' }, audio: { bg:'#EDE9FE', txt:'#5B21B6', ic:'🎵' } };
                   return (
@@ -8843,7 +9461,7 @@ export default function DashboardProfesseur() {
                       const styleOverride   = { borderColor: '#FCD34D', background: '#FFFBEB' };
                       const CT = { lecon:{bg:'#E0F2FE',txt:'#0E7490',ic:'📖'}, exercice:{bg:'#D1FAE5',txt:'#065F46',ic:'✏️'}, devoir:{bg:'#FEF3C7',txt:'#92400E',ic:'📝'}, audio:{bg:'#EDE9FE',txt:'#5B21B6',ic:'🎵'}, video:{bg:'#FEE2E2',txt:'#991B1B',ic:'🎬'}, document:{bg:'#F3F4F6',txt:'#374151',ic:'📄'} };
                       // Supports disponibles groupés par module
-                      const disponibles = cf.groupe_id ? mesContenus.filter(c => c.groupe_id === cf.groupe_id) : [];
+                      const disponibles = cf.groupe_id ? mesContenus.filter(c => contenuViseClasse(c, cf.groupe_id)) : [];
                       const modules = [...new Set(disponibles.map(c => c.module || '- Sans module -'))];
                       const idsLigne = ligne.contenu_ids || [];
                       return (

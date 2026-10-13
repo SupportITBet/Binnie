@@ -2,9 +2,24 @@
 import { Router } from "express";
 import supabase from "../config/supabase.js";
 import { authenticateAdmin, resolvePermissions, messagePermissionRefusee } from "../middlewares/requireAdmin.js";
-import { notifyRole, notifyEntreprise } from "../services/notifyRole.js";
+import { notifyRole as _notifyRole, notifyEntreprise as _notifyEntreprise } from "../services/notifyRole.js";
+
+/* ── TOUTE NOTIFICATION ÉCRITE ICI EST UNE NOTIFICATION BET E-LEARNING ──
+   `notifyRole` / `notifyUser` / `notifyEntreprise` écrivent `source: 'dash'` PAR DÉFAUT,
+   tandis que la cloche de bet-elearning n'interroge que `?source=bet-elearning` et que la
+   route filtre strictement dessus. Chaque appel de ce fichier qui oubliait la source
+   produisait donc une notification REÉLLEMENT CRÉÉE mais INVISIBLE pour son destinataire -
+   la panne était silencieuse des deux côtés.
+   On enveloppe à l'import plutôt que de corriger chaque appel : un appel ajouté demain
+   hérite du bon comportement sans qu'on ait à y penser. Une notification qui doit partir
+   vers dash peut toujours surcharger `source` explicitement. ── */
+const _SRC = { source: 'bet-elearning' };
+const notifyRole       = (r, p, x) => _notifyRole(r, { ..._SRC, ...p }, x);
+const notifyEntreprise = (e, p)    => _notifyEntreprise(e, { ..._SRC, ...p });
+
 import { logAudit } from "../middlewares/logAudit.js";
 import { isRealEmail, phoneToVirtualEmail, identifiantTechniqueApprenant, normalizePhone } from "./apprenants.js";
+import { sendApprenantWelcomeEmail } from "../services/emailService.js";
 
 const router = Router();
 
@@ -18,7 +33,15 @@ function acteurAudit(req) {
   };
 }
 
-const STATUTS = ['recu', 'verifie', 'transmis_placement', 'teste', 'assigne', 'actif'];
+/* L'ordre du parcours, et qui tient la main à chaque étape :
+ *   recu → verifie → transmis_placement → teste → transmis_onboarding → assigne → actif
+ *   └──── assistante e-learning ────┘    agent   └ assistante ┘  └──── onboarding ────┘
+ *                                      placement
+ * `transmis_onboarding` marque le passage de main explicite entre l'assistante, qui lit le
+ * résultat du test, et l'Onboarding, qui choisit la classe sur ce niveau mesuré. Colonne
+ * TEXTE sans contrainte en base : son ajout n'a demandé aucune migration.
+ * Constante déclarative - aucun contrôle ne s'y adosse aujourd'hui. */
+const STATUTS = ['recu', 'verifie', 'transmis_placement', 'teste', 'transmis_onboarding', 'assigne', 'actif'];
 
 // Normalise un email (le matching parent ↔ enfant se fait sur cette valeur exacte)
 const normEmail = (e) => e ? e.toLowerCase().trim() : null;
@@ -64,12 +87,46 @@ async function creerCompteApprenant({ email, nom_complet, telephone, date_naissa
     mdp_temporaire: true, mdp_initial: mdpTemp,
   }, { onConflict: 'id' });
 
-  // Mettre à jour apprenant_id dans classes_elearning_apprenants
-  await supabase.from('classes_elearning_apprenants')
-    .update({ apprenant_id: uid })
-    .ilike('email', email);
+  /* ── L'E-MAIL DE BIENVENUE PARTAIT POUR LES APPRENANTS DE DASH, JAMAIS POUR CEUX D'ICI ──
+     `sendApprenantWelcomeEmail` existe depuis toujours et était appelée depuis
+     `apprenants.js` et `parcours.js` - trois appels, aucun dans ce fichier. L'assignation
+     e-learning créait donc un compte, générait un mot de passe, le stockait... et s'arrêtait
+     là. L'apprenant avait un accès dont il ignorait l'existence.
 
-  return { ok: true, uid, mdp_initial: mdpTemp, email };
+     UNE ADRESSE TECHNIQUE NE REÇOIT RIEN. Un apprenant sans e-mail propre se voit attribuer
+     un identifiant dérivé de son téléphone (`phoneToVirtualEmail`) : écrire à cette adresse
+     serait écrire dans le vide, et compter l'envoi comme fait serait un mensonge. */
+  let envoiOk = false;
+  if (isRealEmail(email)) {
+    try {
+      // `plateforme` dirige le bouton « Se connecter » vers BET E-Learning et non vers
+      // le tableau de bord du présentiel, où ce compte n'ouvre rien.
+      await sendApprenantWelcomeEmail({ prenom, nom, email, mdpTemp, compteExistant: !!existing, plateforme: 'bet-elearning' });
+      envoiOk = true;
+    } catch (e) {
+      console.error('[inscriptions-elearning] e-mail de bienvenue non parti:', e.message || e);
+    }
+  }
+
+  /* `bienvenue` et `acces` ne sont cochées QUE si l'e-mail est réellement parti.
+     L'écran de suivi les déduisait jusqu'ici de la seule présence d'un `apprenant_id`, en
+     expliquant que « le compte créé vaut preuve d'envoi » - c'était vrai côté dash, faux
+     ici : la checklist affichait 50 % de démarrage sur un dossier où rien n'avait été
+     envoyé. On écrit le fait plutôt que de le supposer. */
+  const majClasse = { apprenant_id: uid };
+  if (envoiOk) majClasse.suivi_checklist = { bienvenue: true, acces: true };
+
+  const { error: errMaj } = await supabase.from('classes_elearning_apprenants')
+    .update(majClasse)
+    .ilike('email', email);
+  // La colonne `suivi_checklist` peut manquer si le SQL n'est pas joué : on réessaie sans
+  // elle plutôt que de perdre le rattachement du compte, qui est l'essentiel.
+  if (errMaj && (errMaj.code === '42703' || errMaj.code === 'PGRST204')) {
+    await supabase.from('classes_elearning_apprenants')
+      .update({ apprenant_id: uid }).ilike('email', email);
+  }
+
+  return { ok: true, uid, mdp_initial: mdpTemp, email, email_envoye: envoiOk };
 }
 
 // ── Middleware léger pour les entreprises (token JWT Supabase suffit) ────────
@@ -100,6 +157,25 @@ async function authenticateAny(req, res, next) {
 // ── Gating par la matrice de permissions - staff uniquement ─────────────────
 // Les appels sans req.profil (entreprise self-service, ou tout token Supabase valide sans
 // compte staff) restent toujours autorisés : la matrice ne gouverne que le personnel BET.
+/**
+ * QUI EST PRÉVENU QUAND UN DOSSIER ARRIVE.
+ *
+ * Le parcours a DEUX portes d'entrée, et les deux aboutissent à la même personne :
+ *   · la RH de l'entreprise inscrit depuis son portail (import Excel ou saisie unitaire) ;
+ *   · l'assistante e-learning inscrit elle-même depuis l'onglet « Inscrire ».
+ *
+ * Dans les deux cas c'est l'assistante qui vérifie puis transmet au test de niveau. Les
+ * quatre noms couvrent la même personne vue sous ses différents rôles réels
+ * (`ROLE_MAP_BET` les résout tous vers `admin_elearning` côté écran) ; sans cette liste,
+ * un compte créé en `commercial` plutôt qu'en `assistant_elearning` ne recevrait rien.
+ *
+ * L'ONBOARDING N'Y EST PLUS : son rôle commence à l'assignation, et elle est déjà notifiée
+ * à ce moment-là.
+ */
+const DESTINATAIRES_INSCRIPTION = [
+  'assistant_elearning', 'commercial', 'corporate', 'admin_elearning', 'super_admin',
+];
+
 function requireInscriptionPermission(action) {
   return (req, res, next) => {
     if (!req.profil || req.role === 'super_admin') return next();
@@ -175,7 +251,7 @@ router.post('/', authenticateAny, requireInscriptionPermission('create'), async 
     const {
       entreprise_id, entreprise_nom,
       nom_complet, email, telephone, date_naissance, poste, departement,
-      langue_souhaitee, niveau_declare, notes_onboarding, source,
+      langue_souhaitee, niveau_declare, notes_onboarding, objectif_client, source,
       profil_type, prenom_parent, nom_parent, email_parent, telephone_parent,
       classe, niveau_cecr_estime, etablissement,
     } = req.body;
@@ -203,6 +279,7 @@ router.post('/', authenticateAny, requireInscriptionPermission('create'), async 
         poste:              poste            || null,
         departement:        departement      || null,
         langue_souhaitee:   langue_souhaitee || 'Anglais',
+      objectif_client:    objectif_client  || null,
         niveau_declare:     niveau_declare   || null,
         notes_onboarding:   notes_onboarding || null,
         source:             source           || 'entreprise_portail',
@@ -220,6 +297,24 @@ router.post('/', authenticateAny, requireInscriptionPermission('create'), async 
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    /* LA SAISIE UNITAIRE NE PRÉVENAIT PERSONNE - seul l'import groupé notifiait. Une RH
+       d'entreprise qui inscrivait un bénéficiaire un par un déposait donc un dossier que
+       personne n'attendait : il restait là jusqu'à ce qu'on pense à regarder.
+       ON NE NOTIFIE QUE SI L'AUTEUR EST L'ENTREPRISE. `authenticateAny` ne renseigne
+       `req.profil` que pour le personnel BET : son absence signe un compte
+       `client_entreprise`. Quand l'assistante saisit elle-même, elle n'a pas à recevoir
+       une alerte pour son propre geste. */
+    if (!req.profil) {
+      await notifyRole(DESTINATAIRES_INSCRIPTION, {
+        type:    'info',
+        titre:   'Nouvelle inscription reçue',
+        message: `${data.nom_complet}${data.entreprise_nom ? ` (${data.entreprise_nom})` : ''} `
+               + "vient d'être inscrit via le portail entreprise. À vérifier dans l'onglet Parcours.",
+        meta:    { inscription_id: data.id, entreprise_id: data.entreprise_id, entreprise_nom: data.entreprise_nom },
+      }).catch(err => console.error('[inscriptions-elearning] notify saisie unitaire', err.message));
+    }
+
     res.status(201).json({ inscription: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -372,10 +467,14 @@ router.post('/bulk', authenticateAny, requireInscriptionPermission('create'), as
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Notifier les agents Onboarding des nouvelles inscriptions bulk
+    /* DESTINATAIRE CHANGÉ : l'assistante e-learning, plus l'Onboarding.
+       Depuis la refonte du parcours, c'est elle qui vérifie et transmet ; l'Onboarding ne
+       fait plus que l'assignation à la classe et n'a plus les boutons « Valider » ni
+       « → Placement ». Continuer à l'alerter revenait à lui confier une tâche qu'elle ne
+       peut plus exécuter, pendant que la personne concernée n'était prévenue de rien. */
     const nb     = (data || []).length;
     const entLib = entreprise_nom ? ` de ${entreprise_nom}` : '';
-    await notifyRole(['onboarding', 'admin_onboarding', 'super_admin'], {
+    await notifyRole(DESTINATAIRES_INSCRIPTION, {
       type:    'info',
       titre:   `${nb} nouvelle${nb > 1 ? 's' : ''} inscription${nb > 1 ? 's' : ''} reçue${nb > 1 ? 's' : ''}`,
       message: `${nb} bénéficiaire${nb > 1 ? 's' : ''}${entLib} vien${nb > 1 ? 'nent' : 't'} d'être inscrit${nb > 1 ? 's' : ''} via le portail entreprise.${doublons.length ? ` (${doublons.length} doublon${doublons.length>1?'s':''} ignoré${doublons.length>1?'s':''})` : ''}`,
@@ -524,16 +623,132 @@ router.patch('/:id/transmettre', authenticateAdmin, requireInscriptionPermission
   }
 });
 
+// ── PATCH /api/inscriptions-elearning/:id/transmettre-onboarding ─────────────
+// Le second passage de main du parcours : le test est revenu, l'assistante e-learning en a
+// pris connaissance et confie le dossier à l'Onboarding pour l'assignation en classe.
+//
+// C'est ce geste, et lui seul, qui fait APPARAÎTRE le dossier dans le Parcours de
+// l'Onboarding (STATUTS_VISIBLES_ONBOARDING côté interface). Avant lui, l'Onboarding voyait
+// tous les dossiers dès leur création et pouvait assigner une classe avant même que le test
+// de niveau ait eu lieu - alors que c'est le niveau mesuré qui fonde le choix de la classe.
+router.patch('/:id/transmettre-onboarding', authenticateAdmin, requireInscriptionPermission('update'), async (req, res) => {
+  try {
+    const { data: insc, error: fetchErr } = await supabase
+      .from('inscriptions_elearning').select('*').eq('id', req.params.id).maybeSingle();
+    if (fetchErr) return res.status(500).json({ error: fetchErr.message });
+    if (!insc)    return res.status(404).json({ error: 'Inscription introuvable' });
+
+    /* LE TEST EST BLOQUANT, et le contrôle vit ici et pas seulement dans l'interface :
+       un garde posé uniquement côté écran n'est qu'une décoration, la route reste
+       appelable. `teste` est le seul statut qui ouvre la transmission. */
+    if (insc.statut !== 'teste') {
+      return res.status(409).json({
+        error: insc.statut === 'transmis_placement'
+          ? `Le test de niveau de ${insc.nom_complet} n'est pas encore revenu - impossible de transmettre à l'Onboarding.`
+          : `Ce dossier est au statut « ${insc.statut} » : seul un dossier testé se transmet à l'Onboarding.`,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('inscriptions_elearning')
+      .update({ statut: 'transmis_onboarding' })
+      .eq('id', req.params.id)
+      .select().single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    const acteurNom = `${req.profil.prenom || ''} ${req.profil.nom || ''}`.trim() || 'L\'assistante e-learning';
+    const entNom    = insc.entreprise_nom ? ` (${insc.entreprise_nom})` : '';
+    const niveau    = insc.niveau_cecr_estime || insc.niveau || null;
+
+    await notifyRole(['onboarding', 'admin_onboarding'], {
+      type:    'info',
+      titre:   '📨 Dossier à assigner en classe',
+      message: `${insc.nom_complet}${entNom} a passé son test${niveau ? ` (niveau ${niveau})` : ''} - transmis par ${acteurNom} pour l'assignation en classe.`,
+      meta:    { inscription_id: req.params.id, nom_complet: insc.nom_complet, entreprise_nom: insc.entreprise_nom, niveau },
+    }).catch(() => {});
+
+    logAudit({
+      ...acteurAudit(req),
+      action_type: "DOSSIER_TRANSMIS_ONBOARDING",
+      module:      "inscriptions",
+      entite_type: "inscriptions_elearning",
+      entite_id:   req.params.id,
+      detail:      `Dossier de ${insc.nom_complet} transmis à l'Onboarding pour assignation${niveau ? ` - niveau ${niveau}` : ''}`,
+      statut:      "success",
+    }).catch(() => {});
+
+    res.json({ inscription: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/inscriptions-elearning/:id/relancer-placement ──────────────────
+// La porte de sortie d'un test qui ne revient pas. Le test étant devenu bloquant, un dossier
+// resté en `transmis_placement` n'est plus contournable : il se relance. On notifie l'Agent
+// Placement plutôt que d'ouvrir une dérogation vers l'assignation - le niveau mesuré reste
+// la condition, et c'est le résultat qu'il faut obtenir, pas le contrôle qu'il faut lever.
+router.post('/:id/relancer-placement', authenticateAdmin, requireInscriptionPermission('update'), async (req, res) => {
+  try {
+    const { data: insc } = await supabase
+      .from('inscriptions_elearning').select('*').eq('id', req.params.id).maybeSingle();
+    if (!insc) return res.status(404).json({ error: 'Inscription introuvable' });
+    if (insc.statut !== 'transmis_placement') {
+      return res.status(409).json({ error: 'Ce dossier n\'est pas en attente de test.' });
+    }
+
+    const acteurNom = `${req.profil.prenom || ''} ${req.profil.nom || ''}`.trim() || 'L\'assistante e-learning';
+    const depuis    = (insc.updated_at || insc.created_at || '').slice(0, 10);
+
+    await notifyRole(['admin_placement', 'placement_test'], {
+      type:    'warning',
+      titre:   '🔔 Test de niveau en attente - relance',
+      message: `${acteurNom} relance au sujet de ${insc.nom_complet}${insc.entreprise_nom ? ` (${insc.entreprise_nom})` : ''}, en attente de test${depuis ? ` depuis le ${depuis}` : ''}. Le dossier ne peut pas avancer sans son résultat.`,
+      meta:    { inscription_id: req.params.id, nom_complet: insc.nom_complet, relance: true },
+    }).catch(() => {});
+
+    logAudit({
+      ...acteurAudit(req),
+      action_type: "PLACEMENT_RELANCE",
+      module:      "inscriptions",
+      entite_type: "inscriptions_elearning",
+      entite_id:   req.params.id,
+      detail:      `Relance de l'Agent Placement pour le test de ${insc.nom_complet}`,
+      statut:      "warning",
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PATCH /api/inscriptions-elearning/:id/assigner ───────────────────────────
-// Onboarding assigne l'apprenant (après test) à une classe_elearning
+// Onboarding assigne l'apprenant (après test, et après transmission par l'assistante)
+// à une classe_elearning
 router.patch('/:id/assigner', authenticateAdmin, requireInscriptionPermission('update'), async (req, res) => {
   try {
     const { classe_id, classe_nom } = req.body;
     if (!classe_id) return res.status(400).json({ error: 'classe_id requis' });
 
-    // Récupérer le nom de la classe si pas fourni
+    /* LE DOSSIER DOIT AVOIR ÉTÉ TRANSMIS. L'assignation est le geste de l'Onboarding,
+       et elle ne s'ouvre qu'une fois le test revenu ET l'assistante ayant passé la main.
+       Le contrôle vit ici et pas seulement dans l'interface : un garde d'écran n'empêche
+       pas d'appeler la route. On tolère `teste` pour les dossiers antérieurs à
+       l'introduction de `transmis_onboarding`, qui n'ont jamais eu l'occasion d'y passer. */
+    const { data: inscAvant } = await supabase
+      .from('inscriptions_elearning').select('statut, nom_complet').eq('id', req.params.id).maybeSingle();
+    if (inscAvant && !['transmis_onboarding', 'teste'].includes(inscAvant.statut)) {
+      return res.status(409).json({
+        error: inscAvant.statut === 'transmis_placement'
+          ? `Le test de niveau de ${inscAvant.nom_complet} n'est pas encore revenu - la classe se choisit sur le niveau mesuré.`
+          : `Ce dossier est au statut « ${inscAvant.statut} » : il n'est pas prêt à être assigné.`,
+      });
+    }
+
+    // Récupérer le nom de la classe si pas fourni - et savoir si elle a un coach
     let nomClasse = classe_nom;
-    const { data: clExistante } = await supabase.from('classes_elearning').select('nom').eq('id', classe_id).maybeSingle();
+    const { data: clExistante } = await supabase.from('classes_elearning').select('nom, coach_id, coach_nom').eq('id', classe_id).maybeSingle();
     if (clExistante) {
       nomClasse = nomClasse || clExistante.nom;
     } else {
@@ -584,6 +799,10 @@ router.patch('/:id/assigner', authenticateAdmin, requireInscriptionPermission('u
         classe:             insc.classe             || null,
         niveau_cecr_estime: insc.niveau_cecr_estime || null,
         profil_type:        insc.profil_type        || 'adulte',
+        /* L'OBJECTIF SUIT L'APPRENANT DANS SA CLASSE. Le PA Advisor choisit un coach
+           pour une CLASSE : il lui faut les objectifs de ses apprenants sans remonter
+           à des dossiers qui peuvent avoir été archivés entre-temps. */
+        objectif_client:    insc.objectif_client    || null,
       });
       if (inscErr) console.error('[assigner] insert classes_elearning_apprenants:', inscErr.message);
     }
@@ -631,18 +850,55 @@ router.patch('/:id/assigner', authenticateAdmin, requireInscriptionPermission('u
     const onbNom   = `${req.profil.prenom || ''} ${req.profil.nom || ''}`.trim() || 'Onboarding';
     const metaAssign = { inscription_id: req.params.id, nom_complet: insc.nom_complet, classe_nom: nomClasse, entreprise_nom: insc.entreprise_nom };
 
+    /* LE PASSAGE AUTOMATIQUE AU PA QUAND LA CLASSE N'A PAS DE COACH.
+       Jusqu'ici le PA recevait le même message dans les deux cas - « Nouvel apprenant dans
+       votre classe » - sans que `coach_id` soit jamais lu : rien ne distinguait une classe
+       pourvue d'une classe qui attendait un coach, et l'information se perdait dans le flux.
+       Deux messages distincts désormais, dont un qui appelle une action et porte le
+       `classe_id` en méta pour ouvrir directement l'écran d'assignation du coach. */
+    const classeSansCoach = !clExistante?.coach_id;
+
     await Promise.all([
-      await notifyRole(['pedagogical_advisor', 'admin_pa_advisor'], {
+      await notifyRole(['pedagogical_advisor', 'admin_pa_advisor'], classeSansCoach ? {
+        type:    'warning',
+        titre:   `⚠️ Classe sans coach - ${nomClasse}`,
+        message: `${insc.nom_complet} a été assigné(e) à la classe "${nomClasse}" par ${onbNom}, mais cette classe n'a aucun coach. À pourvoir pour que le programme démarre.`,
+        meta:    { ...metaAssign, classe_id, coach_a_assigner: true },
+      } : {
         type:    'success',
-        titre:   `Nouvel apprenant dans votre classe`,
-        message: `${insc.nom_complet} vient d'être assigné(e) à la classe "${nomClasse}" par ${onbNom}.`,
-        meta:    metaAssign,
+        titre:   `Nouvel apprenant assigné - ${nomClasse}`,
+        message: `${insc.nom_complet} vient d'être assigné(e) à la classe "${nomClasse}" (coach : ${clExistante.coach_nom || 'assigné'}) par ${onbNom}.`,
+        meta:    { ...metaAssign, classe_id },
       }),
       insc.entreprise_id && notifyEntreprise(insc.entreprise_id, {
         type:    'success',
         titre:   `Bénéficiaire intégré - ${insc.nom_complet}`,
         message: `${insc.nom_complet} a été intégré(e) à la classe "${nomClasse}". Le programme démarre.`,
         meta:    metaAssign,
+      }),
+      /* → L'ASSISTANTE E-LEARNING : LA BOUCLE SE REFERME OÙ ELLE S'EST OUVERTE.
+         C'est elle qui a reçu le dossier, l'a vérifié, l'a envoyé au test puis transmis
+         à l'Onboarding - et elle n'apprenait rien de son aboutissement. Les destinataires
+         de l'assignation avaient été pensés comme ceux de la suite du parcours (le PA, le
+         RH de l'entreprise), en oubliant celle qui l'avait lancé. Elle suit ses dossiers
+         dans l'onglet Parcours : il lui faut savoir lesquels sont arrivés. */
+      await notifyRole(DESTINATAIRES_INSCRIPTION.filter(r => r !== 'super_admin'), {
+        type:    'success',
+        titre:   `✅ Dossier abouti - ${insc.nom_complet}`,
+        message: `${insc.nom_complet}${insc.entreprise_nom ? ` (${insc.entreprise_nom})` : ''}, que vous aviez transmis, a été assigné(e) à la classe "${nomClasse}" par ${onbNom}.`,
+        meta:    { ...metaAssign, classe_id },
+      }),
+      /* → LA SUPERVISION. Le superviseur et ses adjoints suivent les effectifs sans
+         intervenir dans le parcours : ils reçoivent le fait, pas la demande d'action.
+         Les quatre noms de rôle sont nécessaires — `superviseur`/`deputy_superviseur`
+         sont les rôles réels, les variantes `admin_*` les façades portées côté
+         bet-elearning ; n'en citer qu'une moitié laisse l'autre moitié des comptes
+         muette. */
+      await notifyRole(['superviseur', 'admin_superviseur', 'deputy_superviseur', 'admin_deputy_superviseur'], {
+        type:    'info',
+        titre:   `🎓 Nouvel apprenant - ${nomClasse}`,
+        message: `${insc.nom_complet}${insc.entreprise_nom ? ` (${insc.entreprise_nom})` : ''} a été assigné(e) à la classe "${nomClasse}" par ${onbNom}.`,
+        meta:    { ...metaAssign, classe_id },
       }),
     ].filter(Boolean));
 
@@ -814,6 +1070,11 @@ router.patch('/bulk-valider', authenticateAdmin, requireInscriptionPermission('u
 // ci-dessus (/bulk-supprimer, /bulk-valider, /creer-comptes-batch…).
 const CHAMPS_EDITABLES_PARCOURS = [
   'nom_complet', 'email', 'telephone', 'date_naissance', 'poste', 'departement',
+  // `objectif_client` est éditable À TOUT MOMENT du parcours, et pas seulement à la
+  // saisie : il se précise souvent après un échange avec le client, parfois après le
+  // test de niveau. Le figer à la création obligerait à supprimer le dossier pour le
+  // corriger.
+  'objectif_client',
   'langue_souhaitee', 'niveau_declare', 'classe',
   'prenom_parent', 'nom_parent', 'email_parent', 'telephone_parent',
 ];

@@ -10,7 +10,7 @@ import ModalProfSuivi from './ModalProfesseur';
 import { useMessagerie } from '../../contexts/MessagerieContext';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 function joursRestants(dateFin) {
   return Math.ceil((new Date(dateFin) - new Date()) / (1000 * 60 * 60 * 24));
 }

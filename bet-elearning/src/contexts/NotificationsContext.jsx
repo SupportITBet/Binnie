@@ -84,6 +84,14 @@ export function NotificationsProvider({ children }) {
         _source: 'supabase',
         role,
         type:    normaliserType(n.type),
+        /* LE TYPE D'ORIGINE EST CONSERVÉ À CÔTÉ DU TYPE NORMALISÉ.
+           `normaliserType` écrase une soixantaine de valeurs métier ('paiement',
+           'remplacement_confirme', 'coach_change'…) en trois états d'affichage
+           (alerte / succes / info) : c'est ce qu'il faut pour colorer une carte, et
+           c'est insuffisant pour la classer. Le classement par catégorie métier lit
+           `type_origine`, le reste de l'écran continue de lire `type`. */
+        type_origine: n.type || null,
+        source:  n.source || null,
         icone:   n.icone || iconeParType(n.type),
         titre:   n.titre || n.title || 'Notification',
         message: n.message || n.corps || '',
@@ -112,6 +120,10 @@ export function NotificationsProvider({ children }) {
         event: 'INSERT', schema: 'public', table: 'notifications',
         filter: `user_id=eq.${userId}`,
       }, (payload) => {
+        /* Le temps réel filtre comme la requête initiale : une notification écrite
+           depuis dash n'a pas à surgir dans la cloche de bet-elearning. Les deux
+           chemins disent la même chose — c'est leur divergence qui, auparavant, faisait
+           apparaître au rechargement ce que le direct avait écarté. */
         if (payload.new.source && payload.new.source !== 'bet-elearning') return;
         const n = payload.new;
         setSupabaseNotifs(prev => [{
@@ -119,6 +131,8 @@ export function NotificationsProvider({ children }) {
           _source: 'supabase',
           role,
           type:    normaliserType(n.type),
+          type_origine: n.type || null,
+          source:  n.source || null,
           icone:   n.icone || iconeParType(n.type),
           titre:   n.titre || 'Notification',
           message: n.message || '',

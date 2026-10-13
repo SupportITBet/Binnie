@@ -85,13 +85,27 @@ export function installerInterceptionSession() {
       // Retrouver le rôle AVANT de vider le storage - sinon la redirection tombe toujours
       // sur la page de connexion générique (portail BET), même pour un compte entreprise,
       // apprenant, parent ou professeur qui a sa propre page de connexion dédiée.
+      /* DEUX EMPLACEMENTS, PARCE QUE LES PAGES DE CONNEXION N'ÉCRIVENT PAS AU MÊME ENDROIT.
+         `bet_profil_mock` (sessionStorage) est posé par AuthContext ; les pages de connexion
+         dédiées - entreprise, professeur, admin - écrivent, elles, `admin_profil`
+         (localStorage) après l'appel API. Un RH entreprise n'a donc PAS de `bet_profil_mock` :
+         la recherche échouait, `pageConnexion` restait sur le portail générique `/connexion`,
+         et une session expirée le renvoyait vers un écran qui n'est pas le sien au lieu de
+         `/connexion/entreprise`. On lit les deux, le premier qui donne un rôle connu gagne. */
       let pageConnexion = '/connexion';
-      try {
-        const profilSauvegarde = JSON.parse(sessionStorage.getItem('bet_profil_mock') || 'null');
-        if (profilSauvegarde?.role && ROLE_LOGIN[profilSauvegarde.role]) {
-          pageConnexion = ROLE_LOGIN[profilSauvegarde.role];
-        }
-      } catch { /* rôle indisponible, on garde /connexion par défaut (comptes BET) */ }
+      const sources = [
+        () => sessionStorage.getItem('bet_profil_mock'),
+        () => localStorage.getItem('admin_profil'),
+      ];
+      for (const lire of sources) {
+        try {
+          const profilSauvegarde = JSON.parse(lire() || 'null');
+          if (profilSauvegarde?.role && ROLE_LOGIN[profilSauvegarde.role]) {
+            pageConnexion = ROLE_LOGIN[profilSauvegarde.role];
+            break;
+          }
+        } catch { /* source illisible, on tente la suivante */ }
+      }
 
       sessionStorage.removeItem('bet_profil_mock');
       localStorage.removeItem('bet_access_token');

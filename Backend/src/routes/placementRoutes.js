@@ -2,7 +2,21 @@
 import { Router } from "express";
 import supabase from "../config/supabase.js";
 import { authenticateAdmin } from "../middlewares/requireAdmin.js";
-import { notifyRole, notifyEntreprise } from "../services/notifyRole.js";
+import { notifyRole as _notifyRole, notifyEntreprise as _notifyEntreprise } from "../services/notifyRole.js";
+
+/* ── TOUTE NOTIFICATION ÉCRITE ICI EST UNE NOTIFICATION BET E-LEARNING ──
+   `notifyRole` / `notifyUser` / `notifyEntreprise` écrivent `source: 'dash'` PAR DÉFAUT,
+   tandis que la cloche de bet-elearning n'interroge que `?source=bet-elearning` et que la
+   route filtre strictement dessus. Chaque appel de ce fichier qui oubliait la source
+   produisait donc une notification REÉLLEMENT CRÉÉE mais INVISIBLE pour son destinataire -
+   la panne était silencieuse des deux côtés.
+   On enveloppe à l'import plutôt que de corriger chaque appel : un appel ajouté demain
+   hérite du bon comportement sans qu'on ait à y penser. Une notification qui doit partir
+   vers dash peut toujours surcharger `source` explicitement. ── */
+const _SRC = { source: 'bet-elearning' };
+const notifyRole       = (r, p, x) => _notifyRole(r, { ..._SRC, ...p }, x);
+const notifyEntreprise = (e, p)    => _notifyEntreprise(e, { ..._SRC, ...p });
+
 
 const router = Router();
 
@@ -127,6 +141,28 @@ router.post("/:id/resultat", authenticateAdmin, async (req, res) => {
       }
     }
 
+    /* ── LE NOUVEAU NIVEAU REDESCEND SUR LA FICHE DE L'APPRENANT ──
+       `classes_elearning_apprenants.niveau_cecr` n'était écrit qu'UNE FOIS, à l'assignation
+       initiale, et plus jamais ensuite. Un apprenant re-testé à B1 gardait donc « A1 » sur
+       sa fiche : l'onglet « Test de niveau » affichait A1 → B1 pendant que l'onglet
+       « Compétences » - entièrement dérivé de `niveau_cecr` - continuait de décrire un
+       niveau A1. Les deux onglets d'une même fiche se contredisaient.
+
+       On ne touche QUE les inscriptions actives : une ligne `transfere` ou `retire` garde
+       le niveau qu'elle avait au moment où l'apprenant a quitté la classe, c'est son
+       historique. Non bloquant - un échec ici ne doit pas faire perdre le résultat du test,
+       qui est déjà enregistré. */
+    if (data.email) {
+      supabase
+        .from("classes_elearning_apprenants")
+        .update({ niveau_cecr })
+        .ilike("email", data.email)
+        .eq("statut", "actif")
+        .then(({ error: errNiv }) => {
+          if (errNiv) console.error("[placement/resultat] propagation niveau_cecr:", errNiv.message);
+        });
+    }
+
     // Notifier les agents Onboarding que le test est terminé
     const agentNom  = `${req.profil.prenom || ''} ${req.profil.nom || ''}`.trim() || 'Agent Placement';
     const entNom    = data.entreprise_nom ? ` (${data.entreprise_nom})` : '';
@@ -190,6 +226,89 @@ router.get("/historique", authenticateAdmin, async (req, res) => {
     res.status(500).json({ error: "Erreur interne" });
   }
 });
+
+// ── GET /api/placement/tests-apprenant?email=… ───────────────────────────────
+// TOUS les tests de niveau d'un apprenant, les anciens comme le dernier.
+//
+// Un apprenant en passe PLUSIEURS au fil de sa formation : à l'entrée, puis à chaque
+// transfert de classe - c'est même la raison d'être du transfert, re-mesurer le niveau
+// avant de changer de groupe. Ne rendre que le dernier effacerait la progression, qui est
+// précisément ce qu'on vient lire sur cette fiche.
+//
+// DEUX SOURCES, parce qu'il y a deux circuits distincts :
+//  · `inscriptions_adultes` - le test passé AVEC l'Agent Placement (`niveau_detecte`,
+//    `date_test`). C'est le circuit normal du parcours e-learning.
+//  · `bet_level_test_results` - le test en ligne passé seul depuis le formulaire public.
+// Les deux sont rendus dans un format commun, fusionnés et triés du plus récent au plus
+// ancien : celui qui lit la fiche se moque de savoir quelle table porte quoi.
+//
+// Le rapprochement se fait par E-MAIL : `classes_elearning_apprenants` ne porte aucune clé
+// vers l'inscription ni vers la file de placement (vérifié), l'adresse est le seul lien
+// disponible depuis une fiche apprenant.
+router.get("/tests-apprenant", authenticateAdmin, async (req, res) => {
+  try {
+    const email = (req.query.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "email requis" });
+    res.json({ tests: await testsNiveauParEmail(email) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* La résolution elle-même, isolée pour être APPELÉE AILLEURS SANS LA ROUTE.
+   L'espace entreprise a besoin des mêmes tests, mais il ne peut pas emprunter la route
+   ci-dessus : celle-ci accepte n'importe quelle adresse, ce qui laisserait un RH lire les
+   résultats d'un apprenant d'une autre société. Sa propre route vérifie d'abord que le
+   bénéficiaire lui appartient, puis appelle cette fonction. Une seule logique d'agrégation,
+   deux contrôles d'accès distincts. */
+export async function testsNiveauParEmail(emailBrut) {
+  const email = (emailBrut || "").trim().toLowerCase();
+  if (!email) return [];
+  // Une adresse technique (<nom>@betacademy.app) n'a jamais servi à passer un test :
+  // elle est générée à la création du compte, après coup.
+  if (email.endsWith("@betacademy.app")) return [];
+
+  try {
+    const [{ data: placement }, { data: enLigne }] = await Promise.all([
+      supabase.from("inscriptions_adultes")
+        .select("id, niveau_detecte, date_test, statut, notes_placement, created_at, entreprise_nom")
+        .ilike("email", email)
+        .order("date_test", { ascending: false }),
+      supabase.from("bet_level_test_results")
+        .select("id, level, score, points_earned, points_total, correct_answers, total_questions, correction_statut, by_category, time_taken_seconds, format_test, notes_agent, submitted_at")
+        .ilike("email", email)
+        .order("submitted_at", { ascending: false }),
+    ]);
+
+    const tests = [
+      // Un dossier encore en attente de test n'a pas de niveau : on ne le compte pas,
+      // sinon la fiche afficherait une ligne vide comme s'il y avait eu un test.
+      ...(placement || []).filter(x => x.niveau_detecte).map(x => ({
+        id: x.id, origine: "placement", libelle_origine: "Agent Placement",
+        niveau: x.niveau_detecte, date: x.date_test || (x.created_at || "").slice(0, 10),
+        notes: x.notes_placement || null, statut: x.statut || null,
+        score: null, by_category: null,
+      })),
+      ...(enLigne || []).map(x => ({
+        id: x.id, origine: "en_ligne", libelle_origine: "Test en ligne",
+        niveau: x.level, date: (x.submitted_at || "").slice(0, 10),
+        notes: x.notes_agent || null,
+        statut: x.correction_statut === "corrige" ? "Corrigé" : x.correction_statut === "auto" ? "Automatique" : x.correction_statut,
+        score: x.score ?? null,
+        points: x.points_total ? `${x.points_earned ?? 0} / ${x.points_total}` : null,
+        reponses: x.total_questions ? `${x.correct_answers ?? 0} / ${x.total_questions}` : null,
+        duree_min: x.time_taken_seconds ? Math.round(x.time_taken_seconds / 60) : null,
+        format: x.format_test || null,
+        by_category: x.by_category || null,
+      })),
+    ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+    return tests;
+  } catch (err) {
+    console.error("[testsNiveauParEmail]", err.message);
+    return [];
+  }
+}
 
 // ── PATCH /api/placement/:id/assigner-classe ─────────────────────────────────
 // Agent Placement assigne directement un bénéficiaire testé à une classe
@@ -264,11 +383,26 @@ router.patch("/:id/assigner-classe", authenticateAdmin, async (req, res) => {
         message: `${insc.nom_complet} a été assigné(e) à la classe "${nomClasse}" par l'Agent Placement.`,
         meta:    metaAssign,
       }),
-      // → PA : nouveau bénéficiaire dans leur classe
+      /* → PA : nouveau bénéficiaire dans la classe.
+         Titre reformulé : « votre classe » ne valait que pour le PA, or la direction
+         est désormais destinataire de toute notification de rôle (ROLES_DIRECTION dans
+         notifyRole.js) et aurait lu une phrase fausse. Nommer la classe informe mieux
+         que la posséder, et le message reste juste pour tous ses lecteurs. */
       await notifyRole(['pedagogical_advisor', 'admin_pa_advisor'], {
         type:    'success',
-        titre:   `Nouvel apprenant dans votre classe`,
+        titre:   `Nouvel apprenant assigné - ${nomClasse}`,
         message: `${insc.nom_complet} vient d'être assigné(e) à la classe "${nomClasse}".`,
+        meta:    metaAssign,
+      }),
+      /* → L'ASSISTANTE E-LEARNING : elle a reçu ce dossier, l'a vérifié et envoyé au
+         test ; elle n'apprenait rien de son aboutissement. Les destinataires avaient été
+         pensés comme ceux de la SUITE du parcours - l'Onboarding, le PA, le RH - en
+         oubliant celle qui l'avait lancé et qui en suit l'avancement dans son onglet
+         Parcours. Même ajout que dans inscriptionsElearning.js/assigner. */
+      await notifyRole(['assistant_elearning', 'commercial', 'corporate', 'admin_elearning'], {
+        type:    'success',
+        titre:   `✅ Dossier abouti - ${insc.nom_complet}`,
+        message: `${insc.nom_complet}${insc.entreprise_nom ? ` (${insc.entreprise_nom})` : ''}, que vous aviez transmis, a été assigné(e) à la classe "${nomClasse}".`,
         meta:    metaAssign,
       }),
       // → RH Entreprise : leur bénéficiaire a été placé

@@ -10,7 +10,7 @@ import { useAlerte } from '../../contexts/ConfirmContext';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 function authHeaders() {
   const t = localStorage.getItem('admin_token') || '';
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` };
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${t}`, 'X-Plateforme': 'bet-elearning' };
 }
 
 // Mapping rôles backend → rôles bet-elearning

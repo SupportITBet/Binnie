@@ -31,7 +31,11 @@ export default function PastilleGroupe({ nom, url, taille = 30, accent = COULEUR
     return (
       <>
         <img src={url} alt={nom || ''}
-          onClick={agrandissable ? () => setPlein(true) : undefined}
+          /* `stopPropagation` : la vignette vit souvent dans une ligne ou une carte
+             elles-mêmes cliquables (tableau des classes, liste des apprenants). Sans lui,
+             un clic destiné à agrandir la photo ouvrait AUSSI la fiche derrière - deux
+             actions pour un seul geste, dont une non voulue. */
+          onClick={agrandissable ? (e) => { e.stopPropagation(); setPlein(true); } : undefined}
           title={agrandissable ? 'Voir la photo en grand' : undefined}
           style={{ ...style, border: `1px solid ${COULEURS.gris200}`, cursor: agrandissable ? 'zoom-in' : 'default' }}
           onError={() => setCasse(true)} />

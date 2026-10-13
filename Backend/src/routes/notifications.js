@@ -34,7 +34,16 @@ router.post("/to-role", authenticateAdmin, async (req, res) => {
 });
 
 // GET /api/notifications/mes-notifs - récupérer ses propres notifications (paginé)
-// Query params optionnels : ?source=bet-elearning · ?page=1 · ?limit=20 · ?date_debut=YYYY-MM-DD · ?date_fin=YYYY-MM-DD
+// Query params optionnels : ?source=bet-elearning · ?type= · ?page=1 · ?limit=20
+//                           ?date_debut=YYYY-MM-DD · ?date_fin=YYYY-MM-DD
+//
+// ── CHAQUE PLATEFORME NE MONTRE QUE LA SIENNE ──
+// `source` sépare les deux cloches, et cette séparation vaut pour TOUS LES RÔLES, direction
+// comprise : on change de plateforme pour lire l'autre, on ne les mélange pas dans la même.
+// Ce qui faisait échouer ce filtre n'était pas le filtre lui-même mais la source écrite :
+// elle valait `dash` par défaut sur 107 des 108 points d'appel, y compris pour des actions
+// faites depuis bet-elearning. Elle se déduit désormais de l'en-tête `X-Plateforme` de la
+// requête d'origine (services/contextePlateforme.js).
 router.get("/mes-notifs", authenticateAdmin, async (req, res) => {
   const userId = req.profil?.id;
   if (!userId) return res.status(401).json({ error: "Non authentifié" });
@@ -49,7 +58,16 @@ router.get("/mes-notifs", authenticateAdmin, async (req, res) => {
     .select("*", { count: "exact" })
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (req.query.source)     query = query.eq("source", req.query.source);
+  /* LE CLOISONNEMENT PAR PLATEFORME EST RÉTABLI, POUR TOUT LE MONDE.
+     Il avait été levé pour que la direction voie l'ensemble ; l'effet de bord a été que
+     chacun voyait l'autre plateforme — un coach e-learning recevait les notifications du
+     présentiel. La séparation est voulue jusqu'en haut : la direction consulte les deux
+     cloches en changeant de plateforme, elle ne les mélange pas dans la même.
+     Ce qui manquait pour que ce filtre fonctionne, c'est que la source d'ÉCRITURE soit
+     juste : elle se déduit désormais de l'en-tête de la requête
+     (services/contextePlateforme.js) et non d'un défaut figé à `dash`. */
+  if (req.query.source) query = query.eq("source", req.query.source);
+  if (req.query.type)       query = query.eq("type", req.query.type);
   if (req.query.date_debut) query = query.gte("created_at", req.query.date_debut);
   if (req.query.date_fin)   query = query.lte("created_at", `${req.query.date_fin}T23:59:59`);
 

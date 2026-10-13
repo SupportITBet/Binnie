@@ -5,8 +5,10 @@ import supabase from "../config/supabase.js";
 import { authenticateAdmin, requirePermission, messagePermissionRefusee } from "../middlewares/requireAdmin.js";
 import { notifyRole, notifyUser, notifyEntreprise } from "../services/notifyRole.js";
 import { logAudit } from "../middlewares/logAudit.js";
+import { testsNiveauParEmail } from "./placementRoutes.js";
 import { enregistrerEncaissementEntreprise } from "./comptabilite.js";
 import { publicFormLimiter } from "../middlewares/rateLimiters.js";
+import { sendStaffWelcomeEmail } from "../services/emailService.js";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -510,6 +512,20 @@ router.post("/admin/creer", authenticateAdmin, requirePermission("crm_entreprise
           cree_par_id:    req.profil.id,
         }, { onConflict: 'id' });
 
+
+        /* ── LES ACCÈS DE LA RH PARTENT MAINTENANT PAR E-MAIL ──
+           Le mot de passe était généré, stocké, puis renvoyé dans la réponse HTTP : il
+           s'affichait à l'écran de celui qui créait le compte, à charge pour lui de le
+           recopier et de le transmettre à la main. Ce fichier n'importait même pas le
+           service d'e-mail, qui expose pourtant `sendStaffWelcomeEmail` depuis toujours.
+           `compteRH` RESTE DANS LA RÉPONSE : si l'envoi échoue - adresse erronée, service
+           indisponible - celui qui crée le compte garde de quoi dépanner. L'e-mail est le
+           chemin normal, pas le seul. */
+        await sendStaffWelcomeEmail({
+          prenom: rh_prenom || '', nom: rh_nom || '', email: rh_email.toLowerCase(),
+          mdpTemp: mdp, departement: ent?.nom_entreprise || 'Entreprise cliente',
+        }).catch(e => console.error('[entreprise] e-mail RH non parti:', e.message || e));
+
         compteRH = { email: rh_email.toLowerCase(), mot_de_passe: mdp, prenom: rh_prenom, nom: rh_nom };
       }
     }
@@ -736,6 +752,13 @@ router.post("/admin/:id/creer-compte-rh", authenticateAdmin, requirePermission("
       scope:           ['national'],
       cree_par_id:     req.profil.id,
     }, { onConflict: 'id' });
+
+    // Même envoi qu'à la création de l'entreprise : la RH reçoit ses accès plutôt qu'on
+    // les lui dicte. L'échec est journalisé sans bloquer la création du compte.
+    await sendStaffWelcomeEmail({
+      prenom: prenom || '', nom: nom || '', email,
+      mdpTemp: mdp, departement: ent?.nom_entreprise || 'Entreprise cliente',
+    }).catch(e => console.error('[entreprise] e-mail RH non parti:', e.message || e));
 
     // Mettre à jour l'entreprise avec le email RH
     await supabase.from("comptes_entreprises").update({
@@ -1839,6 +1862,162 @@ router.delete("/admin/:id/paiements/:paieId", authenticateAdmin, requirePermissi
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ════════════════════════════════════════════════════════════════════
+// VÉRIFICATION DES VERSEMENTS DÉCLARÉS PAR L'ENTREPRISE
+//
+// Un versement saisi par un admin BET naît 'recu' : la personne qui le saisit
+// EST la vérification. Un versement déclaré par le RH de l'entreprise naît
+// 'declare' et n'entre dans aucun total tant qu'un humain de BET n'a pas ouvert
+// la pièce jointe. Ces deux routes sont ce moment-là.
+// ════════════════════════════════════════════════════════════════════
+
+// PATCH /api/entreprise/admin/:id/paiements/:paieId/valider
+// La preuve a été regardée et elle tient : le versement devient un encaissement.
+router.patch("/admin/:id/paiements/:paieId/valider", authenticateAdmin, requirePermission("finances","update"), async (req, res) => {
+  try {
+    const { data: paie } = await supabase
+      .from("paiements_entreprises")
+      .select("*")
+      .eq("id", req.params.paieId)
+      .eq("entreprise_id", req.params.id)
+      .maybeSingle();
+    if (!paie) return res.status(404).json({ error: "Versement introuvable" });
+
+    /* Garde-fou contre le double-clic et contre deux vérificatrices qui ouvrent
+       la même fiche : sans lui, le second appel repasserait l'encaissement en
+       trésorerie et le montant serait compté deux fois. */
+    if (paie.statut === "recu") return res.status(409).json({ error: "Ce versement est déjà validé" });
+
+    const valideParNom = `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim() || req.profil?.email || "Admin";
+
+    const { data, error } = await supabase
+      .from("paiements_entreprises")
+      .update({
+        statut:         "recu",
+        valide_par_id:  req.profil.id,
+        valide_par_nom: valideParNom,
+        valide_le:      new Date().toISOString(),
+        motif_rejet:    null,   // efface la trace d'un rejet précédent corrigé puis revalidé
+      })
+      .eq("id", req.params.paieId)
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    const { data: ent } = await supabase.from("comptes_entreprises").select("nom").eq("id", req.params.id).maybeSingle();
+
+    /* L'ENCAISSEMENT PART ICI, et nulle part ailleurs pour une déclaration RH :
+       c'est tout l'intérêt du statut 'declare'. La saisie admin directe
+       (POST ci-dessus) encaisse à la saisie, puisqu'elle naît déjà validée. */
+    enregistrerEncaissementEntreprise({
+      client_nom: ent?.nom || "Entreprise", montant: paie.montant, date_paiement: paie.date,
+      mode_paiement: paie.mode, reference: paie.reference, notes: paie.note, created_by: req.profil?.id || null,
+    }).catch(() => {});
+
+    req._auditLogged = true;
+    logAudit({
+      acteur_id:    req.profil.id,
+      acteur_nom:   valideParNom,
+      acteur_email: req.profil.email,
+      acteur_role:  req.role,
+      action_type:  "VERSEMENT_VALIDE",
+      module:       "finances",
+      entite_type:  "paiements_entreprises",
+      entite_id:    data.id,
+      detail:       `Versement de ${paie.montant.toLocaleString('fr-FR')} FCFA validé pour ${ent?.nom || req.params.id} (déclaré par ${paie.declare_par_nom || "l'entreprise"})`,
+      metadata:     { entreprise_id: req.params.id, montant: paie.montant, preuves: (paie.preuves || []).length },
+      statut:       "success",
+    }).catch(() => {});
+
+    await notifyRole(
+      ["super_admin", "admin", "manager", "superviseur", "comptable"],
+      {
+        type:    "paiement",
+        titre:   "✅ Versement entreprise validé",
+        message: `${valideParNom} a validé le versement de ${paie.montant.toLocaleString('fr-FR')} FCFA déclaré par ${ent?.nom || "une entreprise"}.`,
+        meta:    { entreprise_id: req.params.id, paiement_id: data.id, montant: paie.montant },
+        source:  "dash",
+      },
+      req.profil.id
+    ).catch(() => {});
+
+    notifyEntreprise(req.params.id, {
+      type:    "paiement",
+      titre:   "✅ Votre versement a été validé",
+      message: `Votre versement de ${paie.montant.toLocaleString('fr-FR')} FCFA a été vérifié et enregistré sur votre contrat.`,
+      meta:    { paiement_id: data.id, montant: paie.montant },
+    }).catch(() => {});
+
+    res.json({ paiement: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/entreprise/admin/:id/paiements/:paieId/rejeter
+// La preuve ne tient pas. On ne supprime pas la ligne : le RH doit voir POURQUOI,
+// sinon il redéclare à l'identique et la même pièce revient en boucle.
+router.patch("/admin/:id/paiements/:paieId/rejeter", authenticateAdmin, requirePermission("finances","update"), async (req, res) => {
+  try {
+    const motif = (req.body?.motif || "").trim();
+    if (!motif) return res.status(400).json({ error: "Le motif du rejet est obligatoire" });
+
+    const { data: paie } = await supabase
+      .from("paiements_entreprises")
+      .select("*")
+      .eq("id", req.params.paieId)
+      .eq("entreprise_id", req.params.id)
+      .maybeSingle();
+    if (!paie) return res.status(404).json({ error: "Versement introuvable" });
+
+    /* Un versement déjà encaissé ne se rejette pas : l'argent est entré en
+       trésorerie, le défaire relève de la suppression (finances.delete), pas d'ici. */
+    if (paie.statut === "recu") {
+      return res.status(409).json({ error: "Ce versement est déjà validé - utilisez la suppression pour l'annuler" });
+    }
+
+    const rejeteParNom = `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim() || req.profil?.email || "Admin";
+
+    const { data, error } = await supabase
+      .from("paiements_entreprises")
+      .update({
+        statut:         "rejete",
+        motif_rejet:    motif,
+        valide_par_id:  req.profil.id,
+        valide_par_nom: rejeteParNom,
+        valide_le:      new Date().toISOString(),
+      })
+      .eq("id", req.params.paieId)
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    const { data: ent } = await supabase.from("comptes_entreprises").select("nom").eq("id", req.params.id).maybeSingle();
+
+    req._auditLogged = true;
+    logAudit({
+      acteur_id:    req.profil.id,
+      acteur_nom:   rejeteParNom,
+      acteur_email: req.profil.email,
+      acteur_role:  req.role,
+      action_type:  "VERSEMENT_REJETE",
+      module:       "finances",
+      entite_type:  "paiements_entreprises",
+      entite_id:    data.id,
+      detail:       `Versement de ${paie.montant.toLocaleString('fr-FR')} FCFA rejeté pour ${ent?.nom || req.params.id} - motif : ${motif}`,
+      metadata:     { entreprise_id: req.params.id, montant: paie.montant, motif },
+      statut:       "success",
+    }).catch(() => {});
+
+    notifyEntreprise(req.params.id, {
+      type:    "paiement",
+      titre:   "⚠️ Votre versement n'a pas pu être validé",
+      message: `Le versement de ${paie.montant.toLocaleString('fr-FR')} FCFA déclaré n'a pas été validé : ${motif}`,
+      meta:    { paiement_id: data.id, montant: paie.montant, motif },
+    }).catch(() => {});
+
+    res.json({ paiement: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Documents entreprise (onglet "Documents" du modal détail) ─────────
 // GET /api/entreprise/admin/:id/documents - liste des documents déposés
 router.get("/admin/:id/documents", authenticateAdmin, async (req, res) => {
@@ -2024,8 +2203,9 @@ router.get("/elearning/mon-compte", requireEntrepriseOrAdmin, async (req, res) =
 });
 
 // ── GET /api/entreprise/elearning/mes-paiements ──────────────────────────────
-// Historique complet des versements de l'entreprise du RH connecté - lecture seule
-// (contrairement à l'onglet équivalent côté admin BET, aucune saisie/modification ici).
+// Historique complet des versements de l'entreprise du RH connecté. Le RH peut
+// DÉCLARER un versement (POST ci-dessous) mais jamais le valider ni le corriger :
+// la vérification de la preuve appartient à BET.
 router.get("/elearning/mes-paiements", requireEntrepriseOrAdmin, async (req, res) => {
   try {
     const entrepriseId = req.profil.entreprise_id;
@@ -2039,6 +2219,198 @@ router.get("/elearning/mes-paiements", requireEntrepriseOrAdmin, async (req, res
     if (error) return res.status(500).json({ error: error.message });
 
     res.json({ paiements: paiements || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/entreprise/elearning/preuve-paiement ───────────────────────────
+// Dépose UNE pièce justificative et renvoie son URL. Le RH en envoie souvent
+// deux (ordre de virement + avis de débit), d'où un appel par fichier plutôt
+// qu'un envoi groupé : un PDF qui échoue ne fait pas retomber les autres, et la
+// déclaration elle-même (POST ci-dessous) ne part qu'avec les URL déjà obtenues.
+//
+// `resource_type: "auto"` parce qu'un justificatif est tantôt une photo du reçu,
+// tantôt un PDF bancaire. Cloudinary classe le PDF en `image` ou `raw` selon le
+// cas et, pour `raw`, ne rajoute PAS l'extension au nom : sans elle le fichier
+// arrive inouvrable. On la recolle donc au public_id, comme uploadRoutes.js.
+router.post("/elearning/preuve-paiement", requireEntrepriseOrAdmin, upload.single("preuve"), async (req, res) => {
+  try {
+    const entrepriseId = req.profil.entreprise_id;
+    if (!entrepriseId && req.role === "client_entreprise") {
+      return res.status(400).json({ error: "Aucune entreprise liée à ce compte" });
+    }
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+
+    const FORMATS_OK = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
+    if (!FORMATS_OK.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: "Format non accepté - envoyez une image (JPG, PNG) ou un PDF" });
+    }
+
+    const nomOriginal = req.file.originalname || "preuve";
+    const ext  = nomOriginal.includes(".") ? nomOriginal.split(".").pop().toLowerCase() : "";
+    const base = `preuve_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    const resultat = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder:        "bet/preuves-paiements",
+          resource_type: "auto",
+          public_id:     ext ? `${base}.${ext}` : base,
+        },
+        (err, result) => { if (err) return reject(err); resolve(result); }
+      );
+      stream.end(req.file.buffer);
+    });
+
+    res.json({
+      preuve: {
+        url:    resultat.secure_url,
+        nom:    nomOriginal,
+        type:   req.file.mimetype,
+        taille: req.file.size,
+      },
+    });
+  } catch (err) {
+    console.error("[entreprise/preuve-paiement]", err);
+    res.status(500).json({ error: err.message || "Envoi de la pièce jointe impossible" });
+  }
+});
+
+// ── POST /api/entreprise/elearning/mes-paiements ─────────────────────────────
+// Le RH déclare un versement qu'il a effectué. La ligne naît 'declare' : elle
+// apparaît dans l'historique, marquée en attente, mais n'entre dans AUCUN total
+// et ne touche PAS la trésorerie tant que BET n'a pas ouvert la pièce jointe
+// (voir PATCH .../valider plus haut).
+router.post("/elearning/mes-paiements", requireEntrepriseOrAdmin, async (req, res) => {
+  try {
+    const entrepriseId = req.profil.entreprise_id;
+    if (!entrepriseId) return res.status(404).json({ error: "Aucune entreprise liée à ce compte" });
+
+    const { montant, date, mode, reference, note, preuves } = req.body || {};
+    const montantNum = Number(montant);
+    if (!montantNum || montantNum <= 0) return res.status(400).json({ error: "Montant invalide" });
+    if (!date) return res.status(400).json({ error: "Date requise" });
+
+    /* La preuve est le cœur du dispositif : sans pièce jointe, la vérificatrice
+       n'a rien à vérifier et la déclaration n'est qu'une affirmation. On exige
+       donc au moins une pièce, plutôt que d'accepter une ligne invérifiable. */
+    const listePreuves = Array.isArray(preuves) ? preuves.filter(p => p?.url) : [];
+    if (listePreuves.length === 0) {
+      return res.status(400).json({ error: "Au moins une pièce justificative est requise" });
+    }
+
+    const declareParNom = `${req.profil?.prenom || ""} ${req.profil?.nom || ""}`.trim() || req.profil?.email || "Entreprise";
+
+    const { data, error } = await supabase
+      .from("paiements_entreprises")
+      .insert({
+        entreprise_id:   entrepriseId,
+        montant:         Math.round(montantNum),
+        date,
+        mode:            mode      || null,
+        reference:       reference || null,
+        note:            note      || null,
+        statut:          "declare",
+        preuves:         listePreuves,
+        declare_par_id:  req.profil.id,
+        declare_par_nom: declareParNom,
+      })
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    const { data: ent } = await supabase.from("comptes_entreprises").select("nom").eq("id", entrepriseId).maybeSingle();
+    const nomEnt = ent?.nom || "Une entreprise";
+
+    logAudit({
+      acteur_id:    req.profil.id,
+      acteur_nom:   declareParNom,
+      acteur_email: req.profil.email,
+      acteur_role:  req.role,
+      action_type:  "VERSEMENT_DECLARE",
+      module:       "finances",
+      entite_type:  "paiements_entreprises",
+      entite_id:    data.id,
+      detail:       `${nomEnt} a déclaré un versement de ${Math.round(montantNum).toLocaleString('fr-FR')} FCFA (${listePreuves.length} pièce(s) jointe(s))`,
+      metadata:     { entreprise_id: entrepriseId, montant: Math.round(montantNum), mode, reference, nb_preuves: listePreuves.length },
+      statut:       "success",
+    }).catch(() => {});
+
+    const corpsNotif = {
+      type:    "paiement",
+      titre:   "🧾 Versement déclaré - à vérifier",
+      message: `${nomEnt} a déclaré un versement de ${Math.round(montantNum).toLocaleString('fr-FR')} FCFA avec ${listePreuves.length} justificatif(s). À vérifier avant validation.`,
+      meta:    { entreprise_id: entrepriseId, paiement_id: data.id, montant: Math.round(montantNum), a_verifier: true },
+    };
+
+    /* UN SEUL ENVOI, et la source n'est plus écrite à la main : la déclaration vient
+       de l'espace RH, donc de bet-elearning, et `plateformeCourante()` le déduit de
+       l'en-tête de la requête. `super_admin` et `admin` ne sont pas listés non plus -
+       `notifyRole` les ajoute d'office. */
+    await notifyRole(
+      ["assistant_elearning", "commercial", "corporate", "admin_commercial", "manager", "comptable"],
+      corpsNotif,
+      req.profil.id
+    ).catch(() => {});
+
+    res.status(201).json({ paiement: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/entreprise/elearning/beneficiaires/:id/tests ───────────────────
+// L'historique des tests de niveau d'UN bénéficiaire, pour l'espace RH.
+//
+// Un apprenant en passe plusieurs au fil de sa formation - à l'entrée, puis à chaque
+// changement de classe - et le RH qui finance la formation a de quoi vouloir suivre cette
+// progression. C'est la même agrégation que côté BET (`testsNiveauParEmail`), les deux
+// circuits de test confondus.
+//
+// LE CONTRÔLE D'ACCÈS EST LA RAISON D'ÊTRE DE CETTE ROUTE. L'équivalent côté BET
+// (`/api/placement/tests-apprenant?email=…`) prend l'adresse en paramètre et la croit :
+// l'exposer au RH lui permettrait de lire les résultats de n'importe quel apprenant, y
+// compris ceux d'une autre société. Ici l'appelant désigne un BÉNÉFICIAIRE par son id, et
+// on vérifie qu'il appartient bien à son entreprise AVANT de résoudre quoi que ce soit -
+// l'e-mail est lu en base, jamais reçu du client.
+router.get("/elearning/beneficiaires/:id/tests", requireEntrepriseOrAdmin, async (req, res) => {
+  try {
+    const entrepriseId = req.profil.entreprise_id;
+    if (!entrepriseId) return res.status(404).json({ error: "Aucune entreprise liée à ce compte" });
+
+    // Les classes de CETTE entreprise, et elles seules.
+    const { data: classes } = await supabase
+      .from("classes_elearning").select("id").eq("entreprise_id", entrepriseId);
+    const classeIds = (classes || []).map(c => c.id);
+
+    let email = null;
+    if (classeIds.length) {
+      const { data: appr } = await supabase
+        .from("classes_elearning_apprenants")
+        .select("email, classe_id")
+        .eq("id", req.params.id)
+        .in("classe_id", classeIds)
+        .maybeSingle();
+      email = appr?.email || null;
+    }
+
+    // Repli sur l'ancien système de bénéficiaires, lui aussi borné à l'entreprise.
+    if (!email) {
+      const { data: ancien } = await supabase
+        .from("beneficiaires_entreprise")
+        .select("email, utilisateur:utilisateurs(email)")
+        .eq("id", req.params.id)
+        .eq("entreprise_id", entrepriseId)
+        .maybeSingle();
+      email = ancien?.utilisateur?.email || ancien?.email || null;
+    }
+
+    /* 404 et non 403 : ne pas confirmer qu'un identifiant existe quand il ne vous
+       appartient pas - c'est ce qui permettrait de deviner les bénéficiaires d'autrui. */
+    if (!email) return res.status(404).json({ error: "Bénéficiaire introuvable" });
+
+    res.json({ tests: await testsNiveauParEmail(email) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

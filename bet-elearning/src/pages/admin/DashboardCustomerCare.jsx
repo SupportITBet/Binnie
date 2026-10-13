@@ -8,7 +8,7 @@ import { COULEURS } from '../../constants/couleurs';
 import { PaginationSimple } from './DashboardAdminShared';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 const SOURCE_LIB = {
   portail:  { lib: 'Portail client', bg: '#EFF6FF', txt: '#1D4ED8' },

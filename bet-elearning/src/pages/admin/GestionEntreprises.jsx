@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import { useConfirm, useAlerte } from '../../contexts/ConfirmContext';
+import { useConfirm, useAlerte, usePrompt } from '../../contexts/ConfirmContext';
+import { BadgeStatutVersement, VignettesPreuves, estVerse } from '../../components/shared/PreuvesPaiement';
 import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { SECTEURS } from '../../mock/entreprises';
@@ -14,7 +15,7 @@ import { estRole } from '../../constants/roles';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 function authHeaders() {
   const t = localStorage.getItem('admin_token');
-  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json', 'X-Plateforme': 'bet-elearning' } : { 'Content-Type': 'application/json' };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -3014,7 +3015,7 @@ export const STATUT_CONTRAT_LIB = {
   resilie:   { bg: '#FEE2E2', txt: '#991B1B', lib: '🚫 Résilié' },
 };
 
-function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements, echeanciers, onFermer, onEditer, onAjouterPaiement, onModifierPaiement, onSupprimerPaiement, onRenouvelerContrat, onChangerStatutContrat, onProposerRenouvellement, onValiderRenouvellement, peutGererContrat = false, peutProposerRenouvellement = false, onSauvegarderBeneficiaire, onPreuveSupprimee, ongletInitial, lectureSeule = false, peutSaisirPaiements: peutSaisirPaiementsRole = false, peutModifierPaiements: peutModifierPaiementsRole = false, peutSupprimerPaiements = false }) {
+function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements, echeanciers, onFermer, onEditer, onAjouterPaiement, onModifierPaiement, onSupprimerPaiement, onTrancherPaiement,  onRenouvelerContrat, onChangerStatutContrat, onProposerRenouvellement, onValiderRenouvellement, peutGererContrat = false, peutProposerRenouvellement = false, onSauvegarderBeneficiaire, onPreuveSupprimee, ongletInitial, lectureSeule = false, peutSaisirPaiements: peutSaisirPaiementsRole = false, peutModifierPaiements: peutModifierPaiementsRole = false, peutSupprimerPaiements = false }) {
   const { couleurTheme, couleurThemeFonce, couleurThemeClair } = useTheme();
   const confirm = useConfirm();
   const alerte = useAlerte();
@@ -3023,6 +3024,8 @@ function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements,
   const entrepriseRefusee = entreprise.statut === 'refuse';
   const peutSaisirPaiements = peutSaisirPaiementsRole && !entrepriseRefusee;
   const peutModifierPaiements = peutModifierPaiementsRole && !entrepriseRefusee;
+  // Vérifier une déclaration d'entreprise, c'est modifier un versement : même droit.
+  const peutValiderPaiements = peutModifierPaiements && typeof onTrancherPaiement === 'function';
   const [modalRenouvellement, setModalRenouvellement] = useState(false);
   const [contratHistoriqueOuvert, setContratHistoriqueOuvert] = useState(null);
   const [tab, setTab]               = useState(ongletInitial || 'infos');
@@ -3818,15 +3821,31 @@ function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements,
               {pais.length === 0 ? (
                 <div style={{ padding: '20px', textAlign: 'center', color: COULEURS.gris400, fontSize: 13 }}>Aucun versement enregistré.</div>
               ) : (() => {
-                const avecActions = peutModifierPaiements || peutSupprimerPaiements;
-                const colsPaie = avecActions ? '1fr 1fr 1fr 1fr 90px 70px' : '1fr 1fr 1fr 1fr 90px';
+                /* L'impression du reçu compte parmi les actions : sans elle, un rôle
+                   qui ne fait que consulter (le SuperAdmin) perdait la colonne entière
+                   et n'avait plus aucun moyen d'éditer un reçu. */
+                const avecActions = true;
+                // Deux colonnes de plus : le statut, et la preuve JUSTE À CÔTÉ des
+                // boutons - la vérificatrice ouvre le justificatif et tranche sans
+                // quitter la ligne des yeux.
+                const colsPaie = avecActions ? '0.9fr 0.9fr 0.8fr 0.9fr 90px 95px 80px 150px' : '0.9fr 0.9fr 0.8fr 0.9fr 90px 95px 80px';
+                const enAttente = pais.filter(p => p.statut === 'declare');
                 return (
                 <div style={S.tableauPaie}>
+                  {enAttente.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#FFFBEB', borderBottom: '1.5px solid #FCD34D', padding: '10px 14px' }}>
+                      <span style={{ fontSize: 17 }}>🕐</span>
+                      <span style={{ fontSize: 12, color: '#92400E' }}>
+                        <strong>{enAttente.length} versement{enAttente.length > 1 ? 's' : ''} déclaré{enAttente.length > 1 ? 's' : ''} par l'entreprise</strong>
+                        {' '}· {formatFCFA(enAttente.reduce((s, p) => s + (p.montant || 0), 0))} en attente de vérification.
+                        {peutValiderPaiements ? ' Ouvrez le justificatif, puis validez ou rejetez.' : ' La vérification revient à l\'assistante e-learning.'}
+                      </span>
+                    </div>
+                  )}
                   <div style={S.thPaie(colsPaie)}>
-                    <span>Date</span><span>Référence</span><span>Mode</span><span>Note</span><span>Montant</span>{avecActions && <span>Actions</span>}
+                    <span>Date</span><span>Référence</span><span>Mode</span><span>Note</span><span>Montant</span><span>Statut</span><span>Preuve</span>{avecActions && <span>Actions</span>}
                   </div>
                   {[...pais].reverse().map((p) => {
-                    const sp = STATUT_PAI[p.statut] || STATUT_PAI.recu;
                     return (
                       <div key={p.id} onClick={() => setPaiementDetail(p)} style={{ ...S.trPaie(colsPaie), cursor: 'pointer' }}
                         onMouseEnter={e => e.currentTarget.style.background = COULEURS.gris50}
@@ -3834,19 +3853,61 @@ function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements,
                         <span style={{ color: COULEURS.gris600 }}>{p.date}</span>
                         <span style={{ fontWeight: 600, color: COULEURS.navy, fontSize: 11 }}>{p.reference}</span>
                         <span style={{ color: COULEURS.gris600, fontSize: 11 }}>{p.mode}</span>
-                        <span style={{ color: COULEURS.gris400, fontSize: 11 }}>{p.note || '-'}</span>
-                        <span style={{ fontWeight: 800, color: p.statut === 'recu' ? COULEURS.succes : COULEURS.attention, textAlign: 'right' }}>
+                        <span style={{ color: COULEURS.gris400, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.note || '-'}</span>
+                        <span style={{ fontWeight: 800, color: estVerse(p) ? COULEURS.succes : COULEURS.attention, textAlign: 'right' }}>
                           {(p.montant / 1000000).toFixed(3)}M
                         </span>
+                        <span>
+                          <BadgeStatutVersement statut={p.statut} compact />
+                          {p.declare_par_nom && <div style={{ fontSize: 9, color: COULEURS.gris400, marginTop: 2 }}>par l'entreprise</div>}
+                        </span>
+                        <span onClick={e => e.stopPropagation()}>
+                          {(p.preuves || []).length > 0
+                            ? <VignettesPreuves preuves={p.preuves} taille={28} />
+                            : <span style={{ fontSize: 11, color: COULEURS.gris400 }}>—</span>}
+                        </span>
                         {avecActions && (
-                          <span style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
-                            {peutModifierPaiements && (
+                          <span style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                            {/* Valider / Rejeter ne concernent QUE les déclarations d'entreprise
+                                en attente : un versement saisi par un admin naît déjà validé. */}
+                            {p.statut === 'declare' && peutValiderPaiements && (
+                              <>
+                                <button onClick={() => onTrancherPaiement(p, 'valider')}
+                                  title="Vérifier la preuve puis valider"
+                                  style={{ padding: '4px 9px', borderRadius: 6, border: 'none', background: COULEURS.succes, color: '#fff', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', whiteSpace: 'nowrap' }}>
+                                  ✅ Valider
+                                </button>
+                                <button onClick={() => onTrancherPaiement(p, 'rejeter')}
+                                  title="Rejeter avec un motif"
+                                  style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid #FCA5A5', background: '#FFF5F5', color: '#991B1B', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', whiteSpace: 'nowrap' }}>
+                                  ✖️ Rejeter
+                                </button>
+                              </>
+                            )}
+                            {p.statut === 'rejete' && peutValiderPaiements && (
+                              <button onClick={() => onTrancherPaiement(p, 'valider')}
+                                title="Revenir sur le rejet et valider"
+                                style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid #86EFAC', background: '#F0FDF4', color: '#065F46', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', whiteSpace: 'nowrap' }}>
+                                ↺ Valider finalement
+                              </button>
+                            )}
+                            {peutModifierPaiements && p.statut !== 'declare' && (
                               <button onClick={() => { setPaiementAEditer(p); setModalPaie(true); }}
                                 title="Modifier" style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${COULEURS.gris200}`, background: COULEURS.blanc, cursor: 'pointer', fontSize: 12 }}>✏️</button>
                             )}
                             {peutSupprimerPaiements && (
                               <button onClick={() => supprimerPaiement(p)}
                                 title="Supprimer" style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #FCA5A5', background: '#FFF5F5', cursor: 'pointer', fontSize: 12 }}>🗑️</button>
+                            )}
+                            {/* Le reçu n'est éditable qu'une fois le versement validé :
+                                sur une déclaration en attente, il attesterait d'un
+                                encaissement que BET n'a pas confirmé avoir reçu. */}
+                            {estVerse(p) && (
+                              <button onClick={() => genererRecuVersement(p, entreprise, { montantContrat, soldeRestant })}
+                                title="Imprimer le reçu"
+                                style={{ padding: '4px 9px', borderRadius: 6, border: `1px solid ${entreprise.couleur}`, background: COULEURS.blanc, color: entreprise.couleur, cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif', whiteSpace: 'nowrap' }}>
+                                🖨️ Reçu
+                              </button>
                             )}
                           </span>
                         )}
@@ -4174,6 +4235,10 @@ function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements,
             <button onClick={() => setPaiementDetail(null)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 32, height: 32, color: '#fff', fontSize: 16, cursor: 'pointer' }}>×</button>
           </div>
           <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12 }}>
+              <span style={{ fontSize: 12, color: COULEURS.gris600 }}>Statut</span>
+              <BadgeStatutVersement statut={paiementDetail.statut} />
+            </div>
             {[
               { lbl: 'Montant', val: formatFCFA(paiementDetail.montant) },
               { lbl: 'Date du versement', val: paiementDetail.date },
@@ -4186,17 +4251,55 @@ function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements,
                 <span style={{ fontWeight: 700, color: COULEURS.navy }}>{val}</span>
               </div>
             ))}
+            {/* Les justificatifs, en grand : c'est sur cette fiche que la
+                vérificatrice décide, elle doit pouvoir lire la pièce ici. */}
+            {(paiementDetail.preuves || []).length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: COULEURS.gris600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  📎 Justificatifs ({paiementDetail.preuves.length})
+                </div>
+                <VignettesPreuves preuves={paiementDetail.preuves} taille={40} vertical />
+              </div>
+            )}
+
+            {paiementDetail.statut === 'rejete' && paiementDetail.motif_rejet && (
+              <div style={{ marginTop: 16, padding: '12px 16px', background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#991B1B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>⚠️ Motif du rejet</div>
+                <div style={{ fontSize: 13, color: '#7F1D1D', lineHeight: 1.5 }}>{paiementDetail.motif_rejet}</div>
+              </div>
+            )}
+
             <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 10, padding: '12px 16px', marginTop: 16 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>🔍 Traçabilité</div>
               <div style={{ fontSize: 13, color: '#0F172A' }}>
-                Enregistré par <strong>{paiementDetail.cree_par_nom || 'Inconnu'}</strong>
+                {paiementDetail.declare_par_nom
+                  ? <>Déclaré par <strong>{paiementDetail.declare_par_nom}</strong> (entreprise)</>
+                  : <>Enregistré par <strong>{paiementDetail.cree_par_nom || 'Inconnu'}</strong></>}
                 {paiementDetail.created_at && <> le {new Date(paiementDetail.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>}
+                {paiementDetail.valide_par_nom && (
+                  <div style={{ marginTop: 4 }}>
+                    {paiementDetail.statut === 'rejete' ? 'Rejeté' : 'Validé'} par <strong>{paiementDetail.valide_par_nom}</strong>
+                    {paiementDetail.valide_le && <> le {new Date(paiementDetail.valide_le).toLocaleString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>}
+                  </div>
+                )}
               </div>
             </div>
           </div>
           <div style={{ padding: '14px 24px', borderTop: `1px solid ${COULEURS.gris200}`, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button onClick={() => setPaiementDetail(null)} style={{ padding: '9px 18px', borderRadius: 8, border: `1.5px solid ${COULEURS.gris200}`, background: COULEURS.blanc, color: COULEURS.gris600, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>Fermer</button>
-            {peutModifierPaiements && (
+            {paiementDetail.statut === 'declare' && peutValiderPaiements && (
+              <>
+                <button onClick={() => { const p = paiementDetail; setPaiementDetail(null); onTrancherPaiement(p, 'rejeter'); }}
+                  style={{ padding: '9px 20px', borderRadius: 8, border: '1.5px solid #FCA5A5', background: '#FFF5F5', color: '#991B1B', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                  ✖️ Rejeter
+                </button>
+                <button onClick={() => { const p = paiementDetail; setPaiementDetail(null); onTrancherPaiement(p, 'valider'); }}
+                  style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: COULEURS.succes, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                  ✅ Valider le versement
+                </button>
+              </>
+            )}
+            {peutModifierPaiements && paiementDetail.statut !== 'declare' && (
               <button onClick={() => { setPaiementAEditer(paiementDetail); setPaiementDetail(null); setModalPaie(true); }} style={{ padding: '9px 20px', borderRadius: 8, border: `1.5px solid ${entreprise.couleur}`, background: COULEURS.blanc, color: entreprise.couleur, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
                 ✏️ Modifier
               </button>
@@ -4206,9 +4309,14 @@ function ModalDetailEntreprise({ entreprise, contrats, beneficiaires, paiements,
                 🗑️ Supprimer
               </button>
             )}
-            <button onClick={() => genererRecuVersement(paiementDetail, entreprise, { montantContrat, soldeRestant })} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: entreprise.couleur, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-              🧾 Générer le reçu
-            </button>
+            {/* Un reçu atteste d'un encaissement : l'émettre sur une déclaration
+                non vérifiée produirait une pièce comptable pour de l'argent dont
+                BET n'a pas confirmé la réception. */}
+            {estVerse(paiementDetail) && (
+              <button onClick={() => genererRecuVersement(paiementDetail, entreprise, { montantContrat, soldeRestant })} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: entreprise.couleur, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+                🧾 Générer le reçu
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -4294,6 +4402,7 @@ export default function GestionEntreprises() {
   const { profile } = useAuth();
   const confirm = useConfirm();
   const alerte = useAlerte();
+  const demander = usePrompt();
   // ⚠️ La façade "admin_elearning" est partagée entre un éventuel admin e-learning ET le rôle
   // physique "commercial" (l'assistante e-learning) - la whitelister ici court-circuiterait
   // toujours la matrice de permissions pour elle. Seul "admin_manager"/"admin_superviseur"
@@ -4309,10 +4418,18 @@ export default function GestionEntreprises() {
   // proposer un renouvellement, mais seul l'admin BET (droit "modifier") peut le valider.
   const peutGererContratModule = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.contrat?.update === true;
   const peutProposerRenouvellement = !peutGererContratModule && profile?.permissions?.contrat?.create === true;
-  const peutSaisirPaiements = estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true;
-  const peutModifierPaiements = estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true;
+  /* LE SUPER ADMIN CONSULTE LES VERSEMENTS, IL NE LES SAISIT PAS. Encaisser et
+     vérifier les déclarations d'entreprise est le travail de l'assistante
+     e-learning et de la commerciale ; le SuperAdmin supervise. Ce n'est pas une
+     mesure de sécurité - `requirePermission` laisse de toute façon passer le
+     super_admin côté serveur (requireAdmin.js:411) - c'est une répartition du
+     travail, et elle se dit dans l'interface. `profile.role` porte le rôle BRUT :
+     on vise le seul super_admin sans emporter `admin` ni `manager`. */
+  const estSuperAdminLectureSeule = profile?.role === 'super_admin';
+  const peutSaisirPaiements = !estSuperAdminLectureSeule && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true);
+  const peutModifierPaiements = !estSuperAdminLectureSeule && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true);
   // Suppression réservée à l'admin BET - jamais à l'assistante e-learning.
-  const peutSupprimerPaiements = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true;
+  const peutSupprimerPaiements = !estSuperAdminLectureSeule && (estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true);
   const lectureSeule        = !peutModifier;
 
   const [onglet, setOnglet]           = useState('overview');
@@ -4443,6 +4560,39 @@ export default function GestionEntreprises() {
       if (!r.ok) { toast.error(d.error || 'Erreur lors de la suppression du versement'); return; }
       setPaiements(prev => prev.filter(x => x.id !== p.id));
       toast.success('Versement supprimé ✓');
+    } catch (err) {
+      toast.error('Erreur réseau');
+    }
+  }
+
+  /* Vérification d'un versement déclaré par une entreprise.
+     Le rejet exige un motif : sans lui le RH ne sait pas quoi corriger et
+     redéclare à l'identique, avec la même pièce. */
+  async function trancherPaiement(p, action) {
+    let motif = null;
+    if (action === 'rejeter') {
+      motif = await demander(
+        `Pourquoi le versement de ${formatFCFA(p.montant)} déclaré par cette entreprise ne peut-il pas être validé ?\n\nCe motif sera envoyé au RH.`,
+        { titre: 'Rejeter le versement', placeholder: 'ex : le montant du justificatif ne correspond pas', confirmLabel: 'Rejeter le versement' }
+      );
+      if (!motif || !motif.trim()) return;
+    } else {
+      const ok = await confirm(
+        `Valider le versement de ${formatFCFA(p.montant)} ?\n\nLe montant sera enregistré sur le contrat et entrera en trésorerie. Vérifiez d'abord le justificatif.`,
+        { titre: 'Valider le versement', confirmLabel: 'Oui, j\'ai vérifié', danger: false }
+      );
+      if (!ok) return;
+    }
+
+    try {
+      const r = await fetch(`${API_URL}/api/entreprise/admin/${p.entreprise_id}/paiements/${p.id}/${action}`, {
+        method: 'PATCH', headers: authHeaders(),
+        body: JSON.stringify(action === 'rejeter' ? { motif: motif.trim() } : {}),
+      });
+      const d = await r.json();
+      if (!r.ok) { toast.error(d.error || 'Opération impossible'); return; }
+      setPaiements(prev => prev.map(x => x.id === p.id ? d.paiement : x));
+      toast.success(action === 'valider' ? 'Versement validé ✓' : 'Versement rejeté, le RH est notifié.');
     } catch (err) {
       toast.error('Erreur réseau');
     }
@@ -5061,6 +5211,7 @@ export default function GestionEntreprises() {
           onAjouterPaiement={ajouterPaiement}
           onModifierPaiement={modifierPaiement}
           onSupprimerPaiement={supprimerPaiement}
+          onTrancherPaiement={trancherPaiement}
           peutModifierPaiements={peutModifierPaiements}
           peutSupprimerPaiements={peutSupprimerPaiements}
           onRenouvelerContrat={renouvelerContrat}

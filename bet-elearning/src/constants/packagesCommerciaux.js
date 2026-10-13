@@ -33,7 +33,7 @@ export function lirePackages() {
 }
 
 function authHeaders(token) {
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' };
 }
 
 export async function chargerPackages(token) {

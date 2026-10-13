@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useMessagerie } from '../../contexts/MessagerieContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { COULEURS } from '../../constants/couleurs';
-import { LIBELLES_ROLES, ROLE_LOGIN, estRole } from '../../constants/roles';
+import { LIBELLES_ROLES, pageConnexionDe, estRole } from '../../constants/roles';
 import BandeauMaNote from './BandeauMaNote';
 import { MOCK_ENTREPRISES } from '../../mock/entreprises';
 import BoutonLangue from './BoutonLangue';
@@ -197,6 +197,13 @@ const MENUS_PAR_ROLE = {
     { libelle: 'Plannings',         icone: '📅', chemin: '/admin/superviseur/plannings' },
     { libelle: 'Observer un cours', icone: '👁️', chemin: '/admin/superviseur/observer' },
     { libelle: 'Cahiers coachs',    icone: '📘', chemin: '/admin/superviseur/cahiers-coachs' },
+    /* LES NOTES DONNÉES PAR LES APPRENANTS À LEUR COACH.
+       Le serveur ouvre déjà cette lecture au superviseur (`ROLES_LECTURE` dans
+       Backend/src/routes/appreciations.js), et dash lui en donne l'écran — ici l'onglet
+       n'existait que chez le PA Advisor. Le superviseur tient le classement et le cahier
+       des coachs : la voix des apprenants fait partie de ce qu'il doit lire pour les
+       évaluer, au même titre que ses propres observations. */
+    { libelle: 'Évaluations apprenants', icone: '🎓', chemin: '/admin/superviseur/eval-apprenants' },
     { libelle: 'Rapports Deputy',   icone: '📋', chemin: '/admin/superviseur/rapports-deputy' },
     { libelle: 'Anomalies',         icone: '⚠️', chemin: '/admin/superviseur/anomalies' },
     { libelle: 'Gestion Deputies',  icone: '👥', chemin: '/admin/superviseur/deputies' },
@@ -576,7 +583,21 @@ function getNomEntreprise(profile) {
   return MOCK_ENTREPRISES.find(e => e.id === profile.entreprise_id)?.nom || null;
 }
 
-export default function TopNavLayout({ children, stats, menusSec, menuRole, sousTitre }) {
+/**
+ * `badges` — un compteur par onglet, indexé par son chemin :
+ *   badges={{ '/admin/onboarding/parcours': 4, '/admin/onboarding/suivi': 2 }}
+ *
+ * Seules « Notifications » et « Messages » portaient une pastille, parce qu'elles la
+ * tirent d'un contexte global. Les autres onglets n'avaient aucun moyen d'en afficher
+ * une : `MENUS_PAR_ROLE` est une table statique, et un compteur ne peut pas y vivre.
+ * L'appelant, lui, connaît ses chiffres — il les passe ici et le rendu est le même pour
+ * tout le monde.
+ *
+ * Une pastille dit « il y a quelque chose à faire ici », pas « voici combien d'éléments
+ * contient cet onglet » : un badge permanent sur chaque onglet redevient du décor et on
+ * cesse de le voir. On n'en met donc que sur ce qui attend une action.
+ */
+export default function TopNavLayout({ children, stats, menusSec, menuRole, sousTitre, badges }) {
   const { profile, seDeconnecter, connexionReel } = useAuth();
   const confirm = useConfirm();
   const alerte = useAlerte();
@@ -587,8 +608,20 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
   const notifCtx   = useNotifications();
   const nbNonLus   = messagerieCtx?.nbNonLus || 0;
   const nbNotifs   = notifCtx?.nbNonLus || 0;
+
+  /* ── LA BANDEROLE DE NOTIFICATIONS ──
+     Trois non lues au plus : au-delà, on n'affiche plus une alerte mais une liste, et une
+     liste imposée en haut de chaque écran cesse d'être lue. */
+  const [banderoleFermee, setBanderoleFermee] = useState(false);
+  const notifsBanderole = (notifCtx?.notifs || []).filter(n => !n.lu).slice(0, 3);
   // menuRole permet aux pages apprenant de passer leur menu adapté selon l'âge
   const menus        = MENUS_PAR_ROLE[menuRole] || MENUS_PAR_ROLE[profile?.role] || [];
+  /* Vers OÙ mène un clic sur la banderole : chaque rôle a sa propre page de notifications
+     (`/admin/notifications`, `/professeur/notifications`, `/apprenant/notifications`…).
+     On la prend dans le menu du rôle plutôt que de coder une table en double - c'est la
+     même entrée qui porte déjà la pastille. */
+  const cheminNotifs = menus.find(m => m.notifications)?.chemin || null;
+  const surPageNotifs = !!cheminNotifs && location.pathname === cheminNotifs;
   /* Le libellé vient du rôle RÉEL quand on le connaît, sinon de la façade. Un super admin
      porte la façade `admin_manager` (son dashboard est celui du manager) et s'affichait donc
      « Manager BET » : son identité était masquée à l'écran alors qu'elle compte pour savoir
@@ -629,8 +662,11 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
     // menuRole (ex: "apprenant_enfant") sert de filet de sécurité si profile.role n'est pas
     // encore résolu au clic - évite de retomber sur le fallback générique "/connexion" (portail
     // BET) au lieu de la page de connexion propre au rôle (ex: "/connexion/apprenant").
+    // `pageConnexionDe` résout la FAMILLE : une variante de rôle (apprenant par tranche
+    // d'âge, `coach` au lieu de `professeur_titulaire`) ne renvoie plus au portail générique
+    // faute de clé exacte dans la table.
     const role = profile?.role || (menuRole?.startsWith('apprenant') ? 'apprenant' : null);
-    const destination = ROLE_LOGIN[role] || '/connexion';
+    const destination = pageConnexionDe(role) || '/connexion';
     // On attend la fin complète de la déconnexion avant de naviguer, pour éviter toute course
     // avec le listener onAuthStateChange / RedirectRacine qui pourrait rediriger entre-temps.
     seDeconnecter().finally(() => navigate(destination, { replace: true }));
@@ -666,7 +702,7 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
         const avatarUrl = upD.file.url;
         const saveRes = await fetch(`${API_URL}/api/apprenants/preferences`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Plateforme': 'bet-elearning' },
           body: JSON.stringify({ avatar_url: avatarUrl }),
         });
         if (!saveRes.ok) throw new Error((await saveRes.json()).error || 'Erreur enregistrement');
@@ -1224,7 +1260,9 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
       <nav style={S.navPrimaire}>
         {menus.map((item) => {
           const actif = estActif(item.chemin);
-          const badgeVal = item.messagerie ? nbNonLus : item.notifications ? nbNotifs : item.badge;
+          const badgeVal = item.messagerie ? nbNonLus
+            : item.notifications ? nbNotifs
+            : (badges?.[item.chemin] ?? item.badge);
           return (
             <button
               key={item.chemin}
@@ -1271,6 +1309,47 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
       )}
 
       {/* ── Contenu ── */}
+      {/* ══════════ LA BANDEROLE DE NOTIFICATIONS ══════════
+          Portée de dash, où elle est recopiée dans DIX fichiers de dashboard. Ici elle vit
+          dans le layout partagé : les dix-sept écrans de bet-elearning l'obtiennent d'un
+          coup, et une correction les sert tous.
+
+          Elle ne montre que les TROIS PREMIÈRES NON LUES. Une cloche se consulte quand on y
+          pense ; une banderole s'impose au regard — et une banderole qui déroulerait vingt
+          lignes ne serait plus lue du tout.
+
+          MASQUÉE SUR LA PAGE NOTIFICATIONS elle-même : y afficher un résumé de ce que la
+          page montre déjà en entier est du bruit. */}
+      {!banderoleFermee && notifsBanderole.length > 0 && !surPageNotifs && (
+        <div style={{ margin: '14px 24px 0', padding: '10px 16px', background: '#FFF7ED',
+          border: '1px solid #FED7AA', borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>🔔</span>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {notifsBanderole.map(n => (
+              <div key={n.id} role="button" tabIndex={0}
+                onClick={() => { notifCtx?.marquerLue?.(n.id); if (cheminNotifs) navigate(cheminNotifs); }}
+                onKeyDown={e => { if (e.key === 'Enter') { notifCtx?.marquerLue?.(n.id); if (cheminNotifs) navigate(cheminNotifs); } }}
+                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: 700, color: '#9A3412', fontSize: 12 }}>{n.titre}</span>
+                {n.message && <span style={{ color: '#78716C', fontSize: 11, lineHeight: 1.5 }}>{n.message}</span>}
+              </div>
+            ))}
+            {nbNotifs > notifsBanderole.length && (
+              <button onClick={() => cheminNotifs && navigate(cheminNotifs)}
+                style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#9A3412',
+                  fontWeight: 700, fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                +{nbNotifs - notifsBanderole.length} autre{nbNotifs - notifsBanderole.length > 1 ? 's' : ''} →
+              </button>
+            )}
+          </div>
+          {/* Fermée pour la SESSION, pas marquée lue : écarter la banderole n'est pas dire
+              qu'on a traité ce qu'elle annonce. La cloche garde le compte. */}
+          <button onClick={() => setBanderoleFermee(true)} title="Masquer jusqu'à la prochaine connexion"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9A3412',
+              fontSize: 17, lineHeight: 1, padding: 0, flexShrink: 0 }}>✕</button>
+        </div>
+      )}
+
       <div style={S.contenu}>
         {children}
       </div>

@@ -1,12 +1,15 @@
 // DashboardAdminShared.jsx - composants réellement partagés entre plusieurs profils
 // admin_* de DashboardAdmin.jsx (extraits pour éviter la duplication).
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import * as XLSX_ADMIN from 'xlsx';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { useAlerte, useConfirm } from '../../contexts/ConfirmContext';
+import { useAlerte, useConfirm, usePrompt } from '../../contexts/ConfirmContext';
+import { BadgeStatutVersement, VignettesPreuves, estVerse } from '../../components/shared/PreuvesPaiement';
 import { COULEURS } from '../../constants/couleurs';
+import PastilleGroupe from '../../components/shared/PastilleGroupe';
+import PhotoClasseEntete from '../../components/shared/PhotoClasseEntete';
 import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererPDF';
 import { chargerPackages } from '../../constants/packagesCommerciaux';
 import { genererRecuVersement } from '../../utils/recuVersement';
@@ -15,7 +18,7 @@ import { ModalSoumissionParcours, ModalRenouvellementContrat, STATUT_CONTRAT_LIB
 import { fetchUpload } from "../../utils/fetchUpload";
 import { estRole } from '../../constants/roles';
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
 const PAR_PAGE_ENT = 15;
 const STATUT_ENT = {
@@ -1845,6 +1848,7 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
   const { profile } = useAuth();
   const confirm = useConfirm();
   const alerte = useAlerte();
+  const demander = usePrompt();
   /* `super_admin` ajouté : le repli `profile.permissions.crm_entreprises` ne les
        rattrapait PAS. La base leur accorde le module `crm`, et le serveur sait que
        `crm_entreprises` retombe sur `crm` (MODULE_FALLBACK_PARENT) — mais ce repli n'existe
@@ -2102,28 +2106,95 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
   // quoi que l'admin configure dans Gestion des droits. Seul "admin_manager" (super_admin/admin/
   // manager) est une façade sans ambiguïté - on peut la garder comme accès admin implicite.
   const entrepriseRefusee = entreprise.statut === 'refuse';
-  const peutSaisirVersement = !entrepriseRefusee && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true);
-  const peutModifierVersement = !entrepriseRefusee && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true);
+  /* LE SUPER ADMIN CONSULTE, IL NE SAISIT PAS. Les versements entreprise sont le
+     travail de l'assistante e-learning et de la commerciale ; le SuperAdmin les
+     surveille. Rien ici ne relève de la sécurité - `requirePermission` laisse de
+     toute façon passer le super_admin côté serveur (requireAdmin.js:411) - c'est
+     une répartition du travail, et elle se dit donc dans l'interface.
+     `profile.role` porte le rôle BRUT de la base, pas la façade : on peut viser
+     le seul super_admin sans emporter `admin` ni `manager`, qui gardent la main. */
+  const estSuperAdminLectureSeule = profile?.role === 'super_admin';
+  const peutSaisirVersement = !entrepriseRefusee && !estSuperAdminLectureSeule && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.create === true);
+  const peutModifierVersement = !entrepriseRefusee && !estSuperAdminLectureSeule && (estRole(profile?.role, 'admin_manager') || profile?.permissions?.finances?.update === true);
   // Suppression réservée à l'admin BET - jamais à l'assistante e-learning, même si un rôle
   // "commercial" venait un jour à cocher "Modifier" sur le module Finances.
-  const peutSupprimerVersement = estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true;
+  const peutSupprimerVersement = !estSuperAdminLectureSeule && (estRole(profile?.role, ['admin_manager', 'admin_superviseur']) || profile?.permissions?.finances?.delete === true);
+  /* Vérifier une déclaration d'entreprise, c'est modifier un versement : même droit.
+     L'assistante e-learning le reçoit par `finances.update` (accordé en base par
+     paiements_entreprises_preuves.sql), et non par une exception de rôle - la
+     matrice de droits reste la seule autorité, conformément à la note ci-dessus. */
+  const peutValiderVersement = !entrepriseRefusee && peutModifierVersement;
+  /* CONSULTER UN VERSEMENT ET EN IMPRIMER LE REÇU SONT DES LECTURES, et elles ne
+     dépendent donc d'aucun droit d'écriture.
+     Elles étaient adossées à `peutSaisirVersement` : un rôle sans `finances.create`
+     - l'assistante e-learning tant que la matrice ne le lui accorde pas, le
+     SuperAdmin désormais - perdait non seulement les boutons de saisie mais la
+     colonne Actions entière, donc le reçu, et jusqu'à la fiche détail où se lisent
+     les justificatifs. Qui voit déjà l'onglet Paiements a `finances.read` ; lui
+     refuser la lecture de ce qu'il a sous les yeux n'avait aucun sens.
+     La seule exception est l'Onboarding, tenu à l'écart du volet financier par
+     choix d'organisation : l'argent est du ressort de la commerciale. */
+  const estOnboarding = estRole(profile?.role, 'admin_onboarding');
+  const peutVoirDetailVersement = !estOnboarding;
   const [versements, setVersements] = useState([]);
   const [chargVersements, setChargVersements] = useState(false);
   const [showFormVers, setShowFormVers] = useState(false);
   const [savingVers, setSavingVers] = useState(false);
   const [paiementDetail, setPaiementDetail] = useState(null);
   const [editVersId, setEditVersId] = useState(null);
+  const [traitementVers, setTraitementVers] = useState(null);   // id du versement en cours de validation/rejet
   const [formVers, setFormVers] = useState({ montant:'', date: new Date().toISOString().split('T')[0], mode:'virement', reference:'', note:'' });
 
-  useEffect(() => {
-    if (tab !== 'paiements') return;
+  const chargerVersements = useCallback(() => {
     setChargVersements(true);
-    fetch(`${_API_URL_ADMIN}/api/entreprise/admin/${entreprise.id}/paiements`, { headers: _authHdrsAdmin() })
+    return fetch(`${_API_URL_ADMIN}/api/entreprise/admin/${entreprise.id}/paiements`, { headers: _authHdrsAdmin() })
       .then(r => r.json())
       .then(d => setVersements(d.paiements || []))
       .catch(() => {})
       .finally(() => setChargVersements(false));
-  }, [tab, entreprise.id]);
+  }, [entreprise.id]);
+
+  useEffect(() => {
+    if (tab !== 'paiements') return;
+    chargerVersements();
+  }, [tab, chargerVersements]);
+
+  /* Validation / rejet d'un versement déclaré par l'entreprise. Le rejet exige un
+     motif : sans lui, le RH ne sait pas quoi corriger et redéclare à l'identique. */
+  async function trancherVersement(v, action) {
+    let motif = null;
+    if (action === 'rejeter') {
+      motif = await demander(
+        `Pourquoi le versement de ${formatFCFA(v.montant)} déclaré par ${entreprise.nom} ne peut-il pas être validé ?\n\nCe motif sera envoyé au RH de l'entreprise.`,
+        { titre: 'Rejeter le versement', placeholder: 'ex : le montant du justificatif ne correspond pas', confirmLabel: 'Rejeter le versement' }
+      );
+      if (!motif || !motif.trim()) return;
+    } else {
+      const ok = await confirm(
+        `Valider le versement de ${formatFCFA(v.montant)} déclaré par ${entreprise.nom} ?\n\nLe montant sera enregistré sur le contrat et entrera en trésorerie. Vérifiez d'abord le justificatif.`,
+        { titre: 'Valider le versement', confirmLabel: 'Oui, j\'ai vérifié', danger: false }
+      );
+      if (!ok) return;
+    }
+
+    setTraitementVers(v.id);
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/entreprise/admin/${entreprise.id}/paiements/${v.id}/${action}`, {
+        method: 'PATCH',
+        headers: { ..._authHdrsAdmin(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(action === 'rejeter' ? { motif: motif.trim() } : {}),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Opération impossible');
+      await chargerVersements();
+      onEntrepriseMaj?.();   // le « Total versé » du contrat change, la liste derrière aussi
+      toast.success(action === 'valider' ? 'Versement validé et enregistré.' : 'Versement rejeté, le RH est notifié.');
+    } catch (err) {
+      await alerte(err.message, { titre: 'Opération impossible', danger: true });
+    } finally {
+      setTraitementVers(null);
+    }
+  }
 
   // ── Champs réels de l'entreprise ──
   const cfg         = STATUT_ENT[entreprise.statut] || STATUT_ENT.actif;
@@ -2132,7 +2203,12 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
   const pct         = nbLicences > 0 ? Math.round((nbActifs / nbLicences) * 100) : 0;
   const jours       = entreprise.date_fin_contrat ? joursRestants(entreprise.date_fin_contrat) : null;
   const montantContrat = Number(entreprise.montant_contrat || 0);
-  const totalVerse  = versements.reduce((s, v) => s + Number(v.montant || 0), 0);
+  /* SEUL CE QUI EST VALIDÉ EST VERSÉ. Un versement déclaré par le RH et pas
+     encore vérifié resterait sinon compté comme encaissé - le solde afficherait
+     une dette éteinte sur la foi d'une pièce que personne n'a ouverte. */
+  const versementsEnAttente = versements.filter(v => v.statut === 'declare');
+  const totalVerse  = versements.filter(estVerse).reduce((s, v) => s + Number(v.montant || 0), 0);
+  const totalEnAttente = versementsEnAttente.reduce((s, v) => s + Number(v.montant || 0), 0);
   const soldeRestant = Math.max(0, montantContrat - totalVerse);
   const pctPaie     = montantContrat > 0 ? Math.round((totalVerse / montantContrat) * 100) : 0;
 
@@ -2634,11 +2710,31 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
                     </button>
                   )}
                   {!peutSaisirVersement && (
-                    <span style={{ fontSize:11, padding:'4px 10px', borderRadius:20, background: entrepriseRefusee ? '#FEE2E2' : '#F1F5F9', color: entrepriseRefusee ? '#991B1B' : '#64748B', fontWeight:600 }}>
-                      {entrepriseRefusee ? '❌ Inscription refusée - aucune saisie possible' : '🔒 Lecture seule'}
+                    <span title={estSuperAdminLectureSeule ? "La saisie et la validation des versements entreprise reviennent à l'assistante e-learning et à la commerciale." : undefined}
+                      style={{ fontSize:11, padding:'4px 10px', borderRadius:20, background: entrepriseRefusee ? '#FEE2E2' : '#F1F5F9', color: entrepriseRefusee ? '#991B1B' : '#64748B', fontWeight:600 }}>
+                      {entrepriseRefusee
+                        ? '❌ Inscription refusée - aucune saisie possible'
+                        : estSuperAdminLectureSeule
+                          ? '👁️ Supervision - saisie assurée par l\'assistante e-learning'
+                          : '🔒 Lecture seule'}
                     </span>
                   )}
                 </div>
+
+                {/* Ce qui attend une vérification, dit avant la liste : c'est l'action
+                    du jour, elle ne doit pas se découvrir en parcourant les lignes. */}
+                {versementsEnAttente.length > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:10, background:'#FFFBEB', border:'1.5px solid #FCD34D', borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
+                    <span style={{ fontSize:18 }}>🕐</span>
+                    <div style={{ flex:1, fontSize:12, color:'#92400E' }}>
+                      <strong>{versementsEnAttente.length} versement{versementsEnAttente.length > 1 ? 's' : ''} déclaré{versementsEnAttente.length > 1 ? 's' : ''} par l'entreprise</strong>
+                      {' '}· {formatFCFA(totalEnAttente)} en attente de vérification.
+                      {peutValiderVersement
+                        ? ' Ouvrez le justificatif, puis validez ou rejetez.'
+                        : ' La vérification revient à l\'assistante e-learning.'}
+                    </div>
+                  </div>
+                )}
 
                 {/* Formulaire ajout (lecture seule masqué) */}
                 {showFormVers && (peutSaisirVersement || (editVersId && peutModifierVersement)) && (
@@ -2696,29 +2792,70 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
                     {peutSaisirVersement && <div style={{ fontSize:12, color:COULEURS.gris400 }}>Cliquez sur "+ Nouveau versement" pour saisir le premier paiement.</div>}
                   </div>
                 ) : (() => {
-                  const avecActions = peutModifierVersement || peutSupprimerVersement;
-                  const colsVers = avecActions ? '1fr 1.2fr 1fr 1.2fr 1.5fr 80px' : '1fr 1.2fr 1fr 1.2fr 1.5fr';
+                  /* La colonne existe dès qu'on a le droit de LIRE les versements :
+                     elle porte le reçu, qui n'est pas une action d'écriture. La
+                     conditionner aux droits de saisie la faisait disparaître pour
+                     l'assistante et le SuperAdmin, reçu compris. */
+                  const avecActions = peutVoirDetailVersement;
+                  // Deux colonnes de plus que l'historique d'origine : le statut, et la
+                  // preuve JUSTE À CÔTÉ des boutons - la vérificatrice doit pouvoir ouvrir
+                  // le justificatif et valider sans quitter la ligne des yeux.
+                  const colsVers = avecActions ? '0.9fr 1fr 0.9fr 1fr 1.1fr 100px 90px 150px' : '0.9fr 1fr 0.9fr 1fr 1.1fr 100px 90px';
                   return (
                   <div style={{ background:COULEURS.blanc, borderRadius:12, overflow:'hidden', border:`1px solid ${COULEURS.gris200}` }}>
                     <div style={{ display:'grid', gridTemplateColumns:colsVers, padding:'9px 16px', background:COULEURS.gris50, borderBottom:`1px solid ${COULEURS.gris200}`, fontSize:10, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em' }}>
-                      <span>Date</span><span>Montant</span><span>Mode</span><span>Référence</span><span>Note</span>{avecActions && <span>Actions</span>}
+                      <span>Date</span><span>Montant</span><span>Mode</span><span>Référence</span><span>Note</span><span>Statut</span><span>Preuve</span>{avecActions && <span>Actions</span>}
                     </div>
                     {versements.map((v, i) => (
                       // Ce modal ModalOnboardingEntreprise est partagé par plusieurs rôles (Onboarding,
                       // E-Learning, et 2 autres) - le détail/reçu n'est activé que pour ceux autorisés
                       // à saisir des versements (peutSaisirVersement), pas pour Onboarding (lecture seule).
-                      <div key={v.id} onClick={() => peutSaisirVersement && setPaiementDetail(v)}
-                        style={{ display:'grid', gridTemplateColumns:colsVers, padding:'12px 16px', borderBottom: i < versements.length-1 ? `1px solid ${COULEURS.gris100}` : 'none', fontSize:12, alignItems:'center', cursor: peutSaisirVersement ? 'pointer' : 'default' }}
-                        onMouseEnter={e => { if (peutSaisirVersement) e.currentTarget.style.background = COULEURS.gris50; }}
+                      <div key={v.id} onClick={() => peutVoirDetailVersement && setPaiementDetail(v)}
+                        style={{ display:'grid', gridTemplateColumns:colsVers, padding:'12px 16px', borderBottom: i < versements.length-1 ? `1px solid ${COULEURS.gris100}` : 'none', fontSize:12, alignItems:'center', cursor: peutVoirDetailVersement ? 'pointer' : 'default' }}
+                        onMouseEnter={e => { if (peutVoirDetailVersement) e.currentTarget.style.background = COULEURS.gris50; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <span style={{ color:COULEURS.gris600 }}>{v.date}</span>
-                        <span style={{ fontWeight:800, color:'#059669' }}>{formatFCFA(v.montant)}</span>
-                        <span style={{ padding:'2px 8px', borderRadius:10, background:'#EDE9FE', color:'#6D28D9', fontSize:10, fontWeight:600 }}>{MODES[v.mode] || v.mode}</span>
+                        <span style={{ fontWeight:800, color: estVerse(v) ? '#059669' : COULEURS.gris600 }}>{formatFCFA(v.montant)}</span>
+                        <span style={{ padding:'2px 8px', borderRadius:10, background:'#EDE9FE', color:'#6D28D9', fontSize:10, fontWeight:600, width:'fit-content' }}>{MODES[v.mode] || v.mode}</span>
                         <span style={{ fontSize:11, color:COULEURS.gris600 }}>{v.reference || '-'}</span>
-                        <span style={{ fontSize:11, color:COULEURS.gris400, fontStyle: v.note ? 'normal' : 'italic' }}>{v.note || '-'}</span>
+                        <span style={{ fontSize:11, color:COULEURS.gris400, fontStyle: v.note ? 'normal' : 'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.note || '-'}</span>
+                        <span>
+                          <BadgeStatutVersement statut={v.statut} compact />
+                          {v.declare_par_nom && (
+                            <div style={{ fontSize:9, color:COULEURS.gris400, marginTop:2 }}>par l'entreprise</div>
+                          )}
+                        </span>
+                        <span onClick={e => e.stopPropagation()}>
+                          {(v.preuves || []).length > 0
+                            ? <VignettesPreuves preuves={v.preuves} taille={30} />
+                            : <span style={{ fontSize:11, color:COULEURS.gris400 }}>—</span>}
+                        </span>
                         {avecActions && (
-                          <span style={{ display:'flex', gap:5 }} onClick={e => e.stopPropagation()}>
-                            {peutModifierVersement && (
+                          <span style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }} onClick={e => e.stopPropagation()}>
+                            {/* Valider / Rejeter ne concernent QUE les déclarations d'entreprise
+                                en attente : un versement saisi par un admin naît déjà validé. */}
+                            {v.statut === 'declare' && peutValiderVersement && (
+                              <>
+                                <button onClick={() => trancherVersement(v, 'valider')} disabled={traitementVers === v.id}
+                                  title="Vérifier la preuve puis valider"
+                                  style={{ padding:'4px 9px', borderRadius:6, border:'none', background:'#059669', color:'#fff', cursor: traitementVers === v.id ? 'wait' : 'pointer', fontSize:10, fontWeight:700, fontFamily:'"Plus Jakarta Sans",sans-serif', whiteSpace:'nowrap' }}>
+                                  {traitementVers === v.id ? '⏳' : '✅ Valider'}
+                                </button>
+                                <button onClick={() => trancherVersement(v, 'rejeter')} disabled={traitementVers === v.id}
+                                  title="Rejeter avec un motif"
+                                  style={{ padding:'4px 9px', borderRadius:6, border:'1px solid #FCA5A5', background:'#FFF5F5', color:'#991B1B', cursor: traitementVers === v.id ? 'wait' : 'pointer', fontSize:10, fontWeight:700, fontFamily:'"Plus Jakarta Sans",sans-serif', whiteSpace:'nowrap' }}>
+                                  ✖️ Rejeter
+                                </button>
+                              </>
+                            )}
+                            {v.statut === 'rejete' && peutValiderVersement && (
+                              <button onClick={() => trancherVersement(v, 'valider')} disabled={traitementVers === v.id}
+                                title="Revenir sur le rejet et valider"
+                                style={{ padding:'4px 9px', borderRadius:6, border:'1px solid #86EFAC', background:'#F0FDF4', color:'#065F46', cursor:'pointer', fontSize:10, fontWeight:700, fontFamily:'"Plus Jakarta Sans",sans-serif', whiteSpace:'nowrap' }}>
+                                ↺ Valider finalement
+                              </button>
+                            )}
+                            {peutModifierVersement && v.statut !== 'declare' && (
                               <button onClick={() => { setFormVers({ montant: v.montant, date: (v.date||'').slice(0,10), mode: v.mode || 'virement', reference: v.reference || '', note: v.note || '' }); setEditVersId(v.id); setShowFormVers(true); }}
                                 title="Modifier" style={{ width:26, height:26, borderRadius:6, border:`1px solid ${COULEURS.gris200}`, background:COULEURS.blanc, cursor:'pointer', fontSize:12 }}>✏️</button>
                             )}
@@ -2726,15 +2863,29 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
                               <button onClick={() => supprimer(v)}
                                 title="Supprimer" style={{ width:26, height:26, borderRadius:6, border:'1px solid #FCA5A5', background:'#FFF5F5', cursor:'pointer', fontSize:12 }}>🗑️</button>
                             )}
+                            {/* Le reçu n'est éditable qu'une fois le versement validé :
+                                sur une déclaration en attente, il attesterait d'un
+                                encaissement que BET n'a pas confirmé avoir reçu. */}
+                            {estVerse(v) && peutVoirDetailVersement && (
+                              <button onClick={() => genererRecuVersement(v, entreprise, { montantContrat, soldeRestant })}
+                                title="Imprimer le reçu"
+                                style={{ padding:'4px 9px', borderRadius:6, border:`1px solid ${entreprise.couleur}`, background:COULEURS.blanc, color:entreprise.couleur, cursor:'pointer', fontSize:10, fontWeight:700, fontFamily:'"Plus Jakarta Sans",sans-serif', whiteSpace:'nowrap' }}>
+                                🖨️ Reçu
+                              </button>
+                            )}
                           </span>
                         )}
                       </div>
                     ))}
                     {/* Total */}
                     <div style={{ display:'grid', gridTemplateColumns:colsVers, padding:'10px 16px', background:COULEURS.navy, fontSize:12, alignItems:'center' }}>
-                      <span style={{ fontWeight:700, color:'#fff' }}>TOTAL</span>
+                      <span style={{ fontWeight:700, color:'#fff' }}>TOTAL VALIDÉ</span>
                       <span style={{ fontWeight:900, color:'#FCD34D' }}>{formatFCFA(totalVerse)}</span>
-                      <span></span><span></span><span></span>{avecActions && <span></span>}
+                      <span></span><span></span>
+                      <span style={{ fontSize:10, color:'rgba(255,255,255,0.65)' }}>
+                        {totalEnAttente > 0 ? `+ ${formatFCFA(totalEnAttente)} en attente` : ''}
+                      </span>
+                      <span></span><span></span>{avecActions && <span></span>}
                     </div>
                   </div>
                   );
@@ -2965,9 +3116,28 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
         />
       )}
 
-      {/* Modal détail bénéficiaire */}
+      {/* Modal détail bénéficiaire — LA MÊME FICHE QUE PARTOUT AILLEURS.
+          Ce chemin (Entreprises → classe → bénéficiaire) ouvrait `ModalDetailBenef`, une
+          SECONDE fiche apprenant, distincte de `ModalDetailApprenant` utilisée par Mes
+          apprenants, Mes classes, le PA et l'Onboarding. Les deux ne se recouvraient qu'à
+          moitié, et tous les enrichissements - Test de niveau, Historique, Accès réservé,
+          objectif du client - n'étaient allés que dans la seconde : le même bénéficiaire
+          montrait deux fiches différentes selon la porte empruntée.
+
+          `ModalDetailApprenant` est un sur-ensemble strict : son onglet Présences porte
+          déjà le taux et les filtres qu'offrait « Suivi », et l'onglet « Compétences » de
+          l'ancienne fiche n'était qu'une ébauche affichant « bientôt disponibles ». Rien
+          n'a donc été perdu au passage. */}
       {benDetail && (
-        <ModalDetailBenef benef={benDetail} entreprise={entreprise} onFermer={() => setBen(null)} />
+        <ModalDetailApprenant
+          apprenant={benDetail}
+          groupe={modalCl ? { id: modalCl.id, nom: modalCl.nom } : null}
+          entreprise={entreprise}
+          onFermer={() => setBen(null)}
+          /* Au-dessus de la fiche de classe (1500) qui l'a ouverte, elle-même au-dessus
+             de la fiche entreprise. */
+          zIndex={1700}
+        />
       )}
 
       {/* Modal renouvellement de contrat (renouvellement direct pour l'admin BET,
@@ -2989,7 +3159,7 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
 
       {/* Modal détail versement (traçabilité + reçu) - actif seulement pour les rôles
           autorisés à saisir des versements (peutSaisirVersement), pas pour Onboarding. */}
-      {peutSaisirVersement && paiementDetail && (
+      {peutVoirDetailVersement && paiementDetail && (
         <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1150, backdropFilter:'blur(4px)' }} onClick={() => setPaiementDetail(null)}>
           <div style={{ background:COULEURS.blanc, borderRadius:16, width:640, maxWidth:'94vw', boxShadow:'0 24px 64px rgba(0,0,0,0.35)', overflow:'hidden' }} onClick={e => e.stopPropagation()}>
             <div style={{ background:`linear-gradient(135deg, ${entreprise.couleur}CC, ${entreprise.couleur})`, padding:'20px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -3000,6 +3170,10 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
               <button onClick={() => setPaiementDetail(null)} style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:8, width:32, height:32, color:'#fff', fontSize:16, cursor:'pointer' }}>×</button>
             </div>
             <div style={{ padding:24 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:12 }}>
+                <span style={{ fontSize:12, color:COULEURS.gris600 }}>Statut</span>
+                <BadgeStatutVersement statut={paiementDetail.statut} />
+              </div>
               {[
                 { lbl:'Montant', val: formatFCFA(paiementDetail.montant) },
                 { lbl:'Date du versement', val: paiementDetail.date },
@@ -3012,17 +3186,55 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
                   <span style={{ fontWeight:700, color:COULEURS.navy }}>{val}</span>
                 </div>
               ))}
+              {/* Les justificatifs, en grand : c'est sur cette fiche que la
+                  vérificatrice décide, elle doit pouvoir lire la pièce ici. */}
+              {(paiementDetail.preuves || []).length > 0 && (
+                <div style={{ marginTop:16 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>
+                    📎 Justificatifs ({paiementDetail.preuves.length})
+                  </div>
+                  <VignettesPreuves preuves={paiementDetail.preuves} taille={40} vertical />
+                </div>
+              )}
+
+              {paiementDetail.statut === 'rejete' && paiementDetail.motif_rejet && (
+                <div style={{ marginTop:16, padding:'12px 16px', background:'#FEE2E2', border:'1px solid #FCA5A5', borderRadius:10 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#991B1B', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>⚠️ Motif du rejet</div>
+                  <div style={{ fontSize:13, color:'#7F1D1D', lineHeight:1.5 }}>{paiementDetail.motif_rejet}</div>
+                </div>
+              )}
+
               <div style={{ background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:10, padding:'12px 16px', marginTop:16 }}>
                 <div style={{ fontSize:10, fontWeight:700, color:'#0369A1', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>🔍 Traçabilité</div>
                 <div style={{ fontSize:13, color:'#0F172A' }}>
-                  Enregistré par <strong>{paiementDetail.cree_par_nom || 'Inconnu'}</strong>
+                  {paiementDetail.declare_par_nom
+                    ? <>Déclaré par <strong>{paiementDetail.declare_par_nom}</strong> (entreprise)</>
+                    : <>Enregistré par <strong>{paiementDetail.cree_par_nom || 'Inconnu'}</strong></>}
                   {paiementDetail.created_at && <> le {new Date(paiementDetail.created_at).toLocaleString('fr-FR', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}</>}
+                  {paiementDetail.valide_par_nom && (
+                    <div style={{ marginTop:4 }}>
+                      {paiementDetail.statut === 'rejete' ? 'Rejeté' : 'Validé'} par <strong>{paiementDetail.valide_par_nom}</strong>
+                      {paiementDetail.valide_le && <> le {new Date(paiementDetail.valide_le).toLocaleString('fr-FR', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}</>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
             <div style={{ padding:'14px 24px', borderTop:`1px solid ${COULEURS.gris200}`, display:'flex', justifyContent:'flex-end', gap:10 }}>
               <button onClick={() => setPaiementDetail(null)} style={{ padding:'9px 18px', borderRadius:8, border:`1.5px solid ${COULEURS.gris200}`, background:COULEURS.blanc, color:COULEURS.gris600, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'"Plus Jakarta Sans", sans-serif' }}>Fermer</button>
-              {peutModifierVersement && (
+              {paiementDetail.statut === 'declare' && peutValiderVersement && (
+                <>
+                  <button onClick={() => { const v = paiementDetail; setPaiementDetail(null); trancherVersement(v, 'rejeter'); }}
+                    style={{ padding:'9px 20px', borderRadius:8, border:'1.5px solid #FCA5A5', background:'#FFF5F5', color:'#991B1B', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'"Plus Jakarta Sans", sans-serif' }}>
+                    ✖️ Rejeter
+                  </button>
+                  <button onClick={() => { const v = paiementDetail; setPaiementDetail(null); trancherVersement(v, 'valider'); }}
+                    style={{ padding:'9px 20px', borderRadius:8, border:'none', background:'#059669', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'"Plus Jakarta Sans", sans-serif' }}>
+                    ✅ Valider le versement
+                  </button>
+                </>
+              )}
+              {peutModifierVersement && paiementDetail.statut !== 'declare' && (
                 <button onClick={() => {
                   setFormVers({ montant: paiementDetail.montant, date: (paiementDetail.date || '').slice(0,10), mode: paiementDetail.mode || 'virement', reference: paiementDetail.reference || '', note: paiementDetail.note || '' });
                   setEditVersId(paiementDetail.id);
@@ -3048,9 +3260,14 @@ export function ModalOnboardingEntreprise({ entreprise, onFermer, onPreuveSuppri
                   🗑️ Supprimer
                 </button>
               )}
-              <button onClick={() => genererRecuVersement(paiementDetail, entreprise, { montantContrat, soldeRestant })} style={{ padding:'9px 20px', borderRadius:8, border:'none', background:entreprise.couleur, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'"Plus Jakarta Sans", sans-serif' }}>
-                🧾 Générer le reçu
-              </button>
+              {/* Un reçu atteste d'un encaissement : l'émettre sur une déclaration
+                  non vérifiée produirait une pièce comptable pour de l'argent dont
+                  BET n'a pas confirmé la réception. */}
+              {estVerse(paiementDetail) && (
+                <button onClick={() => genererRecuVersement(paiementDetail, entreprise, { montantContrat, soldeRestant })} style={{ padding:'9px 20px', borderRadius:8, border:'none', background:entreprise.couleur, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'"Plus Jakarta Sans", sans-serif' }}>
+                  🧾 Générer le reçu
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -4355,14 +4572,40 @@ export function ModalRemplacementManuel({ onFermer, onCree }) {
 
 
 // Utilisé par OngletClasses (onboarding) et OngletClassesPAAdvisor (pa_advisor)
-export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, canCreateParent = false }) {
+/* `zIndex` PAR DÉFAUT À 1600, soit AU-DESSUS de la fiche de classe (1500).
+   Cette fiche s'ouvre très souvent DEPUIS une fiche de classe - on clique sur un
+   apprenant de la liste - et elle restait alors derrière celle qui l'avait ouverte :
+   l'écran semblait ne rien faire. Une modale enfant passe au-dessus de son parent ;
+   ouverte seule, un cran de plus ne gêne personne. La prop reste réglable pour un
+   appelant qui l'empilerait différemment. */
+export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, canCreateParent = false, zIndex = 1600 }) {
   const PAGE_SIZE = 10;
+  const { profile: profilCourant } = useAuth();
+  const { couleurTheme } = useTheme();
 
   const [tab,          setTab]         = useState('infos');
   const [noteInterne,  setNote]        = useState(apprenant.notes_internes || '');
   const [noteSauvee,   setNoteSauvee]  = useState(false);
   const [noteSaving,   setNoteSaving]  = useState(false);
   const [noteErr,      setNoteErr]     = useState('');
+
+  /* ── Données des onglets ajoutés (chargées à l'ouverture de l'onglet, pas avant) ──
+     `dejaCharge` MARQUE LA TENTATIVE, PAS LE RÉSULTAT, et c'est indispensable :
+     les gardes de ces trois effets testaient la donnée elle-même (`testNiveau`,
+     `acces`, `historique.length`). Quand la recherche ne rend RIEN - aucun test
+     rapproché, aucun événement d'audit - la donnée reste vide, la garde ne bloque
+     plus, et `setChargXxx(false)` relance l'effet qui vient de se terminer : requête
+     en boucle, et un onglet qui clignote entre « Chargement… » et « Aucun test ».
+     Un `useRef` plutôt qu'un state : il ne doit RIEN redéclencher en changeant. */
+  const dejaCharge = useRef({ test: false, acces: false, historique: false });
+  const [testNiveau,  setTestNiveau]  = useState(null);   // null = pas encore chargé, [] = aucun test
+  const [chargTest,   setChargTest]   = useState(false);
+  const [acces,       setAcces]       = useState(null);
+  const [chargAcces,  setChargAcces]  = useState(false);
+  const [accesSaving, setAccesSaving] = useState(false);
+  const [accesMsg,    setAccesMsg]    = useState(null);
+  const [historique,  setHistorique]  = useState([]);
+  const [chargHisto,  setChargHisto]  = useState(false);
 
   // Parent account creation state
   const [parentAcces,       setParentAcces]       = useState(null);
@@ -4371,7 +4614,15 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
 
   // Edit mode for infos
   const [editMode,   setEditMode]   = useState(false);
+  /* Les champs de l'APPRENANT LUI-MÊME manquaient : le formulaire d'édition ne portait
+     que l'état civil des mineurs et les coordonnées du parent. Sur un adulte en entreprise
+     - le cas courant côté assistante - cliquer « Modifier » n'ouvrait donc aucun champ qui
+     le concerne, d'où l'impression d'un bouton sans effet. */
   const [editForm,   setEditForm]   = useState({
+    nom_complet:      apprenant.nom_complet      || '',
+    telephone:        apprenant.telephone        || '',
+    niveau_cecr:      apprenant.niveau_cecr      || '',
+    objectif_client:  apprenant.objectif_client  || '',
     date_naissance:   apprenant.date_naissance   || '',
     profil_type:      apprenant.profil_type      || 'adulte',
     prenom_parent:    apprenant.prenom_parent    || '',
@@ -4408,7 +4659,13 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
   const inscriptionId = apprenant.id;
   const classeId      = groupe?.id || apprenant.classe_id;
   const niv           = apprenant.niveau_cecr;
-  const nvc           = NIV_COULEUR[niv] || '#6366F1';
+  /* LE CHROME DE LA MODALE SUIT LE DASHBOARD, PAS LE NIVEAU DE L'APPRENANT.
+     `nvc` valait `NIV_COULEUR[niveau]` : l'en-tête, les onglets et les boutons prenaient
+     la couleur du niveau CECR, si bien qu'un apprenant A1 ouvrait un bandeau bleu et un
+     B2 un bandeau orange — dans le même dashboard, et sans rapport avec sa charte.
+     Le badge « Niveau » de l'en-tête, lui, se lit sur un fond blanc translucide : il reste
+     lisible quelle que soit la couleur du dashboard, et n'a donc pas besoin de la sienne. */
+  const nvc           = couleurTheme;
 
   const STATUT_CFG = {
     actif:               { bg:'#D1FAE5', txt:'#065F46', lib:'Actif' },
@@ -4423,24 +4680,168 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
   const ageApprenant = apprenant.date_naissance
     ? Math.floor((Date.now() - new Date(apprenant.date_naissance)) / (365.25*24*3600*1000))
     : null;
-  const trancheApprenant = apprenant.profil_type && apprenant.profil_type !== 'adulte'
+  /* LE PROFIL DÉCLARÉ FAIT FOI, « adulte » COMPRIS.
+     La condition écartait `profil_type === 'adulte'` et retombait alors sur un calcul
+     d'âge : un adulte dont la date de naissance est erronée - saisie du jour même, ce qui
+     arrive à l'import - se voyait attribuer 0 an, donc la tranche « enfant », donc un
+     onglet Parent sur une fiche d'adulte. L'âge n'est plus qu'un repli, pour les seuls
+     dossiers où le profil n'a pas été renseigné du tout. */
+  const trancheApprenant = apprenant.profil_type
     ? apprenant.profil_type
     : (ageApprenant !== null ? (ageApprenant <= 12 ? 'enfant' : ageApprenant <= 17 ? 'adolescent' : 'adulte') : 'adulte');
   const hasParentData = localApp.email_parent || localApp.prenom_parent || localApp.nom_parent || localApp.telephone_parent;
-  const showParentTab = trancheApprenant === 'enfant' || trancheApprenant === 'adolescent';
+  /* L'onglet Parent n'a de sens que pour un mineur. `hasParentData` le rattrape quand un
+     contact parent a été saisi sur un dossier dont le profil n'a jamais été précisé :
+     l'information existe, la masquer la rendrait inaccessible. */
+  const showParentTab = trancheApprenant === 'enfant' || trancheApprenant === 'adolescent'
+    || (!apprenant.profil_type && hasParentData);
 
+  /* L'ONGLET « ACCÈS » EST RÉSERVÉ À L'ASSISTANTE E-LEARNING. Il expose l'identifiant de
+     connexion et le mot de passe temporaire en clair : c'est elle qui ouvre les accès et
+     les redonne quand l'apprenant les perd, personne d'autre n'a à les lire.
+     `super_admin` y a droit aussi - il n'y a pas de secret qu'on lui cache - mais aucun
+     autre profil, PA ou Onboarding compris. */
+  /* L'ASSISTANTE E-LEARNING, ET ELLE SEULE.
+     `super_admin` y figurait — ajouté au motif qu'il « consulte tout » : c'était une
+     interprétation, pas la règle. L'onglet expose l'identifiant et le mot de passe en
+     clair ; ce droit appartient à celle qui ouvre et redonne les accès, personne d'autre,
+     supervision comprise. */
+  const estAssistanteElearning = estRole(profilCourant?.role, 'admin_elearning')
+    || ['commercial', 'assistant_elearning', 'corporate'].includes(profilCourant?.role);
+  const peutVoirAcces = estAssistanteElearning;
+
+  /* MODIFIER LA FICHE D'UN APPRENANT EST RÉSERVÉ À L'ASSISTANTE E-LEARNING.
+     C'est elle qui reçoit le dossier, le vérifie et le corrige tout au long du parcours ;
+     le PA, l'Onboarding et le Customer Care le consultent pour décider de leur propre
+     geste - assigner un coach, une classe, traiter une demande - pas pour en changer
+     l'état civil. Le bouton était visible pour tous, sans cette distinction de métier.
+     Le SuperAdmin en est exclu lui aussi : il surveille le parcours, il ne tient pas les
+     dossiers — même raison que sur les versements entreprise, où il est passé en lecture
+     seule. Voir et modifier relèvent ici du même métier, d'où la constante partagée. */
+  const peutModifierApprenant = estAssistanteElearning;
+
+  /* PAS D'ONGLET « PAIEMENTS » : en e-learning, c'est l'entreprise qui paie, et sa
+     facturation se tient dans sa propre fiche (onglet Paiements de l'entreprise).
+     PAS D'ONGLET « PLANNING OFFICIEL » non plus : la notion de planning validé appartient
+     aux groupes de dash ; une classe e-learning n'a que ses séances, déjà couvertes par
+     l'onglet Sessions - le dupliquer afficherait deux fois la même chose. */
   const TABS = [
-    { id:'infos',       lib:'Infos',          icone:'👤' },
+    { id:'infos',       lib:'Profil & Formation', icone:'👤' },
     ...(showParentTab ? [{ id:'parent', lib:'Parent', icone:'👨‍👩‍👧' }] : []),
-    { id:'presences',   lib:'Présences',      icone:'✅' },
     { id:'sessions',    lib:'Sessions',       icone:'📅' },
-    { id:'evaluations', lib:'Évaluations',    icone:'📊' },
-    { id:'notes',       lib:'Notes internes', icone:'🗒️' },
+    { id:'test',        lib:'Test de niveau', icone:'📊' },
+    { id:'presences',   lib:'Présences',      icone:'✅' },
+    { id:'evaluations', lib:'Évaluations',    icone:'📈' },
+    /* ONGLET « NOTES INTERNES » RETIRÉ (demande du 12 octobre 2026).
+       Son code de rendu est conservé tel quel plus bas, simplement inatteignable : le
+       remettre tient en une ligne ici, et la saisie déjà écrite n'a pas à être réécrite.
+       `tab` démarre sur 'infos', il ne vaudra donc jamais 'notes'. */
+    ...(peutVoirAcces ? [{ id:'acces', lib:'Accès', icone:'🔑' }] : []),
+    { id:'historique',  lib:'Historique',     icone:'🕓' },
   ];
 
   const TYPE_SEANCE    = { cours:'Cours', evaluation:'Évaluation', rattrapage:'Rattrapage', decouverte:'Découverte', presentiel:'Présentiel' };
   const STATUT_SEANCE  = { planifiee:{ c:'#0EA5E9', bg:'#EFF6FF' }, en_cours:{ c:'#F97316', bg:'#FFF7ED' }, terminee:{ c:'#059669', bg:'#D1FAE5' }, annulee:{ c:'#DC2626', bg:'#FEE2E2' } };
   const MENTION_C      = { Excellent:'#059669', Bien:'#0EA5E9', 'Assez Bien':'#6366F1', Passable:'#F59E0B', Insuffisant:'#EF4444' };
+
+  /* TOUS les tests de l'apprenant, et pas seulement le dernier : il en passe un à
+     l'entrée, puis un à chaque transfert de classe - c'est même la raison d'être du
+     transfert. La progression entre ces tests est ce qu'on vient lire ici.
+
+     La route agrège les DEUX circuits (Agent Placement et test en ligne). Le premier
+     écrit dans `inscriptions_adultes`, pas dans `bet_level_test_results` que cet onglet
+     interrogeait seule : d'où « Aucun test rapproché » sur un dossier pourtant testé,
+     dont le niveau A1 s'affichait juste au-dessus dans l'en-tête de la fiche. */
+  useEffect(() => {
+    if (tab !== 'test' || dejaCharge.current.test) return;
+    const mail = localApp.email;
+    if (!mail || mail.includes('@betacademy.app')) { dejaCharge.current.test = true; return; }
+    dejaCharge.current.test = true;
+    setChargTest(true);
+    fetch(`${_API_URL_ADMIN}/api/placement/tests-apprenant?email=${encodeURIComponent(mail)}`, { headers: _authHdrsAdmin() })
+      .then(r => r.ok ? r.json() : { tests: [] })
+      .then(d => setTestNiveau(Array.isArray(d.tests) ? d.tests : []))
+      .catch(() => setTestNiveau([]))
+      .finally(() => setChargTest(false));
+  }, [tab, localApp.email]);
+
+  // Les identifiants de connexion, lus seulement quand l'onglet Accès est ouvert.
+  useEffect(() => {
+    if (tab !== 'acces' || dejaCharge.current.acces || !localApp.apprenant_id) return;
+    dejaCharge.current.acces = true;
+    setChargAcces(true);
+    // `profil-acces` existe déjà et rend exactement ce qu'il faut - identifiant, mot de
+    // passe temporaire, état du compte - plutôt que d'ajouter une route de plus.
+    fetch(`${_API_URL_ADMIN}/api/apprenants/profil-acces?apprenant_id=${localApp.apprenant_id}`, { headers: _authHdrsAdmin() })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAcces(d.profil || d.acces || d); })
+      .catch(() => {})
+      .finally(() => setChargAcces(false));
+  }, [tab, localApp.apprenant_id]);
+
+  /* L'historique du dossier : les entrées d'audit qui le citent. Le filtre `entite_id`
+     a dû être ajouté côté serveur - la route ne filtrait que par module, acteur et date,
+     et aurait rendu le journal de toute l'application. */
+  useEffect(() => {
+    if (tab !== 'historique' || dejaCharge.current.historique) return;
+    dejaCharge.current.historique = true;
+    setChargHisto(true);
+    fetch(`${_API_URL_ADMIN}/api/audit/logs?entite_id=${apprenant.id}&limit=50&include_non_staff=true`, { headers: _authHdrsAdmin() })
+      .then(r => r.ok ? r.json() : { logs: [] })
+      .then(d => setHistorique(d.logs || d.data || []))
+      .catch(() => {})
+      .finally(() => setChargHisto(false));
+  }, [tab, apprenant.id]);
+
+  /* La fiche imprimable. Elle reprend ce que la modale montre - identité, formation,
+     test de niveau, assiduité - SANS les identifiants de connexion : un PDF circule par
+     e-mail et finit sur un bureau, un mot de passe n'a rien à y faire. */
+  function exporterFichePDF() {
+    const lignes = [
+      ['Nom complet',       nomComplet],
+      ['E-mail',            localApp.email || '-'],
+      ['Téléphone',         localApp.telephone || '-'],
+      ['Date de naissance', localApp.date_naissance || '-'],
+      ['Profil',            localApp.profil_type || 'adulte'],
+      ['Classe',            groupe?.nom || localApp.classe_nom || '-'],
+      ['Entreprise',        entreprise?.nom || localApp.entreprise_nom || '-'],
+      ['Niveau',            localApp.niveau_cecr_estime || localApp.niveau || '-'],
+      ['Objectif du client', localApp.objectif_client || '-'],
+      ['Statut',            localApp.statut || '-'],
+      ...(testNiveau ? [['Test de niveau', `${testNiveau.niveau_cecr || testNiveau.niveau || '-'}${testNiveau.score != null ? ` (score ${testNiveau.score})` : ''}`]] : []),
+    ];
+    const corps = lignes.map(([k, v]) => `<tr><td style="font-weight:600;width:220px">${k}</td><td>${v}</td></tr>`).join('');
+    genererPDF(`
+      <div class="doc-header"><div><div class="doc-header-logo">BET E-Learning</div><div class="doc-header-sub">British English Training · Dossier apprenant</div></div><div class="doc-header-right">Émis le ${fmtDatePDF(new Date().toISOString())}</div></div>
+      <div class="doc-title-band">🎓 DOSSIER APPRENANT — ${nomComplet.toUpperCase()}</div>
+      <div class="doc-body">
+        <div class="section-title">Identité & formation</div>
+        <table><tbody>${corps}</tbody></table>
+        <div class="doc-footer"><span>BET E-Learning · Dossier apprenant · Confidentiel</span><span>Émis le ${fmtDatePDF(new Date().toISOString())}</span></div>
+      </div>
+    `, `Dossier apprenant - ${nomComplet}`);
+  }
+
+  /* Ouvrir ou redonner les accès. La même route sert aux deux : côté serveur, un compte
+     existant voit son mot de passe régénéré, un compte absent est créé. */
+  async function creerAcces() {
+    if (accesSaving) return;
+    setAccesSaving(true); setAccesMsg(null);
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/apprenants/creer-acces`, {
+        method: 'POST',
+        headers: { ..._authHdrsAdmin(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apprenant_id: localApp.apprenant_id || null, email: localApp.email, nom_complet: nomComplet, telephone: localApp.telephone || null }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Opération impossible');
+      setAcces(d.acces || d);
+      if (d.apprenant_id) setLocalApp(prev => ({ ...prev, apprenant_id: d.apprenant_id }));
+      setAccesMsg({ txt: d.email_envoye ? '✅ Accès envoyés par e-mail.' : '✅ Accès générés. Aucun e-mail envoyé (pas d\'adresse réelle).', err: false });
+    } catch (e) {
+      setAccesMsg({ txt: e.message, err: true });
+    } finally { setAccesSaving(false); }
+  }
 
   // Charger le compte parent existant quand on ouvre l'onglet parent
   useEffect(() => {
@@ -4593,7 +4994,7 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
   );
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.70)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1300, backdropFilter:'blur(3px)', padding:'16px' }}
+    <div style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.70)', display:'flex', alignItems:'center', justifyContent:'center', zIndex, backdropFilter:'blur(3px)', padding:'16px' }}
       onClick={onFermer}>
       <div style={{ background:COULEURS.blanc, borderRadius:18, width:'90vw', maxWidth:'90vw', height:'90vh', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 32px 80px rgba(0,0,0,0.35)', overflow:'hidden' }}
         onClick={e => e.stopPropagation()}>
@@ -4614,7 +5015,13 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
                 </div>
               </div>
             </div>
-            <button onClick={onFermer} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:8, width:32, height:32, cursor:'pointer', fontSize:18, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <button onClick={exporterFichePDF}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', background:'rgba(255,255,255,0.18)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, whiteSpace:'nowrap', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                📄 Export PDF
+              </button>
+              <button onClick={onFermer} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:8, width:32, height:32, cursor:'pointer', fontSize:18, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+            </div>
           </div>
           <div style={{ display:'flex', gap:24, marginTop:16, flexWrap:'wrap' }}>
             {[
@@ -4660,6 +5067,10 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
                   method: 'PATCH',
                   headers: { ..._authHdrsAdmin(), 'Content-Type': 'application/json' },
                   body: JSON.stringify({
+                    nom_complet:      editForm.nom_complet      || null,
+                    telephone:        editForm.telephone        || null,
+                    niveau_cecr:      editForm.niveau_cecr      || null,
+                    objectif_client:  editForm.objectif_client  || null,
                     date_naissance:   editForm.date_naissance   || null,
                     profil_type:      editForm.profil_type      || null,
                     prenom_parent:    editForm.prenom_parent    || null,
@@ -4711,17 +5122,53 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
                         {editSaving ? '⏳ Enregistrement…' : '💾 Enregistrer'}
                       </button>
                     </>
-                  ) : (
+                  ) : peutModifierApprenant ? (
                     <button onClick={() => setEditMode(true)}
                       style={{ padding:'7px 16px', borderRadius:8, border:`1px solid ${nvc}`, background:COULEURS.blanc, fontSize:12, fontWeight:700, cursor:'pointer', color:nvc, fontFamily:'"Plus Jakarta Sans",sans-serif', display:'flex', alignItems:'center', gap:6 }}>
                       ✏️ Modifier
                     </button>
+                  ) : (
+                    <span style={{ fontSize:11, padding:'5px 12px', borderRadius:20, background:COULEURS.gris100, color:COULEURS.gris600, fontWeight:600 }}>
+                      🔒 Modification réservée à l'assistante e-learning
+                    </span>
                   )}
                 </div>
 
-                {editMode ? (
+                {editMode && peutModifierApprenant ? (
                   /* ── Formulaire d'édition ── */
                   <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+                    <div style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:14, padding:'20px 24px' }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:16, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>🎓 Apprenant</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+                        {fld('Nom complet', 'nom_complet')}
+                        {fld('Téléphone', 'telephone')}
+                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                          <label style={{ fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em' }}>Niveau CECR</label>
+                          <select value={editForm.niveau_cecr} onChange={e => setEditForm(f => ({ ...f, niveau_cecr: e.target.value }))} style={inpSt}>
+                            <option value="">— Non évalué —</option>
+                            {['A0','A1','A2','B1','B2','C1','C2'].map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                        </div>
+                        {/* L'E-MAIL EST EN LECTURE SEULE, et c'est voulu : c'est l'identifiant
+                            de connexion de l'apprenant. Le changer ici ne changerait pas son
+                            compte Supabase Auth - il garderait une adresse affichée qui
+                            n'ouvre plus sa session. Cela relève d'un geste dédié. */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                          <label style={{ fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em' }}>E-mail (identifiant)</label>
+                          <input value={localApp.email || ''} disabled
+                            style={{ ...inpSt, background:COULEURS.gris50, color:COULEURS.gris400, cursor:'not-allowed' }} />
+                          <span style={{ fontSize:10, color:COULEURS.gris400 }}>Sert à la connexion — se modifie depuis l'onglet Accès.</span>
+                        </div>
+                      </div>
+                      {/* L'objectif : ce qui détermine le choix du coach par le PA Advisor. */}
+                      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        <label style={{ fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em' }}>🎯 Objectif du client</label>
+                        <textarea value={editForm.objectif_client} rows={2}
+                          placeholder="Ex : préparer un entretien d'embauche, animer des réunions en anglais…"
+                          onChange={e => setEditForm(f => ({ ...f, objectif_client: e.target.value }))}
+                          style={{ ...inpSt, resize:'vertical', fontFamily:'"Plus Jakarta Sans",sans-serif' }} />
+                      </div>
+                    </div>
                     <div style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:14, padding:'20px 24px' }}>
                       <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:16, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>👤 Informations personnelles</div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
@@ -4750,6 +5197,24 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
                 ) : (
                   /* ── Vue lecture ── */
                   <>
+                    {/* L'OBJECTIF EN PREMIER, ET EN PLEINE LARGEUR. C'est la raison pour
+                        laquelle cette personne apprend l'anglais - préparer un entretien,
+                        animer des réunions, passer une certification - et c'est ce qui
+                        détermine le choix du coach par le PA Advisor. Le reléguer parmi les
+                        champs d'état civil en ferait une ligne qu'on ne lit pas. */}
+                    <div style={{ background: localApp.objectif_client ? '#F5F3FF' : COULEURS.gris50, border:`1px solid ${localApp.objectif_client ? '#DDD6FE' : COULEURS.gris200}`, borderRadius:14, padding:'16px 22px', marginBottom:16 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color: localApp.objectif_client ? '#6D28D9' : COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
+                        🎯 Objectif du client
+                      </div>
+                      {localApp.objectif_client ? (
+                        <div style={{ fontSize:14, color:COULEURS.navy, lineHeight:1.6 }}>{localApp.objectif_client}</div>
+                      ) : (
+                        <div style={{ fontSize:13, color:COULEURS.gris400, fontStyle:'italic' }}>
+                          Aucun objectif renseigné — il se saisit sur la fiche d'inscription, et guide le choix du coach.
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
                       <div style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:14, padding:'18px 22px' }}>
                         <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:12, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>👤 Informations</div>
@@ -4768,7 +5233,10 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
                         {localApp.classe && row('Classe scolaire', localApp.classe)}
                         {row('Entreprise',     entreprise?.nom)}
                         {row('Compte créé',    localApp.apprenant_id ? '✅ Oui' : '⏳ Non')}
-                        {localApp.profil_type && localApp.profil_type !== 'adulte' && row('Profil', localApp.profil_type === 'enfant' ? '🧒 Enfant' : '🧑 Ado')}
+                        {/* Le profil est affiché même quand il vaut « adulte » : c'est lui qui
+                            commande la présence de l'onglet Parent, et le masquer rendait
+                            incompréhensible qu'une fiche l'ait et une autre non. */}
+                        {localApp.profil_type && row('Profil', localApp.profil_type === 'enfant' ? '🧒 Enfant' : localApp.profil_type === 'adolescent' ? '🧑 Adolescent' : '🧑 Adulte')}
                       </div>
                     </div>
                     {hasParent && (
@@ -5080,7 +5548,10 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
             })()
           )}
 
-          {/* ── NOTES INTERNES ── */}
+          {/* ── NOTES INTERNES — ONGLET RETIRÉ ──
+               Bloc conservé et inatteignable : l'entrée correspondante a été ôtée de
+               `TABS` ci-dessus, `tab` ne vaut donc jamais 'notes'. Pour le réactiver,
+               remettre la ligne dans `TABS` — rien d'autre à toucher. */}
           {tab === 'notes' && (
             <>
               <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:12, padding:'12px 16px', marginBottom:20, display:'flex', gap:10, alignItems:'flex-start' }}>
@@ -5123,6 +5594,196 @@ export function ModalDetailApprenant({ apprenant, groupe, entreprise, onFermer, 
                 </button>
               </div>
             </>
+          )}
+
+          {/* ── TEST DE NIVEAU ── */}
+          {tab === 'test' && (
+            chargTest || testNiveau === null ? <div style={{ textAlign:'center', padding:'40px 0', color:COULEURS.gris400 }}>Chargement…</div>
+            : testNiveau.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px 24px', background:COULEURS.gris50, borderRadius:12, border:`2px dashed ${COULEURS.gris200}` }}>
+                <div style={{ fontSize:36, marginBottom:10 }}>📊</div>
+                <div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucun test de niveau rapproché</div>
+                <div style={{ fontSize:12, color:COULEURS.gris600 }}>
+                  Le rapprochement se fait sur l'adresse e-mail. {localApp.email ? `Aucun résultat pour ${localApp.email}.` : "Cet apprenant n'a pas d'adresse e-mail propre."}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* La progression d'abord, quand il y a de quoi la lire : c'est ce que
+                    plusieurs tests racontent, et c'est l'intérêt de les garder tous. */}
+                {testNiveau.length > 1 && (
+                  <div style={{ background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:12, padding:'14px 18px', marginBottom:18 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#6D28D9', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>
+                      Progression · {testNiveau.length} tests
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      {[...testNiveau].reverse().map((t, i, arr) => (
+                        <span key={t.id || i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ padding:'4px 12px', borderRadius:8, background: i === arr.length-1 ? nvc : COULEURS.blanc, color: i === arr.length-1 ? '#fff' : COULEURS.navy, border:`1px solid ${i === arr.length-1 ? nvc : COULEURS.gris200}`, fontSize:13, fontWeight:800 }}>
+                            {t.niveau || '?'}
+                          </span>
+                          {i < arr.length-1 && <span style={{ color:'#A78BFA', fontSize:14 }}>→</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                  {testNiveau.map((t, i) => (
+                    <div key={t.id || i} style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderLeft:`3px solid ${i === 0 ? nvc : COULEURS.gris200}`, borderRadius:12, padding:'16px 20px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <span style={{ fontSize:20, fontWeight:800, color:nvc }}>{t.niveau || '-'}</span>
+                          <span style={{ padding:'3px 10px', borderRadius:20, background: t.origine === 'placement' ? '#EDE9FE' : '#DBEAFE', color: t.origine === 'placement' ? '#5B21B6' : '#1D4ED8', fontSize:10, fontWeight:700 }}>
+                            {t.libelle_origine}
+                          </span>
+                          {i === 0 && <span style={{ padding:'3px 10px', borderRadius:20, background:'#D1FAE5', color:'#065F46', fontSize:10, fontWeight:700 }}>Le plus récent</span>}
+                        </div>
+                        <span style={{ fontSize:12, color:COULEURS.gris600 }}>{t.date || '-'}</span>
+                      </div>
+
+                      {(t.score != null || t.points || t.reponses || t.duree_min) && (
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:10, marginBottom:10 }}>
+                          {[
+                            t.score != null && { l:'Score',          v:`${t.score}%` },
+                            t.points        && { l:'Points',         v:t.points },
+                            t.reponses      && { l:'Bonnes réponses', v:t.reponses },
+                            t.duree_min     && { l:'Durée',          v:`${t.duree_min} min` },
+                            t.statut        && { l:'Correction',     v:t.statut },
+                          ].filter(Boolean).map(k => (
+                            <div key={k.l} style={{ background:COULEURS.gris50, borderRadius:8, padding:'8px 12px' }}>
+                              <div style={{ fontSize:13, fontWeight:800, color:COULEURS.navy }}>{k.v}</div>
+                              <div style={{ fontSize:9.5, color:COULEURS.gris400, textTransform:'uppercase', letterSpacing:'0.04em', marginTop:2 }}>{k.l}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Le détail par compétence : ce qui dit POURQUOI ce niveau,
+                          et ce sur quoi le coach devra travailler en priorité. */}
+                      {t.by_category && Object.keys(t.by_category).length > 0 && (
+                        <div style={{ marginTop:10 }}>
+                          {Object.entries(t.by_category).map(([cat, val]) => {
+                            const pct = typeof val === 'number' ? val : (val?.pourcentage ?? val?.score ?? 0);
+                            return (
+                              <div key={cat} style={{ marginBottom:7 }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, marginBottom:3 }}>
+                                  <span style={{ color:COULEURS.gris600, textTransform:'capitalize' }}>{cat}</span>
+                                  <span style={{ fontWeight:700, color: pct >= 70 ? '#059669' : pct >= 50 ? '#F59E0B' : '#DC2626' }}>{Math.round(pct)}%</span>
+                                </div>
+                                <div style={{ height:5, background:COULEURS.gris100, borderRadius:3, overflow:'hidden' }}>
+                                  <div style={{ height:'100%', width:`${Math.min(100, Math.max(0, pct))}%`, background: pct >= 70 ? '#059669' : pct >= 50 ? '#F59E0B' : '#DC2626', borderRadius:3 }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {t.notes && (
+                        <div style={{ marginTop:10, background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:8, padding:'10px 14px' }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'#1D4ED8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:3 }}>Notes</div>
+                          <div style={{ fontSize:12.5, color:'#1E3A8A', lineHeight:1.5 }}>{t.notes}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )
+          )}
+
+          {/* ── ACCÈS & CONNEXION (assistante e-learning) ── */}
+          {tab === 'acces' && (
+            <>
+              <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:12, padding:'12px 16px', marginBottom:20, display:'flex', gap:10, alignItems:'flex-start' }}>
+                <span style={{ fontSize:16 }}>🔒</span>
+                <div style={{ fontSize:12, color:'#92400E' }}>
+                  Identifiants de connexion de l'apprenant. Cet onglet n'est visible que par l'assistante e-learning.
+                </div>
+              </div>
+              {chargAcces ? <div style={{ textAlign:'center', padding:'32px 0', color:COULEURS.gris400 }}>Chargement…</div>
+              : !localApp.apprenant_id ? (
+                <div style={{ textAlign:'center', padding:'36px 24px', background:COULEURS.gris50, borderRadius:12, border:`2px dashed ${COULEURS.gris200}` }}>
+                  <div style={{ fontSize:34, marginBottom:10 }}>🔑</div>
+                  <div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucun compte ouvert</div>
+                  <div style={{ fontSize:12, color:COULEURS.gris600, marginBottom:14 }}>
+                    L'apprenant n'a pas encore d'accès à la plateforme.
+                  </div>
+                  <button onClick={creerAcces} disabled={accesSaving}
+                    style={{ padding:'9px 20px', borderRadius:9, border:'none', background:nvc, color:'#fff', cursor: accesSaving?'wait':'pointer', fontSize:13, fontWeight:700, fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                    {accesSaving ? '⏳ Création…' : '🔑 Créer les accès'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                    <span style={{ padding:'4px 12px', borderRadius:20, background:'#D1FAE5', color:'#065F46', fontSize:11, fontWeight:700 }}>✅ Compte actif</span>
+                    {acces?.mdp_temporaire && <span style={{ padding:'4px 12px', borderRadius:20, background:'#FEF3C7', color:'#92400E', fontSize:11, fontWeight:700 }}>Mot de passe temporaire</span>}
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    <div style={{ background:COULEURS.gris50, border:`1px solid ${COULEURS.gris200}`, borderRadius:10, padding:'14px 16px' }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>Identifiant</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, wordBreak:'break-all' }}>{acces?.email || localApp.email || '-'}</div>
+                      {localApp.telephone && <div style={{ fontSize:12, color:COULEURS.gris600, marginTop:4 }}>📞 {localApp.telephone}</div>}
+                      {/* Un identifiant technique ne reçoit aucun courrier : le dire ici évite
+                          de croire qu'un envoi d'accès est parti alors qu'il n'a nulle part où aller. */}
+                      {(acces?.email || '').includes('@betacademy.app') && (
+                        <div style={{ fontSize:11, color:'#B45309', marginTop:6 }}>
+                          Compte créé sans adresse e-mail réelle — cet apprenant ne reçoit aucun courrier.
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:10, padding:'14px 16px' }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#92400E', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>Mot de passe temporaire</div>
+                      <div style={{ fontSize:17, fontWeight:800, color:'#78350F', fontFamily:'monospace', letterSpacing:'0.02em' }}>
+                        {acces?.mdp_initial || '—'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:10, marginTop:16 }}>
+                    <button onClick={creerAcces} disabled={accesSaving}
+                      style={{ padding:'9px 18px', borderRadius:9, border:`1.5px solid ${nvc}`, background:COULEURS.blanc, color:nvc, cursor: accesSaving?'wait':'pointer', fontSize:12.5, fontWeight:700, fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                      {accesSaving ? '⏳ Envoi…' : '📧 Renvoyer les accès'}
+                    </button>
+                  </div>
+                  {accesMsg && <div style={{ marginTop:12, fontSize:12, color: accesMsg.err ? '#DC2626' : '#059669', fontWeight:600 }}>{accesMsg.txt}</div>}
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── HISTORIQUE ── */}
+          {tab === 'historique' && (
+            chargHisto ? <div style={{ textAlign:'center', padding:'40px 0', color:COULEURS.gris400 }}>Chargement…</div>
+            : (historique || []).length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px 24px', background:COULEURS.gris50, borderRadius:12, border:`2px dashed ${COULEURS.gris200}` }}>
+                <div style={{ fontSize:36, marginBottom:10 }}>🕓</div>
+                <div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucun événement enregistré</div>
+                <div style={{ fontSize:12, color:COULEURS.gris600 }}>Les actions sur ce dossier apparaîtront ici au fur et à mesure.</div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+                {historique.map((h, i) => (
+                  <div key={h.id || i} style={{ display:'flex', gap:14, paddingBottom: i < historique.length-1 ? 18 : 0 }}>
+                    {/* La colonne-repère : une pastille par événement, reliée à la suivante. */}
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+                      <div style={{ width:10, height:10, borderRadius:'50%', background: h.statut==='warning' ? '#F59E0B' : h.statut==='error' ? '#DC2626' : nvc, marginTop:4 }} />
+                      {i < historique.length-1 && <div style={{ width:2, flex:1, background:COULEURS.gris200, marginTop:4 }} />}
+                    </div>
+                    <div style={{ flex:1, paddingBottom:4 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy }}>{(h.action_type || '').replace(/_/g,' ').toLowerCase()}</div>
+                      <div style={{ fontSize:12, color:COULEURS.gris600, marginTop:2, lineHeight:1.5 }}>{h.detail || '-'}</div>
+                      <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:4 }}>
+                        {(h.created_at || '').slice(0,16).replace('T',' à ')}
+                        {h.acteur_nom && <> · {h.acteur_nom}</>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       </div>
@@ -6729,9 +7390,20 @@ export function OngletAccesClasse({ benefs, couleur }) {
   );
 }
 
-export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirBenef, onStatutChange }) {
+/* `onOuvrirBenef` et `onStatutChange` sont OPTIONNELS, et ont un défaut.
+   Ce composant est monté par cinq écrans ; l'un d'eux ne passait pas `onOuvrirBenef`, et
+   le bouton « 👁 Détail » de la liste des bénéficiaires faisait planter la page entière
+   — « onOuvrirBenef is not a function ». Un composant partagé ne doit pas tomber parce
+   qu'un appelant n'a pas besoin d'une de ses fonctionnalités : sans gestionnaire, le
+   bouton est simplement masqué (voir plus bas), ce qui vaut mieux qu'un bouton présent
+   qui casse. */
+export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirBenef = null, onStatutChange = null }) {
   const [tab, setTab] = useState('infos');
-  const couleur  = entreprise.couleur || '#0891B2';
+  const { couleurTheme } = useTheme();
+  /* La couleur de l'ENTREPRISE reste prioritaire — sur sa fiche, c'est elle qui identifie
+     le client. Partout ailleurs on retombe sur le thème du dashboard plutôt que sur un
+     cyan codé en dur, qui ne correspondait à aucune charte. */
+  const couleur  = entreprise?.couleur || couleurTheme;
   const benefs   = classe.apprenants || [];
   const horaires = Array.isArray(classe.horaire) ? classe.horaire : [];
   const FORMAT   = { en_ligne:'🌐 En ligne', presentiel:'🏢 Présentiel', hybride:'🔀 Hybride' };
@@ -6742,8 +7414,87 @@ export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirB
     { id:'beneficiaires', lib:'Bénéficiaires',  icone:'👥', badge: benefs.length },
     { id:'presences',     lib:'Présences',      icone:'✅' },
     { id:'sessions',      lib:'Sessions',       icone:'📅' },
-    { id:'acces',         lib:'Accès',          icone:'🔐' },
+    { id:'progression',   lib:'Progression',    icone:'📈' },
+    /* PAS D'ONGLET « ACCÈS » ICI : une classe n'a pas d'identifiants de connexion.
+       Il listait en réalité les accès de ses apprenants — une information qui appartient
+       à la fiche de chaque apprenant, et au seul profil habilité à la lire. */
+    { id:'historique',    lib:'Historique',     icone:'🕓' },
   ];
+
+  /* MODIFIER LA CLASSE DEPUIS SA FICHE. Cette modale ne portait AUCUN bouton d'édition :
+     l'assistante pouvait tout consulter - nom, niveau, horaires, capacité - sans jamais
+     rien corriger, alors que la fiche de l'Onboarding le permet et que la route
+     `PATCH /api/classes-elearning/:id` accepte déjà ces champs.
+     Une classe clôturée ou archivée se consulte, elle ne se modifie plus. */
+  const [editCl, setEditCl] = useState(false);
+  const [formCl, setFormCl] = useState(null);
+  const [saveCl, setSaveCl] = useState(false);
+  const [flashCl, setFlashCl] = useState(null);
+  const [clLocale, setClLocale] = useState(classe);
+  const clFigee = ['clos', 'archive', 'termine'].includes(clLocale.statut);
+  /* La classe appartient à l'Onboarding : lui seul la crée, en pose l'emploi du temps et
+     la modifie. Ici, personne — cette modale est celle des profils qui consultent. */
+  const peutModifierClasse = false;
+
+  function ouvrirEditionClasse() {
+    /* QUATRE CHAMPS, PAS DAVANTAGE. Niveau, format, statut, coach et entreprise sont
+       volontairement hors du formulaire : ils engagent la classe et son effectif, et se
+       décident ailleurs avec le contexte qu'il faut. Ne garder ici que ce qui se corrige
+       sans conséquence évite de tout mélanger dans un même geste. */
+    setFormCl({
+      nom:          clLocale.nom          || '',
+      capacite_max: clLocale.capacite_max || '',
+      date_debut:   (clLocale.date_debut  || '').slice(0, 10),
+      date_fin:     (clLocale.date_fin    || '').slice(0, 10),
+    });
+    setFlashCl(null);
+    setEditCl(true);
+  }
+
+  async function sauvegarderClasse() {
+    if (saveCl) return;
+    setSaveCl(true); setFlashCl(null);
+    try {
+      const r = await fetch(`${_API_URL_ADMIN}/api/classes-elearning/${clLocale.id}`, {
+        method: 'PATCH',
+        headers: { ..._authHdrsAdmin(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: formCl.nom,
+          // `capacite_max` part en nombre : une chaîne vide effacerait la capacité.
+          capacite_max: formCl.capacite_max === '' ? null : Number(formCl.capacite_max),
+          date_debut:   formCl.date_debut || null,
+          date_fin:     formCl.date_fin   || null,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erreur serveur');
+      setClLocale(prev => ({ ...prev, ...(d.classe || formCl) }));
+      setEditCl(false);
+      setFlashCl({ ok: true, msg: '✅ Classe mise à jour.' });
+      onStatutChange?.();
+      setTimeout(() => setFlashCl(null), 3500);
+    } catch (e) {
+      setFlashCl({ ok: false, msg: e.message });
+    } finally { setSaveCl(false); }
+  }
+
+  /* L'historique de la classe : les entrées d'audit qui la citent. Chargé seulement
+     quand on ouvre l'onglet, et UNE SEULE FOIS - la garde porte sur la tentative et non
+     sur le résultat, sans quoi une classe sans événement relancerait la requête en
+     boucle (même piège que sur la fiche apprenant). */
+  const [histoClasse, setHistoClasse] = useState([]);
+  const [chargHistoCl, setChargHistoCl] = useState(false);
+  const histoTente = useRef(false);
+  useEffect(() => {
+    if (tab !== 'historique' || histoTente.current) return;
+    histoTente.current = true;
+    setChargHistoCl(true);
+    fetch(`${_API_URL_ADMIN}/api/audit/logs?entite_id=${classe.id}&limit=50&include_non_staff=true`, { headers: _authHdrsAdmin() })
+      .then(r => r.ok ? r.json() : { logs: [] })
+      .then(d => setHistoClasse(d.logs || d.data || []))
+      .catch(() => {})
+      .finally(() => setChargHistoCl(false));
+  }, [tab, classe.id]);
 
   const row = (l, v) => v ? (
     <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:`1px solid ${COULEURS.gris100}`, fontSize:13, gap:12 }}>
@@ -6762,7 +7513,16 @@ export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirB
         <div style={{ background:`linear-gradient(135deg, ${couleur}CC, ${couleur})`, padding:'20px 26px', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-              <div style={{ width:48, height:48, borderRadius:12, background:'rgba(255,255,255,0.2)', border:'2px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>🏫</div>
+              {/* LA PHOTO DE LA CLASSE, pas une icône générique - et MODIFIABLE ici.
+                  L'en-tête affichait un 🏫 identique pour toutes, ce qui rendait invisible
+                  la photo posée à la création, partout où cette fiche est ouverte.
+                  `PhotoClasseEntete` est le même composant que la fiche de l'Onboarding :
+                  il affiche, laisse remplacer l'image et enregistre immédiatement, sans
+                  bouton « Enregistrer » que cette modale n'a pas.
+                  Une classe clôturée se consulte, elle ne se modifie plus. */}
+              <PhotoClasseEntete classe={classe} taille={48} accent="#fff"
+                modifiable={classe.statut !== 'clos' && classe.statut !== 'archive'}
+                onChange={url => { classe.photo_url = url; }} />
               <div>
                 <div style={{ fontSize:17, fontWeight:800, color:'#fff' }}>{classe.nom}</div>
                 <div style={{ display:'flex', gap:8, marginTop:5, flexWrap:'wrap', alignItems:'center' }}>
@@ -6796,15 +7556,103 @@ export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirB
           {/* INFOS */}
           {tab === 'infos' && (
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, maxWidth:860 }}>
+              {/* Barre d'action : modifier, ou enregistrer/annuler pendant l'édition */}
+              <div style={{ gridColumn:'1/-1', display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10 }}>
+                {flashCl && (
+                  <span style={{ fontSize:12, padding:'6px 14px', borderRadius:20, background: flashCl.ok ? '#D1FAE5' : '#FEE2E2', color: flashCl.ok ? '#065F46' : '#DC2626', fontWeight:600 }}>{flashCl.msg}</span>
+                )}
+                {/* MODIFIER UNE CLASSE EST RÉSERVÉ À L'ONBOARDING, qui dispose de sa propre
+                    fiche (ModalDetailClasseOnboarding) avec l'édition complète. Cette
+                    modale-ci sert l'assistante, l'Admin et le SuperAdmin : ils consultent.
+                    Le bouton y avait été ajouté sans cette distinction de métier. */}
+                {!peutModifierClasse ? (
+                  <span style={{ fontSize:11, padding:'5px 12px', borderRadius:20, background:COULEURS.gris100, color:COULEURS.gris600, fontWeight:600 }}>
+                    {clFigee ? `🔒 Classe ${clLocale.statut} — lecture seule` : '🔒 Modification réservée à l\'Onboarding'}
+                  </span>
+                ) : editCl ? (
+                  <>
+                    <button onClick={() => { setEditCl(false); setFlashCl(null); }} disabled={saveCl}
+                      style={{ padding:'7px 16px', borderRadius:8, border:`1px solid ${COULEURS.gris200}`, background:COULEURS.blanc, fontSize:12, fontWeight:600, cursor:'pointer', color:COULEURS.gris600, fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                      Annuler
+                    </button>
+                    <button onClick={sauvegarderClasse} disabled={saveCl || !formCl?.nom?.trim()}
+                      style={{ padding:'7px 16px', borderRadius:8, border:'none', background: formCl?.nom?.trim() ? couleur : COULEURS.gris200, fontSize:12, fontWeight:700, cursor: formCl?.nom?.trim() ? 'pointer' : 'not-allowed', color:'#fff', fontFamily:'"Plus Jakarta Sans",sans-serif' }}>
+                      {saveCl ? '⏳ Enregistrement…' : '💾 Enregistrer'}
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={ouvrirEditionClasse}
+                    style={{ padding:'7px 16px', borderRadius:8, border:`1px solid ${couleur}`, background:COULEURS.blanc, fontSize:12, fontWeight:700, cursor:'pointer', color:couleur, fontFamily:'"Plus Jakarta Sans",sans-serif', display:'flex', alignItems:'center', gap:6 }}>
+                    ✏️ Modifier la classe
+                  </button>
+                )}
+              </div>
+
+              {editCl && formCl ? (
+                <div style={{ gridColumn:'1/-1', background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:12, padding:'20px 24px' }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:COULEURS.navy, marginBottom:16, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>✏️ Modifier la classe</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    {[
+                      { l:'Nom de la classe *', k:'nom' },
+                      { l:'Capacité maximale',  k:'capacite_max', t:'number' },
+                      { l:'Date de début',      k:'date_debut',   t:'date' },
+                      { l:'Date de fin',        k:'date_fin',     t:'date' },
+                    ].map(({ l, k, t }) => (
+                      <div key={k} style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        <label style={{ fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{l}</label>
+                        <input type={t || 'text'} value={formCl[k]} onChange={e => setFormCl(f => ({ ...f, [k]: e.target.value }))}
+                          style={{ padding:'9px 12px', borderRadius:8, border:`1.5px solid ${COULEURS.gris200}`, fontSize:13, fontFamily:'"Plus Jakarta Sans",sans-serif', outline:'none', boxSizing:'border-box' }} />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── CE QUI NE SE MODIFIE PAS ICI, ET POURQUOI ──
+                      L'édition se limite aux champs « éditoriaux » : un libellé, une
+                      capacité, des dates. Tout ce qui ENGAGE la classe reste ailleurs,
+                      parce que ces décisions se prennent avec un contexte que cette fiche
+                      n'a pas - et qu'un menu déroulant discret les court-circuiterait. */}
+                  <div style={{ marginTop:18, background:COULEURS.gris50, border:`1px solid ${COULEURS.gris200}`, borderRadius:10, padding:'14px 16px' }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10 }}>
+                      🔒 Non modifiable ici
+                    </div>
+                    {[
+                      { l:'Niveau CECR', v: clLocale.niveau || '— non défini —',
+                        pq:'Les apprenants sont assignés sur ce niveau — le changer ici désaccorderait la classe de son effectif.' },
+                      { l:'Format',      v: FORMAT[clLocale.type_cours] || clLocale.type_cours || '—',
+                        pq:'Structure la classe et ses séances.' },
+                      { l:'Statut',      v: clLocale.statut || 'actif',
+                        pq:'Suspendre ou clôturer est un geste à part, pas un choix dans une liste.' },
+                      { l:'Coach',       v: clLocale.coach_nom || '— non assigné —',
+                        pq:'S\'assigne depuis le PA Advisor, sur la charge, les disponibilités et la note du coach.' },
+                      { l:'Entreprise',  v: clLocale.entreprise_nom || '—',
+                        pq:'Rattachement contractuel de la classe.' },
+                      { l:'Créneaux horaires', v: `${horaires.length} créneau${horaires.length > 1 ? 'x' : ''}`,
+                        pq:'L\'emploi du temps relève de l\'Onboarding, qui le pose à la création de la classe.' },
+                    ].map(({ l, v, pq }) => (
+                      <div key={l} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16, padding:'7px 0', borderBottom:`1px solid ${COULEURS.gris100}` }}>
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontSize:12, fontWeight:600, color:COULEURS.navy }}>{l}</div>
+                          <div style={{ fontSize:10.5, color:COULEURS.gris400, lineHeight:1.4 }}>{pq}</div>
+                        </div>
+                        <span style={{ fontSize:12, fontWeight:700, color:COULEURS.gris600, whiteSpace:'nowrap', flexShrink:0 }}>{v}</span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop:10, fontSize:10.5, color:COULEURS.gris400 }}>
+                      La photo de la classe se change depuis l'en-tête de cette fiche.
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <div style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:12, padding:'18px 20px' }}>
                 <div style={{ fontSize:12, fontWeight:700, color:COULEURS.navy, marginBottom:10, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>📋 Détails</div>
-                {row('Nom',        classe.nom)}
-                {row('Niveau',     niv)}
-                {row('Format',     FORMAT[classe.type_cours] || classe.type_cours)}
-                {row('Statut',     classe.statut === 'actif' ? '✅ Active' : classe.statut)}
-                {row('Capacité',   classe.capacite_max ? `${benefs.length} / ${classe.capacite_max} places` : null)}
-                {row('Entreprise', classe.entreprise_nom)}
+                {row('Nom',        clLocale.nom)}
+                {row('Niveau',     clLocale.niveau)}
+                {row('Format',     FORMAT[clLocale.type_cours] || clLocale.type_cours)}
+                {row('Statut',     clLocale.statut === 'actif' ? '✅ Active' : clLocale.statut)}
+                {row('Capacité',   clLocale.capacite_max ? `${benefs.length} / ${clLocale.capacite_max} places` : null)}
+                {row('Entreprise', clLocale.entreprise_nom)}
               </div>
+              )}
               <div style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:12, padding:'18px 20px' }}>
                 <div style={{ fontSize:12, fontWeight:700, color:COULEURS.navy, marginBottom:10, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>👨‍🏫 Encadrement & Dates</div>
                 {row('Coach',      classe.coach_nom || '- Non assigné')}
@@ -6812,9 +7660,26 @@ export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirB
                 {row('Date fin',   classe.date_fin   ? new Date(classe.date_fin).toLocaleDateString('fr-FR')   : null)}
                 {row('Type',       '🎓 E-Learning BET')}
               </div>
+              {/* L'ÉTAT VIDE EST DIT, et il dit QUI peut le remplir. Le bloc n'apparaissait
+                  qu'avec des créneaux : une classe sans emploi du temps n'affichait rien
+                  du tout, sans qu'on sache si l'information manquait ou si l'écran était
+                  incomplet. Les créneaux se saisissent à la création de la classe, par
+                  l'Onboarding — ils ne se modifient pas depuis cette fiche. */}
+              {horaires.length === 0 && (
+                <div style={{ gridColumn:'1/-1', background:COULEURS.gris50, border:`2px dashed ${COULEURS.gris200}`, borderRadius:12, padding:'24px 20px', textAlign:'center' }}>
+                  <div style={{ fontSize:30, marginBottom:8 }}>📅</div>
+                  <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:5 }}>Aucun créneau horaire défini</div>
+                  <div style={{ fontSize:12, color:COULEURS.gris600, lineHeight:1.5, maxWidth:420, margin:'0 auto' }}>
+                    L'emploi du temps se renseigne à la création de la classe, par l'Onboarding.
+                  </div>
+                </div>
+              )}
               {horaires.length > 0 && (
                 <div style={{ gridColumn:'1/-1', background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:12, padding:'18px 20px' }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:COULEURS.navy, marginBottom:12, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}` }}>📅 Disponibilités - créneaux horaires</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:COULEURS.navy, marginBottom:12, paddingBottom:8, borderBottom:`1px solid ${COULEURS.gris100}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <span>📅 Disponibilités - créneaux horaires</span>
+                    <span style={{ fontSize:10, fontWeight:600, color:COULEURS.gris400 }}>🔒 Gérés par l'Onboarding</span>
+                  </div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
                     {horaires.map((h, i) => (
                       <div key={i} style={{ background:`${couleur}10`, border:`1px solid ${couleur}30`, borderRadius:10, padding:'8px 14px', display:'flex', gap:10, alignItems:'center' }}>
@@ -6877,10 +7742,12 @@ export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirB
                         <span style={{ background: b.statut==='suspendu' ? '#FEE2E2' : '#D1FAE5', color: b.statut==='suspendu' ? '#991B1B' : '#065F46', borderRadius:20, padding:'2px 8px', fontSize:10, fontWeight:700, display:'inline-block' }}>
                           {b.statut === 'suspendu' ? 'Suspendu' : 'Actif'}
                         </span>
-                        <button onClick={() => onOuvrirBenef({ ...b, _source: 'elearning', prenom: b.prenom || nom.split(' ')[0], nom: b.nom || nom.split(' ').slice(1).join(' ') || nom })}
-                          style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${couleur}`, background:`${couleur}10`, color:couleur, cursor:'pointer', fontSize:10, fontFamily:'"Plus Jakarta Sans",sans-serif', fontWeight:600 }}>
-                          👁 Détail
-                        </button>
+                        {onOuvrirBenef ? (
+                          <button onClick={() => onOuvrirBenef({ ...b, _source: 'elearning', prenom: b.prenom || nom.split(' ')[0], nom: b.nom || nom.split(' ').slice(1).join(' ') || nom })}
+                            style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${couleur}`, background:`${couleur}10`, color:couleur, cursor:'pointer', fontSize:10, fontFamily:'"Plus Jakarta Sans",sans-serif', fontWeight:600 }}>
+                            👁 Détail
+                          </button>
+                        ) : <span />}
                       </div>
                     );
                   })}
@@ -6899,9 +7766,88 @@ export function ModalDetailClasseAdmin({ classe, entreprise, onFermer, onOuvrirB
             <OngletSessionsClasse classeId={classe.id} coachNom={classe.coach_nom} couleur={couleur} />
           )}
 
-          {/* ACCÈS */}
-          {tab === 'acces' && (
-            <OngletAccesClasse benefs={benefs} couleur={couleur} />
+          {/* PROGRESSION — le niveau des apprenants de la classe, et leur assiduité */}
+          {tab === 'progression' && (
+            benefs.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px 24px', background:COULEURS.gris50, borderRadius:12, border:`2px dashed ${COULEURS.gris200}` }}>
+                <div style={{ fontSize:34, marginBottom:10 }}>📈</div>
+                <div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucun apprenant dans cette classe</div>
+                <div style={{ fontSize:12, color:COULEURS.gris600 }}>La progression s'affichera dès le premier inscrit.</div>
+              </div>
+            ) : (() => {
+              /* Répartition par niveau : sur une classe annoncée « B1 », voir qui n'y est
+                 pas encore dit en un coup d'œil si le groupe est homogène - c'est la
+                 question que le niveau affiché en en-tête ne répond pas. */
+              const parNiveau = {};
+              benefs.forEach(b => { const n = b.niveau_cecr || b.niveau || '—'; parNiveau[n] = (parNiveau[n] || 0) + 1; });
+              const horsNiveau = niv ? benefs.filter(b => (b.niveau_cecr || b.niveau) && (b.niveau_cecr || b.niveau) !== niv).length : 0;
+              const avecCompte = benefs.filter(b => b.apprenant_id).length;
+              return (
+                <>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:20 }}>
+                    {[
+                      { l:'Apprenants',        v: benefs.length, c: couleur },
+                      { l:'Niveau de la classe', v: niv || '—',  c:'#6366F1' },
+                      { l:'Hors niveau',       v: horsNiveau,    c: horsNiveau > 0 ? '#F59E0B' : '#059669' },
+                      { l:'Accès ouverts',     v: `${avecCompte}/${benefs.length}`, c: avecCompte === benefs.length ? '#059669' : '#F59E0B' },
+                    ].map(k => (
+                      <div key={k.l} style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderTop:`3px solid ${k.c}`, borderRadius:10, padding:'14px 16px' }}>
+                        <div style={{ fontSize:17, fontWeight:800, color:k.c }}>{k.v}</div>
+                        <div style={{ fontSize:10, color:COULEURS.gris400, marginTop:3 }}>{k.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:12, padding:'16px 20px' }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:COULEURS.gris600, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:12 }}>Répartition par niveau</div>
+                    {Object.entries(parNiveau).sort().map(([n, nb]) => {
+                      const pct = Math.round((nb / benefs.length) * 100);
+                      return (
+                        <div key={n} style={{ marginBottom:9 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
+                            <span style={{ color:COULEURS.navy, fontWeight: n === niv ? 700 : 500 }}>{n}{n === niv ? ' · niveau de la classe' : ''}</span>
+                            <span style={{ fontWeight:700, color:COULEURS.gris600 }}>{nb} · {pct}%</span>
+                          </div>
+                          <div style={{ height:7, background:COULEURS.gris100, borderRadius:4, overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:`${pct}%`, background: n === niv ? couleur : COULEURS.gris400, borderRadius:4 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()
+          )}
+
+          {/* HISTORIQUE */}
+          {tab === 'historique' && (
+            chargHistoCl ? <div style={{ textAlign:'center', padding:'40px 0', color:COULEURS.gris400 }}>Chargement…</div>
+            : histoClasse.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px 24px', background:COULEURS.gris50, borderRadius:12, border:`2px dashed ${COULEURS.gris200}` }}>
+                <div style={{ fontSize:34, marginBottom:10 }}>🕓</div>
+                <div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:6 }}>Aucun événement enregistré</div>
+                <div style={{ fontSize:12, color:COULEURS.gris600 }}>Les actions sur cette classe apparaîtront ici au fur et à mesure.</div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column' }}>
+                {histoClasse.map((h, i) => (
+                  <div key={h.id || i} style={{ display:'flex', gap:14, paddingBottom: i < histoClasse.length-1 ? 18 : 0 }}>
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+                      <div style={{ width:10, height:10, borderRadius:'50%', background: h.statut==='warning' ? '#F59E0B' : h.statut==='error' ? '#DC2626' : couleur, marginTop:4 }} />
+                      {i < histoClasse.length-1 && <div style={{ width:2, flex:1, background:COULEURS.gris200, marginTop:4 }} />}
+                    </div>
+                    <div style={{ flex:1, paddingBottom:4 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy }}>{(h.action_type || '').replace(/_/g,' ').toLowerCase()}</div>
+                      <div style={{ fontSize:12, color:COULEURS.gris600, marginTop:2, lineHeight:1.5 }}>{h.detail || '-'}</div>
+                      <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:4 }}>
+                        {(h.created_at || '').slice(0,16).replace('T',' à ')}
+                        {h.acteur_nom && <> · {h.acteur_nom}</>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
 
         </div>

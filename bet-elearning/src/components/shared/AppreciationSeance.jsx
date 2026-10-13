@@ -56,8 +56,13 @@ export function useSeancesANoter(apiUrl, jeton) {
     if (!token) return;
     setChargement(true);
     try {
+      /* `X-Plateforme` EST CE QUI REND CET ÉCRAN FONCTIONNEL ICI. Sans lui, le serveur
+         cherche les séances de l'apprenant dans `groupes_apprenants` / `seances` —
+         les tables du présentiel — où un apprenant e-learning n'existe pas : la liste
+         revenait donc toujours vide et il n'a jamais pu noter son coach.
+         Ce composant ne vit que dans bet-elearning ; l'en-tête y est donc constant. */
       const r = await fetch(`${apiUrl}/api/appreciations/a-noter`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, "X-Plateforme": "bet-elearning" },
       });
       const d = r.ok ? await r.json() : { seances: [] };
       setSeances(d.seances || []);
@@ -135,7 +140,7 @@ export default function AppreciationSeance({ seances, apiUrl, jeton, onFerme, on
       const token = typeof jeton === "function" ? jeton() : jeton;
       const r = await fetch(`${apiUrl}/api/appreciations`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Plateforme": "bet-elearning" },
         body: JSON.stringify({ seance_id: seance.id, note, commentaire }),
       });
       const d = await r.json().catch(() => ({}));

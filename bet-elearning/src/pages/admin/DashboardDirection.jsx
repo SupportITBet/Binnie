@@ -4,6 +4,7 @@ import { COULEURS } from '../../constants/couleurs';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LIBELLES_ROLES } from '../../constants/roles';
 import { useAuth } from '../../contexts/AuthContext';
+import { ModalDetailApprenant } from './DashboardAdminShared';
 
 /**
  * ──────────────────────────────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ import { useAuth } from '../../contexts/AuthContext';
  */
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}` });
+const _hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('admin_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
 
 /**
  * MES TÂCHES — ce qui attend la direction, à l'échelle de la plateforme.
@@ -186,6 +187,11 @@ export function OngletDirectionApprenants() {
   const [apprenants, setApprenants] = useState(null);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  /* La liste n'ouvrait aucune fiche : la direction voyait des lignes - nom, e-mail,
+     classe - sans pouvoir entrer dans un dossier, là où l'assistante, le PA et
+     l'Onboarding disposent tous de la fiche complète. Même modale partagée, en lecture :
+     le droit de modifier reste à l'assistante (cf. `peutModifierApprenant`). */
+  const [detail, setDetail] = useState(null);
 
   useEffect(() => {
     let vivant = true;
@@ -261,7 +267,10 @@ export function OngletDirectionApprenants() {
               </thead>
               <tbody>
                 {visibles.map(a => (
-                  <tr key={a.id} style={{ borderBottom: `1px solid ${COULEURS.gris100}` }}>
+                  <tr key={a.id} onClick={() => setDetail(a)}
+                    style={{ borderBottom: `1px solid ${COULEURS.gris100}`, cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = COULEURS.gris50}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <td style={{ ...td, fontWeight: 700 }}>{a.nom_complet || '—'}</td>
                     <td style={{ ...td, fontSize: 12, color: COULEURS.gris600 }}>{a.email || '—'}</td>
                     <td style={td}>{a.classe_nom || '—'}</td>
@@ -300,6 +309,15 @@ export function OngletDirectionApprenants() {
             </div>
           )}
         </div>
+      )}
+
+      {detail && (
+        <ModalDetailApprenant
+          apprenant={detail}
+          groupe={{ nom: detail.classe_nom, id: detail.classe_id }}
+          entreprise={detail.entreprise_nom ? { nom: detail.entreprise_nom } : null}
+          onFermer={() => setDetail(null)}
+        />
       )}
     </div>
   );

@@ -17,6 +17,7 @@ import uploadRoutes       from "./routes/uploadRoutes.js";
 import paiementsRouter    from "./routes/paiements.js";
 import jobsPaiementsRouter from "./routes/jobsPaiements.js";
 import badgesFideliteRouter from "./routes/badgesFidelite.js";
+import contextePlateforme from "./services/contextePlateforme.js";
 import jobsBadgesFideliteRouter from "./routes/jobsBadgesFidelite.js";
 import jobsNewsletterProgrammeeRouter from "./routes/jobsNewsletterProgrammee.js";
 import jobsRappelsSeancesRouter from "./routes/jobsRappelsSeances.js";
@@ -155,6 +156,12 @@ app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 });
+
+/* La plateforme d'origine de la requête, ouverte pour toute sa durée. C'est elle qui
+   décide dans quelle cloche atterrit une notification : les routes partagées (classes,
+   séances, remplacements, cours) servent les deux plateformes avec le même code, et
+   n'avaient jusqu'ici aucun moyen de savoir laquelle. Voir services/contextePlateforme.js. */
+app.use("/api", contextePlateforme);
 
 
 

@@ -13,6 +13,7 @@ import { assurerActiviteDuJour, attribuerPoints } from "../services/gamification
 import { enrichirPaiementsAvecTouchPoint } from "../utils/enrichirPaiementsTouchpoint.js";
 import { notifyRole, notifyUser, notifyOnboarding, ROLES_SUPERVISION_GLOBALE } from "../services/notifyRole.js";
 import { contexteMarquage, noterLectureEnCache, MOTIF } from "../services/lectureSequentielle.js";
+import { contenusAnnotesEl, contexteMarquageEl, MOTIF_EL } from "../services/lectureSequentielleElearning.js";
 import { utilisateurDuJeton } from "../services/cacheAuth.js";
 import { photoValide } from "../utils/photoUrl.js";
 
@@ -2381,6 +2382,30 @@ router.get("/mes-cours-lus", async (req, res) => {
   res.json({ lus: data || [] });
 });
 
+/**
+ * GET /api/apprenants/mes-contenus-elearning
+ *
+ * Les cours publiés qui concernent cet apprenant, DÉJÀ ANNOTÉS de leur état de verrou.
+ *
+ * L'espace apprenant lisait `contenus_classes_elearning` directement par le client
+ * Supabase. Il n'avait donc aucun moyen de savoir ce qui est verrouillé : le calcul
+ * demande les rattachements, leurs dates et les lectures, et le refaire côté navigateur
+ * aurait créé une seconde implémentation de la règle — celle qui finit par diverger de
+ * celle que le serveur applique à l'écriture, et par afficher un cadenas sur un cours
+ * autorisé (ou l'inverse, bien pire).
+ */
+router.get("/mes-contenus-elearning", async (req, res) => {
+  const user = await getApprenantUser(req);
+  if (!user) return res.status(401).json({ error: "Non authentifié" });
+  try {
+    const { contenus } = await contenusAnnotesEl(user);
+    res.json({ contenus });
+  } catch (err) {
+    console.error("[mes-contenus-elearning]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/contenus/:contenu_id/lu", async (req, res) => {
   // Chronometrage par etape. Pose deliberement : un ecran « lent » ne dit pas OU le temps
   // passe, et sans cette mesure on ne peut que supposer. Le cout est nul (trois
@@ -2402,7 +2427,15 @@ router.post("/contenus/:contenu_id/lu", async (req, res) => {
   const tVerrou0 = Date.now();
   let tVerrou = 0;
   try {
-    const ctx = await contexteMarquage(user, contenu_id);
+    /* DEUX SÉQUENCES, DEUX JEUX DE TABLES. `contexteMarquage` lit celles de dash
+       (`modules_elearning`, `groupes_apprenants`) ; un apprenant e-learning n'y a aucun
+       rattachement, le service répondait donc « accessible » pour tout et le verrou
+       n'existait pas, silencieusement. On choisit le service selon la plateforme de la
+       requête, que le front envoie déjà dans `X-Plateforme`. */
+    const estElearning = String(req.headers["x-plateforme"] || "").toLowerCase() === "bet-elearning";
+    const ctx = estElearning
+      ? await contexteMarquageEl(user, contenu_id)
+      : await contexteMarquage(user, contenu_id);
     tVerrou = Date.now() - tVerrou0;
     dejaLu = ctx.dejaLu;
     if (!ctx.accessible) {
@@ -2410,7 +2443,7 @@ router.post("/contenus/:contenu_id/lu", async (req, res) => {
       // meme facon que « publie avant votre arrivee », et un refus sans motif laisse
       // l'apprenant devant un bouton qui ne fait rien.
       const message =
-        ctx.motif === MOTIF.AVANT_ARRIVEE
+        ctx.motif === MOTIF.AVANT_ARRIVEE || ctx.motif === MOTIF_EL.AVANT_ARRIVEE
           ? "Ce cours a été publié avant votre arrivée dans la classe."
           : ctx.motif === MOTIF.APRES_DEPART
           ? "Ce cours a été publié après la fin de votre formation."

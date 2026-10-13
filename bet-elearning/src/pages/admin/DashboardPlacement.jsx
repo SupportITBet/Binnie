@@ -10,7 +10,7 @@ import { ageDepuisNaissance, ModalEnvoiGroupé, ModalResultatsTest, ModalAssigna
 import BetLevelTestsTab from '../../components/shared/BetLevelTestsTab';
 
 const _API_URL_ADMIN = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+const _authHdrsAdmin = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 const NIV_COULEUR = { A1:'#94A3B8', A2:'#60A5FA', B1:'#34D399', B2:'#818CF8', C1:'#F59E0B', C2:'#F97316' };
 const NIV_COULEUR_PL = NIV_COULEUR;
 
@@ -20,7 +20,7 @@ export function OngletGestionTests() {
   const NIV_OPTS  = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   const BET_CYAN  = couleurTheme;
 
-  const authH = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}` });
+  const authH = () => ({ 'Content-Type':'application/json', Authorization:`Bearer ${localStorage.getItem('admin_token')||''}`, 'X-Plateforme': 'bet-elearning' });
 
   // ── tab principal ──────────────────────────────────────────────────────────
   const [tab, setTab] = useTabState('suivi', 'tab_tests');

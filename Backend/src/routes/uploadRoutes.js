@@ -428,10 +428,25 @@ router.post("/fichier-classe", authenticateAdmin, (req, res) => {
   uploadDossierMem.single("file")(req, res, (multerErr) => {
     if (multerErr) return res.status(400).json({ error: multerErr.message });
     if (!req.file)  return res.status(400).json({ error: "Aucun fichier reçu" });
-    const isImage   = req.file.mimetype.startsWith("image/");
-    const isVideo   = req.file.mimetype.startsWith("video/");
-    const resType   = isImage ? "image" : isVideo ? "video" : "raw";
-    const public_id = `fichier_classe_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const isImage = req.file.mimetype.startsWith("image/");
+    /* L'AUDIO EST UN `video` CHEZ CLOUDINARY. C'est leur convention : un seul
+       `resource_type` couvre les deux médias temporels. Un mp3 envoyé en `raw` est bien
+       stocké mais servi comme un fichier quelconque — pas de lecture en continu, et le
+       lecteur de l'apprenant doit le télécharger en entier avant le premier son. Le test
+       ne portait que sur `video/`, donc toute capsule audio tombait dans ce cas. */
+    const isMediaTemporel = req.file.mimetype.startsWith("video/") || req.file.mimetype.startsWith("audio/");
+    const resType   = isImage ? "image" : isMediaTemporel ? "video" : "raw";
+    const base      = `fichier_classe_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    /* L'EXTENSION DOIT ÊTRE DANS LE `public_id` POUR UN `raw`. Cloudinary l'ajoute tout
+       seul pour `image` et `video` — c'est pourquoi les mp3 et les mp4 s'ouvrent bien —
+       mais jamais pour `raw`. Un PDF arrivait donc à une URL sans extension, servie en
+       `application/octet-stream` : le navigateur ne sait pas quoi en faire, il propose un
+       téléchargement d'un fichier sans nom exploitable, ou affiche des caractères
+       illisibles. Le téléversement des pièces jointes de la messagerie
+       (`messageStorage` plus haut) corrige déjà ce piège ; cette route-ci l'ignorait. */
+    const ext       = req.file.originalname?.includes(".")
+      ? req.file.originalname.split(".").pop().toLowerCase() : "";
+    const public_id = (resType === "raw" && ext) ? `${base}.${ext}` : base;
     const stream = cloudinary.uploader.upload_stream(
       { folder: "bet/fichiers-classes", resource_type: resType, public_id },
       (error, result) => {

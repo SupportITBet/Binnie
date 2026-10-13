@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { COULEURS } from '../../constants/couleurs';
+import { urlOuvrir, urlTelecharger } from '../../utils/fichierUrl';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { supabase } from '../../services/supabase';
 import SalleVirtuelle from '../../components/shared/SalleVirtuelle';
@@ -16,7 +17,7 @@ const MINUTES_OUVERTURE_SALLE = 10;
 const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-const authHdrsParent = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('bet_access_token') || ''}` });
+const authHdrsParent = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('bet_access_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
 
 // ── Mapping URL → section ────────────────────────────────────────────────────
 const CHEMIN_SECTION = {
@@ -170,7 +171,10 @@ export default function DashboardParent() {
         // Rendus de l'enfant : note + statut réel par devoir
         supabase.from('devoirs_rendus_elearning').select('devoir_id, statut, note, note_max, commentaire_coach, rendu_at, corrige_at').eq('inscription_id', enfantActif.id),
         classeId ? supabase.from('seances_elearning').select('*').eq('classe_id', classeId).order('date', { ascending: false }) : Promise.resolve({ data: [] }),
-        classeId ? supabase.from('contenus_classes_elearning').select('*').eq('classe_id', classeId).eq('est_visible', true).order('semaine', { ascending: true }).order('ordre', { ascending: true }) : Promise.resolve({ data: [] }),
+        /* `contains` et non `eq` : le coach diffuse un même contenu vers plusieurs
+           classes, et `classe_id` ne porte plus que la première. Le parent voyait
+           donc moins de cours que son enfant, sans rien qui l'explique. */
+        classeId ? supabase.from('contenus_classes_elearning').select('*').contains('classe_ids', [classeId]).eq('est_visible', true).order('semaine', { ascending: true }).order('ordre', { ascending: true }) : Promise.resolve({ data: [] }),
       ]);
 
       // Enrichir les présences avec les données de séance (split FK)
@@ -1684,7 +1688,16 @@ export default function DashboardParent() {
                         {b.type === 'video' && <div style={{ background:'#1E293B', borderRadius:10, padding:'40px 20px', textAlign:'center' }}><div style={{ fontSize:48, marginBottom:8 }}>🎬</div><a href={b.url} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:8, background:bt.couleur, color:'#fff', borderRadius:8, padding:'10px 20px', fontWeight:700, fontSize:14, textDecoration:'none' }}>▶ Regarder la vidéo</a></div>}
                         {b.type === 'audio' && <div style={{ background:'#F0FDF4', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}><div style={{ fontSize:36 }}>🎧</div><div><div style={{ fontWeight:700, color:COULEURS.navy, marginBottom:4 }}>{b.titre}</div><a href={b.url} target="_blank" rel="noreferrer" style={{ fontSize:13, color:'#059669', fontWeight:600 }}>▶ Écouter</a></div></div>}
                         {b.type === 'lien' && <div style={{ background:'#E0F2FE', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}><div style={{ fontSize:28 }}>🔗</div><div><div style={{ fontWeight:600, color:COULEURS.navy, marginBottom:4 }}>{b.titre}</div><a href={b.url} target="_blank" rel="noreferrer" style={{ fontSize:13, color:couleurTheme }}>Accéder →</a></div></div>}
-                        {b.type === 'document' && <div style={{ background:'#FFF7ED', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}><div style={{ fontSize:36 }}>📄</div><div><div style={{ fontWeight:600, color:COULEURS.navy, marginBottom:4 }}>{b.fichier || b.titre}</div><button style={{ fontSize:13, color:'#F59E0B', fontWeight:600, background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'"Plus Jakarta Sans",sans-serif' }}>⬇ Télécharger</button></div></div>}
+                        {b.type === 'document' && <div style={{ background:'#FFF7ED', borderRadius:10, padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}><div style={{ fontSize:36 }}>📄</div><div><div style={{ fontWeight:600, color:COULEURS.navy, marginBottom:4 }}>{b.fichier || b.titre}</div>{/* Ce bouton n'avait AUCUN `onClick` : il changeait de curseur au survol et
+                            ne faisait rien. Un parent cliquait sans jamais obtenir le document. */}
+                          {b.url ? (
+                            <span style={{ display:'flex', gap:12 }}>
+                              <a href={urlOuvrir(b.url, b.fichier || b.titre)} target="_blank" rel="noreferrer" style={{ fontSize:13, color:'#F59E0B', fontWeight:600 }}>👁 Ouvrir</a>
+                              <a href={urlTelecharger(b.url, b.fichier || b.titre || 'document')} style={{ fontSize:13, color:'#F59E0B', fontWeight:600 }}>⬇ Télécharger</a>
+                            </span>
+                          ) : (
+                            <span style={{ fontSize:12, color:COULEURS.gris400 }}>Aucun fichier joint à ce bloc.</span>
+                          )}</div></div>}
                         {b.type === 'quiz' && (() => {
                           const soumis = quizSoumisLive[b.id];
                           const { bonnes, total, pct } = scoreQuizL(b);
