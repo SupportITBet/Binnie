@@ -926,23 +926,48 @@ router.patch("/missions/:id", authenticateAdmin, requireSuperviseurRole, require
  *
  * @returns {Promise<{modules: object[], nomDe: Record<string,string>}>}
  */
+/**
+ * Les contenus qu'un coach a publiés pour ses classes BET E-Learning.
+ *
+ * ── CE QUI NE POUVAIT PAS MARCHER ──
+ * Cette fonction lisait `modules_elearning` — la table de DASH — en ne gardant que les
+ * lignes rattachées à une classe e-learning. Or les deux mondes ne partagent pas cette
+ * table : un contenu e-learning vit dans `contenus_classes_elearning` et pointe ses classes
+ * par `classe_ids`. Le filtre cherchait donc, dans la table de l'autre plateforme, des
+ * lignes qui n'y seront jamais.
+ *
+ * Mesuré sur un coach réel : 17 lignes dans `modules_elearning`, dont **zéro** rattachée à
+ * une classe e-learning — et 3 contenus bien présents dans `contenus_classes_elearning`.
+ * Les onglets « Modules e-learning » et « Ressources partagées » du cahier de coach
+ * affichaient donc un vide permanent, qui se lisait comme « ce coach n'a rien produit ».
+ *
+ * On part des CLASSES du coach plutôt que de son `coach_id` sur le contenu : un contenu peut
+ * être écrit par un remplaçant et rattaché à la classe du titulaire, et c'est bien au titre
+ * de sa classe qu'on le consulte ici.
+ */
 async function modulesElearningDuCoach(coachId) {
+  const { data: classes, error: errC } = await supabase
+    .from("classes_elearning")
+    .select("id, nom")
+    .eq("coach_id", coachId);
+  if (errC) throw errC;
+
+  const nomDe = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
+  const ids = Object.keys(nomDe);
+  /* DÉDOUBLONNÉ : `classe_id` porte la première classe et figure AUSSI dans `classe_ids`.
+     Sans ce `Set`, un contenu partagé entre deux classes s'affichait « Anglais Moov A2,
+     Anglais Moov A2, MOOV CI - A1 » — on croit à trois rattachements, il y en a deux. */
+  const groupesDe = (m) => [...new Set([m.classe_id, ...(m.classe_ids || [])].filter(Boolean))];
+  if (!ids.length) return { modules: [], nomDe, groupesDe, classeIds: [] };
+
   const { data: tous, error } = await supabase
-    .from("modules_elearning")
-    .select("id, titre, statut, blocs, groupe_id, groupe_ids, created_at")
-    .eq("coach_id", coachId)
+    .from("contenus_classes_elearning")
+    .select("id, titre, statut, est_visible, blocs, classe_id, classe_ids, created_at")
+    .overlaps("classe_ids", ids)
     .order("created_at", { ascending: false });
   if (error) throw error;
 
-  const groupesDe = (m) => [m.groupe_id, ...(m.groupe_ids || [])].filter(Boolean);
-  const tousIds = [...new Set((tous || []).flatMap(groupesDe))];
-  const { data: classes } = tousIds.length
-    ? await supabase.from("classes_elearning").select("id, nom").in("id", tousIds)
-    : { data: [] };
-  const nomDe = Object.fromEntries((classes || []).map(c => [c.id, c.nom]));
-
-  const modules = (tous || []).filter(m => groupesDe(m).some(id => nomDe[id]));
-  return { modules, nomDe, groupesDe };
+  return { modules: tous || [], nomDe, groupesDe, classeIds: ids };
 }
 
 router.get("/coachs/:id/modules", authenticateAdmin, requireSuperviseurRole, async (req, res) => {
@@ -968,7 +993,7 @@ router.get("/coachs/:id/ressources", authenticateAdmin, requireSuperviseurRole, 
   try {
     // Mêmes modules que l'onglet « Modules e-learning », donc même filtre de plateforme :
     // sans lui, cet onglet remontait les fichiers des modules de dash.
-    const { modules, nomDe, groupesDe } = await modulesElearningDuCoach(req.params.id);
+    const { modules, nomDe, groupesDe, classeIds } = await modulesElearningDuCoach(req.params.id);
 
     /**
      * La nature d'un fichier.
@@ -1011,13 +1036,44 @@ router.get("/coachs/:id/ressources", authenticateAdmin, requireSuperviseurRole, 
         })),
     ).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
+    /* ── LES FICHIERS DÉPOSÉS DIRECTEMENT SUR LA CLASSE ──
+       `fichiers_classes_elearning` est l'autre moitié de ce que le coach partage : les
+       documents qu'il dépose hors d'un contenu, et que l'apprenant reçoit dans « Mes
+       ressources ». Les ignorer donnait un inventaire incomplet à qui vient précisément
+       vérifier ce qui a été transmis — deux fichiers manquaient sur le coach mesuré. */
+    const { data: fichiers } = classeIds.length
+      ? await supabase.from("fichiers_classes_elearning")
+          .select("id, nom, url, categorie, taille_ko, visible, classe_id, created_at")
+          .in("classe_id", classeIds)
+          .order("created_at", { ascending: false })
+      : { data: [] };
+
+    const ressourcesFichiers = (fichiers || []).map(f => ({
+      id: `fichier-${f.id}`,
+      origine: "classe",
+      nom: f.nom || "Fichier",
+      url: f.url,
+      nature: natureDe(f.nom || f.url, f.categorie),
+      taille_ko: f.taille_ko ?? null,
+      classes: [nomDe[f.classe_id]].filter(Boolean),
+      contexte: { classe_id: f.classe_id, classe_nom: nomDe[f.classe_id] || null },
+      created_at: f.created_at,
+      // Un fichier masqué reste listé au superviseur : il doit voir ce qui existe ET savoir
+      // que l'apprenant ne l'a pas.
+      masque: f.visible === false,
+    }));
+
+    const toutes = [...ressources, ...ressourcesFichiers]
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+
     res.json({
-      ressources,
+      ressources: toutes,
       totaux: {
-        total: ressources.length,
+        total: toutes.length,
         chat: 0,                       // cf. l'en-tête : pas de fichiers de chat en base ici
         modules: ressources.length,
-        poids_ko: 0,                   // les médias d'un module ne portent pas leur taille
+        fichiers: ressourcesFichiers.length,
+        poids_ko: ressourcesFichiers.reduce((n, r) => n + (r.taille_ko || 0), 0),
       },
       // Dit franchement à l'écran pourquoi les pièces jointes du chat n'y sont pas, plutôt
       // que de laisser croire que ce coach n'a rien partagé.

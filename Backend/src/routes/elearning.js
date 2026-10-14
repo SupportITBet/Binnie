@@ -945,6 +945,22 @@ router.get("/classes/:id/apprenants", authenticateAdmin, async (req, res) => {
   }
 });
 
+/* GET /api/elearning/classes/:id/fichiers — les documents déposés sur une classe.
+   Pendant de `/classes/:id/presences` : le superviseur qui ouvre une classe depuis le cahier
+   d'un coach veut voir ce qui y a été partagé, et aucune route ne le servait par classe —
+   seule la vue par COACH existait, trop large quand on regarde une classe précise. */
+router.get("/classes/:id/fichiers", authenticateAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("fichiers_classes_elearning")
+      .select("id, nom, url, public_id, categorie, taille_ko, visible, coach_id, created_at")
+      .eq("classe_id", req.params.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json({ fichiers: data || [] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/elearning/classes/:id/presences
 router.get("/classes/:id/presences", authenticateAdmin, async (req, res) => {
   try {

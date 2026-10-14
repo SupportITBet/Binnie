@@ -4,6 +4,7 @@ import { authenticateAdmin } from "../middlewares/requireAdmin.js";
 import { notifyRole } from "../services/notifyRole.js";
 import { onAvisParentSoumis } from "../services/gamificationCoach.js";
 import { onAvisParentSoumisDash } from "../services/gamificationCoachDash.js";
+import { estElearning } from "../services/plateformeApprenant.js";
 
 const router = express.Router();
 
@@ -229,15 +230,67 @@ router.post("/avis-parent", async (req, res) => {
 // ne sont que des identifiants bruts dans avis_parents_coach - colonnes texte sans FK).
 router.get("/evaluations-coach", authenticateAdmin, async (req, res) => {
   try {
-    // avis_parents_coach est partagée avec bet-elearning (seule plateforme à soumettre
-    // des avis pour l'instant) - ne jamais afficher ses données côté dash tant que le
-    // ParentDashboard de dash n'a pas son propre mécanisme de soumission.
+    /* ── CHAQUE PLATEFORME LIT SES PROPRES AVIS ──
+       `avis_parents_coach` est commune aux deux mondes et porte une colonne `plateforme`.
+       La lecture était figée sur « dash » : le superviseur de bet-elearning n'avait aucun
+       moyen d'ouvrir les avis déposés par SES parents, alors que c'est précisément cette
+       plateforme qui les collecte. L'inverse reste vrai — dash ne doit pas afficher les
+       avis de bet-elearning —, d'où l'aiguillage plutôt qu'un élargissement.
+
+       Les identifiants bruts ne désignent pas les mêmes tables de part et d'autre :
+       `inscription_id` pointe sur `groupes_apprenants` côté dash et sur
+       `classes_elearning_apprenants` ici, `classe_id` sur `groupes` là et
+       `classes_elearning` ici. C'est tout l'objet de la résolution qui suit. */
+    const surElearning = estElearning(req);
+
     const { data, error } = await supabase
       .from("avis_parents_coach")
       .select("*")
-      .eq("plateforme", "dash")
+      .eq("plateforme", surElearning ? "bet-elearning" : "dash")
       .order("created_at", { ascending: false });
     if (error) throw error;
+
+    if (surElearning) {
+      const avisEl = data || [];
+      if (!avisEl.length) return res.json({ evaluations: [] });
+
+      const inscrIds = [...new Set(avisEl.map(a => a.inscription_id).filter(Boolean))];
+      const classIds = [...new Set(avisEl.map(a => a.classe_id).filter(Boolean))];
+      const [{ data: inscrs }, { data: classes }] = await Promise.all([
+        inscrIds.length
+          ? supabase.from("classes_elearning_apprenants")
+              .select("id, nom_complet, email, telephone, niveau_cecr, date_naissance, prenom_parent, nom_parent, email_parent, telephone_parent")
+              .in("id", inscrIds)
+          : Promise.resolve({ data: [] }),
+        classIds.length
+          ? supabase.from("classes_elearning").select("id, nom").in("id", classIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const parInscr = Object.fromEntries((inscrs  || []).map(i => [String(i.id), i]));
+      const parClasse = Object.fromEntries((classes || []).map(c => [String(c.id), c]));
+
+      /* Le parent est porté par l'inscription elle-même ici — `prenom_parent`/`nom_parent` —
+         et non par un dossier `assignations_parcours` comme côté dash. Un détour par cette
+         table ne rendrait rien pour un apprenant e-learning. */
+      return res.json({
+        evaluations: avisEl.map(a => {
+          const i = a.inscription_id ? parInscr[String(a.inscription_id)] : null;
+          const nomParent = i ? `${i.prenom_parent || ""} ${i.nom_parent || ""}`.trim() : "";
+          return {
+            ...a,
+            enfant_nom:       i?.nom_complet || null,
+            enfant_email:     i?.email || null,
+            enfant_telephone: i?.telephone || null,
+            enfant_niveau:    i?.niveau_cecr || null,
+            enfant_naissance: i?.date_naissance || null,
+            parent_nom:       nomParent || null,
+            parent_email:     a.parent_email || i?.email_parent || null,
+            parent_telephone: i?.telephone_parent || null,
+            classe_nom: a.classe_id ? (parClasse[String(a.classe_id)]?.nom || null) : null,
+          };
+        }),
+      });
+    }
 
     const avis = data || [];
     // inscription_id = groupes_apprenants.id, classe_id = groupes.id (dash - voir
