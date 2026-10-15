@@ -273,11 +273,17 @@ PROPRIO=$(stat -c '%U:%G' "$CIBLE" 2>/dev/null || stat -f '%Su:%Sg' "$CIBLE")
 #                n'ait l'air de s'être passé le jour du déploiement.
 #   cgi-bin      créé par cPanel.
 #   0-RACINE-*   le repère qui nomme le domaine servi par ce dossier.
+#   php.ini, .user.ini
+#                posés par cPanel à la création du sous-domaine. Le site est statique et
+#                ne s'en sert pas, mais ils n'appartiennent pas au build : les effacer
+#                serait défaire une configuration qu'on n'a pas mise là.
 rsync -a --delete \
       --exclude='.well-known/' \
       --exclude='cgi-bin/' \
       --exclude='.deploiement-bet-elearning' \
       --exclude='0-RACINE-*' \
+      --exclude='php.ini' \
+      --exclude='.user.ini' \
       build/ "$CIBLE/"
 date '+%F %H:%M:%S' > "$CIBLE/.deploiement-bet-elearning"
 git -C "$RACINE" log -1 --format='%h %s' >> "$CIBLE/.deploiement-bet-elearning"

@@ -13,6 +13,16 @@
 # déploiement suivant l'a écrasée avec la version du build, qui ne la contenait pas,
 # et le site est repassé en HTTP sans que rien ne le signale. Tant qu'elle est ici,
 # chaque build la reconduit.
+#
+# POURQUOI AUCUNE CONDITION DE DOMAINE ICI, alors que ce fichier atterrit dans
+# `/home/betnet/public_html` où cPanel loge aussi les sous-domaines (`app-bet`,
+# `elearning-bet`, `api-bet`). mod_rewrite n'hérite PAS des règles du parent : dès
+# qu'un dossier déclare son propre `RewriteEngine On`, il remplace le jeu de règles
+# hérité. Chaque sous-domaine BET publie un `.htaccess` qui le fait, et n'est donc
+# jamais soumis à cette redirection — vérifié le 15/10/2026 sur
+# `http://app.binniesenglish.net/`, qui répond 200 sans redirection.
+# Un dossier de sous-domaine encore VIDE, lui, hérite bien de cette règle et part en
+# 301 vers le site public : c'est normal, et la première publication y met fin.
 RewriteEngine On
 RewriteCond %{HTTPS} off [OR]
 RewriteCond %{HTTP_HOST} ^www\. [NC]
