@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { signalerDeconnexionVolontaire, memoriserRoleSession, oublierRoleSession } from '../utils/sessionInterceptor';
 import { supabase } from '../services/supabase';
 import { calcTranche } from '../utils/trancheAge';
 import { ROLE_MAP_BET } from '../constants/roles';
@@ -139,6 +140,20 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  /* ── LE RÔLE VIVANT, DONNÉ À L'INTERCEPTEUR DE SESSION ──
+     Il en a besoin pour savoir vers quelle page de connexion renvoyer quand la session
+     expire. Il le cherchait dans les stockages ; or `admin_profil` (localStorage) n'est
+     effacé par personne et appartient au compte connecté AVANT celui-ci, si bien qu'un
+     apprenant était renvoyé vers la page du coach ou de l'admin — c'est-à-dire, ces rôles
+     n'ayant pas de page dédiée, vers le portail générique `/connexion`.
+     Un seul effet couvre TOUS les chemins qui posent un profil (connexion directe, reprise
+     de session, 2FA, SSO, profils mock) : les traiter un par un en aurait forcément oublié
+     un, et c'est exactement ce qui est arrivé deux fois. */
+  useEffect(() => {
+    if (profile?.role) memoriserRoleSession(profile.role);
+    else oublierRoleSession();
+  }, [profile?.role]);
+
   async function chargerProfil(userId) {
     // Si la connexion a été faite explicitement en tant que parent (via seConnecterParent),
     // on respecte ce choix sans interroger utilisateurs - le rôle est déjà dans sessionStorage.
@@ -193,6 +208,22 @@ export function AuthProvider({ children }) {
       } catch { /* ignore */ }
     }
     setProfile(data);
+    /* ── LE PROFIL EST AUSSI PERSISTÉ ICI, ET C'EST CE QUI MANQUAIT ──
+       `bet_profil_mock` n'était écrit qu'à la CONNEXION. Or `sessionStorage` est propre à
+       un onglet : rouvrir l'application dans un nouvel onglet reprenait bien la session
+       Supabase (stockée, elle, dans `localStorage`) et rechargeait le profil depuis la
+       base — mais sans jamais réécrire cette clé.
+
+       Conséquence, invisible jusqu'à l'expiration : l'intercepteur de session cherche le
+       rôle dans `bet_profil_mock` pour savoir vers quelle page de connexion renvoyer. Il
+       ne trouvait rien, retombait sur le portail générique, et un apprenant déconnecté
+       automatiquement atterrissait sur l'écran de l'administration BET au lieu du sien.
+
+       On l'écrit à chaque chargement de profil : la clé suit l'onglet, quel que soit le
+       chemin par lequel la session y est arrivée. */
+    try {
+      if (data?.role) sessionStorage.setItem('bet_profil_mock', JSON.stringify(data));
+    } catch { /* stockage refusé (navigation privée) : l'intercepteur retombera sur le portail */ }
     setLoading(false);
   }
 
@@ -399,7 +430,18 @@ export function AuthProvider({ children }) {
       role:   estParent ? 'parent' : 'apprenant',
       actif:  true,
     };
+    /* ON REPART D'UN STOCKAGE PROPRE. Un apprenant ou un parent n'a rien à faire des clés
+       `admin_*` : elles appartiennent au compte qui s'est connecté avant lui par une page
+       dédiée, et elles ne s'effaçaient jusqu'ici jamais. Les laisser là, c'est lui prêter
+       le profil et le jeton de rafraîchissement de quelqu'un d'autre — et c'est ce que
+       l'intercepteur lisait à l'expiration de SA session.
+       Nettoyer ici, et pas seulement à la déconnexion, remet d'aplomb les navigateurs déjà
+       pollués : le poste de test n'a pas besoin d'être vidé à la main. */
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_refresh');
+    localStorage.removeItem('admin_profil');
     sessionStorage.setItem('bet_profil_mock', JSON.stringify(profilMinimal));
+    memoriserRoleSession(profilMinimal.role);
     setProfile(profilMinimal);
 
     return { besoin2FA: false };
@@ -430,7 +472,13 @@ export function AuthProvider({ children }) {
       role:   'parent',
       actif:  true,
     };
+    // Même nettoyage que pour l'apprenant : le parent a sa propre session Supabase et sa
+    // propre page de connexion, il ne doit pas hériter des clés `admin_*` du compte d'avant.
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_refresh');
+    localStorage.removeItem('admin_profil');
     sessionStorage.setItem('bet_profil_mock', JSON.stringify(profilMinimal));
+    memoriserRoleSession(profilMinimal.role);
     setProfile(profilMinimal);
     return { besoin2FA: false };
   }
@@ -474,13 +522,34 @@ export function AuthProvider({ children }) {
   }
 
   async function seDeconnecter() {
+    /* On PRÉVIENT L'INTERCEPTEUR AVANT de vider quoi que ce soit. Il surveille les 401
+       pour détecter une session expirée ; ceux qui suivent une déconnexion volontaire n'en
+       sont pas, et il les traitait pourtant comme telle — redirigeant vers le portail
+       générique `/connexion` au lieu de la page du rôle, par `window.location.href` qui
+       écrase la navigation React. */
+    signalerDeconnexionVolontaire();
+    oublierRoleSession();
+    /* ── TOUTES LES CLÉS D'IDENTITÉ, PAS SEULEMENT `bet_profil_mock` ──
+       Le commentaire que cette ligne remplace affirmait que `bet_profil_mock` était « la
+       source unique de vérité ». C'était faux : les cinq pages de connexion dédiées
+       (admin, professeur, entreprise, portail, SSO) écrivent `admin_profil`, `admin_token`
+       et `admin_refresh` dans localStorage, et RIEN ne les effaçait jamais. Elles
+       survivaient à la déconnexion, au changement de compte et à la fermeture du
+       navigateur.
+       Un apprenant se connectant ensuite sur ce poste héritait donc, sans le savoir, du
+       profil et du jeton de rafraîchissement du compte précédent — et c'est ce qui le
+       renvoyait vers `/connexion` à l'expiration : l'intercepteur résolvait correctement
+       le rôle… de quelqu'un d'autre. On part proprement. */
     sessionStorage.removeItem('bet_profil_mock');
+    localStorage.removeItem('bet_access_token');
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_refresh');
+    localStorage.removeItem('admin_profil');
     setProfile(null);
     setDelegation(null);
     setDelegationsSortantes([]);
     setDelegationsRecues([]);
     if (SUPABASE_ACTIF) await supabase.auth.signOut().catch(() => {});
-    // Pas d'autre cleanup nécessaire - bet_profil_mock est la source unique de vérité
   }
 
   return (

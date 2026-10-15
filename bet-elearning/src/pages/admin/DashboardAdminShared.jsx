@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAlerte, useConfirm, usePrompt } from '../../contexts/ConfirmContext';
 import { BadgeStatutVersement, VignettesPreuves, estVerse } from '../../components/shared/PreuvesPaiement';
 import { COULEURS } from '../../constants/couleurs';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import PastilleGroupe from '../../components/shared/PastilleGroupe';
 import PhotoClasseEntete from '../../components/shared/PhotoClasseEntete';
 import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererPDF';
@@ -6930,7 +6931,13 @@ export function OngletSessionsClasse({ classeId, coachNom, couleur }) {
                     <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:COULEURS.gris500 }}>
                       {s.heure_debut && <span>🕐 {s.heure_debut}{s.heure_fin ? ` → ${s.heure_fin}` : ''}{duree ? ` (${duree})` : ''}</span>}
                       {s.nb_presents != null && <span>👥 {s.nb_presents} présent{s.nb_presents !== 1 ? 's' : ''}</span>}
-                      {lien && <span style={{ color:col }}>🔗 <a href={lien} target="_blank" rel="noreferrer" style={{ color:col, textDecoration:'none', fontWeight:600 }}>Lien visio</a></span>}
+                      {/* Grisé jusqu'à H-10, comme dans tous les autres écrans. */}
+                      {lien && (() => {
+                        const acc = accesSalle(s);
+                        return acc.joignable
+                          ? <span style={{ color:col }}>🔗 <a href={lien} target="_blank" rel="noreferrer" style={{ color:col, textDecoration:'none', fontWeight:600 }}>Lien visio</a></span>
+                          : <span style={{ color:COULEURS.gris400, fontWeight:600 }} title={`La salle s'ouvre ${MINUTES_OUVERTURE_SALLE} min avant le cours`}>🔒 Lien visio · {acc.libelleAttente}</span>;
+                      })()}
                     </div>
                     {(s.objectifs_session || s.compte_rendu || s.bilan_session) && (
                       <div style={{ marginTop:8, fontSize:12, color:COULEURS.gris600, background:COULEURS.gris50, borderRadius:8, padding:'8px 12px', lineHeight:1.5 }}>

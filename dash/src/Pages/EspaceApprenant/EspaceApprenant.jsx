@@ -6122,6 +6122,73 @@ export default function EspaceApprenant() {
 
               const copyLink = (lien) => { navigator.clipboard.writeText(lien).then(()=>toast.success("Lien copié !")); };
 
+              /* ── LES COURS RATTACHÉS À LA SESSION, OUVRABLES ──
+                 Ils n'étaient qu'une pastille inerte portant un titre : l'apprenant voyait
+                 « 📦 Leçon 1 » sans aucun moyen de lire la leçon depuis sa session, alors
+                 que le portail bet-elearning y donne accès au cours entier. On recoupe donc
+                 les modules de la session avec `coursElearning` - la liste de ses cours
+                 accessibles, celle qui porte déjà le verrou de lecture, les blocs et l'état
+                 « lu » - et le clic ouvre le panneau de cours DÉJÀ EN PLACE. Rien n'est
+                 réécrit : un second rendu des blocs aurait fini par diverger du premier.
+
+                 TROIS ÉTATS, TROIS RENDUS. Accessible : cliquable. Verrouillé par la
+                 séquence : le motif, comme dans « Mes cours ». Absent de ses cours : le
+                 coach l'a rattaché sans le publier pour sa classe, et le dire évite à
+                 l'apprenant de réclamer un cours qu'il croit manquant. */
+              const coursDeLaSession = (s) => {
+                /* `contenu_modules` ne contient QUE les cours publiés - le serveur retire
+                   les brouillons, dont le titre n'a rien à faire ici. Les identifiants
+                   restants sans module correspondant sont donc exactement ces brouillons :
+                   on les annonce sans les nommer, plutôt que de les taire. Taire le cours
+                   d'une séance qui en a un conduit l'apprenant à le réclamer, et le coach à
+                   répondre qu'il l'a pourtant bien rattaché - ce qui est vrai. */
+                const publies = (s.contenu_modules || []);
+                const nonPublies = (s.contenu_ids || [])
+                  .filter(id => !publies.some(m => m.id === id))
+                  .map(id => ({ id, titre: null }));
+                return [...publies, ...nonPublies]
+                  .map(m => ({ ...m, cours: coursElearning.find(c => c.id === m.id) || null }));
+              };
+
+              const PastillesCoursSession = ({ s, compact }) => {
+                const liste = coursDeLaSession(s);
+                if (!liste.length) return null;
+                const EMOJI = { lecon:"📖", audio:"🎧", video:"🎬" };
+                return (
+                  <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:5 }}>
+                    {liste.map(({ id, titre, cours, type_contenu, nb_blocs }) => {
+                      const ouvrable = !!cours && cours.verrouille !== true;
+                      const verrou   = !!cours && cours.verrouille === true;
+                      const nom      = cours?.titre || titre || "Cours pas encore publié";
+                      const motif    = verrou
+                        ? (cours.bloque_par?.titre ? `Terminez d'abord « ${cours.bloque_par.titre} »` : "Ce cours n'est pas encore accessible")
+                        : !cours
+                        ? "Votre professeur l'a rattaché à la séance mais ne l'a pas encore publié pour votre classe"
+                        : `Ouvrir « ${nom} »`;
+                      return (
+                        <span key={id} title={motif}
+                          onClick={ouvrable ? (e) => { e.stopPropagation(); setLiveJoinModal(null); setCoursElearningDetail(cours); } : undefined}
+                          style={{ display:"inline-flex", alignItems:"center", gap:5,
+                            padding: compact ? "3px 9px" : "6px 12px", borderRadius:8,
+                            fontSize: compact ? 10.5 : 12, fontWeight:600,
+                            background: ouvrable ? "#e0f2fe" : "#f1f5f9",
+                            color:      ouvrable ? "#0369a1" : "#94a3b8",
+                            border: `1px solid ${ouvrable ? "#bae6fd" : "#e2e8f0"}`,
+                            cursor: ouvrable ? "pointer" : "not-allowed" }}>
+                          <span>{verrou ? "🔒" : !cours ? "⏳" : (EMOJI[type_contenu || cours?.type_contenu] || "📦")}</span>
+                          <span>{nom}</span>
+                          {ouvrable && cours.lu === true && <span style={{ color:"#15803d", fontWeight:800 }}>✓</span>}
+                          {ouvrable && nb_blocs > 0 && !compact && (
+                            <span style={{ color:"#7dd3fc", fontWeight:700 }}>· {nb_blocs} partie{nb_blocs>1?"s":""}</span>
+                          )}
+                          {ouvrable && <span style={{ fontWeight:800 }}>›</span>}
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              };
+
               const ApprCard = ({ s, isPast }) => {
                 const plat = PLATFORMS.find(p=>p.id===s.plateforme) || PLATFORMS[5];
                 const countdown = formatCountdown(s.date, s.heure);
@@ -6165,13 +6232,7 @@ export default function EspaceApprenant() {
                             <span>⏱ {s.duree} min</span>
                           </div>
                           {s.notes && <div style={{ marginTop:6, fontSize:12, color:"#374151", fontStyle:"italic" }}>💬 {s.notes}</div>}
-                          {(s.contenu_titres||[]).length > 0 && (
-                            <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:4 }}>
-                              {(s.contenu_titres||[]).map((t,i) => (
-                                <span key={i} style={{ padding:"2px 8px", borderRadius:8, fontSize:10, fontWeight:600, background:"#e0f2fe", color:"#0369a1" }}>📦 {t}</span>
-                              ))}
-                            </div>
-                          )}
+                          <PastillesCoursSession s={s} compact />
                         </div>
                         <div style={{ display:"flex", gap:5, flexShrink:0 }}>
                           <button onClick={()=>setLiveJoinModal(s)}
@@ -6270,7 +6331,6 @@ export default function EspaceApprenant() {
                       : maPresenceModal === "absent"
                       ? { bg:"#FEE2E2", c:"#991B1B", label:"❌ Vous étiez absent(e)" }
                       : null;
-                    const titresContenu = jm.contenu_titres || [];
                     return (
                       <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.72)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
                         onClick={()=>setLiveJoinModal(null)}>
@@ -6320,17 +6380,14 @@ export default function EspaceApprenant() {
                               </div>
                             )}
 
-                            {/* Cours / modules partagés */}
-                            {titresContenu.length > 0 && (
+                            {/* Cours / modules partagés - ouvrables, et plus seulement nommés.
+                                Cette liste était l'endroit le plus trompeur de l'écran : on y
+                                annonçait « Supports de cours partagés » juste au-dessus du
+                                lien de la réunion, sans aucun moyen de les lire. */}
+                            {coursDeLaSession(jm).length > 0 && (
                               <div style={{ marginBottom:16 }}>
                                 <div style={{ fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>📚 Supports de cours partagés</div>
-                                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                                  {titresContenu.map((titre, i) => (
-                                    <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", background:"#f0f9ff", borderRadius:8, border:"1px solid #bae6fd", fontSize:12, color:"#0369a1", fontWeight:600 }}>
-                                      📦 {titre}
-                                    </div>
-                                  ))}
-                                </div>
+                                <PastillesCoursSession s={jm} />
                               </div>
                             )}
 

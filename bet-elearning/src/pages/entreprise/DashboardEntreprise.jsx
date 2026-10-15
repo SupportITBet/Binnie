@@ -7,6 +7,7 @@ import TopNavLayout from '../../components/shared/TopNavLayout';
 import { genererPDF, fmtDatePDF, exporterExcelStyle } from '../../utils/genererPDF';
 import { genererRecuVersement } from '../../utils/recuVersement';
 import { useTheme } from '../../contexts/ThemeContext';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import { useAlerte, useConfirm } from '../../contexts/ConfirmContext';
 import { BadgeStatutVersement, VignettesPreuves, estVerse } from '../../components/shared/PreuvesPaiement';
 import * as XLSX from 'xlsx';
@@ -1721,7 +1722,10 @@ function ModalDetailClasse({ classe, couleurEnt, onFermer, onOuvrirBenef }) {
   );
 }
 
-function OngletBeneficiaires({ apprenants, groupes, classes, couleurEnt }) {
+/* Cet onglet montre les CLASSES de l'entreprise, pas ses bénéficiaires — il s'appelait
+   pourtant `OngletBeneficiaires`, et le menu « Bénéficiaires » menait ici. La liste
+   nominative des apprenants, elle, n'existait nulle part : voir `OngletBeneficiairesListe`. */
+function OngletClasses({ apprenants, groupes, classes, couleurEnt }) {
   const { couleurTheme } = useTheme();
   const [modalClasse, setModalClasse] = useState(null);
   const [modalBenef,  setModalBenef]  = useState(null);
@@ -3705,11 +3709,672 @@ function ModalDeclarationVersement({ couleurEnt, nomEntreprise, soldeRestant, on
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   ONGLET « BÉNÉFICIAIRES » — la liste nominative, qui n'existait pas.
+
+   La RH finance la formation de salariés qu'elle ne pouvait voir qu'en ouvrant une classe
+   après l'autre : l'onglet qui portait ce nom affichait une grille de classes (désormais
+   « Classes »). Pour répondre à « où en est Untel ? », il fallait deviner sa classe d'abord.
+
+   LE MODAL DE DÉTAIL N'EST PAS RÉÉCRIT. `ModalDetailBeneficiaire` existe déjà, avec ses six
+   onglets (Infos, Compétences, Test de niveau, Évaluations, Présences, Accès) ; un second
+   rendu du même dossier aurait fini par en dire autre chose. On l'ouvre, c'est tout.
+══════════════════════════════════════════════════════════════════════════════════════════ */
+function OngletBeneficiairesListe({ apprenants, classes, groupes, couleurEnt }) {
+  const { couleurTheme } = useTheme();
+  const couleur = couleurEnt || couleurTheme;
+
+  const [recherche, setRecherche] = useState('');
+  const [fClasse,   setFClasse]   = useState('');
+  const [fStatut,   setFStatut]   = useState('');
+  const [fNiveau,   setFNiveau]   = useState('');
+  const [page,      setPage]      = useState(1);
+  const [modalBenef, setModalBenef] = useState(null);
+  const [tri,       setTri]       = useState({ col: 'nom', sens: 1 });
+  const PAR_PAGE = 15;
+
+  /* Le statut vient de la liste du serveur ; on le met à jour sur place après une
+     suspension pour que la ligne ne contredise pas le modal qu'on vient de fermer. */
+  const [statutsLocaux, setStatutsLocaux] = useState({});
+  const statutDe = (a) => statutsLocaux[a.id] || a.statut || 'actif';
+
+  const STATUTS_CFG = {
+    actif:    { bg:'#D1FAE5', txt:'#065F46', lib:'Actif' },
+    suspendu: { bg:'#FEE2E2', txt:'#991B1B', lib:'Suspendu' },
+    certifie: { bg:'#EDE9FE', txt:'#5B21B6', lib:'Certifié' },
+    retire:   { bg:COULEURS.gris100, txt:COULEURS.gris600, lib:'Retiré' },
+  };
+
+  const nomDe = (a) => a.nom_complet || `${a.prenom || ''} ${a.nom || ''}`.trim() || '—';
+  const classeDe = (a) => a.classe_nom || a.groupe_nom || '—';
+
+  const niveaux = [...new Set(apprenants.map(a => a.niveau_cecr).filter(Boolean))].sort();
+  const nomsClasses = [...new Set(apprenants.map(classeDe).filter(n => n !== '—'))].sort();
+
+  const filtres = apprenants.filter(a => {
+    const q = recherche.trim().toLowerCase();
+    if (q && ![nomDe(a), a.email, a.telephone, classeDe(a)]
+      .some(v => String(v || '').toLowerCase().includes(q))) return false;
+    if (fClasse && classeDe(a) !== fClasse) return false;
+    if (fStatut && statutDe(a) !== fStatut) return false;
+    if (fNiveau && a.niveau_cecr !== fNiveau) return false;
+    return true;
+  });
+
+  const COLS = {
+    nom:    (a) => nomDe(a).toLowerCase(),
+    classe: (a) => classeDe(a).toLowerCase(),
+    niveau: (a) => a.niveau_cecr || '',
+    statut: (a) => statutDe(a),
+    date:   (a) => a.date_inscription || '',
+  };
+  const triees = [...filtres].sort((a, b) => {
+    const f = COLS[tri.col] || COLS.nom;
+    return String(f(a)).localeCompare(String(f(b)), 'fr') * tri.sens;
+  });
+
+  const nbPages = Math.max(1, Math.ceil(triees.length / PAR_PAGE));
+  const pageSure = Math.min(page, nbPages);
+  const visibles = triees.slice((pageSure - 1) * PAR_PAGE, pageSure * PAR_PAGE);
+
+  const compte = (st) => apprenants.filter(a => statutDe(a) === st).length;
+  const KPIS = [
+    { l: 'Bénéficiaires', v: apprenants.length,     c: couleur },
+    { l: 'Actifs',        v: compte('actif'),       c: COULEURS.succes },
+    { l: 'Certifiés',     v: compte('certifie'),    c: '#7C3AED' },
+    { l: 'Suspendus',     v: compte('suspendu'),    c: COULEURS.erreur },
+  ];
+
+  const enTete = (cle, libelle, align) => (
+    <th onClick={() => { setTri(t => ({ col: cle, sens: t.col === cle ? -t.sens : 1 })); setPage(1); }}
+      style={{ padding:'10px 12px', fontSize:11, color:COULEURS.gris600, textTransform:'uppercase',
+        textAlign: align || 'left', fontWeight:700, cursor:'pointer', whiteSpace:'nowrap', userSelect:'none' }}>
+      {libelle}{tri.col === cle ? (tri.sens === 1 ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+  const td = { padding:'11px 12px', fontSize:13, color:COULEURS.navy };
+  const champ = { padding:'8px 11px', borderRadius:8, border:`1.5px solid ${COULEURS.gris200}`,
+    fontSize:12.5, fontFamily:'inherit', outline:'none', background:COULEURS.blanc };
+
+  const classeObjDe = (a) =>
+    classes.find(c => c.id === a.classe_id) || groupes.find(g => g.id === a.groupe_id) || null;
+
+  return (
+    <>
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:COULEURS.navy }}>
+          {apprenants.length} bénéficiaire{apprenants.length !== 1 ? 's' : ''}
+        </div>
+        <div style={{ fontSize:13, color:COULEURS.gris600, marginTop:2 }}>
+          Cliquez sur une ligne pour ouvrir le dossier complet du bénéficiaire.
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:18 }}>
+        {KPIS.map(k => (
+          <div key={k.l} style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`,
+            borderRadius:12, padding:'13px 16px', borderLeft:`3px solid ${k.c}` }}>
+            <div style={{ fontSize:11, color:COULEURS.gris400, textTransform:'uppercase', letterSpacing:'.05em', fontWeight:700 }}>{k.l}</div>
+            <div style={{ fontSize:22, fontWeight:800, color:k.c, marginTop:3, fontVariantNumeric:'tabular-nums' }}>{k.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:'flex', gap:9, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
+        <input value={recherche} onChange={e => { setRecherche(e.target.value); setPage(1); }}
+          placeholder="🔍 Nom, e-mail, téléphone, classe…"
+          style={{ ...champ, flex:'1 1 240px', minWidth:200 }} />
+        <select value={fClasse} onChange={e => { setFClasse(e.target.value); setPage(1); }} style={champ}>
+          <option value="">Toutes les classes</option>
+          {nomsClasses.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <select value={fNiveau} onChange={e => { setFNiveau(e.target.value); setPage(1); }} style={champ}>
+          <option value="">Tous les niveaux</option>
+          {niveaux.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <select value={fStatut} onChange={e => { setFStatut(e.target.value); setPage(1); }} style={champ}>
+          <option value="">Tous les statuts</option>
+          {Object.entries(STATUTS_CFG).map(([k, c]) => <option key={k} value={k}>{c.lib}</option>)}
+        </select>
+        {(recherche || fClasse || fNiveau || fStatut) && (
+          <button onClick={() => { setRecherche(''); setFClasse(''); setFNiveau(''); setFStatut(''); setPage(1); }}
+            style={{ ...champ, cursor:'pointer', fontWeight:700, color:COULEURS.gris600 }}>✕ Réinitialiser</button>
+        )}
+      </div>
+
+      {apprenants.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'56px 20px', border:`2px dashed ${COULEURS.gris200}`, borderRadius:16, color:COULEURS.gris400 }}>
+          <div style={{ fontSize:44, marginBottom:12 }}>👥</div>
+          <div style={{ fontSize:15, fontWeight:600, marginBottom:6 }}>Aucun bénéficiaire</div>
+          <div style={{ fontSize:13 }}>Vos salariés apparaîtront ici dès leur assignation à une classe par l'équipe BET.</div>
+        </div>
+      ) : triees.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'40px 20px', background:COULEURS.gris50, borderRadius:12, color:COULEURS.gris400, fontSize:13 }}>
+          Aucun bénéficiaire ne correspond à ces critères.
+        </div>
+      ) : (
+        <div style={{ border:`1px solid ${COULEURS.gris200}`, borderRadius:14, overflow:'hidden', background:COULEURS.blanc }}>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', minWidth:740 }}>
+              <thead>
+                <tr style={{ background:COULEURS.gris50, borderBottom:`1px solid ${COULEURS.gris200}` }}>
+                  {enTete('nom', 'Bénéficiaire')}
+                  {enTete('classe', 'Classe')}
+                  <th style={{ padding:'10px 12px', fontSize:11, color:COULEURS.gris600, textTransform:'uppercase', textAlign:'left', fontWeight:700 }}>Coach</th>
+                  {enTete('niveau', 'Niveau', 'center')}
+                  {enTete('date', 'Inscrit le')}
+                  {enTete('statut', 'Statut', 'center')}
+                  <th style={{ padding:'10px 12px', fontSize:11, color:COULEURS.gris600, textTransform:'uppercase', textAlign:'center', fontWeight:700 }}>Accès</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibles.map(a => {
+                  const st  = statutDe(a);
+                  const cfg = STATUTS_CFG[st] || STATUTS_CFG.actif;
+                  const nom = nomDe(a);
+                  const initiales = nom.split(/\s+/).map(p => p[0] || '').slice(0, 2).join('').toUpperCase();
+                  return (
+                    <tr key={a.id} onClick={() => setModalBenef(a)}
+                      title={`Ouvrir le dossier de ${nom}`}
+                      style={{ borderBottom:`1px solid ${COULEURS.gris100}`, cursor:'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = COULEURS.gris50; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      <td style={td}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <div style={{ width:32, height:32, borderRadius:'50%', background:`${couleur}1a`, color:couleur,
+                            display:'flex', alignItems:'center', justifyContent:'center', fontSize:11.5, fontWeight:800, flexShrink:0 }}>
+                            {initiales || '—'}
+                          </div>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontWeight:700 }}>{nom}</div>
+                            <div style={{ fontSize:11.5, color:COULEURS.gris400 }}>{a.email || '—'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={td}>{classeDe(a)}</td>
+                      <td style={{ ...td, color:COULEURS.gris600 }}>{a.coach_nom || '—'}</td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        {a.niveau_cecr ? (
+                          <span style={{ background:`${NIV_COULEUR_ENT[a.niveau_cecr] || COULEURS.gris400}22`,
+                            color:NIV_COULEUR_ENT[a.niveau_cecr] || COULEURS.gris600,
+                            borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:800 }}>{a.niveau_cecr}</span>
+                        ) : <span style={{ color:COULEURS.gris400 }}>—</span>}
+                      </td>
+                      <td style={{ ...td, color:COULEURS.gris600, whiteSpace:'nowrap' }}>{fmtDateFr(a.date_inscription)}</td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <span style={{ background:cfg.bg, color:cfg.txt, borderRadius:20, padding:'3px 11px', fontSize:11, fontWeight:700 }}>{cfg.lib}</span>
+                      </td>
+                      {/* L'ACCÈS À LA PLATEFORME N'EST PAS LE STATUT. Un bénéficiaire peut être
+                          actif au contrat sans que son compte soit ouvert : la RH relance
+                          l'équipe BET sur cette colonne-là, pas sur la précédente. */}
+                      <td style={{ ...td, textAlign:'center' }}>
+                        {a.acces_elearning
+                          ? <span title="Compte e-learning ouvert" style={{ color:COULEURS.succes, fontWeight:800 }}>✓</span>
+                          : <span title="Compte e-learning pas encore ouvert" style={{ color:COULEURS.gris400 }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {nbPages > 1 && (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'12px 0' }}>
+              <span style={{ fontSize:11.5, color:COULEURS.gris400, marginRight:4 }}>
+                Page {pageSure}/{nbPages} · {triees.length} bénéficiaire{triees.length !== 1 ? 's' : ''}
+              </span>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSure === 1}
+                style={{ ...champ, cursor: pageSure === 1 ? 'default' : 'pointer', opacity: pageSure === 1 ? .5 : 1, fontWeight:700 }}>← Préc.</button>
+              <button onClick={() => setPage(p => Math.min(nbPages, p + 1))} disabled={pageSure === nbPages}
+                style={{ ...champ, cursor: pageSure === nbPages ? 'default' : 'pointer', opacity: pageSure === nbPages ? .5 : 1, fontWeight:700 }}>Suiv. →</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {modalBenef && (
+        <ModalDetailBeneficiaire
+          benef={modalBenef}
+          classe={classeObjDe(modalBenef)}
+          couleurEnt={couleur}
+          onFermer={() => setModalBenef(null)}
+          onStatutChange={(id, nouveau) => setStatutsLocaux(p => ({ ...p, [id]: nouveau }))}
+        />
+      )}
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   ONGLET « PRÉSENCES & SESSIONS LIVE »
+
+   Ce que la RH ne pouvait pas savoir : si les cours qu'elle finance ont réellement eu lieu,
+   combien de temps ils ont duré, et qui de ses salariés y était. L'état `sessions` du
+   dashboard était déclaré et jamais rempli — aucune route ne les lui servait.
+
+   LES CHIFFRES PORTENT SUR CE QUI A EU LIEU. Un taux de présence calculé sur les séances
+   encore à venir vaudrait toujours zéro et ferait paniquer sur une formation qui se déroule
+   normalement : seules les séances RÉALISÉES entrent dans les moyennes.
+══════════════════════════════════════════════════════════════════════════════════════════ */
+function OngletPresencesSessions({ classes, apprenants, couleurEnt }) {
+  const { couleurTheme } = useTheme();
+  const couleur = couleurEnt || couleurTheme;
+
+  const [seances, setSeances] = useState(null);   // null = chargement
+  const [fClasse, setFClasse] = useState('');
+  const [fEtat,   setFEtat]   = useState('');
+  const [detail,  setDetail]  = useState(null);
+  const [page,    setPage]    = useState(1);
+  const PAR_PAGE = 12;
+
+  useEffect(() => {
+    let vivant = true;
+    fetch(`${API_URL}/api/entreprise/elearning/seances`, { headers: authHeaders() })
+      .then(r => (r.ok ? r.json() : { seances: [] }))
+      .then(d => { if (vivant) setSeances(Array.isArray(d.seances) ? d.seances : []); })
+      .catch(() => { if (vivant) setSeances([]); });
+    return () => { vivant = false; };
+  }, []);
+
+  const toutes  = seances || [];
+  const tenues  = toutes.filter(s => s.statut === 'realisee');
+  const annulees = toutes.filter(s => s.statut === 'annulee');
+  const aVenir  = toutes.filter(s => !['realisee', 'annulee'].includes(s.statut));
+
+  /* Le taux global rapporte les présences relevées au nombre de places attendues sur les
+     séances tenues — et non au nombre de lignes de présence saisies, qui ne compte que ceux
+     que le coach a pointés. */
+  const placesAttendues = tenues.reduce((n, s) => n + (s.effectif_classe || 0), 0);
+  const presencesTotal  = tenues.reduce((n, s) => n + (s.nb_presents || 0), 0);
+  const tauxGlobal = placesAttendues ? Math.round((presencesTotal / placesAttendues) * 100) : null;
+
+  // Heures réellement passées en salle, et non les heures annoncées au planning.
+  const minutesSuivies = tenues.reduce((n, s) => {
+    const reel = s.duree_reelle_s != null ? Math.round(s.duree_reelle_s / 60)
+      : (s.demarree_at && s.terminee_at
+          ? Math.max(0, Math.round((new Date(s.terminee_at) - new Date(s.demarree_at)) / 60000))
+          : null);
+    return n + (reel ?? 0);
+  }, 0);
+  const minutesPrevues = tenues.reduce((n, s) => n + (s.duree_minutes || 0), 0);
+
+  /* Assiduité par bénéficiaire : combien de séances tenues de SA classe il a suivies.
+     On ne divise pas par le total de toutes les classes — un salarié d'une classe qui n'a
+     eu qu'une séance apparaîtrait sinon comme un décrocheur. */
+  const assiduite = apprenants.map(a => {
+    const sesSeances = tenues.filter(s => s.classe_id === (a.classe_id || a.groupe_id));
+    const suivies = sesSeances.filter(s =>
+      (s.presences || []).some(p => p.inscription_id === a.id && ['present', 'retard'].includes(p.statut))).length;
+    const taux = sesSeances.length ? Math.round((suivies / sesSeances.length) * 100) : null;
+    return { ...a, nb_seances: sesSeances.length, suivies, taux };
+  });
+  const aRisque = assiduite.filter(a => a.taux !== null && a.taux < 70);
+
+  const KPIS = [
+    { l: 'Séances programmées', v: toutes.length,  c: couleur,           s: `${aVenir.length} à venir` },
+    { l: 'Séances tenues',      v: tenues.length,  c: COULEURS.succes,   s: annulees.length ? `${annulees.length} annulée${annulees.length > 1 ? 's' : ''}` : 'aucune annulation' },
+    { l: 'Taux de présence',    v: tauxGlobal === null ? '—' : `${tauxGlobal}%`,
+      c: tauxGlobal === null ? COULEURS.gris400 : tauxGlobal >= 80 ? COULEURS.succes : tauxGlobal >= 60 ? COULEURS.attention : COULEURS.erreur,
+      s: placesAttendues ? `${presencesTotal}/${placesAttendues} présences` : 'aucune séance tenue' },
+    { l: 'Heures suivies',      v: `${Math.floor(minutesSuivies / 60)}h${String(minutesSuivies % 60).padStart(2, '0')}`,
+      c: '#0891B2', s: minutesPrevues ? `sur ${Math.floor(minutesPrevues / 60)}h prévues` : '—' },
+    { l: 'Absences relevées',   v: tenues.reduce((n, s) => n + (s.nb_absents || 0), 0),
+      c: COULEURS.erreur, s: `${tenues.reduce((n, s) => n + (s.nb_retards || 0), 0)} retard(s)` },
+    { l: 'Assiduité < 70 %',    v: aRisque.length, c: aRisque.length ? COULEURS.attention : COULEURS.succes,
+      s: aRisque.length ? 'à suivre' : 'aucun décrochage' },
+  ];
+
+  const nomsClasses = [...new Set(toutes.map(s => s.classe_nom).filter(Boolean))].sort();
+  const filtrees = toutes.filter(s => {
+    if (fClasse && s.classe_nom !== fClasse) return false;
+    if (fEtat === 'tenues' && s.statut !== 'realisee') return false;
+    if (fEtat === 'avenir' && ['realisee', 'annulee'].includes(s.statut)) return false;
+    if (fEtat === 'annulees' && s.statut !== 'annulee') return false;
+    return true;
+  });
+  const nbPages  = Math.max(1, Math.ceil(filtrees.length / PAR_PAGE));
+  const pageSure = Math.min(page, nbPages);
+  const visibles = filtrees.slice((pageSure - 1) * PAR_PAGE, pageSure * PAR_PAGE);
+
+  const th = { padding:'10px 12px', fontSize:11, color:COULEURS.gris600, textTransform:'uppercase', textAlign:'left', fontWeight:700, whiteSpace:'nowrap' };
+  const td = { padding:'11px 12px', fontSize:13, color:COULEURS.navy };
+  const champ = { padding:'8px 11px', borderRadius:8, border:`1.5px solid ${COULEURS.gris200}`, fontSize:12.5, fontFamily:'inherit', outline:'none', background:COULEURS.blanc };
+  const hhmmSeance = (h) => (h ? String(h).slice(0, 5) : '—');
+
+  const reelMinDe = (s) => s.duree_reelle_s != null ? Math.round(s.duree_reelle_s / 60)
+    : (s.demarree_at && s.terminee_at ? Math.max(0, Math.round((new Date(s.terminee_at) - new Date(s.demarree_at)) / 60000)) : null);
+
+  if (seances === null) {
+    return <div style={{ textAlign:'center', padding:60, color:COULEURS.gris400 }}>Chargement des séances…</div>;
+  }
+
+  return (
+    <>
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:COULEURS.navy }}>✅ Présences & sessions live</div>
+        <div style={{ fontSize:13, color:COULEURS.gris600, marginTop:2 }}>
+          Les séances programmées par le coach pour vos classes, et qui y était.
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:12, marginBottom:20 }}>
+        {KPIS.map(k => (
+          <div key={k.l} style={{ background:COULEURS.blanc, border:`1px solid ${COULEURS.gris200}`, borderRadius:12, padding:'13px 16px', borderLeft:`3px solid ${k.c}` }}>
+            <div style={{ fontSize:11, color:COULEURS.gris400, textTransform:'uppercase', letterSpacing:'.05em', fontWeight:700 }}>{k.l}</div>
+            <div style={{ fontSize:22, fontWeight:800, color:k.c, marginTop:3, fontVariantNumeric:'tabular-nums' }}>{k.v}</div>
+            <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:2 }}>{k.s}</div>
+          </div>
+        ))}
+      </div>
+
+      {toutes.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'56px 20px', border:`2px dashed ${COULEURS.gris200}`, borderRadius:16, color:COULEURS.gris400 }}>
+          <div style={{ fontSize:44, marginBottom:12 }}>📅</div>
+          <div style={{ fontSize:15, fontWeight:600, marginBottom:6 }}>Aucune séance programmée</div>
+          <div style={{ fontSize:13 }}>Les sessions apparaîtront ici dès que le coach les aura planifiées.</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ display:'flex', gap:9, marginBottom:14, flexWrap:'wrap' }}>
+            <select value={fClasse} onChange={e => { setFClasse(e.target.value); setPage(1); }} style={champ}>
+              <option value="">Toutes les classes</option>
+              {nomsClasses.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            {[['', 'Toutes'], ['avenir', 'À venir'], ['tenues', 'Tenues'], ['annulees', 'Annulées']].map(([v, l]) => (
+              <button key={v} onClick={() => { setFEtat(v); setPage(1); }}
+                style={{ ...champ, cursor:'pointer', fontWeight:700,
+                  border:`1.5px solid ${fEtat === v ? couleur : COULEURS.gris200}`,
+                  background: fEtat === v ? `${couleur}14` : COULEURS.blanc,
+                  color: fEtat === v ? couleur : COULEURS.gris600 }}>{l}</button>
+            ))}
+          </div>
+
+          <div style={{ border:`1px solid ${COULEURS.gris200}`, borderRadius:14, overflow:'hidden', background:COULEURS.blanc, marginBottom:24 }}>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', minWidth:800 }}>
+                <thead>
+                  <tr style={{ background:COULEURS.gris50, borderBottom:`1px solid ${COULEURS.gris200}` }}>
+                    <th style={th}>Date</th><th style={th}>Horaire</th><th style={th}>Classe</th>
+                    <th style={th}>Coach</th><th style={{ ...th, textAlign:'center' }}>Présents</th>
+                    <th style={{ ...th, textAlign:'center' }}>Durée réelle</th>
+                    <th style={{ ...th, textAlign:'center' }}>Salle</th><th style={{ ...th, textAlign:'center' }}>État</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibles.map(s => {
+                    const acc    = accesSalle(s);
+                    const reel   = reelMinDe(s);
+                    const tenue  = s.statut === 'realisee';
+                    const ratio  = s.effectif_classe ? (s.nb_presents || 0) / s.effectif_classe : null;
+                    const lien   = s.lien_zoom || s.lien_meet || s.lien_teams;
+                    return (
+                      <tr key={s.id} onClick={() => setDetail(s)} title="Voir le détail et la liste de présence"
+                        style={{ borderBottom:`1px solid ${COULEURS.gris100}`, cursor:'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = COULEURS.gris50; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                        <td style={{ ...td, fontWeight:700, whiteSpace:'nowrap' }}>{fmtDateFr(s.date)}</td>
+                        <td style={{ ...td, color:COULEURS.gris600, whiteSpace:'nowrap' }}>
+                          {hhmmSeance(s.heure_debut)}{s.heure_fin ? ` → ${hhmmSeance(s.heure_fin)}` : ''}
+                        </td>
+                        <td style={td}>{s.classe_nom || '—'}</td>
+                        <td style={{ ...td, color:COULEURS.gris600 }}>{s.coach_nom || '—'}</td>
+                        <td style={{ ...td, textAlign:'center', fontVariantNumeric:'tabular-nums' }}>
+                          {tenue ? (
+                            <span style={{ fontWeight:800,
+                              color: ratio === null ? COULEURS.gris600 : ratio >= .8 ? COULEURS.succes : ratio >= .5 ? COULEURS.attention : COULEURS.erreur }}>
+                              {s.nb_presents || 0}/{s.effectif_classe || 0}
+                            </span>
+                          ) : <span style={{ color:COULEURS.gris400 }}>—</span>}
+                        </td>
+                        {/* LA DURÉE RÉELLE, PAS CELLE DU PLANNING. C'est la seule qui dise si
+                            un cours de deux heures a duré deux heures. */}
+                        <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap' }}>
+                          {reel === null ? <span style={{ color:COULEURS.gris400 }}>—</span> : (
+                            <span style={{ fontWeight:700,
+                              color: s.duree_minutes && reel < s.duree_minutes * 0.75 ? COULEURS.erreur : COULEURS.gris900 }}>
+                              {reel} min
+                              {s.duree_minutes ? <span style={{ color:COULEURS.gris400, fontWeight:500 }}> / {s.duree_minutes}</span> : null}
+                            </span>
+                          )}
+                        </td>
+                        {/* LE LIEN EST DONNÉ À LA RH, pas seulement son état. Elle assiste
+                            aux séances qu'elle finance — se contenter d'une pastille verte
+                            l'obligeait à redemander l'adresse au coach. Même règle que
+                            partout : rien avant H-10, rien après la clôture. Le clic
+                            n'ouvre pas le détail de la séance : `stopPropagation`. */}
+                        <td style={{ ...td, textAlign:'center' }}>
+                          {acc.close ? <span style={{ color:COULEURS.gris400, fontSize:11.5 }} title={acc.raison}>🔒 Fermée</span>
+                            : acc.presentiel ? <span style={{ fontSize:11.5, color:COULEURS.gris600 }} title="Séance en présentiel, aucune salle à ouvrir">🏢 Présentiel</span>
+                            : !lien ? <span style={{ color:'#B45309', fontSize:11.5, fontWeight:600 }} title="Séance en ligne sans lien de visio">⚠️ Lien manquant</span>
+                            : acc.joignable ? (
+                              <a href={lien} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, fontSize:11.5, fontWeight:800,
+                                  background: acc.enDirect ? '#FEE2E2' : '#D1FAE5', color: acc.enDirect ? '#991B1B' : '#065F46', textDecoration:'none', whiteSpace:'nowrap' }}>
+                                {acc.enDirect ? '▶ En direct' : '🔗 Rejoindre'}
+                              </a>
+                            )
+                            : <span style={{ color:COULEURS.gris400, fontSize:11.5 }} title={`La salle ouvre ${MINUTES_OUVERTURE_SALLE} min avant le début`}>🔒 {acc.libelleAttente}</span>}
+                        </td>
+                        <td style={{ ...td, textAlign:'center' }}>
+                          <span style={{ borderRadius:20, padding:'3px 10px', fontSize:10.5, fontWeight:700,
+                            background: tenue ? '#D1FAE5' : s.statut === 'annulee' ? '#FEE2E2' : '#E0F2FE',
+                            color:      tenue ? '#065F46' : s.statut === 'annulee' ? '#991B1B' : '#0369A1' }}>
+                            {tenue ? 'Tenue' : s.statut === 'annulee' ? 'Annulée' : 'À venir'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {nbPages > 1 && (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'12px 0' }}>
+                <span style={{ fontSize:11.5, color:COULEURS.gris400, marginRight:4 }}>Page {pageSure}/{nbPages} · {filtrees.length} séance{filtrees.length !== 1 ? 's' : ''}</span>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSure === 1}
+                  style={{ ...champ, cursor: pageSure === 1 ? 'default' : 'pointer', opacity: pageSure === 1 ? .5 : 1, fontWeight:700 }}>← Préc.</button>
+                <button onClick={() => setPage(p => Math.min(nbPages, p + 1))} disabled={pageSure === nbPages}
+                  style={{ ...champ, cursor: pageSure === nbPages ? 'default' : 'pointer', opacity: pageSure === nbPages ? .5 : 1, fontWeight:700 }}>Suiv. →</button>
+              </div>
+            )}
+          </div>
+
+          {/* Assiduité par bénéficiaire */}
+          <div style={{ fontSize:14, fontWeight:800, color:COULEURS.navy, marginBottom:10 }}>👥 Assiduité par bénéficiaire</div>
+          {assiduite.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'30px 20px', background:COULEURS.gris50, borderRadius:12, color:COULEURS.gris400, fontSize:13 }}>
+              Aucun bénéficiaire rattaché à une classe.
+            </div>
+          ) : (
+            <div style={{ border:`1px solid ${COULEURS.gris200}`, borderRadius:14, overflow:'hidden', background:COULEURS.blanc }}>
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', minWidth:560 }}>
+                  <thead>
+                    <tr style={{ background:COULEURS.gris50, borderBottom:`1px solid ${COULEURS.gris200}` }}>
+                      <th style={th}>Bénéficiaire</th><th style={th}>Classe</th>
+                      <th style={{ ...th, textAlign:'center' }}>Séances suivies</th>
+                      <th style={{ ...th, textAlign:'left' }}>Assiduité</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...assiduite].sort((a, b) => (a.taux ?? 101) - (b.taux ?? 101)).map(a => {
+                      const c = a.taux === null ? COULEURS.gris400 : a.taux >= 80 ? COULEURS.succes : a.taux >= 70 ? COULEURS.attention : COULEURS.erreur;
+                      return (
+                        <tr key={a.id} style={{ borderBottom:`1px solid ${COULEURS.gris100}` }}>
+                          <td style={{ ...td, fontWeight:600 }}>{a.nom_complet || `${a.prenom || ''} ${a.nom || ''}`.trim() || '—'}</td>
+                          <td style={{ ...td, color:COULEURS.gris600 }}>{a.classe_nom || a.groupe_nom || '—'}</td>
+                          <td style={{ ...td, textAlign:'center', fontVariantNumeric:'tabular-nums' }}>
+                            {a.nb_seances ? `${a.suivies}/${a.nb_seances}` : <span style={{ color:COULEURS.gris400 }}>—</span>}
+                          </td>
+                          <td style={td}>
+                            {a.taux === null ? (
+                              /* Aucune séance tenue dans sa classe : « 0 % » serait un
+                                 reproche adressé à quelqu'un qui n'a rien pu manquer. */
+                              <span style={{ fontSize:12, color:COULEURS.gris400 }}>aucune séance tenue</span>
+                            ) : (
+                              <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                                <div style={{ flex:1, maxWidth:160, height:7, borderRadius:20, background:COULEURS.gris100, overflow:'hidden' }}>
+                                  <div style={{ width:`${a.taux}%`, height:'100%', background:c, borderRadius:20 }} />
+                                </div>
+                                <span style={{ fontSize:12.5, fontWeight:800, color:c, fontVariantNumeric:'tabular-nums' }}>{a.taux}%</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {detail && <ModalSeanceEntreprise seance={detail} couleur={couleur} onFermer={() => setDetail(null)} />}
+    </>
+  );
+}
+
+/** Le détail d'une séance vu par la RH : ce qui était prévu, ce qui a eu lieu, et qui y était. */
+function ModalSeanceEntreprise({ seance, couleur, onFermer }) {
+  const acc  = accesSalle(seance);
+  const reel = seance.duree_reelle_s != null ? Math.round(seance.duree_reelle_s / 60)
+    : (seance.demarree_at && seance.terminee_at
+        ? Math.max(0, Math.round((new Date(seance.terminee_at) - new Date(seance.demarree_at)) / 60000)) : null);
+  const hhmmS = (h) => (h ? String(h).slice(0, 5) : '—');
+  const hhmmISO = (iso) => (iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '—');
+
+  const P_STATUT = {
+    present: { c:'#15803D', bg:'#DCFCE7', l:'Présent' },
+    absent:  { c:'#B91C1C', bg:'#FEE2E2', l:'Absent'  },
+    retard:  { c:'#B45309', bg:'#FEF9C3', l:'Retard'  },
+    excuse:  { c:'#4F46E5', bg:'#E0E7FF', l:'Excusé'  },
+  };
+  const lignes = [
+    ['Classe', seance.classe_nom || '—'],
+    ['Coach',  seance.coach_nom  || '—'],
+    ['Date',   fmtDateFr(seance.date)],
+    ['Horaire prévu', `${hhmmS(seance.heure_debut)}${seance.heure_fin ? ` → ${hhmmS(seance.heure_fin)}` : ''}${seance.duree_minutes ? ` (${seance.duree_minutes} min)` : ''}`],
+    ['Modalité', acc.presentiel ? '🏢 Présentiel' : '📡 En ligne'],
+    ['État', seance.statut || '—'],
+  ];
+
+  return (
+    <>
+      <div onClick={onFermer} style={{ position:'fixed', inset:0, background:'rgba(10,18,35,0.6)', zIndex:1200, backdropFilter:'blur(3px)' }} />
+      <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'min(92vw,560px)', background:COULEURS.blanc, zIndex:1201,
+        display:'flex', flexDirection:'column', boxShadow:'-8px 0 40px rgba(0,0,0,0.2)' }}>
+        <div style={{ background:couleur, padding:'18px 22px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexShrink:0 }}>
+          <div>
+            <div style={{ fontSize:10.5, fontWeight:700, color:'rgba(255,255,255,0.65)', textTransform:'uppercase', letterSpacing:'.07em' }}>Séance</div>
+            <div style={{ fontSize:16, fontWeight:800, color:'#fff', marginTop:4 }}>{seance.objectifs_session || seance.classe_nom || 'Séance'}</div>
+          </div>
+          <button onClick={onFermer} style={{ background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:8,
+            width:30, height:30, color:'#fff', fontSize:15, cursor:'pointer', flexShrink:0 }}>✕</button>
+        </div>
+
+        <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+            {lignes.map(([l, v]) => (
+              <div key={l} style={{ display:'flex', justifyContent:'space-between', gap:12, fontSize:12.5 }}>
+                <span style={{ color:COULEURS.gris400 }}>{l}</span>
+                <span style={{ fontWeight:600, color:COULEURS.navy, textAlign:'right' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          {(seance.demarree_at || reel !== null) && (
+            <div style={{ marginTop:16, background:'#F0FDF4', border:'1.5px solid #BBF7D0', borderRadius:12, padding:'14px 16px' }}>
+              <div style={{ fontSize:11, fontWeight:800, color:'#15803D', letterSpacing:'.05em', marginBottom:10 }}>DÉROULÉ RÉEL</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:12 }}>
+                {[['Ouverte à', hhmmISO(seance.demarree_at)], ['Fermée à', hhmmISO(seance.terminee_at)],
+                  ['Temps en salle', reel !== null ? `${reel} min` : 'non relevé'],
+                  ['Prévu', seance.duree_minutes ? `${seance.duree_minutes} min` : '—']].map(([l, v]) => (
+                  <div key={l}>
+                    <div style={{ fontSize:10, fontWeight:800, color:COULEURS.gris400, textTransform:'uppercase' }}>{l}</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:COULEURS.navy, marginTop:2 }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {seance.compte_rendu && (
+            <div style={{ marginTop:16 }}>
+              <div style={{ fontSize:11, fontWeight:800, color:COULEURS.gris400, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Compte rendu du coach</div>
+              <div style={{ background:COULEURS.gris50, borderRadius:10, padding:'11px 14px', fontSize:12.5, color:COULEURS.navy, lineHeight:1.65, whiteSpace:'pre-wrap' }}>{seance.compte_rendu}</div>
+            </div>
+          )}
+
+          {/* L'accès à la salle, sous la règle commune — la RH y entre comme les autres. */}
+          {(() => {
+            const lienSalle = seance.lien_zoom || seance.lien_meet || seance.lien_teams;
+            const base = { marginTop:18, padding:10, borderRadius:9, fontWeight:700, fontSize:12.5, textAlign:'center' };
+            if (acc.close) return <div style={{ ...base, background:COULEURS.gris100, color:COULEURS.gris400 }}>🔒 {acc.raison}</div>;
+            if (acc.presentiel) return null;
+            if (!lienSalle) return <div style={{ ...base, background:'#FEF3C7', color:'#92400E' }}>⚠️ Séance en ligne sans lien de visio</div>;
+            if (acc.joignable) return (
+              <a href={lienSalle} target="_blank" rel="noreferrer"
+                style={{ ...base, display:'block', background: acc.enDirect ? '#B91C1C' : COULEURS.succes, color:'#fff', fontWeight:800, fontSize:13, textDecoration:'none' }}>
+                {acc.enDirect ? '▶ Rejoindre maintenant' : '🔗 Rejoindre la séance'}
+              </a>
+            );
+            return (
+              <div style={{ ...base, background:COULEURS.gris100, color:COULEURS.gris400 }}>
+                🔒 {acc.libelleAttente}
+                <div style={{ fontWeight:600, fontSize:11, marginTop:3 }}>La salle ouvre {MINUTES_OUVERTURE_SALLE} min avant le début du cours.</div>
+              </div>
+            );
+          })()}
+
+          <div style={{ marginTop:20, paddingTop:16, borderTop:`1px solid ${COULEURS.gris100}` }}>
+            <div style={{ fontSize:13, fontWeight:700, color:COULEURS.navy, marginBottom:10 }}>
+              👥 Liste de présence
+              {(seance.presences || []).length > 0 && (
+                <span style={{ fontWeight:600, color:COULEURS.gris400, fontSize:12 }}> — {seance.nb_presents}/{seance.effectif_classe}</span>
+              )}
+            </div>
+            {(seance.presences || []).length === 0 ? (
+              <div style={{ fontSize:12, color:COULEURS.gris400, lineHeight:1.6 }}>
+                {acc.close
+                  ? "Présences non saisies pour cette séance clôturée — à signaler à l'équipe BET."
+                  : "Présences pas encore enregistrées : le coach les saisit en clôturant la séance."}
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {seance.presences.map(p => {
+                  const ps = P_STATUT[p.statut] || { c:COULEURS.gris600, bg:COULEURS.gris100, l:p.statut || '—' };
+                  return (
+                    <div key={p.inscription_id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10,
+                      padding:'7px 11px', background:COULEURS.gris50, borderRadius:8 }}>
+                      <div>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:COULEURS.navy }}>{p.nom || '—'}</div>
+                        {p.duree_connexion_min != null && (
+                          <div style={{ fontSize:10.5, color:COULEURS.gris400 }}>⏱ {p.duree_connexion_min} min en salle</div>
+                        )}
+                      </div>
+                      <span style={{ background:ps.bg, color:ps.c, borderRadius:99, padding:'2px 9px', fontSize:10, fontWeight:700, whiteSpace:'nowrap' }}>{ps.l}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Composant principal ────────────────────────────────────────────────────────
 
 const CHEMIN_VERS_ONGLET = {
   '/entreprise/dashboard':     'tableau_bord',
+  '/entreprise/classes':       'classes',
   '/entreprise/beneficiaires': 'beneficiaires',
+  '/entreprise/presences':     'presences',
   '/entreprise/inscription':   'inscriptions',
   '/entreprise/rapports':      'rapports',
   '/entreprise/paiements':     'paiements',
@@ -3974,8 +4639,16 @@ export default function DashboardEntreprise() {
           />
         )}
 
+        {ongletActif === 'classes' && (
+          <OngletClasses apprenants={apprenants} groupes={groupes} classes={classes} couleurEnt={couleurEnt} />
+        )}
+
         {ongletActif === 'beneficiaires' && (
-          <OngletBeneficiaires apprenants={apprenants} groupes={groupes} classes={classes} couleurEnt={couleurEnt} />
+          <OngletBeneficiairesListe apprenants={apprenants} classes={classes} groupes={groupes} couleurEnt={couleurEnt} />
+        )}
+
+        {ongletActif === 'presences' && (
+          <OngletPresencesSessions classes={classes} apprenants={apprenants} couleurEnt={couleurEnt} />
         )}
 
         {ongletActif === 'inscriptions' && (

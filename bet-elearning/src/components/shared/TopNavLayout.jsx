@@ -6,6 +6,7 @@ import { useNotifications } from '../../contexts/NotificationsContext';
 import { COULEURS } from '../../constants/couleurs';
 import { LIBELLES_ROLES, pageConnexionDe, estRole } from '../../constants/roles';
 import BandeauMaNote from './BandeauMaNote';
+import { MentionsCoach, HeuresDuMois } from './IdentiteCoach';
 import { MOCK_ENTREPRISES } from '../../mock/entreprises';
 import BoutonLangue from './BoutonLangue';
 import { useTheme, PALETTE_THEME } from '../../contexts/ThemeContext';
@@ -204,8 +205,16 @@ const MENUS_PAR_ROLE = {
        des coachs : la voix des apprenants fait partie de ce qu'il doit lire pour les
        évaluer, au même titre que ses propres observations. */
     { libelle: 'Évaluations apprenants', icone: '🎓', chemin: '/admin/superviseur/eval-apprenants' },
+    /* LES NOTES DONNÉES PAR LES PARENTS, pendant du précédent. `avis_parents_coach` est
+       alimentée par bet-elearning — c'est même la seule plateforme qui collecte ces avis —
+       et son superviseur était pourtant le seul à ne pas pouvoir les lire. */
+    { libelle: 'Évaluations parents',    icone: '👨‍👩‍👧', chemin: '/admin/superviseur/eval-parents' },
     { libelle: 'Rapports Deputy',   icone: '📋', chemin: '/admin/superviseur/rapports-deputy' },
-    { libelle: 'Anomalies',         icone: '⚠️', chemin: '/admin/superviseur/anomalies' },
+    /* ANOMALIES MASQUÉ POUR LE MOMENT (demande du 15/10/2026). L'entrée disparaît du menu,
+       mais rien n'est supprimé : `OngletAnomaliesSuperviseur`, sa route dans DashboardAdmin
+       et les routes serveur restent en place — décommenter cette ligne et la tâche marquée
+       du même repère dans DashboardSuperviseur.jsx suffit à le rétablir. */
+    // { libelle: 'Anomalies',         icone: '⚠️', chemin: '/admin/superviseur/anomalies' },
     { libelle: 'Gestion Deputies',  icone: '👥', chemin: '/admin/superviseur/deputies' },
     { libelle: 'Notifications',     icone: '🔔', chemin: '/admin/notifications', notifications: true },
     { libelle: 'Messages',          icone: '💬', chemin: '/admin/messages', messagerie: true },
@@ -398,7 +407,12 @@ const MENUS_PAR_ROLE = {
   ],
   client_entreprise: [
     { libelle: 'Tableau de bord RH', icone: '🏠', chemin: '/entreprise/dashboard' },
+    /* CLASSES et BÉNÉFICIAIRES sont deux choses distinctes, et ne l'étaient pas :
+       « Bénéficiaires » ouvrait une grille de classes, si bien que la RH ne disposait
+       d'aucune liste nominative de ses salariés en formation. */
+    { libelle: 'Classes',            icone: '🏫', chemin: '/entreprise/classes' },
     { libelle: 'Bénéficiaires',      icone: '👥', chemin: '/entreprise/beneficiaires' },
+    { libelle: 'Présences & Live',   icone: '✅', chemin: '/entreprise/presences' },
     { libelle: 'Inscription',        icone: '➕', chemin: '/entreprise/inscription' },
     { libelle: 'Rapports',           icone: '📊', chemin: '/entreprise/rapports' },
     { libelle: 'Contrat & Paiements',icone: '💳', chemin: '/entreprise/paiements' },
@@ -1118,6 +1132,11 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
             <div style={S.infoSecondaire}>
               {profile?.email} · {description}
             </div>
+            {/* LES MENTIONS PROFESSIONNELLES DU COACH. Le header de dash les affiche
+                (spécialité, filière, niveaux, contrat, matricule) ; ici la ligne s'arrêtait
+                à « e-mail · Pédagogie ». Le composant se tait pour tous les autres rôles,
+                et pour un coach dont la fiche est vide. */}
+            {estRole(profile?.role, ['professeur_titulaire', 'professeur_remplacant']) && <MentionsCoach />}
           </div>
         </div>
         <div style={S.headerDroite}>
@@ -1126,6 +1145,10 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
               apprend son classement par quelqu'un d'autre. Le composant se charge seul et
               ne s'affiche que s'il obtient une réponse. */}
           {estRole(profile?.role, ['professeur_titulaire', 'professeur_remplacant']) && <BandeauMaNote />}
+          {/* « Ce mois · Xh dispensées » — les heures réellement passées en salle. Elle
+              existe côté dash et manquait ici : le coach n'avait aucun compteur de son
+              activité e-learning sous les yeux. */}
+          {estRole(profile?.role, ['professeur_titulaire', 'professeur_remplacant']) && <HeuresDuMois coachId={profile?.id} />}
           <div
             style={{ ...S.btnNotif, position: 'relative', cursor: 'pointer' }}
             title="Notifications"

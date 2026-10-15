@@ -45,7 +45,12 @@ export const ROUTES = {
 
   // Entreprise
   ENTREPRISE_DASHBOARD:  '/entreprise/dashboard',
+  /* `/entreprise/classes` montre les CLASSES, `/entreprise/beneficiaires` les APPRENANTS.
+     Les deux étaient confondus : l'onglet « Bénéficiaires » affichait en réalité une grille
+     de classes, et la RH n'avait aucune liste nominative de ses salariés en formation. */
+  ENTREPRISE_CLASSES:       '/entreprise/classes',
   ENTREPRISE_BENEFICIAIRES: '/entreprise/beneficiaires',
+  ENTREPRISE_PRESENCES:     '/entreprise/presences',
   ENTREPRISE_INSCRIPTION:   '/entreprise/inscription',
   ENTREPRISE_RAPPORTS:      '/entreprise/rapports',
 };

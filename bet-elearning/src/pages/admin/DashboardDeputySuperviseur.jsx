@@ -5,8 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { COULEURS } from '../../constants/couleurs';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { useTheme } from '../../contexts/ThemeContext';
-import DerouleReel, { dureeReelleMin } from '../../components/shared/DerouleReel';
-import { OngletMesTachesSuperviseur, OngletCahiersCoachs, OngletPlanningsElearning } from './DashboardSuperviseur';
+import { OngletMesTachesSuperviseur, OngletCahiersCoachs, OngletPlanningsElearning, OngletObserverCours } from './DashboardSuperviseur';
 
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const VIOLET = '#A855F7';
@@ -123,24 +122,12 @@ export default function DashboardDeputySuperviseur() {
   const [rapportsLoad,  setRapportsLoad]  = useState(false);
   const [missions,      setMissions]      = useState([]);
   const [missionsLoad,  setMissionsLoad]  = useState(false);
-  const [classes,       setClasses]       = useState([]);
-  const [classesLoad,   setClassesLoad]   = useState(false);
   const [coachs,        setCoachs]        = useState([]);
   const [kpi,           setKpi]           = useState({ rapports_soumis: 0, missions_actives: 0, derniere_observation: null });
 
-  // Modal Apprenants / Disponibilités et sessions - vue lecture seule d'une classe observée
-  const [classeDetail,        setClasseDetail]        = useState(null);
-  const [classeModalTab,      setClasseModalTab]      = useState('apprenants');
-  const [classeApprenants,    setClasseApprenants]    = useState([]);
-  const [classeAppLoading,    setClasseAppLoading]    = useState(false);
-  const [classeSessions,      setClasseSessions]      = useState([]);
-  const [classeSessionsLoad,  setClasseSessionsLoad]  = useState(false);
-
-  // Observer un cours - filtres
-  const [obsDateFrom,  setObsDateFrom]  = useState('');
-  const [obsDateTo,    setObsDateTo]    = useState('');
-  const [obsPage,      setObsPage]      = useState(1);
-  const OBS_PER_PAGE = 10;
+  /* La vue de classe observée, ses filtres et son chargement vivent désormais dans
+     `OngletObserverCours` (DashboardSuperviseur.jsx), partagé avec le superviseur général.
+     Les douze états qui les portaient ici n'avaient plus d'emploi. */
 
   // Rapports - filtres + pagination
   const [rapDateFrom, setRapDateFrom] = useState('');
@@ -215,19 +202,6 @@ export default function DashboardDeputySuperviseur() {
     }
   }, []);
 
-  const fetchClasses = useCallback(async () => {
-    setClassesLoad(true);
-    try {
-      const r = await fetch(`${_API}/api/classes-elearning`, { headers: authHdrs() });
-      const d = await r.json();
-      setClasses(d.classes || []);
-    } catch (e) {
-      console.error('[fetchClasses]', e.message);
-    } finally {
-      setClassesLoad(false);
-    }
-  }, []);
-
   const fetchCoachs = useCallback(async () => {
     try {
       const r = await fetch(`${_API}/api/superviseur/coachs-conformite`, { headers: authHdrs() });
@@ -255,28 +229,6 @@ export default function DashboardDeputySuperviseur() {
     }
   }
 
-  // Charger les apprenants d'une classe (lecture seule) - pour le bouton 👥 Apprenants
-  async function fetchClasseApprenants(classeId) {
-    setClasseAppLoading(true);
-    try {
-      const r = await fetch(`${_API}/api/classes-elearning/${classeId}/apprenants`, { headers: authHdrs() });
-      const d = await r.json();
-      setClasseApprenants(d.apprenants || []);
-    } catch { setClasseApprenants([]); }
-    finally { setClasseAppLoading(false); }
-  }
-
-  // Charger les séances programmées d'une classe (lecture seule) - pour l'onglet Disponibilités et sessions
-  async function fetchClasseSessions(classeId) {
-    setClasseSessionsLoad(true);
-    try {
-      const r = await fetch(`${_API}/api/elearning/seances?classe_id=${classeId}`, { headers: authHdrs() });
-      const d = await r.json();
-      setClasseSessions(d.seances || []);
-    } catch { setClasseSessions([]); }
-    finally { setClasseSessionsLoad(false); }
-  }
-
   // Init
   useEffect(() => {
     fetchRapports();
@@ -284,9 +236,8 @@ export default function DashboardDeputySuperviseur() {
   }, [fetchRapports, fetchMissions]);
 
   useEffect(() => {
-    if (activeTab === 'observer') fetchClasses();
     if (activeTab === 'rapports') fetchCoachs();
-  }, [activeTab, fetchClasses, fetchCoachs]);
+  }, [activeTab, fetchCoachs]);
 
   // ── Soumettre rapport ────────────────────────────────────────────────────
 
@@ -428,257 +379,6 @@ export default function DashboardDeputySuperviseur() {
             ))}
           </div>
         </div>
-      </div>
-    );
-  }
-
-  function renderObserver() {
-    const filtrees = classes.filter(cl => {
-      if (obsDateFrom && cl.date_debut && cl.date_debut < obsDateFrom) return false;
-      if (obsDateTo   && cl.date_debut && cl.date_debut > obsDateTo)   return false;
-      return true;
-    });
-    const totalPages = Math.max(1, Math.ceil(filtrees.length / OBS_PER_PAGE));
-    const pageSafe   = Math.min(obsPage, totalPages);
-    const pageItems  = filtrees.slice((pageSafe - 1) * OBS_PER_PAGE, pageSafe * OBS_PER_PAGE);
-
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: COULEURS.navy }}>👁️ Observer un cours</h2>
-            <p style={{ margin: '3px 0 0', fontSize: 12, color: COULEURS.gris400 }}>Accès en lecture seule aux classes actives</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <input type="date" value={obsDateFrom} onChange={e => { setObsDateFrom(e.target.value); setObsPage(1); }}
-              style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${obsDateFrom ? VIOLET : COULEURS.gris200}`, fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
-            <span style={{ fontSize: 11, color: COULEURS.gris400 }}>→</span>
-            <input type="date" value={obsDateTo} onChange={e => { setObsDateTo(e.target.value); setObsPage(1); }}
-              style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${obsDateTo ? VIOLET : COULEURS.gris200}`, fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
-            {(obsDateFrom || obsDateTo) && (
-              <button onClick={() => { setObsDateFrom(''); setObsDateTo(''); setObsPage(1); }}
-                style={{ padding: '4px 9px', borderRadius: 8, border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
-            )}
-            <button onClick={fetchClasses}
-              style={{ padding: '6px 14px', background: VIOLET_CLAIR, border: `1px solid ${VIOLET}40`, borderRadius: 8, fontSize: 12, color: VIOLET, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>↻ Actualiser</button>
-          </div>
-        </div>
-
-        {/* Infobanner */}
-        <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#1D4ED8', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <span>ℹ️</span>
-          <span>En tant que Deputy Superviseur, vous pouvez consulter toutes les classes en lecture seule. Après observation, soumettez un rapport dans l'onglet <strong>Mes rapports</strong>.</span>
-        </div>
-
-        {classesLoad ? (
-          <div style={{ textAlign: 'center', padding: 60, color: COULEURS.gris400 }}>Chargement…</div>
-        ) : filtrees.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', background: COULEURS.gris50, borderRadius: 14, border: `1px dashed ${COULEURS.gris200}` }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🏫</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: COULEURS.navy, marginBottom: 6 }}>Aucune classe trouvée</div>
-            <div style={{ fontSize: 13, color: COULEURS.gris400 }}>{(obsDateFrom || obsDateTo) ? 'Essayez de modifier les filtres de date.' : 'Aucune classe disponible pour le moment.'}</div>
-          </div>
-        ) : (
-          <>
-            {/* Pagination haut */}
-            {totalPages > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, justifyContent: 'center' }}>
-                <span style={{ fontSize: 11, color: COULEURS.gris400, marginRight: 4 }}>Page {pageSafe}/{totalPages} · {filtrees.length} classe{filtrees.length !== 1 ? 's' : ''}</span>
-                {[{l:'‹',v:-1},{l:'›',v:1}].map(({l,v}) => (
-                  <button key={l} onClick={() => setObsPage(p => Math.min(totalPages, Math.max(1, p + v)))}
-                    disabled={(v === -1 && pageSafe === 1) || (v === 1 && pageSafe === totalPages)}
-                    style={{ padding: '4px 10px', borderRadius: 7, border: `1.5px solid ${COULEURS.gris200}`, background: '#fff', fontSize: 13, cursor: 'pointer', color: COULEURS.navy, fontWeight: 600, fontFamily: 'inherit' }}>{l}</button>
-                ))}
-              </div>
-            )}
-
-            <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${COULEURS.gris200}`, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: COULEURS.gris50, borderBottom: `2px solid ${COULEURS.gris200}` }}>
-                    {['Classe', 'Niveau', 'Type', 'Coach', 'Apprenants', 'Début', 'Statut', 'Action'].map(h => (
-                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: COULEURS.gris600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageItems.map((cl, idx) => {
-                    const sCol = cl.statut === 'actif' ? { c: '#16a34a', bg: '#DCFCE7' } : cl.statut === 'termine' ? { c: '#475569', bg: '#F1F5F9' } : { c: '#D97706', bg: '#FEF9C3' };
-                    return (
-                      <tr key={cl.id} style={{ background: idx % 2 === 0 ? '#fff' : '#FAFAFA', borderBottom: `1px solid ${COULEURS.gris100}` }}>
-                        <td style={{ padding: '10px 14px', fontWeight: 600, color: COULEURS.navy }}>{cl.nom}</td>
-                        <td style={{ padding: '10px 14px' }}>{cl.niveau || '-'}</td>
-                        <td style={{ padding: '10px 14px' }}>{cl.type_cours === 'en_ligne' ? '💻 En ligne' : cl.type_cours === 'presentiel' ? '🏢 Présentiel' : '🔀 Hybride'}</td>
-                        <td style={{ padding: '10px 14px', color: COULEURS.gris600 }}>{cl.coach_nom || '-'}</td>
-                        <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#0891b2' }}>{cl.nb_apprenants ?? 0}</td>
-                        <td style={{ padding: '10px 14px', color: COULEURS.gris600 }}>{fmtDate(cl.date_debut)}</td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <span style={{ background: sCol.bg, color: sCol.c, padding: '2px 9px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
-                            {cl.statut === 'actif' ? '🟢 Actif' : cl.statut === 'termine' ? '⬛ Terminé' : '⏳ En attente'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              onClick={async () => { setClasseDetail(cl); setClasseModalTab('apprenants'); await Promise.all([fetchClasseApprenants(cl.id), fetchClasseSessions(cl.id)]); }}
-                              style={{ padding: '5px 12px', background: '#E0F2FE', border: '1px solid #BAE6FD', borderRadius: 7, fontSize: 11, color: '#0369A1', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                              👥 Apprenants
-                            </button>
-                            <button
-                              onClick={() => { setRapportForm(f => ({ ...f, classe: cl.nom, centre: lieuAutoClasse(cl) })); navigate('/admin/deputy-superviseur/rapports'); setTimeout(() => setShowRapportForm(true), 200); }}
-                              style={{ padding: '5px 12px', background: VIOLET_CLAIR, border: `1px solid ${VIOLET}40`, borderRadius: 7, fontSize: 11, color: VIOLET, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                              📋 Rapport
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {/* Modal Apprenants / Disponibilités et sessions - lecture seule */}
-        {classeDetail && (
-          <Modal title={`👥 ${classeDetail.nom}`} subtitle="Vue lecture seule" onClose={() => { setClasseDetail(null); setClasseApprenants([]); setClasseSessions([]); }} big>
-            <div style={{ display: 'flex', gap: 4, marginBottom: 18, background: COULEURS.gris50, borderRadius: 10, padding: 4, width: 'fit-content' }}>
-              {[
-                { id: 'apprenants',    label: `🎓 Apprenants${classeApprenants.length ? ` (${classeApprenants.length})` : ''}` },
-                { id: 'disponibilite', label: `📅 Disponibilités et sessions${classeSessions.length ? ` (${classeSessions.length})` : ''}` },
-              ].map(t => (
-                <button key={t.id} onClick={() => setClasseModalTab(t.id)}
-                  style={{ padding: '7px 14px', borderRadius: 7, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                    background: classeModalTab === t.id ? '#fff' : 'transparent',
-                    color: classeModalTab === t.id ? VIOLET : COULEURS.gris600,
-                    boxShadow: classeModalTab === t.id ? '0 1px 6px rgba(0,0,0,.08)' : 'none' }}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {classeModalTab === 'apprenants' && (
-              classeAppLoading ? (
-                <div style={{ textAlign: 'center', padding: 30, color: COULEURS.gris400 }}>Chargement...</div>
-              ) : classeApprenants.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 30, color: COULEURS.gris400 }}>Aucun apprenant inscrit</div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: COULEURS.gris50 }}>
-                        {['#', 'Nom complet', 'Email', 'Téléphone', 'Niveau', 'Statut'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: COULEURS.gris600, borderBottom: `1px solid ${COULEURS.gris200}` }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {classeApprenants.map((a, i) => (
-                        <tr key={a.id || i} style={{ borderBottom: `1px solid ${COULEURS.gris100}`, background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                          <td style={{ padding: '8px 12px', fontSize: 12, color: COULEURS.gris400, fontWeight: 600 }}>{i + 1}</td>
-                          <td style={{ padding: '8px 12px', fontSize: 13, fontWeight: 600 }}>{a.nom_complet || '-'}</td>
-                          <td style={{ padding: '8px 12px', fontSize: 12, color: COULEURS.gris600 }}>{a.email || '-'}</td>
-                          <td style={{ padding: '8px 12px', fontSize: 12, color: COULEURS.gris600 }}>{a.telephone || '-'}</td>
-                          <td style={{ padding: '8px 12px', fontSize: 12 }}>{a.niveau_cecr || '-'}</td>
-                          <td style={{ padding: '8px 12px', fontSize: 11 }}>
-                            <span style={{ background: a.statut === 'actif' ? '#DCFCE7' : '#F1F5F9', color: a.statut === 'actif' ? '#16a34a' : '#64748b', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>{a.statut || '-'}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            )}
-
-            {classeModalTab === 'disponibilite' && (() => {
-              const now = Date.now();
-              const tri = [...classeSessions].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-              const aVenir = tri.filter(s => s.date && new Date(`${s.date}T${s.heure_debut || '00:00'}`).getTime() >= now);
-              const passees = tri.filter(s => s.date && new Date(`${s.date}T${s.heure_debut || '00:00'}`).getTime() < now).reverse();
-              const statutCol = st => st === 'realisee' || st === 'terminee' ? { c: '#16a34a', bg: '#DCFCE7' } : st === 'annulee' ? { c: '#dc2626', bg: '#FEE2E2' } : { c: '#D97706', bg: '#FEF9C3' };
-              const jourHoraire = Array.isArray(classeDetail.horaire) ? classeDetail.horaire : [];
-              const JOURS_ORDER = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-              return (
-                <div>
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: COULEURS.navy, marginBottom: 10 }}>🗓️ Emploi du temps hebdomadaire</div>
-                    {jourHoraire.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: 20, color: COULEURS.gris400, background: COULEURS.gris50, borderRadius: 10, border: `1px dashed ${COULEURS.gris200}`, fontSize: 12 }}>
-                        Aucun créneau récurrent renseigné pour cette classe.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10 }}>
-                        {JOURS_ORDER.filter(j => jourHoraire.some(h => h.jour === j)).map(jour => (
-                          <div key={jour} style={{ background: VIOLET_CLAIR, borderRadius: 10, padding: '10px 12px', border: `1px solid ${VIOLET}30` }}>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: VIOLET_FONCE, marginBottom: 6 }}>{jour}</div>
-                            {jourHoraire.filter(h => h.jour === jour).map((h, i) => (
-                              <div key={i} style={{ fontSize: 12, color: '#374151' }}>{h.debut} – {h.fin}</div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: COULEURS.navy, marginBottom: 10 }}>📋 Séances ({classeSessions.length})</div>
-                    {classeSessionsLoad ? (
-                      <div style={{ textAlign: 'center', padding: 30, color: COULEURS.gris400 }}>Chargement des séances…</div>
-                    ) : classeSessions.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: 20, color: COULEURS.gris400, background: COULEURS.gris50, borderRadius: 10, border: `1px dashed ${COULEURS.gris200}`, fontSize: 12 }}>
-                        Aucune séance programmée pour cette classe.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {aVenir.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris600, marginBottom: 6, textTransform: 'uppercase' }}>À venir ({aVenir.length})</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {aVenir.map(s => { const sc = statutCol(s.statut); return (
-                                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fff', border: `1px solid ${COULEURS.gris200}`, borderRadius: 9 }}>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: COULEURS.navy, minWidth: 90 }}>{s.date ? fmtDate(s.date) : '-'}</span>
-                                  <span style={{ fontSize: 12, color: COULEURS.gris600 }}>{s.heure_debut || '-'}{s.heure_fin ? ` – ${s.heure_fin}` : ''}</span>
-                                  {s.type && <span style={{ fontSize: 11, color: COULEURS.gris400 }}>· {s.type}</span>}
-                                  <span style={{ marginLeft: 'auto', background: sc.bg, color: sc.c, borderRadius: 99, padding: '2px 9px', fontSize: 10, fontWeight: 700 }}>{s.statut || 'planifiee'}</span>
-                                </div>
-                              );})}
-                            </div>
-                          </div>
-                        )}
-                        {passees.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: COULEURS.gris600, marginBottom: 6, textTransform: 'uppercase' }}>Passées ({passees.length})</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {passees.map(s => { const sc = statutCol(s.statut); const reel = dureeReelleMin(s); return (
-                                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fafafa', border: `1px solid ${COULEURS.gris100}`, borderRadius: 9, flexWrap: 'wrap' }}>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', minWidth: 90 }}>{s.date ? fmtDate(s.date) : '-'}</span>
-                                  <span style={{ fontSize: 12, color: COULEURS.gris400 }}>{s.heure_debut || '-'}{s.heure_fin ? ` – ${s.heure_fin}` : ''}</span>
-                                  {s.type && <span style={{ fontSize: 11, color: COULEURS.gris400 }}>· {s.type}</span>}
-                                  {/* Verifier qu'un cours a bien ete donne, c'est d'abord savoir
-                                      combien de temps il a dure. L'information existait cote
-                                      coach et n'arrivait jamais jusqu'ici. */}
-                                  {reel != null && (
-                                    <span title="Temps reellement passe en salle, releve par le chronometre du coach"
-                                      style={{ fontSize: 11, fontWeight: 700, color: (s.duree_minutes && reel < s.duree_minutes - 5) ? '#B91C1C' : '#15803D' }}>
-                                      ⏱ {reel} min réel{s.duree_minutes ? ` / ${s.duree_minutes}` : ''}
-                                    </span>
-                                  )}
-                                  <span style={{ marginLeft: 'auto', background: sc.bg, color: sc.c, borderRadius: 99, padding: '2px 9px', fontSize: 10, fontWeight: 700 }}>{s.statut || '-'}</span>
-                                </div>
-                              );})}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-          </Modal>
-        )}
       </div>
     );
   }
@@ -1080,7 +780,24 @@ export default function DashboardDeputySuperviseur() {
       // Le même écran que chez le superviseur général : le Deputy consulte les mêmes cahiers.
       case 'cahiers':   return <OngletCahiersCoachs />;
       case 'plannings': return <OngletPlanningsElearning />;
-      case 'observer':  return renderObserver();
+      /* ── LE MÊME ÉCRAN D'OBSERVATION QUE LE SUPERVISEUR GÉNÉRAL ──
+         Le Deputy avait sa propre version : un tableau à deux actions (Apprenants, Rapport),
+         sans le bouton Sessions, et une fiche de classe à deux onglets. Celle du superviseur
+         en a cinq — Infos, Apprenants, Planning & séances, Présences, Fichiers — avec filtre
+         de dates et pagination sur les trois dernières.
+         Les deux rôles observent les MÊMES classes pour la MÊME raison : maintenir deux
+         écrans garantissait qu'ils divergent, et c'est déjà ce qui s'était produit.
+         `onObserver` garde au Deputy son propre circuit de rapport : c'est la seule chose
+         qui lui est propre ici. */
+      case 'observer':  return (
+        <OngletObserverCours
+          onObserver={cl => {
+            setRapportForm(fo => ({ ...fo, classe: cl.nom, centre: lieuAutoClasse(cl) }));
+            navigate('/admin/deputy-superviseur/rapports');
+            setTimeout(() => setShowRapportForm(true), 200);
+          }}
+        />
+      );
       case 'rapports':  return renderRapports();
       case 'missions':  return renderMissions();
       default:          return renderDashboard();

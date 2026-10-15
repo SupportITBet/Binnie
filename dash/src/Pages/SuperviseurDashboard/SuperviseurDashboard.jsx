@@ -277,7 +277,11 @@ export default function SuperviseurDashboard() {
     { key:"eval-apprenants", icon:"⭐", label:"Évaluations apprenants" },
     { key:"eval-parents",   icon:"👨‍👩‍👧", label:"Évaluations parents" },
     { key:"rapports",       icon:"📋", label:"Rapports Deputy" },
-    { key:"anomalies",      icon:"⚠️",  label:"Anomalies" },
+    /* ANOMALIES MASQUÉ POUR LE MOMENT (demande du 15/10/2026). L'onglet est retiré de la
+       barre, mais tout le code reste en place - `renderAnomalies`, `fetchAnomalies`, le
+       formulaire et les routes serveur : décommenter cette ligne et les quatre raccourcis
+       marqués du même repère suffit à le rétablir. */
+    // { key:"anomalies",      icon:"⚠️",  label:"Anomalies" },
     { key:"messagerie",     icon:"💬", label:"Messagerie" },
     { key:"notifications",  icon:"🔔", label:"Notifications" },
   ];
@@ -314,6 +318,8 @@ export default function SuperviseurDashboard() {
   // Filtre par categorie de contrat du cahier coachs. "" = toutes.
   const [coachCategorie, setCoachCategorie] = useState("");
   const [coachFiltre,  setCoachFiltre]  = useState("tous");
+  // Pagination du Cahier coachs (voir `coachsPage` plus bas pour la regle de remise a 1).
+  const [coachPage,    setCoachPage]    = useState(1);
   const [coachDetail,       setCoachDetail]       = useState(null);
   const [coachModalTab,     setCoachModalTab]     = useState("infos");
   const [coachRapports,        setCoachRapports]        = useState([]);
@@ -1067,7 +1073,8 @@ export default function SuperviseurDashboard() {
   const renderTaches = () => {
     const taches = IS_GENERAL ? [
       { icon:"📋", label:"Rapports non lus",     n:tachesRapportsNonLus,    tab:"rapports" },
-      { icon:"⚠️", label:"Anomalies ouvertes",    n:tachesAnomaliesOuvertes, tab:"anomalies" },
+      // ANOMALIES MASQUÉ POUR LE MOMENT - mènerait vers un onglet retiré de la barre.
+      // { icon:"⚠️", label:"Anomalies ouvertes",    n:tachesAnomaliesOuvertes, tab:"anomalies" },
     ] : [
       { icon:"📋", label:"Rapports en attente de lecture", n:tachesRapportsEnAttente, tab:"rapports" },
       { icon:"💬", label:"Retours du superviseur à lire",  n:tachesRapportsCommentes, tab:"rapports" },
@@ -1130,7 +1137,8 @@ export default function SuperviseurDashboard() {
             <StatCard label="Coachs actifs"           value={kpi?.nb_coachs ?? "-"}               color="#0891b2" icon="👨‍🏫" onClick={()=>setActiveTab("cahiers")} />
             <StatCard label="Coachs évalués"           value={kpi?.nb_coachs_evalues ?? "-"}         color="#7c3aed" icon="📊"  onClick={()=>setActiveTab("cahiers")} />
             <StatCard label="Rapports non lus"          value={kpi?.nb_rapports_non_lus ?? "-"}       color="#f59e0b" icon="📋" onClick={()=>setActiveTab("rapports")} />
-            <StatCard label="Anomalies ouvertes"        value={kpi?.nb_anomalies_ouvertes ?? "-"}     color="#dc2626" icon="⚠️"  onClick={()=>setActiveTab("anomalies")} />
+            {/* ANOMALIES MASQUÉ POUR LE MOMENT - carte retirée avec l'onglet qu'elle ouvrait.
+                <StatCard label="Anomalies ouvertes"        value={kpi?.nb_anomalies_ouvertes ?? "-"}     color="#dc2626" icon="⚠️"  onClick={()=>setActiveTab("anomalies")} /> */}
             <StatCard label="Deputy Superviseurs"       value={kpi?.nb_deputies ?? "-"}               color="#059669" icon="👥" onClick={()=>setActiveTab("deputies")} />
             <StatCard label="Missions actives"          value={kpi?.nb_missions_actives ?? "-"}       color="#0369a1" icon="🎯" onClick={()=>setActiveTab("deputies")} />
           </div>
@@ -1139,7 +1147,8 @@ export default function SuperviseurDashboard() {
               <div style={{ fontWeight:700, fontSize:14, marginBottom:12, color:"#0f172a" }}>⚡ Accès rapides</div>
               {[
                 { icon:"📓", label:"Vérifier les cahiers de texte coachs",    tab:"cahiers" },
-                { icon:"⚠️",  label:"Signaler une anomalie",                    tab:"anomalies", action:"new" },
+                // ANOMALIES MASQUÉ POUR LE MOMENT - ouvrait l'onglet retiré de la barre.
+                // { icon:"⚠️",  label:"Signaler une anomalie",                    tab:"anomalies", action:"new" },
                 { icon:"🎯", label:"Assigner une mission à un deputy",          tab:"deputies" },
               ].map(a => (
                 <button key={a.label} onClick={()=>{ setActiveTab(a.tab); if(a.action==="new") setTimeout(()=>setShowAnomForm(true),200); }}
@@ -1259,6 +1268,16 @@ export default function SuperviseurDashboard() {
     const matchC = !coachCategorie || categorieCoach(c.note_moyenne).cle === coachCategorie;
     return matchQ && matchF && matchC;
   });
+
+  /* PAGINATION du cahier coachs. L'annuaire entier s'alignait d'un bloc : passe quelques
+     dizaines de coachs, la table devient un mur qu'on parcourt a la molette. On borne a
+     COACH_PER_PAGE, et on revient en page 1 des qu'un filtre change - rester en page 4
+     d'un resultat qui n'en compte plus que 2 afficherait un tableau vide trompeur. */
+  const COACH_PER_PAGE  = 12;
+  const coachTotalPages = Math.max(1, Math.ceil(coachsFiltres.length / COACH_PER_PAGE));
+  const coachPageSafe   = Math.min(coachPage, coachTotalPages);
+  const coachsPage      = coachsFiltres.slice((coachPageSafe - 1) * COACH_PER_PAGE, coachPageSafe * COACH_PER_PAGE);
+  useEffect(() => { setCoachPage(1); }, [coachSearch, coachFiltre, coachCategorie]);
 
   /* ═══════════════════════════════════════════════════════
      CLASSEMENT DES COACHS
@@ -1633,7 +1652,7 @@ export default function SuperviseurDashboard() {
               {coachsFiltres.length === 0 && (
                 <tr><td colSpan={7} style={{ textAlign:"center", padding:40, color:"#94a3b8" }}>Aucun coach trouvé</td></tr>
               )}
-              {coachsFiltres.map(c => (
+              {coachsPage.map(c => (
                 /* La ligne entière ouvre la fiche : le bouton « Détail » restait le seul point
                    d'entrée, alors que c'est le nom du coach qu'on cherche à cliquer. */
                 <tr key={c.id} onClick={()=>openCoachModal(c)}
@@ -1668,10 +1687,11 @@ export default function SuperviseurDashboard() {
                   <Td>
                     <div style={{ display:"flex", gap:6 }}>
                       <button onClick={e=>{ e.stopPropagation(); openCoachModal(c); }} style={{ padding:"4px 10px", background:BET_LIGHT, border:`1px solid ${BET_COLOR}40`, borderRadius:6, fontSize:11, color:BET_COLOR, fontWeight:600, cursor:"pointer" }}>Détail</button>
+                      {/* ANOMALIES MASQUÉ POUR LE MOMENT - ce bouton basculait sur l'onglet retiré.
                       {IS_GENERAL && c.statut_conformite === "non_conforme" && (
                         <button disabled={!peut("rapports","manage")} title={permBtnTitle("Signaler",peut("rapports","manage"))} onClick={e=>{ e.stopPropagation(); setAnomForm({...ANOM_INIT, coach_id:c.id}); setActiveTab("anomalies"); setTimeout(()=>setShowAnomForm(true),100); }}
                           style={permBtnStyle({ padding:"4px 10px", background:"#fee2e2", border:"1px solid #fecaca", borderRadius:6, fontSize:11, color:"#dc2626", fontWeight:600, cursor:"pointer" },peut("rapports","manage"))}>{peut("rapports","manage")?"":"🔒 "}Signaler</button>
-                      )}
+                      )} */}
                     </div>
                   </Td>
                 </tr>
@@ -1681,6 +1701,21 @@ export default function SuperviseurDashboard() {
         </div>
       )}
 
+      {!coachsLoading && coachTotalPages > 1 && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, justifyContent:"center", padding:"14px 0", flexWrap:"wrap" }}>
+          <span style={{ fontSize:11, color:"#9ca3af", marginRight:4 }}>
+            Page {coachPageSafe}/{coachTotalPages} · {coachsFiltres.length} coach{coachsFiltres.length!==1?"s":""}
+          </span>
+          <button onClick={()=>setCoachPage(p=>Math.max(1,p-1))} disabled={coachPageSafe===1}
+            style={{ padding:"4px 10px", borderRadius:7, border:"1.5px solid #e2e8f0", background:coachPageSafe===1?"#f1f5f9":"#fff", fontSize:12, cursor:coachPageSafe===1?"default":"pointer", color:coachPageSafe===1?"#cbd5e1":"#374151", fontWeight:600 }}>← Préc.</button>
+          {Array.from({length:coachTotalPages},(_,i)=>i+1).filter(p=>Math.abs(p-coachPageSafe)<=2).map(p=>(
+            <button key={p} onClick={()=>setCoachPage(p)}
+              style={{ padding:"4px 9px", borderRadius:7, border:`1.5px solid ${p===coachPageSafe?BET_COLOR:"#e2e8f0"}`, background:p===coachPageSafe?BET_COLOR:"#fff", fontSize:12, cursor:"pointer", color:p===coachPageSafe?"#fff":"#374151", fontWeight:p===coachPageSafe?800:400 }}>{p}</button>
+          ))}
+          <button onClick={()=>setCoachPage(p=>Math.min(coachTotalPages,p+1))} disabled={coachPageSafe===coachTotalPages}
+            style={{ padding:"4px 10px", borderRadius:7, border:"1.5px solid #e2e8f0", background:coachPageSafe===coachTotalPages?"#f1f5f9":"#fff", fontSize:12, cursor:coachPageSafe===coachTotalPages?"default":"pointer", color:coachPageSafe===coachTotalPages?"#cbd5e1":"#374151", fontWeight:600 }}>Suiv. →</button>
+        </div>
+      )}
 
     </div>
   );
@@ -2557,6 +2592,9 @@ export default function SuperviseurDashboard() {
 
   /* ── ÉLIGIBILITÉ ── */
   /* ── ANOMALIES ── */
+  /* ANOMALIES MASQUÉ POUR LE MOMENT : la fonction n'est plus appelée (son rendu est
+     commenté plus bas) mais reste intacte pour être rétablie telle quelle. */
+  // eslint-disable-next-line no-unused-vars
   const renderAnomalies = () => (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
@@ -3596,7 +3634,9 @@ export default function SuperviseurDashboard() {
               accent={BET_COLOR} accentLight={BET_LIGHT} accentGradient={BET_GRADIENT} />
           )}
           {activeTab === "rapports"       && renderRapports()}
-          {activeTab === "anomalies"      && renderAnomalies()}
+          {/* ANOMALIES MASQUÉ POUR LE MOMENT - l'écran n'est plus rendu, même si un
+              `activeTab` resté à "anomalies" revenait par un autre chemin.
+          {activeTab === "anomalies"      && renderAnomalies()} */}
           {activeTab === "deputies"       && renderDeputies()}
           {activeTab === "missions"       && renderMissions()}
           {activeTab === "observer-cours" && renderObserverCours()}
@@ -4086,12 +4126,13 @@ export default function SuperviseurDashboard() {
                       <BadgeCategorieCoach note={coach.note_moyenne} taille="sm" />
                     </div>
                   </div>
+                  {/* ANOMALIES MASQUÉ POUR LE MOMENT - ce bouton basculait sur l'onglet retiré.
                   {IS_GENERAL && (
                     <button disabled={!peut("rapports","manage")} title={permBtnTitle("Signaler anomalie",peut("rapports","manage"))} onClick={()=>{ setCoachDetail(null); setAnomForm({...ANOM_INIT, coach_id:coach.id}); setActiveTab("anomalies"); setTimeout(()=>setShowAnomForm(true),80); }}
                       style={permBtnStyle({ padding:"7px 14px", background:"rgba(239,68,68,0.25)", border:"1px solid rgba(239,68,68,0.5)", borderRadius:9, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" },peut("rapports","manage"))}>
                       {peut("rapports","manage")?"⚠️":"🔒"} Signaler anomalie
                     </button>
-                  )}
+                  )} */}
                 </div>
               </div>
 

@@ -6,15 +6,8 @@ import { urlOuvrir, urlTelecharger } from '../../utils/fichierUrl';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { supabase } from '../../services/supabase';
 import SalleVirtuelle from '../../components/shared/SalleVirtuelle';
-import { MODE_DEV } from '../../utils/genererSalleVirtuelle';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import { useTheme } from '../../contexts/ThemeContext';
-
-/* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
-   Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
-   main dans quatre fichiers pour le changer d'une minute : nommé ici, il se relit et se
-   corrige d'un seul endroit par application. */
-const MINUTES_OUVERTURE_SALLE = 10;
-const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const authHdrsParent = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('bet_access_token') || ''}`, 'X-Plateforme': 'bet-elearning' });
@@ -1416,14 +1409,17 @@ export default function DashboardParent() {
                 {aVenir.length === 0 ? (
                   <div style={S.vide}>Aucune session planifiée pour {enfantActif?.prenom}</div>
                 ) : aVenir.map(s => {
-                  const estPresentiel = s.type === 'presentiel';
+                  /* LA RÈGLE VIENT DU MODULE COMMUN, et plus d'un calcul posé ici — qui
+                     comportait `MODE_DEV ||` et ouvrait donc toutes les salles en
+                     développement, y compris celles d'une session prévue dans dix jours. */
                   const debutISO     = `${s.date}T${s.heure_debut}:00`;
                   const debut        = new Date(debutISO);
-                  const debutMoins15 = new Date(debut.getTime() - MS_OUVERTURE_SALLE);
                   const maintenant   = new Date();
-                  const joignable    = !estPresentiel && (MODE_DEV || maintenant >= debutMoins15);
+                  const acces        = accesSalle(s, maintenant);
+                  const estPresentiel = acces.presentiel;
+                  const joignable    = !estPresentiel && acces.joignable;
                   const enCoursNow   = !estPresentiel && maintenant >= debut && maintenant <= new Date(debut.getTime() + 2 * 60 * 60 * 1000);
-                  const minutesAvant = joignable ? 0 : Math.round((debutMoins15 - maintenant) / 60000);
+                  const minutesAvant = acces.minutesAvant;
                   const contenusSess = [];
 
                   return (
@@ -1451,7 +1447,7 @@ export default function DashboardParent() {
                             </div>
                             {!estPresentiel && !joignable && minutesAvant < 1440 && (
                               <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:4 }}>
-                                🔒 Accès {MINUTES_OUVERTURE_SALLE} min avant · dans {minutesAvant < 60 ? `${minutesAvant} min` : `${Math.floor(minutesAvant/60)}h`}
+                                🔒 Accès {MINUTES_OUVERTURE_SALLE} min avant · {acces.libelleAttente}
                               </div>
                             )}
                           </div>

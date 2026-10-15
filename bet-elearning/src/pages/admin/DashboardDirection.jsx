@@ -95,10 +95,12 @@ export function OngletDirectionMesTaches() {
     const sansAcces = apprenants.filter(a => !a.apprenant_id).length;
     if (sansAcces) taches.push({ icone: '🔑', label: "Apprenants sans compte d'accès", n: sansAcces, vers: '/admin/direction/apprenants' });
   }
+  /* ANOMALIES MASQUÉ POUR LE MOMENT - cette tâche menait vers une page dont la route est
+     retirée ; la laisser aurait donné un clic sans destination depuis la Direction.
   if (anomalies) {
     const ouvertes = anomalies.filter(a => a.statut === 'ouvert').length;
     if (ouvertes) taches.push({ icone: '🚨', label: 'Anomalies de supervision ouvertes', n: ouvertes, vers: '/admin/superviseur/anomalies' });
-  }
+  } */
   if (rapports) {
     const nonLus = rapports.filter(r => r.statut === 'soumis').length;
     if (nonLus) taches.push({ icone: '📋', label: "Rapports d'observation non lus", n: nonLus, vers: '/admin/superviseur/rapports-deputy' });

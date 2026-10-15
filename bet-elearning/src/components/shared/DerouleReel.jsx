@@ -47,7 +47,11 @@ export function dureeReelleMin(seance) {
 /** La durée prévue, en minutes, quelle que soit la forme sous laquelle elle est portée. */
 export function dureePrevueMin(seance) {
   if (!seance) return null;
-  return seance.duree_prevue_min ?? seance.duree ??
+  /* `duree_minutes` est la forme portée par `seances_elearning` — la quatrième après
+     `duree_prevue_min`, `duree` et `duree_h`. Sans elle, le panneau de séance affichait
+     « Prévu : - » et l'écart avec le temps réellement passé en salle, qui est tout
+     l'intérêt du bloc, ne se calculait pas. */
+  return seance.duree_prevue_min ?? seance.duree ?? seance.duree_minutes ??
     (seance.duree_h ? Math.round(parseFloat(seance.duree_h) * 60) : null);
 }
 

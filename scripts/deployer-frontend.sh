@@ -254,6 +254,12 @@ PROPRIO=$(stat -c '%U:%G' "$CIBLE" 2>/dev/null || stat -f '%Su:%Sg' "$CIBLE")
 #                vhost de l'API perd sa racine documentaire et répond 500 à tout — sans
 #                rien écrire dans les journaux, ce qui rend la panne très difficile à
 #                relier au déploiement qui l'a causée.
+#   elearning-bet/  RACINE DU VHOST e-learning.binniesenglish.net, ajoutée le 15/10/2026.
+#                Même piège que api-bet/ et app-bet/ : cPanel place les sous-domaines SOUS
+#                public_html, donc dans la cible de ce déploiement. Sans cette exclusion,
+#                publier le site public effacerait la plateforme e-learning.
+#                ⚠ Ce nom doit correspondre au dossier réel du vhost. Pour le vérifier :
+#                    uapi --user=betnet DomainInfo list_domains
 rsync -a --delete \
       --exclude='.well-known/' \
       --exclude='cgi-bin/' \
@@ -261,6 +267,7 @@ rsync -a --delete \
       --exclude='0-RACINE-*' \
       --exclude='api-bet/' \
       --exclude='app-bet/' \
+      --exclude='elearning-bet/' \
       build/ "$CIBLE/"
 date '+%F %H:%M:%S' > "$CIBLE/.deploiement-bet"
 git -C "$RACINE" log -1 --format='%h %s' >> "$CIBLE/.deploiement-bet"

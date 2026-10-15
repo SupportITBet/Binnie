@@ -3,7 +3,7 @@
 // on intercepte les réponses 401 des appels API et on tente un refresh silencieux avant
 // de forcer la déconnexion si la session est réellement expirée.
 import { supabase } from '../services/supabase';
-import { ROLE_LOGIN } from '../constants/roles';
+import { pageConnexionDe } from '../constants/roles';
 
 const ENDPOINTS_EXCLUS = [
   '/api/admin/login',
@@ -29,6 +29,60 @@ function afficherBanniereSessionExpiree() {
   document.body.appendChild(overlay);
 }
 
+/* ── UNE DÉCONNEXION VOLONTAIRE N'EST PAS UNE SESSION EXPIRÉE ──
+   `seDeconnecter()` vide `bet_profil_mock` PUIS appelle `signOut()`. Les requêtes encore
+   en vol répondent alors 401, l'intercepteur se déclenche, cherche le rôle dans un stockage
+   qu'on vient d'effacer, ne le trouve pas, et renvoie vers le portail générique
+   `/connexion` — en écrasant par `window.location.href` la navigation React qui menait
+   pourtant à `/connexion/apprenant`.
+   L'apprenant atterrissait donc sur la page de l'administration BET à chaque déconnexion.
+
+   Ce drapeau dit à l'intercepteur de se taire : il n'y a pas de session à sauver ni de
+   bannière « session expirée » à afficher quand c'est l'utilisateur qui est parti. */
+let deconnexionVolontaire = false;
+export function signalerDeconnexionVolontaire() {
+  deconnexionVolontaire = true;
+  // Les 401 d'une déconnexion arrivent dans la foulée ; au-delà, c'est une vraie expiration.
+  setTimeout(() => { deconnexionVolontaire = false; }, 10_000);
+}
+
+/* ══ LE RÔLE DE LA SESSION EN COURS, EN MÉMOIRE ══════════════════════════════════════════
+   LA CAUSE RÉELLE DU BUG, après deux correctifs qui visaient à côté.
+
+   L'intercepteur cherchait le rôle dans deux stockages, dans cet ordre : `bet_profil_mock`
+   (sessionStorage, posé par AuthContext) puis `admin_profil` (localStorage, posé par les
+   cinq pages de connexion dédiées). Or AUCUNE déconnexion n'effaçait `admin_profil`,
+   `admin_token` ni `admin_refresh` : ces clés survivaient à tout, indéfiniment.
+
+   Dans un navigateur où l'on s'est connecté une fois comme coach ou comme admin — ce qui
+   est le cas de tout poste de test —, un apprenant dont la session expire déclenchait donc :
+     · soit la résurrection de la session de l'AUTRE compte, `admin_refresh` étant passé à
+       `setSession()` ; le profil basculait alors sur ce rôle et écrasait `bet_profil_mock` ;
+     · soit, si `bet_profil_mock` manquait à cet instant — un nouvel onglet dont le profil
+       n'est pas encore résolu, et c'est précisément là que tombent les premiers appels —,
+       la lecture du `admin_profil` périmé.
+   Dans les deux cas le rôle trouvé était celui d'un coach ou d'un admin. Ces rôles n'ont
+   pas de page de connexion dédiée (choix assumé), `pageConnexionDe` rend donc `null`, et
+   `pageConnexion` restait sur `/connexion`. La résolution du rôle n'a jamais été en cause :
+   c'était la MAUVAISE IDENTITÉ qu'on résolvait correctement.
+
+   La variable ci-dessous est la seule source qui ne puisse pas être périmée ni partagée
+   entre deux comptes : elle vit dans le module, donc dans l'onglet, et AuthContext la
+   réécrit à chaque changement de profil. Les stockages restent en repli pour le cas d'un
+   rechargement complet où le module repart à zéro avant que React ait monté. */
+let roleCourant = null;
+export function memoriserRoleSession(role) { roleCourant = role || null; }
+export function oublierRoleSession() { roleCourant = null; }
+
+/* Les comptes qui se connectent CÔTÉ SERVEUR (POST /api/admin/login) n'ont aucune session
+   Supabase dans le navigateur : leur seul moyen de rafraîchir est le couple
+   `admin_token`/`admin_refresh`. Un apprenant ou un parent, lui, a une vraie session
+   Supabase — lui passer ces clés revient à lui prêter l'identité de quelqu'un d'autre. */
+const ROLES_SANS_SESSION_SUPABASE = ['client_entreprise', 'professeur_titulaire', 'professeur_remplacant'];
+const estCompteServeur = (role) =>
+  !!role && (role.startsWith('admin') || ROLES_SANS_SESSION_SUPABASE.includes(role)
+    || !['apprenant', 'parent'].includes(role));
+
 export function installerInterceptionSession() {
   if (window.__betElearningSessionInterceptorInstalle) return;
   window.__betElearningSessionInterceptorInstalle = true;
@@ -53,6 +107,13 @@ export function installerInterceptionSession() {
         return response;
       }
 
+      /* L'utilisateur vient de cliquer « Déconnexion » : les 401 qui suivent sont attendus.
+         Les traiter comme une expiration afficherait une bannière inquiétante et
+         détournerait la redirection vers le portail générique. */
+      if (deconnexionVolontaire) {
+        return response;
+      }
+
       // Tenter un refresh silencieux de la session avant de conclure qu'elle est vraiment expirée.
       // Les admins se connectent côté serveur (POST /api/admin/login) sans jamais appeler
       // supabase.auth.setSession(...) - le client Supabase du navigateur n'a donc AUCUNE session
@@ -64,7 +125,13 @@ export function installerInterceptionSession() {
         const storedRefresh = localStorage.getItem('admin_refresh') || '';
         let refreshedSession = null;
 
-        if (storedRefresh) {
+        /* `admin_refresh` N'EST UTILISÉ QUE PAR LES COMPTES QUI EN ONT BESOIN.
+           Ces clés ne sont effacées par aucune déconnexion : dans un navigateur ayant servi
+           à un coach ou à un admin, elles restent là pour toujours. Les passer à
+           `setSession()` pour un apprenant ressuscitait la session de l'autre compte — son
+           profil écrasait celui de l'apprenant, et la redirection suivait ce rôle-là.
+           Un apprenant a sa propre session Supabase : c'est elle qu'on rafraîchit. */
+        if (storedRefresh && estCompteServeur(roleCourant)) {
           const { data: sd } = await supabase.auth.setSession({ access_token: storedAccess, refresh_token: storedRefresh });
           refreshedSession = sd?.session;
         } else {
@@ -73,8 +140,12 @@ export function installerInterceptionSession() {
         }
 
         if (refreshedSession?.access_token) {
-          localStorage.setItem('admin_token', refreshedSession.access_token);
-          if (refreshedSession.refresh_token) localStorage.setItem('admin_refresh', refreshedSession.refresh_token);
+          // On ne réécrit `admin_*` que pour les comptes dont c'est le stockage : sinon on
+          // y déposerait les jetons d'un apprenant, et le mélange recommencerait.
+          if (estCompteServeur(roleCourant)) {
+            localStorage.setItem('admin_token', refreshedSession.access_token);
+            if (refreshedSession.refresh_token) localStorage.setItem('admin_refresh', refreshedSession.refresh_token);
+          }
           return response; // le listener onAuthStateChange met déjà à jour bet_access_token
         }
       } catch { /* refresh impossible, on continue vers la déconnexion */ }
@@ -92,18 +163,25 @@ export function installerInterceptionSession() {
          la recherche échouait, `pageConnexion` restait sur le portail générique `/connexion`,
          et une session expirée le renvoyait vers un écran qui n'est pas le sien au lieu de
          `/connexion/entreprise`. On lit les deux, le premier qui donne un rôle connu gagne. */
+      /* LE RÔLE VIVANT PASSE DEVANT LES STOCKAGES. C'est celui de la session réellement
+         ouverte dans cet onglet, qu'aucune clé périmée d'un autre compte ne peut contredire.
+         Les deux stockages ne servent plus qu'au cas où ce module vient d'être rechargé :
+         `bet_profil_mock` est propre à l'onglet, `admin_profil` ne l'est pas — il est donc
+         lu en DERNIER, et c'est bien ce qu'il est, un dernier recours. */
       let pageConnexion = '/connexion';
       const sources = [
+        () => (roleCourant ? JSON.stringify({ role: roleCourant }) : null),
         () => sessionStorage.getItem('bet_profil_mock'),
         () => localStorage.getItem('admin_profil'),
       ];
       for (const lire of sources) {
         try {
           const profilSauvegarde = JSON.parse(lire() || 'null');
-          if (profilSauvegarde?.role && ROLE_LOGIN[profilSauvegarde.role]) {
-            pageConnexion = ROLE_LOGIN[profilSauvegarde.role];
-            break;
-          }
+          /* `pageConnexionDe` plutôt que `ROLE_LOGIN[...]` : il résout la FAMILLE du rôle,
+             et ne rate donc pas une variante (un apprenant par tranche d'âge, un `coach`
+             au lieu de `professeur_titulaire`) qui n'a pas de clé exacte dans la table. */
+          const page = profilSauvegarde?.role ? pageConnexionDe(profilSauvegarde.role) : null;
+          if (page) { pageConnexion = page; break; }
         } catch { /* source illisible, on tente la suivante */ }
       }
 

@@ -33,7 +33,7 @@ const FRONT_URL = process.env.FRONTEND_URL  || "https://binniesenglish.net";
 
    Le domaine de MARQUE et non celui de l'hébergeur : un lien « voici vos accès » pointant
    vers `purepro-technologie.ci` se lit comme une tentative d'hameçonnage. */
-const ELEARNING_URL = process.env.ELEARNING_URL || "https://elearning.binniesenglish.net";
+const ELEARNING_URL = process.env.ELEARNING_URL || "https://e-learning.binniesenglish.net";
 /* Le lien de désinscription vise le SERVEUR, jamais le site : il doit fonctionner depuis
    un client mail, sans dépendre du chargement d'une application React - et la page qu'il
    visait côté site n'a d'ailleurs jamais existé. */

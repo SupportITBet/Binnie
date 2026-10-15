@@ -8797,6 +8797,9 @@ const messagesFiltres = useMemo(() => {
                       const disponible = now >= ouvertureSalle;
                       const deplie = sessionsDepliees.has(s.id);
                       const minutesAvant = disponible ? 0 : Math.round((ouvertureSalle - now) / 60000);
+                      // Les cours rattachés, résolus dans sa propre médiathèque : la session
+                      // ne porte que leurs identifiants.
+                      const contenusSess = cours.filter(c => (s.contenu_ids || []).includes(c.id));
                       return (
                         <div key={s.id} style={{ background:disponible?"#F0FDF4":"#fff", borderRadius:14, border:`1.5px solid ${disponible?"#6EE7B7":"#e5e7eb"}`, marginBottom:12, overflow:"hidden" }}>
                           <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:16, flexWrap:"wrap" }}>
@@ -8810,6 +8813,14 @@ const messagesFiltres = useMemo(() => {
                                 <span>📅 {fmtDate(s.date)}</span>
                                 <span>⏰ {s.heure}{s.heure_fin?` – ${s.heure_fin}`:""}</span>
                                 {grp && <span>👥 {grp.nom}</span>}
+                                {/* CE QUE LE COACH A RATTACHÉ À LA SÉANCE. Il le choisissait
+                                    à la création, puis la carte n'en disait plus un mot : rien
+                                    ne permettait de vérifier qu'une session partait bien avec
+                                    son cours, ni lequel. L'état `sessionsDepliees` existait
+                                    déjà pour ça et n'avait jamais été branché. */}
+                                {contenusSess.length > 0
+                                  ? <span style={{ color:BET, fontWeight:600 }}>📚 {contenusSess.length} cours lié{contenusSess.length>1?"s":""}</span>
+                                  : <span style={{ color:"#cbd5e1", fontStyle:"italic" }}>Aucun cours lié</span>}
                               </div>
                               {!disponible && (
                                 <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>
@@ -8820,6 +8831,13 @@ const messagesFiltres = useMemo(() => {
                               {s.notes && <div style={{ fontSize:11, color:"#374151", marginTop:4, fontStyle:"italic" }}>💬 {s.notes}</div>}
                             </div>
                             <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", justifyContent:"flex-end" }}>
+                              {contenusSess.length > 0 && (
+                                <button
+                                  onClick={()=>setSessionsDepliees(prev => { const n = new Set(prev); deplie ? n.delete(s.id) : n.add(s.id); return n; })}
+                                  style={{ padding:"7px 13px", borderRadius:8, border:"1.5px solid #e5e7eb", background:deplie?"#f1f5f9":"#fff", color:"#0f172a", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                                  {deplie ? "▲ Masquer" : "▼ Voir le cours"}
+                                </button>
+                              )}
                               {s.plateforme !== "presentiel" && (
                                 <button onClick={()=>copyLink(s.lien)} title="Copier le lien"
                                   style={{ padding:"7px 10px", borderRadius:8, border:"1.5px solid #e5e7eb", background:"#fff", color:"#374151", fontSize:13, cursor:"pointer" }}>🔗</button>
@@ -8849,6 +8867,44 @@ const messagesFiltres = useMemo(() => {
                               )}
                             </div>
                           </div>
+
+                          {/* ── LE COURS RATTACHÉ, DÉPLIÉ ──
+                              Le même contenu que l'apprenant recevra, pour que le coach
+                              vérifie avant la séance ce qu'il part animer. Un BROUILLON est
+                              signalé : rattaché à la session, il reste invisible côté
+                              apprenant jusqu'à publication, et c'est la seule chose qui
+                              sépare « le cours est partagé » de « le cours est partagé
+                              pour de vrai ». */}
+                          {deplie && contenusSess.length > 0 && (
+                            <div style={{ borderTop:`1px solid ${disponible?"#6EE7B730":"#f1f5f9"}`, padding:"12px 20px", background:"rgba(255,255,255,0.6)", display:"flex", flexDirection:"column", gap:8 }}>
+                              {contenusSess.map(c => {
+                                const ct = ({ lecon:{bg:"#E0F2FE",txt:"#0E7490",ic:"📖"}, audio:{bg:"#EDE9FE",txt:"#5B21B6",ic:"🎧"}, video:{bg:"#FEE2E2",txt:"#991B1B",ic:"🎬"} })[c.type_contenu] || { bg:"#f1f5f9", txt:"#475569", ic:"📦" };
+                                const blocs = c.blocs || [];
+                                const dureeTotal = blocs.reduce((acc,b) => acc + (b.dureeMin || 0), 0);
+                                return (
+                                  <div key={c.id} style={{ background:"#fff", borderRadius:10, border:"1px solid #e5e7eb", padding:"10px 14px" }}>
+                                    <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                                      <span style={{ padding:"2px 9px", borderRadius:20, background:ct.bg, color:ct.txt, fontSize:11, fontWeight:700 }}>{ct.ic} {c.type_contenu || "leçon"}</span>
+                                      {c.statut === "brouillon" && <span style={{ padding:"2px 8px", borderRadius:10, background:"#FEF3C7", color:"#D97706", fontSize:10, fontWeight:700 }}>📝 Brouillon - non visible par les apprenants</span>}
+                                      <span style={{ fontSize:13, fontWeight:700, color:"#0f172a", flex:1 }}>{c.titre}</span>
+                                      {dureeTotal > 0
+                                        ? <span style={{ fontSize:11, color:"#9ca3af" }}>⏱ {dureeTotal} min</span>
+                                        : c.dureeEstimee ? <span style={{ fontSize:11, color:"#9ca3af" }}>⏱ {c.dureeEstimee} min</span> : null}
+                                    </div>
+                                    {blocs.length > 0 && (
+                                      <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                                        {blocs.map((b,bi) => (
+                                          <span key={b.id||bi} style={{ fontSize:11, padding:"2px 8px", borderRadius:20, background:"#f1f5f9", color:"#475569" }}>
+                                            {({ texte:"📝", video:"🎬", audio:"🎧", document:"📄", image:"🖼️", lien:"🔗", exercice:"✏️", quiz:"🧩" })[b.type] || "📄"} {b.titre || b.type}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

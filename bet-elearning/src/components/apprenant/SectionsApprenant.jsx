@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { COULEURS } from '../../constants/couleurs';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 const jeton = () => localStorage.getItem('bet_access_token') || localStorage.getItem('admin_token') || '';
@@ -130,7 +131,12 @@ export function SectionMonProfil({ couleur }) {
    ══════════════════════════════════════════════════════════════
    `GET /api/mon-espace/seances` est LA route de planning de l'apprenant - la même que
    l'espace web de dash. Une seconde route rendant la même donnée est la panne récurrente de
-   ce projet : les deux divergent et personne ne sait laquelle fait foi. */
+   ce projet : les deux divergent et personne ne sait laquelle fait foi.
+
+   C'est l'en-tête `X-Plateforme` (posé par `hdr()`) qui lui dit OÙ lire : les séances d'un
+   apprenant e-learning vivent dans `seances_elearning`, rattachées à sa classe, et non dans
+   les tables de dash où il n'a aucune ligne. Sans cet aiguillage la route répondait
+   correctement - une liste vide - et cet onglet restait désespérément vide. */
 export function SectionPlanning({ couleur }) {
   const [seances, setSeances] = useState(null);
   const [filtre, setFiltre] = useState('a_venir');
@@ -197,6 +203,44 @@ export function SectionPlanning({ couleur }) {
                     {s.classe_passee ? ' · classe terminée' : ''}
                   </div>
                 </div>
+                {/* LE LIEN DE LA SALLE, SOUS LA MÊME RÈGLE QUE PARTOUT AILLEURS (H-10).
+                    Le planning le montrait seulement comme une date : l'apprenant devait
+                    repasser par « Mon Live » pour rejoindre. Le présentiel, lui, n'a pas de
+                    salle à ouvrir — on n'affiche donc pas de bouton verrouillé qui ne
+                    s'ouvrira jamais. */}
+                {(() => {
+                  const acces = accesSalle(s, maintenant);
+                  /* UNE SÉANCE CLÔTURÉE N'A PLUS DE SALLE. Sans ce cas, le planning
+                     affichait « 🔒 Pas encore » sur un cours déjà passé — on y lisait une
+                     attente là où il n'y a plus rien à attendre. */
+                  if (acces.close) {
+                    return <span title={acces.raison} style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: '4px 11px',
+                      background: COULEURS.gris100, color: COULEURS.gris600, whiteSpace: 'nowrap' }}>
+                      {s.statut === 'annulee' ? '🚫 Annulée' : '✅ Terminée'}
+                    </span>;
+                  }
+                  if (acces.presentiel) {
+                    return <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: '4px 11px',
+                      background: '#D1FAE5', color: '#065F46', whiteSpace: 'nowrap' }}>🏢 Présentiel</span>;
+                  }
+                  if (!s.lien_visio) {
+                    return <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: '4px 11px',
+                      background: '#FEF3C7', color: '#92400E', whiteSpace: 'nowrap' }}>⚠️ Lien à venir</span>;
+                  }
+                  return acces.joignable ? (
+                    <a href={s.lien_visio} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 11.5, fontWeight: 800, borderRadius: 9, padding: '8px 15px',
+                        background: COULEURS.succes, color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      🎥 Rejoindre
+                    </a>
+                  ) : (
+                    <span title={`La salle s'ouvre ${MINUTES_OUVERTURE_SALLE} min avant le début`}
+                      style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 9, padding: '8px 15px',
+                        background: COULEURS.gris100, color: COULEURS.gris400, whiteSpace: 'nowrap', cursor: 'not-allowed' }}>
+                      🔒 {acces.libelleAttente || 'Pas encore'}
+                    </span>
+                  );
+                })()}
                 {s.statut && (
                   <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: '3px 10px',
                     background: COULEURS.gris100, color: COULEURS.gris600 }}>{s.statut}</span>

@@ -7,7 +7,7 @@ import { urlOuvrir, urlTelecharger } from '../../utils/fichierUrl';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { genererPDF, fmtDatePDF } from '../../utils/genererPDF';
 import SalleVirtuelle from '../../components/shared/SalleVirtuelle';
-import { SALLE_TEST, MODE_DEV } from '../../utils/genererSalleVirtuelle';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import { NIVEAUX_CECR, COMPETENCES_DEFAUT, chargerCompetences, CATEGORIES_COMPETENCES } from '../../constants/niveauxCECR';
 import { useTheme } from '../../contexts/ThemeContext';
 import { supabase } from '../../config/supabase';
@@ -19,11 +19,10 @@ import {
   SectionBoutique, SectionTemoignage, SectionSupport,
 } from '../../components/apprenant/SectionsApprenant';
 
-/* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
-   Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
-   main dans quatre fichiers pour le changer d'une minute : nommé ici, il se relit et se
-   corrige d'un seul endroit par application. */
-const MINUTES_OUVERTURE_SALLE = 10;
+/* OUVERTURE DE LA SALLE VIRTUELLE — la règle et le délai viennent de `utils/ouvertureSalle`,
+   partagés par l'apprenant, le parent, le coach et les quatre dashboards d'encadrement.
+   Cet écran en gardait sa propre copie : c'est exactement la divergence que le module
+   commun existe pour empêcher. */
 const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
 const _API = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
@@ -2180,15 +2179,29 @@ export default function DashboardApprenant() {
                 return (
                   <>
                   {sessionsPage.map(s => {
-                const estPresentiel = s.type_session === 'presentiel';
+                /* LA RÈGLE D'OUVERTURE VIENT DU MODULE COMMUN, et plus d'un calcul posé ici.
+                   Celui qu'il remplace comportait `MODE_DEV ||` : en développement, tous les
+                   boutons « Rejoindre » étaient donc ouverts en permanence, y compris pour
+                   une session prévue dans dix jours. La commodité d'un raccourci de test ne
+                   vaut pas une règle qui ne s'applique plus là où on la vérifie. */
                 const debutISO      = `${s.date_session}T${s.heure_debut}:00`;
                 const debut         = new Date(debutISO);
-                const debutMoins15  = new Date(debut.getTime() - MS_OUVERTURE_SALLE);
                 const maintenant    = new Date();
-                const joignable     = !estPresentiel && (MODE_DEV || maintenant >= debutMoins15);
+                const acces         = accesSalle(s, maintenant);
+                const estPresentiel = acces.presentiel;
+                const joignable     = !estPresentiel && acces.joignable;
+                const ouvertureA    = acces.ouvertureA || new Date(debut.getTime() - MS_OUVERTURE_SALLE);
                 const enCours       = !estPresentiel && maintenant >= debut && maintenant <= new Date(debut.getTime() + 2 * 60 * 60 * 1000);
-                const minutesAvant  = joignable ? 0 : Math.round((debutMoins15 - maintenant) / 60000);
-                const veille        = !estPresentiel && Math.floor((debutMoins15 - maintenant) / (1000 * 60 * 60 * 24)) === 0 && !joignable;
+                const minutesAvant  = acces.minutesAvant;
+                const veille        = !estPresentiel && Math.floor((ouvertureA - maintenant) / (1000 * 60 * 60 * 24)) === 0 && !joignable;
+                /* LES COURS LIÉS, ANNONCÉS SUR LA CARTE comme ils le sont chez le coach.
+                   L'apprenant ne pouvait le savoir qu'en ouvrant « Programme », et retombait
+                   le plus souvent sur « aucun contenu » sans pouvoir distinguer les deux cas
+                   possibles : le coach n'a rien lié, ou le cours lié ne lui est pas
+                   accessible. On compte donc les deux séparément. */
+                const idsLies       = s.contenu_ids || [];
+                const contenusCarte = cours.filter(c => idsLies.includes(c.id));
+                const liesInvisibles = idsLies.length - contenusCarte.length;
 
                 // Couleurs selon type
                 const cardBg    = estPresentiel ? '#F0FDF4' : (joignable ? '#F0FDF4' : COULEURS.gris50);
@@ -2216,11 +2229,19 @@ export default function DashboardApprenant() {
                           <div style={{ fontSize:12, color:COULEURS.gris600, display:'flex', gap:12, flexWrap:'wrap' }}>
                             <span>📅 {fmtDate(s.date_session)}</span>
                             <span>⏰ {s.heure_debut} – {s.heure_fin}</span>
+                            {contenusCarte.length > 0 && (
+                              <span style={{ color:COULEURS.cyanFonce, fontWeight:700 }}>
+                                📚 {contenusCarte.length} cours lié{contenusCarte.length > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {contenusCarte.length === 0 && liesInvisibles > 0 && (
+                              <span style={{ color:COULEURS.attention, fontWeight:600 }}>📚 Cours lié non disponible</span>
+                            )}
                           </div>
                           {!estPresentiel && !joignable && (
                             <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:4 }}>
                               🔒 Accès ouvert {MINUTES_OUVERTURE_SALLE} min avant le cours
-                              {minutesAvant < 1440 && <span style={{ color:COULEURS.attention, fontWeight:600 }}> - dans {minutesAvant < 60 ? `${minutesAvant} min` : `${Math.floor(minutesAvant/60)}h${minutesAvant%60>0?String(minutesAvant%60).padStart(2,'0'):''}`}</span>}
+                              {minutesAvant < 1440 && <span style={{ color:COULEURS.attention, fontWeight:600 }}> - {acces.libelleAttente}</span>}
                             </div>
                           )}
                         </div>
@@ -5326,11 +5347,28 @@ export default function DashboardApprenant() {
 
             {/* Liste des cours */}
             <div style={{ flex:1, overflowY:'auto', padding:'20px 24px', display:'flex', flexDirection:'column', gap:16 }}>
+              {/* DEUX CAS, DEUX MESSAGES. « Le professeur n'a rien lié » et « le cours lié
+                  ne vous est pas accessible » ne se réparent pas de la même façon : le
+                  premier se règle avec le coach, le second est un cours resté en brouillon
+                  ou rattaché à une autre classe. Les confondre envoyait l'apprenant
+                  réclamer un cours que son coach avait bel et bien lié. */}
               {contenusSess.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'48px 20px', color:COULEURS.gris400, background:COULEURS.gris50, borderRadius:12, border:`1px dashed ${COULEURS.gris200}` }}>
-                  <div style={{ fontSize:40, marginBottom:10 }}>📭</div>
-                  <div style={{ fontSize:14, fontWeight:600, color:COULEURS.gris600 }}>Aucun contenu associé pour l'instant</div>
-                  <div style={{ fontSize:12, marginTop:4 }}>Le professeur n'a pas encore lié de cours à cette session.</div>
+                  <div style={{ fontSize:40, marginBottom:10 }}>{(sess.contenu_ids || []).length > 0 ? '🔒' : '📭'}</div>
+                  {(sess.contenu_ids || []).length > 0 ? (
+                    <>
+                      <div style={{ fontSize:14, fontWeight:600, color:COULEURS.gris600 }}>Le cours de cette session n'est pas encore disponible</div>
+                      <div style={{ fontSize:12, marginTop:4 }}>
+                        Votre professeur l'a bien rattaché à la séance, mais il ne l'a pas encore publié
+                        pour votre classe. Il apparaîtra ici dès qu'il le rendra visible.
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize:14, fontWeight:600, color:COULEURS.gris600 }}>Aucun contenu associé pour l'instant</div>
+                      <div style={{ fontSize:12, marginTop:4 }}>Le professeur n'a pas encore lié de cours à cette session.</div>
+                    </>
+                  )}
                 </div>
               ) : contenusSess.map((c, cidx) => {
                 const ti      = TYPE_INFO_L[c.type_contenu] || TYPE_INFO_L.lecon;

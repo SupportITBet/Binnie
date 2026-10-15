@@ -215,7 +215,13 @@ router.get("/rapports-deputy", authenticateAdmin, requireSuperviseurRole, async 
       `)
       .eq("plateforme", PLATEFORME)
       .order("created_at", { ascending: false });
-    if (isDeputy) q = q.eq("deputy_id", req.profil.id);
+    /* LECTURE OUVERTE, ÉCRITURE FERMÉE - même règle que bet-elearning.
+       Consulté SUR UN COACH (`?coach_id=`), le dossier montre au deputy tous les rapports
+       de ce coach, y compris ceux de ses collègues et du Superviseur Général : on n'observe
+       pas utilement un coach sans savoir ce qui lui a déjà été reproché.
+       Sans `coach_id`, la route sert « mes rapports » et reste limitée aux siens.
+       Modifier reste exclu : `PATCH /rapports-deputy/:id` exige `requireGlobalSuperviseur`. */
+    if (isDeputy && !req.query.coach_id) q = q.eq("deputy_id", req.profil.id);
     if (req.query.coach_id) q = q.eq("coach_id", req.query.coach_id);
     const { data, error } = await q;
 

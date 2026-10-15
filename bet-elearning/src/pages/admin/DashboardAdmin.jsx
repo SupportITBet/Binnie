@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfirm, useAlerte } from '../../contexts/ConfirmContext';
 import { COULEURS } from '../../constants/couleurs';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { MOCK_APPRENANTS } from '../../mock/apprenants';
 import { MOCK_SESSIONS, MOCK_GROUPES } from '../../mock/sessions';
@@ -15,7 +16,10 @@ import { OngletComptaApercu, OngletComptaFacturation, OngletComptaPaiements, Ong
 import { OngletRHPaieBulletins, OngletRHContrats, OngletRHConges, OngletRHPaieApercu, OngletRHPaieMesTaches, OngletRHGrilleTarifaire } from './DashboardRhPaie';
 import { OngletCustomerCare } from './DashboardCustomerCare';
 import { OngletRemplacements } from './DashboardAdminShared';
-import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, OngletAnomaliesSuperviseur, OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsElearning } from './DashboardSuperviseur';
+// ANOMALIES MASQUÉ POUR LE MOMENT : `OngletAnomaliesSuperviseur` est toujours exporté par
+// DashboardSuperviseur, seul son import est retiré le temps que la route reste commentée.
+import { OngletCahiersCoachs, OngletRapportsDeputySuperviseur, /* OngletAnomaliesSuperviseur, */ OngletGestionDeputies, OngletMesTachesSuperviseur, OngletClassementCoachs, OngletObserverCours, OngletPlanningsElearning, OngletVueEnsembleSuperviseur } from './DashboardSuperviseur';
+import EvaluationsParents from '../../components/shared/EvaluationsParents';
 import { OngletCoachsPAAdvisor, OngletHonorairesPAAdvisor, OngletVueEnsemblePAAdvisor, OngletClassesPAAdvisor, DashboardPAAdvisor, OngletRapportsSuperviseurPA, OngletEvaluationsPAAdvisor, OngletSuiviApprenantsPAAdvisor, OngletMesTachesPAAdvisor, OngletEvaluationsApprenantsPA } from './DashboardPaAdvisor';
 import { OngletGestionTests, OngletMesTachesPlacement, OngletRapportsPlacement } from './DashboardPlacement';
 import { OngletCommMesTaches, OngletCommTableauBord, OngletCommInscriptions, OngletCommMesClasses, OngletCommMesApprenants, OngletCommPaiements } from './DashboardCommercialElearning';
@@ -285,9 +289,11 @@ const CONFIGS_PAR_ROLE = {
   admin_superviseur: {
     titre:       'Superviseur',
     description: 'Suivi qualité et évaluation des professeurs',
+    /* `suivi` et `evaluations` ont été retirés : leurs chemins n'étaient routés nulle part,
+       et cliquer dessus ne faisait rien. Le superviseur a désormais sa vue d'ensemble
+       (`OngletVueEnsembleSuperviseur`) ; cette liste ne sert plus qu'aux écrans qui lisent
+       encore `titre` et `description`. */
     modules: [
-      { id: 'suivi',         titre: 'Suivi profs',    icone: '👁️', chemin: '/admin/superviseur/suivi',         couleur: COULEURS.cyanFonce },
-      { id: 'evaluations',   titre: 'Évaluations',    icone: '⭐', chemin: '/admin/superviseur/evaluations',   couleur: COULEURS.attention },
       { id: 'remplacements', titre: 'Remplacements',  icone: '🔄', chemin: '/admin/superviseur/remplacements', couleur: '#8B5CF6' },
     ],
   },
@@ -1594,7 +1600,16 @@ function OngletSessionsClasse({ classeId, coachNom, couleur }) {
                     <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:COULEURS.gris500 }}>
                       {s.heure_debut && <span>🕐 {s.heure_debut}{s.heure_fin ? ` → ${s.heure_fin}` : ''}{duree ? ` (${duree})` : ''}</span>}
                       {s.nb_presents != null && <span>👥 {s.nb_presents} présent{s.nb_presents !== 1 ? 's' : ''}</span>}
-                      {lien && <span style={{ color:col }}>🔗 <a href={lien} target="_blank" rel="noreferrer" style={{ color:col, textDecoration:'none', fontWeight:600 }}>Lien visio</a></span>}
+                      {/* LE LIEN N'EST CLIQUABLE QU'À H-10. Avant, il mène à une salle vide :
+                          l'encadrement qui « vérifie le lien » trois jours plus tôt y tombe et
+                          signale une panne qui n'existe pas. Le texte reste visible, grisé,
+                          avec le délai — on voit qu'un lien existe, on sait quand il s'ouvre. */}
+                      {lien && (() => {
+                        const acc = accesSalle(s);
+                        return acc.joignable
+                          ? <span style={{ color:col }}>🔗 <a href={lien} target="_blank" rel="noreferrer" style={{ color:col, textDecoration:'none', fontWeight:600 }}>Lien visio</a></span>
+                          : <span style={{ color:COULEURS.gris400, fontWeight:600 }} title={`La salle s'ouvre ${MINUTES_OUVERTURE_SALLE} min avant le cours`}>🔒 Lien visio · {acc.libelleAttente}</span>;
+                      })()}
                     </div>
                     {(s.objectifs_session || s.compte_rendu || s.bilan_session) && (
                       <div style={{ marginTop:8, fontSize:12, color:COULEURS.gris600, background:COULEURS.gris50, borderRadius:8, padding:'8px 12px', lineHeight:1.5 }}>
@@ -3972,6 +3987,33 @@ export default function DashboardAdmin() {
     return () => { vivant = false; };
   }, [estOnboarding]);
 
+  /* ── LES BADGES DU SUPERVISEUR ──
+     La barre de navigation sait afficher un compteur sur n'importe quel onglet, mais ne le
+     fait que si l'écran le lui fournit : seul l'Onboarding alimentait `badges`, et c'est
+     pourquoi seuls Notifications et Messages — câblés globalement par leurs contextes — en
+     portaient un. Le superviseur a pourtant trois files d'attente, et devait ouvrir chaque
+     onglet pour savoir s'il y restait quelque chose.
+
+     LA SOURCE EST CELLE DE SA VUE D'ENSEMBLE : `/api/superviseur/dashboard`. Un compteur qui
+     lirait ailleurs finirait par annoncer un reste-à-faire que l'onglet ne montre pas. */
+  const estSuperviseurBadges = estRole(profile?.role, 'admin_superviseur');
+  useEffect(() => {
+    if (!estSuperviseurBadges) return;
+    let vivant = true;
+    fetch(`${_API_URL_ADMIN}/api/superviseur/dashboard`, { headers: _authHdrsAdmin() })
+      .then(r => (r.ok ? r.json() : null))
+      .then(k => {
+        if (!vivant || !k) return;
+        setBadgesOnb({
+          '/admin/superviseur/rapports-deputy': k.nb_rapports_non_lus || 0,
+          '/admin/superviseur/anomalies':       k.nb_anomalies_ouvertes || 0,
+          '/admin/superviseur/deputies':        k.nb_missions_actives || 0,
+        });
+      })
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, [estSuperviseurBadges]);
+
   const stats = estRole(profile?.role, 'admin_elearning')
     ? [
         { label: 'Apprenants',     valeur: elearningStats.apprenants, couleur: couleurTheme },
@@ -4197,11 +4239,19 @@ export default function DashboardAdmin() {
                les apprenants, plutôt que deux implémentations qui divergeraient. La route
                autorise déjà le superviseur, seul l'accès manquait. */
             <OngletEvaluationsApprenantsPA />
+          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/eval-parents' ? (
+            /* Le même composant que dash, repris à l'identique : les deux écrans doivent
+               dire la même chose des mêmes coachs. L'en-tête `X-Plateforme` suffit à ce que
+               le serveur ne rende que les avis de cette plateforme. */
+            <EvaluationsParents apiUrl={_API_URL_ADMIN} authHeaders={_authHdrsAdmin} />
           ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/rapports-deputy' ? (
             <OngletRapportsDeputySuperviseur />
-          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/anomalies' ? (
+          ) : /* ANOMALIES MASQUÉ POUR LE MOMENT - la route elle-même est retirée, pour que
+                 l'URL tapée à la main ne contourne pas le retrait du menu. Décommenter cette
+                 branche la rétablit telle quelle :
+          estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/anomalies' ? (
             <OngletAnomaliesSuperviseur />
-          ) : estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/deputies' ? (
+          ) : */ estRole(profile?.role, 'admin_superviseur') && location.pathname === '/admin/superviseur/deputies' ? (
             <OngletGestionDeputies />
           ) : /* ── LE VOLET COMMERCIAL, monté sur `admin_elearning` ──
                  Aucun rôle de bet-elearning n'est « Commerciale » : `commercial`,
@@ -5048,6 +5098,13 @@ export default function DashboardAdmin() {
 
           ) : estRole(profile?.role, 'admin_comptable') ? (
             <OngletComptaApercu />
+
+          ) : estRole(profile?.role, 'admin_superviseur') ? (
+            /* La page d'accueil générique lui servait une grille de trois modules dont DEUX
+               ne menaient nulle part — `/admin/superviseur/suivi` et `/evaluations` ne sont
+               routés nulle part — et aucun chiffre sur son périmètre. Même traitement que le
+               manager et le comptable : sa propre vue d'ensemble, alignée sur celle de dash. */
+            <OngletVueEnsembleSuperviseur />
 
           ) : (
           <>

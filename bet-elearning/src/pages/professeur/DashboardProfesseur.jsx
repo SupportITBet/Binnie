@@ -7,7 +7,7 @@ import { urlOuvrir, urlTelecharger, extensionDe } from '../../utils/fichierUrl';
 import { urlEmbedVideo, estChaineYoutube, estFichierVideo, estFichierAudio } from '../../utils/urlVideo';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import SalleVirtuelle from '../../components/shared/SalleVirtuelle';
-import { SALLE_TEST, MODE_DEV } from '../../utils/genererSalleVirtuelle';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import { fmtFCFA } from '../../mock/paiements';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAlerte, useConfirm } from '../../contexts/ConfirmContext';
@@ -31,12 +31,11 @@ import {
   SectionCoachContrats, SectionCoachProfil,
 } from '../../components/professeur/SectionsCoach';
 
-/* OUVERTURE DE LA SALLE VIRTUELLE - le même délai pour le coach, l'apprenant et le parent.
-   Il vivait en clair dans chaque écran (`15*60*1000`), ce qui obligeait à le retrouver à la
-   main dans quatre fichiers pour le changer d'une minute : nommé ici, il se relit et se
-   corrige d'un seul endroit par application. */
-const MINUTES_OUVERTURE_SALLE = 10;
-const MS_OUVERTURE_SALLE = MINUTES_OUVERTURE_SALLE * 60 * 1000;
+/* OUVERTURE DE LA SALLE VIRTUELLE — la règle et le délai viennent de `utils/ouvertureSalle`,
+   partagés par le coach, l'apprenant, le parent et les quatre dashboards d'encadrement.
+   Cet écran en gardait sa propre copie, ce qui est exactement la divergence que le module
+   commun existe pour empêcher — et c'est par là que « H-15min » avait survécu au passage
+   à dix minutes. */
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(d) {
@@ -5114,7 +5113,7 @@ export default function DashboardProfesseur() {
               <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:12, padding:'14px 18px', marginBottom:20, fontSize:12, color:'#1E40AF' }}>
                 <div style={{ fontWeight:700, marginBottom:8 }}>📋 Déroulement type d'une session :</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {['J-1 : Rappel auto 🔔','H-15min : Salle accessible 🔓','Prof ouvre la salle 🎥','Apprenants rejoignent 👥','Cours + chat + main levée 📚','Saisie présences ✅','Clôture & Replay ⏹'].map((e,i) => (
+                  {['J-1 : Rappel auto 🔔',`H-${MINUTES_OUVERTURE_SALLE}min : Salle accessible 🔓`,'Prof ouvre la salle 🎥','Apprenants rejoignent 👥','Cours + chat + main levée 📚','Saisie présences ✅','Clôture & Replay ⏹'].map((e,i) => (
                     <span key={i} style={{ background:'#DBEAFE', borderRadius:20, padding:'3px 10px', fontWeight:600 }}>{e}</span>
                   ))}
                 </div>
@@ -5126,12 +5125,16 @@ export default function DashboardProfesseur() {
                 <div style={S.vide}>Aucune session planifiée</div>
               ) : mesSessions.filter(s => s.statut === 'planifiee' && !sessionsClôturees.has(s.id)).map(s => {
                 const groupe       = mesGroupes.find(g => g.id === s.groupe_id);
-                const debutISO     = `${s.date_session}T${s.heure_debut}:00`;
-                const debut        = new Date(debutISO);
-                const debutMoins15 = new Date(debut.getTime() - MS_OUVERTURE_SALLE);
                 const maintenant   = new Date();
-                const disponible   = MODE_DEV || maintenant >= debutMoins15;
-                const minutesAvant = disponible ? 0 : Math.round((debutMoins15 - maintenant) / 60000);
+                /* LA RÈGLE VIENT DU MODULE COMMUN. Le calcul posé ici comportait
+                   `MODE_DEV ||` : en développement, « Ouvrir la salle » était donc actif sur
+                   TOUTES les sessions, y compris celles prévues dix jours plus tard. Le coach
+                   n'ouvre pas une salle avant H-10 — sinon l'apprenant qui a reçu le même
+                   lien, lui verrouillé, se retrouve devant une porte fermée côté élève et
+                   ouverte côté coach. */
+                const acces        = accesSalle(s, maintenant);
+                const disponible   = acces.joignable;
+                const minutesAvant = acces.minutesAvant;
                 const contenusSess = mesContenus.filter(c => (s.contenu_ids || []).includes(c.id));
                 const deplie       = sessionsDepliees.has(s.id);
                 const CT           = { lecon:{ bg:'#E0F2FE', txt:'#0E7490', ic:'📖' }, exercice:{ bg:'#D1FAE5', txt:'#065F46', ic:'✏️' }, devoir:{ bg:'#FEF3C7', txt:'#92400E', ic:'📝' }, audio:{ bg:'#EDE9FE', txt:'#5B21B6', ic:'🎵' } };
@@ -5160,8 +5163,11 @@ export default function DashboardProfesseur() {
                         </div>
                         {!disponible && (
                           <div style={{ fontSize:11, color:COULEURS.gris400, marginTop:4 }}>
-                            🔒 Salle disponible J-1 et H-15min avant le cours
-                            {minutesAvant < 1440 && <span> ({minutesAvant < 60 ? `dans ${minutesAvant} min` : `dans ${Math.floor(minutesAvant/60)}h`})</span>}
+                            {/* Le texte annonçait « J-1 et H-15min » : ni l'un ni l'autre
+                                n'était la règle appliquée. Un libellé faux sur un verrou est
+                                pire que pas de libellé — on y croit. */}
+                            🔒 Salle disponible {MINUTES_OUVERTURE_SALLE} min avant le cours
+                            {minutesAvant < 1440 && <span> ({acces.libelleAttente})</span>}
                           </div>
                         )}
                       </div>

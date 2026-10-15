@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useConfirm, useAlerte, usePrompt } from '../../contexts/ConfirmContext';
 import { BadgeStatutVersement, VignettesPreuves, estVerse } from '../../components/shared/PreuvesPaiement';
 import { COULEURS } from '../../constants/couleurs';
+import { accesSalle, MINUTES_OUVERTURE_SALLE } from '../../utils/ouvertureSalle';
 import TopNavLayout from '../../components/shared/TopNavLayout';
 import { SECTEURS } from '../../mock/entreprises';
 import { lirePackages, chargerPackages } from '../../constants/packagesCommerciaux';
@@ -1589,7 +1590,13 @@ function ModalDetailBeneficiaire({ benef, entreprise, onFermer, onEditer }) {
                           </div>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <span style={{ padding: '3px 10px', borderRadius: 20, background: '#DBEAFE', color: '#1E40AF', fontSize: 10, fontWeight: 600 }}>Planifiée</span>
-                            {lien && <a href={lien} style={{ padding: '5px 12px', borderRadius: 6, background: '#10B981', color: '#fff', fontSize: 11, fontWeight: 700, textDecoration: 'none' }} target="_blank" rel="noreferrer">🔗 Rejoindre</a>}
+                            {/* Grisé jusqu'à H-10 : avant, la salle est vide. */}
+                            {lien && (() => {
+                              const acc = accesSalle(s);
+                              return acc.joignable
+                                ? <a href={lien} style={{ padding: '5px 12px', borderRadius: 6, background: '#10B981', color: '#fff', fontSize: 11, fontWeight: 700, textDecoration: 'none' }} target="_blank" rel="noreferrer">🔗 Rejoindre</a>
+                                : <span style={{ padding: '5px 12px', borderRadius: 6, background: COULEURS.gris100, color: COULEURS.gris400, fontSize: 11, fontWeight: 700, cursor: 'not-allowed' }} title={`La salle s'ouvre ${MINUTES_OUVERTURE_SALLE} min avant le cours`}>🔒 {acc.libelleAttente}</span>;
+                            })()}
                           </div>
                         </div>
                       );
@@ -2518,7 +2525,12 @@ function OngletSessionsClasse({ classeId, coachNom, couleur }) {
                     <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:COULEURS.gris500 }}>
                       {s.heure_debut && <span>🕐 {s.heure_debut}{s.heure_fin ? ` → ${s.heure_fin}` : ''}{duree ? ` (${duree})` : ''}</span>}
                       {s.nb_presents != null && <span>👥 {s.nb_presents} présent{s.nb_presents !== 1 ? 's' : ''}</span>}
-                      {lien && <span style={{ color:col }}>🔗 <a href={lien} target="_blank" rel="noreferrer" style={{ color:col, textDecoration:'none', fontWeight:600 }}>Lien visio</a></span>}
+                      {lien && (() => {
+                        const acc = accesSalle(s);
+                        return acc.joignable
+                          ? <span style={{ color:col }}>🔗 <a href={lien} target="_blank" rel="noreferrer" style={{ color:col, textDecoration:'none', fontWeight:600 }}>Lien visio</a></span>
+                          : <span style={{ color:COULEURS.gris400, fontWeight:600 }} title={`La salle s'ouvre ${MINUTES_OUVERTURE_SALLE} min avant le cours`}>🔒 Lien visio · {acc.libelleAttente}</span>;
+                      })()}
                     </div>
                     {(s.objectifs_session || s.compte_rendu || s.bilan_session) && (
                       <div style={{ marginTop:8, fontSize:12, color:COULEURS.gris600, background:COULEURS.gris50, borderRadius:8, padding:'8px 12px', lineHeight:1.5 }}>

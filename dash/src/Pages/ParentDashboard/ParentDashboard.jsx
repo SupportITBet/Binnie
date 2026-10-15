@@ -791,21 +791,56 @@ export default function ParentDashboard() {
                             // programmation) - jamais exposé au parent jusqu'ici.
                             const lienSession = s.lieu && /^https?:\/\//i.test(s.lieu) ? s.lieu : null;
                             const estAVenir = s.statut === "planifie" || s.statut === "planifiee";
+                            /* LE PROGRAMME DE LA SÉANCE. Le coach rattache un ou plusieurs
+                               cours à chaque session ; le parent n'en voyait rien, alors que
+                               c'est précisément ce qu'il cherche à savoir - ce que son enfant
+                               va travailler. Seuls les cours PUBLIÉS remontent : le serveur
+                               écarte les brouillons, dont le titre promettrait un contenu
+                               que l'enfant ne peut pas encore ouvrir. */
+                            const coursLies = s.contenu_modules || [];
+                            /* La salle n'est pas encore ouverte : le serveur ne transmet alors
+                               pas le lien du tout (il est public, le masquer à l'écran ne
+                               protégerait rien) et indique l'heure d'ouverture. */
+                            const enAttente = estAVenir && !lienSession && s.salle_ouvre_a;
+                            const EMOJI_C = { lecon:"📖", audio:"🎧", video:"🎬" };
                             return (
-                            <div key={s.id || i} style={styles.classItem}>
+                            <div key={s.id || i} style={{ ...styles.classItem, alignItems:"flex-start", flexWrap:"wrap" }}>
                               <div style={styles.classDate}>
                                 <div style={{ fontWeight:800 }}>{fmtDate(s.date)}</div>
                                 <div style={{ fontSize:".8rem", color:"#64748b" }}>{s.heure_debut || ""}{s.heure_fin ? ` – ${s.heure_fin}` : ""}</div>
                               </div>
-                              <div style={{ flex:1 }}>
+                              <div style={{ flex:1, minWidth:180 }}>
                                 <div style={{ fontWeight:600 }}>{s.objectifs_session || s.type || "Séance"}</div>
                                 <div style={{ fontSize:".8rem", color:"#475569" }}>{s.statut}{s.source === "presence" && <span style={{ color:"#94a3b8" }}> · déduite des présences</span>}</div>
+                                {coursLies.length > 0 && (
+                                  <div style={{ marginTop:7 }}>
+                                    <div style={{ fontSize:".7rem", fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:".05em", marginBottom:5 }}>
+                                      📚 Au programme
+                                    </div>
+                                    <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                                      {coursLies.map(m => (
+                                        <span key={m.id} style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:8, fontSize:".75rem", fontWeight:600, background:"#f0f9ff", border:"1px solid #bae6fd", color:"#0369a1" }}>
+                                          <span>{EMOJI_C[m.type_contenu] || "📦"}</span>
+                                          <span>{m.titre}</span>
+                                          {m.nb_blocs > 0 && <span style={{ color:"#7dd3fc", fontWeight:700 }}>· {m.nb_blocs} partie{m.nb_blocs > 1 ? "s" : ""}</span>}
+                                          {m.duree_estimee && <span style={{ color:"#94a3b8" }}>· {m.duree_estimee} min</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               {lienSession && estAVenir && (
                                 <a href={lienSession} target="_blank" rel="noopener noreferrer"
                                   style={{ padding:"8px 16px", background:"#dc2626", color:"#fff", borderRadius:8, fontWeight:700, fontSize:12.5, textDecoration:"none", whiteSpace:"nowrap" }}>
                                   🔗 Rejoindre
                                 </a>
+                              )}
+                              {enAttente && (
+                                <span title={`La salle s'ouvre ${s.salle_ouvre_dans_min || 10} min avant le début du cours`}
+                                  style={{ padding:"8px 16px", background:"#f1f5f9", color:"#94a3b8", borderRadius:8, fontWeight:700, fontSize:12.5, whiteSpace:"nowrap", cursor:"not-allowed" }}>
+                                  🔒 Salle à {String(s.salle_ouvre_a).slice(0,5)}
+                                </span>
                               )}
                             </div>
                             );
