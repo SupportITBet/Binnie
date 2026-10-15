@@ -56,8 +56,13 @@ if [ -f "$MARQUEUR" ]; then
 elif [ -f "$CIBLE/asset-manifest.json" ] && [ -d "$CIBLE/static" ]; then
   echo "  build React reconnu (asset-manifest.json + static/)"
 else
+  # `php.ini` et `.user.ini` sont posés par cPanel À LA CRÉATION du sous-domaine, avec
+  # `cgi-bin` et `.htaccess`. Un dossier qui ne contient qu'eux est donc un dossier NEUF,
+  # pas le site d'autrui : les compter comme étrangers faisait refuser la toute première
+  # publication, celle que ce contrôle est précisément censé autoriser (15/10/2026).
   ETRANGERS=$(find "$CIBLE" -mindepth 1 -maxdepth 1 \
                 ! -name '.well-known' ! -name 'cgi-bin' ! -name '.htaccess' \
+                ! -name 'php.ini' ! -name '.user.ini' \
                 ! -name '0-RACINE-*' 2>/dev/null | head -20)
   if [ -n "$ETRANGERS" ]; then
     rouge "✗ REFUS : ce dossier contient autre chose qu'une publication BET E-Learning."
