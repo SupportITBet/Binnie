@@ -8585,7 +8585,7 @@ export default function SuperAdminDashboard() {
                     <div style={{ marginBottom:18 }}>
                       <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:"#0f172a" }}>🔑 Code d'accès du portail staff</h3>
                       <p style={{ margin:"3px 0 0", fontSize:12, color:"#6b7280" }}>
-                        Code demandé sur la page d'accueil (dash.purepro-group.com/) avant d'atteindre la connexion staff. Communique-le au staff par un canal interne (Slack, WhatsApp…), jamais dans l'app.
+                        Code demandé sur la page d'accueil (app.binniesenglish.net) avant d'atteindre la connexion staff. Communique-le au staff par un canal interne (Slack, WhatsApp…), jamais dans l'app.
                       </p>
                     </div>
                     <div style={{ marginBottom:16, padding:"8px 12px", borderRadius:8, background: accessGateHasCode ? "#f0fdf4" : "#fef2f2", border: `1px solid ${accessGateHasCode ? "#bbf7d0" : "#fecaca"}`, fontSize:12, color: accessGateHasCode ? "#166534" : "#991b1b" }}>
