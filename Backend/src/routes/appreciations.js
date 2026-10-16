@@ -29,9 +29,23 @@ const requireLecture = (req, res, next) => {
   next();
 };
 
-/** La table peut ne pas exister encore - le SQL est livré séparément. */
-const tableAbsente = (e) =>
-  e && (e.code === "42P01" || /appreciations_apprenants/.test(e.message || ""));
+/**
+ * La table peut ne pas exister encore - le SQL est livré séparément.
+ *
+ * SUR LE CODE SEUL, ET SURTOUT PAS SUR LE MESSAGE. La version précédente retenait aussi
+ * toute erreur dont le message cite `appreciations_apprenants` — or Postgres nomme la
+ * table dans CHACUN de ses messages : violation de contrainte unique, clé étrangère,
+ * colonne NOT NULL. Les trois étaient donc rapportées comme « les appréciations ne sont
+ * pas encore activées », sur une table parfaitement présente.
+ *
+ * Constaté le 16/10/2026 : une appréciation e-learning échouait en 23503 (clé étrangère
+ * `seance_id` vers `seances`), et l'apprenant lisait qu'un module n'était pas activé —
+ * un message qui n'oriente vers rien, et qui a coûté une heure de recherche.
+ *
+ * `42P01` est le code Postgres pour « table inexistante » ; `PGRST205`, celui de PostgREST
+ * quand elle manque à son cache de schéma. Aucun autre ne signifie cela.
+ */
+const tableAbsente = (e) => !!e && (e.code === "42P01" || e.code === "PGRST205");
 
 /* ══════════════════════════════════════════════════════════════
    GET /api/appreciations/a-noter - ce que l'apprenant connecté doit encore noter
@@ -282,9 +296,22 @@ router.post("/", authenticateUser, async (req, res) => {
         })
         .select().single();
       if (eE) {
-        if (tableAbsente(eE)) return res.status(503).json({ error: "Les appréciations ne sont pas encore activées." });
         // 23505 : une note existe déjà pour cette séance - on ne note qu'une fois.
+        // TESTÉ AVANT le cas « table absente » : l'ordre inverse masquait ce refus, le
+        // message d'unicité citant le nom de la table.
         if (eE.code === "23505") return res.status(409).json({ error: "Vous avez déjà noté cette séance." });
+        if (tableAbsente(eE)) return res.status(503).json({ error: "Les appréciations ne sont pas encore activées." });
+        /* 23503 : une clé étrangère refuse la ligne. Côté e-learning, c'est attendu tant
+           que `seance_id` et `groupe_id` pointent vers les tables du présentiel — voir
+           Backend/sql/appreciations_elearning_fk.sql. Le dire plutôt que de laisser une
+           erreur 500 anonyme. */
+        if (eE.code === "23503") {
+          console.error("[appreciations] clé étrangère refusée :", eE.details || eE.message);
+          return res.status(503).json({
+            error: "Les appréciations e-learning ne sont pas encore ouvertes sur cette base "
+                 + "(contrainte de clé étrangère). Exécuter Backend/sql/appreciations_elearning_fk.sql.",
+          });
+        }
         throw eE;
       }
       return res.status(201).json({ appreciation: dE });
