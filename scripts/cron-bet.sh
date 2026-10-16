@@ -17,7 +17,7 @@
 #
 set -uo pipefail
 
-TACHES="rappels-seances paiements-mensuels badges-fidelite newsletter-programmee"
+TACHES="rappels-seances paiements-mensuels badges-fidelite newsletter-programmee push-notifications"
 
 TACHE="${1:-}"
 if [ -z "$TACHE" ] || ! printf '%s\n' $TACHES | grep -qx "$TACHE"; then

@@ -3855,7 +3855,10 @@ router.patch("/:id/email", authenticateAdmin, async (req, res) => {
         + `votre espace exactement comme vous l'aviez laissé. Si vous ne vous en souvenez plus, `
         + `utilisez « Mot de passe oublié » sur la page de connexion.`,
       ctaLabel: "Accéder à mon espace",
-      ctaUrl: `${process.env.DASH_URL || "https://dash.binniesenglish.com"}/connexion`,
+      // `/connexion/apprenant` et non `/connexion` : dash N'A PAS de route `/connexion`
+      // (seulement `/connexion/apprenant`), ce lien tombait donc sur son 404. Le
+      // destinataire est un apprenant dont l'adresse vient de changer.
+      ctaUrl: `${process.env.DASH_URL || "https://dash.binniesenglish.com"}/connexion/apprenant`,
       tag: "changement-email",
     }).catch(e => ({ ok: false, erreur: e.message }));
 

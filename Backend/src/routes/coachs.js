@@ -11,7 +11,7 @@ import { resolveParentUserId } from "./groupes.js";
 import { clotureSeance } from "./seances.js";
 
 import { staffDesClasses } from "../services/staffDesClasses.js";
-import { annoterSessionsDeLeursCours } from "../services/coursDeSession.js";
+import { annoterSessionsDeLeursCours , annoterSessionsElearning } from "../services/coursDeSession.js";
 import { estElearning, inscriptionsElearningDe, classeIdsDe } from "../services/plateformeApprenant.js";
 import {
   motifDe, periodesDe, pausesDe, joursSuivis, dureeDepuisJours, dureeLisible,
@@ -1201,7 +1201,7 @@ async function sessionsElearningDe(user) {
   };
   const close = (s) => ["realisee", "terminee", "annulee"].includes(s.statut);
 
-  return seances.map(s => {
+  const lignes = seances.map(s => {
     const lien = s.lien_zoom || s.lien_meet || s.lien_teams || null;
     const presentiel = s.type === "presentiel";
     const servirLien = !presentiel && lien && !close(s) && salleOuverte(s);
@@ -1224,6 +1224,9 @@ async function sessionsElearningDe(user) {
       demarree_at: s.demarree_at || null,
       terminee_at: s.terminee_at || null,
       duree_reelle_s: s.duree_reelle_s ?? null,
+      /* Remplis juste après par `annoterSessionsElearning` — voir le `return` de la
+         fonction. Laissés vides ICI parce que la résolution est une lecture groupée : la
+         faire séance par séance multiplierait les requêtes par le nombre de sessions. */
       contenu_ids: s.contenu_ids || [],
       contenu_modules: [],
       contenu_titres: [],
@@ -1232,6 +1235,13 @@ async function sessionsElearningDe(user) {
         : null,
     };
   });
+
+  /* LES COURS RATTACHÉS À CHAQUE SÉANCE. `contenu_modules` et `contenu_titres` étaient
+     renvoyés VIDES EN DUR : l'apprenant ne pouvait pas savoir ce que sa session allait
+     traiter, alors que son coach l'avait rattaché. Résolu en UNE lecture groupée pour
+     toutes les séances, contre une par séance si on le faisait dans le `map`.
+     `inclureBrouillons` reste faux : un cours non publié n'est pas annoncé à la famille. */
+  return annoterSessionsElearning(lignes);
 }
 
 // GET public - apprenants: sessions à venir + terminées des 60 derniers jours

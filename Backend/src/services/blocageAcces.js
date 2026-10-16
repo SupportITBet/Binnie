@@ -116,7 +116,8 @@ async function previenirApprenant({ email, prenom, titre, message, tag }) {
     await sendNotificationEmail({
       prenom, email, titre, message,
       ctaLabel: "Accéder à mon espace",
-      ctaUrl:   `${URL_ESPACE}/connexion`,
+      // Destinataire : un apprenant. `/connexion` servait l'ecran du personnel.
+      ctaUrl:   `${URL_ESPACE}/connexion/apprenant`,
       tag,
     });
     return true;

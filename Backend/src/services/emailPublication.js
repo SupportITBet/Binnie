@@ -114,7 +114,13 @@ export async function envoyerEmailPublication({
   ressourceId,
   titre,
   message,
-  ctaUrl = `${URL_ESPACE}/connexion`,
+  /* CHAQUE AUDIENCE A SA PAGE, et c'est possible parce que les deux envois sont deja des
+     boucles separees plus bas. Ce parametre valait `/connexion`, l'ecran du PERSONNEL :
+     apprenants comme parents atterrissaient sur « Super Admin / Manager / Superviseur... ».
+     Il n'existe plus aucune page d'accueil commune a plusieurs profils - laisser une valeur
+     unique obligerait a envoyer la moitie des destinataires au mauvais endroit.
+     `ctaUrl` reste surchargeable par l'appelant : s'il le passe, il vaut pour tout le monde. */
+  ctaUrl = null,
   ctaLabel = "Ouvrir mon espace",
   groupeIds = [],
   parEmailParents = true,
@@ -165,7 +171,8 @@ export async function envoyerEmailPublication({
       try {
         await sendNotificationEmail({
           prenom: a.prenom || "", email: a.email,
-          titre, message, ctaLabel, ctaUrl,
+          titre, message, ctaLabel,
+          ctaUrl: ctaUrl || `${URL_ESPACE}/connexion/apprenant`,
           tag: `publication-${ressourceType}`,
         });
         ok++;
@@ -182,7 +189,8 @@ export async function envoyerEmailPublication({
           // Le parent n'est pas l'élève : on le lui rappelle, sinon le message se lit
           // comme une consigne qui lui serait adressée.
           message: `${message}\n\nVous recevez ce message en tant que parent, pour information.`,
-          ctaLabel, ctaUrl,
+          ctaLabel,
+          ctaUrl: ctaUrl || `${URL_ESPACE}/connexion/parent`,
           tag: `publication-${ressourceType}-parent`,
         });
         ok++;

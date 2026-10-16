@@ -80,3 +80,64 @@ export async function annoterSessionsDeLeursCours(sessions, options = {}) {
     return { ...s, contenu_modules: modules, contenu_titres: modules.map(m => m.titre) };
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════
+   LE PENDANT BET E-LEARNING
+   ═══════════════════════════════════════════════════════════════════════════════════════
+   LES DEUX PLATEFORMES NE RANGENT PAS LEURS COURS AU MÊME ENDROIT. `modulesParId` ci-dessus
+   lit `modules_elearning`, la table de dash. Les séances de bet-elearning désignent, elles,
+   des lignes de `contenus_classes_elearning` — la Médiathèque du coach.
+
+   Mesuré le 15/10/2026 sur les deux séances qui portent des `contenu_ids` : zéro
+   correspondance dans `modules_elearning`, deux dans `contenus_classes_elearning`. Le
+   résolveur de dash aurait donc TOUJOURS rendu une liste vide, en silence — ce qui explique
+   que `contenu_modules` et `contenu_titres` soient restés des tableaux vides en dur dans
+   `sessionsElearningDe` plutôt que d'être calculés.
+
+   La règle du brouillon est la même des deux côtés : un contenu non publié n'est pas annoncé
+   à la famille. Ici elle se lit sur `statut` ET sur `est_visible`, que l'écran du coach
+   manipule pour retirer un cours sans le dépublier. */
+
+/** Le résumé d'un contenu e-learning, dans la MÊME forme que celui de dash. */
+const resumerElearning = (c) => ({
+  id:            c.id,
+  titre:         c.titre,
+  cours_id:      c.classe_id || null,
+  statut:        c.statut,
+  type_contenu:  c.type_contenu || "lecon",
+  duree_estimee: c.duree_estimee || null,
+  nb_blocs:      (c.blocs || []).length,
+  types_blocs:   [...new Set((c.blocs || []).map(b => b?.type).filter(Boolean))],
+});
+
+/** Les contenus e-learning désignés par ces identifiants, indexés par identifiant. */
+export async function contenusElearningParId(ids, { inclureBrouillons = false } = {}) {
+  const propres = [...new Set(ids || [])].filter(Boolean);
+  if (!propres.length) return {};
+
+  const { data, error } = await supabase
+    .from("contenus_classes_elearning")
+    .select("id, titre, classe_id, statut, est_visible, type_contenu, duree_estimee, blocs")
+    .in("id", propres);
+  if (error) {
+    console.error("[coursDeSession] lecture contenus e-learning:", error.message);
+    return {};
+  }
+
+  const out = {};
+  for (const c of data || []) {
+    if (!inclureBrouillons && (c.statut !== "publie" || c.est_visible === false)) continue;
+    out[c.id] = resumerElearning(c);
+  }
+  return out;
+}
+
+/** `annoterSessionsDeLeursCours`, côté bet-elearning. */
+export async function annoterSessionsElearning(sessions, options = {}) {
+  const parId = await contenusElearningParId(
+    (sessions || []).flatMap(s => s.contenu_ids || []), options);
+  return (sessions || []).map(s => {
+    const modules = (s.contenu_ids || []).map(id => parId[id]).filter(Boolean);
+    return { ...s, contenu_modules: modules, contenu_titres: modules.map(m => m.titre) };
+  });
+}

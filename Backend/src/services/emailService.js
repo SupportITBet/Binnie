@@ -328,7 +328,10 @@ export async function sendAccessRegeneratedEmail({ prenom, nom, email, mdpTemp }
  */
 export async function sendApprenantWelcomeEmail({ prenom, nom, email, mdpTemp, compteExistant = false, plateforme = 'dash' }) {
   const urlConnexion = plateforme === 'bet-elearning'
-    ? `${ELEARNING_URL}/connexion`
+    // La page de l'APPRENANT, comme la branche dash juste en dessous. Ce lien pointait sur
+    // `/connexion`, c'est-a-dire l'ecran de connexion du PERSONNEL : un apprenant qui cliquait
+    // sur son e-mail de bienvenue tombait sur « Super Admin / Manager / Superviseur... ».
+    ? `${ELEARNING_URL}/connexion/apprenant`
     : `${DASH_URL}/connexion/apprenant`;
   const identifiantsBlock = compteExistant
     ? `<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:14px;padding:24px 28px;margin-bottom:28px;">
