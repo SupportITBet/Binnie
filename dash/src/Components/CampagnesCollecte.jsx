@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 import { uploadFichier } from "../utils/uploadFichier";
+import { useConfirm } from "../contexts/ConfirmContext";
 import { exporterCampagnesExcel, exporterCampagnesPdf } from "../utils/exportCampagnes";
 import { preparerContacts, exporterVcards, exporterNumeros, decouperEnListes, MAX_PAR_LISTE } from "../utils/exportContactsWhatsapp";
 
@@ -141,6 +142,11 @@ const BlocStat = ({ n, l, c }) => (
 
 
 export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
+  /* LE MODAL MAISON, PAS `window.confirm`. Il est déjà la convention du dashboard
+     (`contexts/ConfirmContext`) : même rendu partout, bouton rouge pour ce qui détruit,
+     et il n'est pas bloquant. Les dialogues natifs du navigateur ne se stylent pas et
+     détonnent avec le reste de l'écran. */
+  const confirm = useConfirm();
   const jeton = () => localStorage.getItem("admin_token");
   const hdr = useCallback(() => ({
     Authorization: `Bearer ${jeton()}`, "Content-Type": "application/json",
@@ -332,6 +338,12 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
      redemande avec `force=1`. Les réponses déjà collectées survivent ; ce qui se perd,
      c'est leur rattachement à la campagne, c'est-à-dire la mesure de provenance. */
   const supprimerCampagne = async (c, force = false) => {
+    /* `force` vient de la seconde confirmation, celle qui affiche les chiffres du serveur :
+       on ne redemande donc pas. Mais le PREMIER appel partait sans rien demander — une
+       campagne sans réponse était supprimée au clic, sans retour possible. */
+    if (!force && !(await confirm(
+      `La campagne « ${c.nom} » et son lien de collecte seront supprimés.`,
+      { titre: "Supprimer cette campagne ?", confirmLabel: "Supprimer" }))) return;
     const r = await fetch(`${apiUrl}/api/campagnes/${c.id}${force ? "?force=1" : ""}`, {
       method: "DELETE", headers: hdr(),
     });
@@ -441,71 +453,116 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
           </div>
         )}
 
-        {[...campagnes, { id: "_", nom: "Sans campagne", _orphelin: true }].map(c => {
-          const liste = parCampagne[c.id] || [];
-          if (!liste.length) return null;
-          return (
-            <div key={c.id} style={{ marginBottom: 22 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 14.5, fontWeight: 800, color: c._orphelin ? "#94a3b8" : "#0f172a" }}>
-                  {c._orphelin ? "📄 " : "🎯 "}{c.nom}
-                </span>
-                {!c._orphelin && c.statut && (
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 99, background: "#f1f5f9", color: "#475569" }}>{c.statut}</span>
-                )}
-                {/* « Sans campagne » n'est pas une campagne : c'est le fourre-tout des
-                    formulaires qui n'en ont pas. Rien à y modifier ni à y supprimer. */}
-                {!c._orphelin && (
-                  <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                    <button onClick={() => setModalCampagne({
-                        id: c.id, nom: c.nom || "", statut: c.statut || "active",
-                        date_debut: (c.date_debut || "").slice(0, 10),
-                        date_fin:   (c.date_fin   || "").slice(0, 10),
-                        objectif_reponses: c.objectif_reponses ?? "",
-                      })}
-                      title="Modifier cette campagne"
-                      style={{ padding: "4px 11px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                      ✏️ Modifier
-                    </button>
-                    <button onClick={() => supprimerCampagne(c)}
-                      title="Supprimer cette campagne"
-                      style={{ padding: "4px 11px", borderRadius: 7, border: "1px solid #fecaca", background: "#fff", color: "#b91c1c", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                      🗑 Supprimer
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 12 }}>
-                {liste.map(f => (
-                  <div key={f.id} onClick={() => ouvrirFormulaire(f.id)}
-                    style={{ ...carte, cursor: "pointer", transition: "box-shadow .15s" }}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,.08)"}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>{f.titre}</div>
-                      <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, padding: "2px 9px", borderRadius: 99, height: "fit-content",
-                        background: f.statut === "publie" ? "#dcfce7" : f.statut === "ferme" ? "#fee2e2" : "#fef9c3",
-                        color: f.statut === "publie" ? "#15803d" : f.statut === "ferme" ? "#b91c1c" : "#a16207" }}>
-                        {f.statut === "publie" ? "Publié" : f.statut === "ferme" ? "Fermé" : "Brouillon"}
-                      </span>
-                    </div>
-                    <div style={{ fontFamily: "monospace", fontSize: 11.5, color: "#94a3b8", marginBottom: 12 }}>/f/{f.slug}</div>
-                    <div style={{ display: "flex", gap: 14, fontSize: 12.5 }}>
-                      <span><strong style={{ fontSize: 16, color: accent }}>{f.reponses}</strong> réponse{f.reponses !== 1 ? "s" : ""}</span>
-                      <span style={{ color: "#64748b" }}><strong>{f.visites}</strong> visite{f.visites !== 1 ? "s" : ""}</span>
-                      <span style={{ color: "#64748b" }}><strong>{f.diffusions}</strong> {f.diffusions > 1 ? "canaux" : "canal"}</span>
-                    </div>
-                    {f.nouvelles > 0 && (
-                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>
-                        🔔 {f.nouvelles} réponse{f.nouvelles > 1 ? "s" : ""} non lue{f.nouvelles > 1 ? "s" : ""}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        {/* ── LA LISTE EN TABLEAU ────────────────────────────────────────────────────────
+            Les formulaires étaient présentés en cartes : jolies, mais on ne pouvait rien y
+            comparer. Les chiffres qui comptent ici — réponses, visites, canaux — se lisent
+            en colonne, pas en cherchant trois nombres au milieu de chaque carte. Un tableau
+            les aligne, et tient dix campagnes dans la hauteur qu'une grille donnait à trois.
+
+            UN SEUL TABLEAU, avec une ligne de groupe par campagne. Découper en un tableau
+            par campagne répéterait l'en-tête à chaque fois et casserait justement
+            l'alignement qu'on vient de gagner. La ligne de groupe porte le nom de la
+            campagne, son statut et ses deux actions. */}
+        {!chargement && formulaires.length > 0 && (
+          <div style={{ ...carte, padding: 0, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["Formulaire", "Statut", "Réponses", "Visites", "Canaux", ""].map((t, i) => (
+                    <th key={t + i} style={{
+                      padding: "11px 14px", textAlign: i >= 2 && i <= 4 ? "right" : "left",
+                      fontSize: 11, fontWeight: 800, color: "#64748b",
+                      textTransform: "uppercase", letterSpacing: ".04em",
+                      borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap",
+                    }}>{t}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...campagnes, { id: "_", nom: "Sans campagne", _orphelin: true }].map(c => {
+                  const liste = parCampagne[c.id] || [];
+                  if (!liste.length) return null;
+                  return (
+                    <React.Fragment key={c.id}>
+                      <tr style={{ background: "#f1f5f9" }}>
+                        <td colSpan={6} style={{ padding: "9px 14px", borderBottom: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 800, color: c._orphelin ? "#94a3b8" : "#0f172a" }}>
+                              {c._orphelin ? "📄 " : "🎯 "}{c.nom}
+                            </span>
+                            {!c._orphelin && c.statut && (
+                              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 9px", borderRadius: 99, background: "#fff", color: "#475569", border: "1px solid #e2e8f0" }}>{c.statut}</span>
+                            )}
+                            {/* « Sans campagne » n'est pas une campagne : c'est le fourre-tout des
+                                formulaires qui n'en ont pas. Rien à y modifier ni à y supprimer. */}
+                            {!c._orphelin && (
+                              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                                <button onClick={() => setModalCampagne({
+                                    id: c.id, nom: c.nom || "", statut: c.statut || "active",
+                                    date_debut: (c.date_debut || "").slice(0, 10),
+                                    date_fin:   (c.date_fin   || "").slice(0, 10),
+                                    objectif_reponses: c.objectif_reponses ?? "",
+                                  })}
+                                  title="Modifier cette campagne"
+                                  style={{ padding: "4px 11px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                  ✏️ Modifier
+                                </button>
+                                <button onClick={() => supprimerCampagne(c)}
+                                  title="Supprimer cette campagne"
+                                  style={{ padding: "4px 11px", borderRadius: 7, border: "1px solid #fecaca", background: "#fff", color: "#b91c1c", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                  🗑 Supprimer
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {liste.map(f => (
+                        <tr key={f.id} onClick={() => ouvrirFormulaire(f.id)}
+                          style={{ cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <td style={{ padding: "11px 14px" }}>
+                            <div style={{ fontWeight: 700, fontSize: 13.5, color: "#0f172a" }}>{f.titre}</div>
+                            <div style={{ fontFamily: "monospace", fontSize: 11, color: "#94a3b8", marginTop: 2 }}>/f/{f.slug}</div>
+                            {/* Les non-lues restent SOUS le titre et non dans leur propre colonne :
+                                elles sont rares, une colonne vide sur toute la hauteur pour un
+                                compteur occasionnel coûterait plus qu'elle ne rapporte. */}
+                            {f.nouvelles > 0 && (
+                              <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 700, color: "#1d4ed8" }}>
+                                🔔 {f.nouvelles} réponse{f.nouvelles > 1 ? "s" : ""} non lue{f.nouvelles > 1 ? "s" : ""}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: "11px 14px" }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 9px", borderRadius: 99, whiteSpace: "nowrap",
+                              background: f.statut === "publie" ? "#dcfce7" : f.statut === "ferme" ? "#fee2e2" : "#fef9c3",
+                              color: f.statut === "publie" ? "#15803d" : f.statut === "ferme" ? "#b91c1c" : "#a16207" }}>
+                              {f.statut === "publie" ? "Publié" : f.statut === "ferme" ? "Fermé" : "Brouillon"}
+                            </span>
+                          </td>
+                          <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 15, fontWeight: 800, color: accent, fontVariantNumeric: "tabular-nums" }}>
+                            {f.reponses}
+                          </td>
+                          <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13.5, color: "#475569", fontVariantNumeric: "tabular-nums" }}>
+                            {f.visites}
+                          </td>
+                          <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13.5, color: "#475569", fontVariantNumeric: "tabular-nums" }}>
+                            {f.diffusions}
+                          </td>
+                          <td style={{ padding: "11px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>Ouvrir →</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* CONFIRMATION DE SUPPRESSION - avec les chiffres RENVOYÉS PAR LE SERVEUR, jamais
             devinés ici. Elle dit ce qui disparaît et ce qui reste : l'écueil serait de
@@ -628,6 +685,15 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
               <button onClick={() => { setFiltreDiff(""); setFiltreStatut(""); chargerReponses(f.id, 1); chargerStats(f.id); setModalReponses(true); }}
                 style={bouton("#0891b2")}>📥 Voir les réponses</button>
               <button onClick={async () => {
+                /* CE BOUTON AGIT SUR LE PUBLIC, et c'est ce qui justifie la confirmation :
+                   publier rend le QR actif pour tout le monde, fermer coupe net une collecte
+                   en cours — les affiches déjà distribuées, elles, ne se rappellent pas. */
+                if (!(await confirm(
+                  publie
+                    ? "Le QR code et le lien cesseront de fonctionner. Les affiches déjà distribuées mèneront à un formulaire fermé."
+                    : "Le QR code et le lien deviendront actifs : n'importe qui pourra répondre.",
+                  { titre: publie ? "Fermer ce formulaire ?" : "Publier ce formulaire ?",
+                    confirmLabel: publie ? "Fermer" : "Publier", danger: publie }))) return;
                 const ok = await majFormulaire({ statut: publie ? "ferme" : "publie" });
                 if (ok) toast.success(publie ? "Formulaire fermé" : "Formulaire publié - le QR est actif ✓");
               }} style={bouton(publie ? "#b45309" : "#15803d")}>
@@ -791,6 +857,8 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
       {repOuverte && (
         <DetailReponse detail={repOuverte} onFermer={() => setRepOuverte(null)}
           onStatut={async (statut) => {
+            if (!(await confirm(`Cette réponse passera au statut « ${statut} ».`,
+              { titre: "Changer le statut ?", confirmLabel: "Changer", danger: false }))) return;
             const r = await fetch(`${apiUrl}/api/campagnes/reponses/${repOuverte.reponse.id}`, {
               method: "PATCH", headers: hdr(), body: JSON.stringify({ statut }),
             });
@@ -1511,6 +1579,7 @@ function StatsCampagnes({ stats, carte }) {
  *    opt-in sont donc comptés et exclus à l'écran, jamais écartés en silence.
  */
 function ModalWhatsapp({ apiUrl, hdr, filtres, onFermer, carte, champ, bouton }) {
+  const confirm = useConfirm();
   const [etape, setEtape]       = useState("audience");   // audience | composer | envoi | fait
   const [audience, setAudience] = useState(null);
   const [config, setConfig]     = useState(null);
@@ -1547,6 +1616,11 @@ function ModalWhatsapp({ apiUrl, hdr, filtres, onFermer, carte, champ, bouton })
     : "";
 
   const lancer = async () => {
+    /* UN ENVOI NE SE RATTRAPE PAS. Le pendant e-mail a déjà sa confirmation dédiée ; celui-ci
+       partait au clic, vers de vraies personnes. */
+    if (!(await confirm(
+      "Les messages partiront vers les destinataires correspondant à vos filtres. Un envoi ne peut pas être annulé.",
+      { titre: "Lancer cette campagne WhatsApp ?", confirmLabel: "Lancer l'envoi" }))) return;
     setOccupe(true);
     try {
       const rc = await fetch(`${apiUrl}/api/campagnes-whatsapp`, {

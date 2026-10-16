@@ -4034,6 +4034,18 @@ export default function SuperAdminDashboard() {
   useEffect(() => { fetchCentresList(); }, []);
 
   const temoAction = async (id, updates) => {
+    /* UN TÉMOIGNAGE PORTE LE NOM D'UNE PERSONNE RÉELLE : l'approuver le publie sous son
+       identité, le refuser la prive de sa parole. Ni l'un ni l'autre ne se fait au clic. */
+    const action = updates?.statut === "approuve" ? "approuver"
+                 : updates?.statut === "refuse"   ? "refuser"
+                 : updates?.en_avant !== undefined ? (updates.en_avant ? "mettre en avant" : "retirer de la une")
+                 : "modifier";
+    if (!(await confirm(
+      action === "approuver" ? "Ce témoignage sera publié sur le site public, au nom de son auteur."
+      : action === "refuser" ? "Ce témoignage ne sera pas publié."
+      : `Ce témoignage va ${action}.`,
+      { titre: `Voulez-vous ${action} ce témoignage ?`,
+        confirmLabel: "Confirmer", danger: action === "refuser" }))) return;
     try {
       const res = await fetch(`${API_URL}/api/temoignages/${id}`, {
         method: "PATCH", headers: authHeaders(), body: JSON.stringify(updates),
@@ -5286,6 +5298,14 @@ export default function SuperAdminDashboard() {
   };
 
   const blogTogglePublie = async (id, publie) => {
+    /* L'article paraît ou disparaît du SITE PUBLIC au clic. Dépublier casse en plus les
+       liens déjà partagés vers cet article. */
+    if (!(await confirm(
+      publie
+        ? "L'article disparaîtra du site public, et les liens déjà partagés ne mèneront plus à rien."
+        : "L'article sera visible de tous sur le site public.",
+      { titre: publie ? "Dépublier cet article ?" : "Publier cet article ?",
+        confirmLabel: publie ? "Dépublier" : "Publier", danger: publie }))) return;
     try {
       await fetch(`${API_URL}/api/blog/${id}/publie`, { method:"PATCH", headers: authHeaders(), body: JSON.stringify({ publie: !publie }) });
       setBlogArticles(p => p.map(a => a.id===id ? {...a, publie:!publie} : a));
@@ -7045,6 +7065,9 @@ export default function SuperAdminDashboard() {
   };
 
   const marquerRelanceMarketing = async (s) => {
+    if (!(await confirm(
+      "La relance sera enregistrée dans le suivi de ce prospect.",
+      { titre: "Enregistrer cette relance ?", confirmLabel: "Enregistrer", danger: false }))) return;
     try {
       const r = await fetch(`${API_URL}/api/marketing/suivis/${s.id}/relance`, {
         method:"POST", headers: authHeaders(), body: JSON.stringify({ canal: CANAUX_SUIVI_MARKETING[0] }),
@@ -7113,6 +7136,12 @@ export default function SuperAdminDashboard() {
   };
 
   const toggleMarqueeActif = async (msg) => {
+    if (!(await confirm(
+      msg.actif
+        ? "Ce message cessera de s'afficher sur le bandeau du site."
+        : "Ce message s'affichera sur le bandeau, visible de tous les visiteurs.",
+      { titre: msg.actif ? "Désactiver ce message ?" : "Activer ce message ?",
+        confirmLabel: msg.actif ? "Désactiver" : "Activer", danger: false }))) return;
     try {
       const token = localStorage.getItem("admin_token");
       await fetch(`${API_URL}/api/marquee/${msg.id}`, {
@@ -7537,6 +7566,12 @@ export default function SuperAdminDashboard() {
   };
 
   const toggleOffreMediaActif = async (item) => {
+    if (!(await confirm(
+      item.actif
+        ? "Cette offre ne sera plus proposée aux visiteurs."
+        : "Cette offre sera proposée aux visiteurs du site.",
+      { titre: item.actif ? "Désactiver cette offre ?" : "Activer cette offre ?",
+        confirmLabel: item.actif ? "Désactiver" : "Activer", danger: false }))) return;
     const activeType = getActiveOffreMediaType();
     try {
       await fetch(`${API_URL}/api/offre-media/${item.id}`, {
