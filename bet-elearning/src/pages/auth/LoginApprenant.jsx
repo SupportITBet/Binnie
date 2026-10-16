@@ -40,7 +40,7 @@ export default function LoginApprenant() {
     try {
       await seConnecter(email, mdp);
       const p = JSON.parse(sessionStorage.getItem('bet_profil_mock') || 'null');
-      if (p) navigate(ROLE_REDIRECT[p.role] || '/connexion');
+      if (p) navigate(ROLE_REDIRECT[p.role] || '/access/bet-learning');
     } catch (err) {
       setErreur(err.message || 'Identifiants incorrects. Contactez votre responsable BET.');
     } finally { setLoading(false); }

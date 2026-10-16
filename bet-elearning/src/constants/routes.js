@@ -1,6 +1,6 @@
 export const ROUTES = {
   // Auth
-  CONNEXION:             '/connexion',
+  CONNEXION:             '/access/bet-learning',
   MOT_DE_PASSE_OUBLIE:   '/mot-de-passe-oublie',
   RESET_MOT_DE_PASSE:    '/reset-mot-de-passe',
 

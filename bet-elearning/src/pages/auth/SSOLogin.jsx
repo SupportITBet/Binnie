@@ -26,7 +26,7 @@ export default function SSOLogin() {
     const ticket = params.get('ticket');
 
     if (!ticket) {
-      navigate('/connexion', { replace: true });
+      navigate('/access/bet-learning', { replace: true });
       return;
     }
 
@@ -37,7 +37,7 @@ export default function SSOLogin() {
       // clair dans l'URL. Un ticket expiré, rejoué ou forgé est rejeté ici, avant tout rendu.
       const r = await fetch(`${API_URL}/api/admin/sso/consume?ticket=${encodeURIComponent(ticket)}`);
       if (!r.ok) {
-        navigate('/connexion', { replace: true });
+        navigate('/access/bet-learning', { replace: true });
         return;
       }
       const { token, refresh, profil } = await r.json();
@@ -47,7 +47,7 @@ export default function SSOLogin() {
       // à privilèges élevés par défaut.
       const roleBet = roleBetDe(profil.role);
       if (!roleBet) {
-        navigate('/connexion', { replace: true });
+        navigate('/access/bet-learning', { replace: true });
         return;
       }
 
@@ -81,7 +81,7 @@ export default function SSOLogin() {
       connexionReel(profilBet);
       navigate(ROLE_REDIRECT[roleBet] || '/admin/manager', { replace: true });
     } catch {
-      navigate('/connexion', { replace: true });
+      navigate('/access/bet-learning', { replace: true });
     }
     })();
   }, []);

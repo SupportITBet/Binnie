@@ -100,7 +100,7 @@ export default function LoginParent() {
         : await seConnecter(loginEmail, mdp);
       if (res?.need2FA) { setEtape('deux_fa'); return; }
       const p = JSON.parse(sessionStorage.getItem('bet_profil_mock') || 'null');
-      if (p) navigate(ROLE_REDIRECT[p.role] || '/connexion');
+      if (p) navigate(ROLE_REDIRECT[p.role] || '/access/bet-learning');
     } catch (err) {
       setErreur(err.message || 'Identifiants incorrects.');
     } finally { setLoading(false); }
@@ -125,7 +125,7 @@ export default function LoginParent() {
     try {
       await valider2FA(code);
       const p = JSON.parse(sessionStorage.getItem('bet_profil_mock') || 'null');
-      if (p) navigate(ROLE_REDIRECT[p.role] || '/connexion');
+      if (p) navigate(ROLE_REDIRECT[p.role] || '/access/bet-learning');
     } catch (err) {
       setTentatives(t => t + 1);
       setErreur2FA(err.message || 'Code incorrect.');

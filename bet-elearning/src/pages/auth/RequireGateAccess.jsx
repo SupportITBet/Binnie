@@ -3,7 +3,8 @@ import { Navigate } from 'react-router-dom';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
-// Empêche d'atteindre /connexion/admin sans être passé par le code du portail "/access" -
+// Empêche d'atteindre /e-learning-staff-access sans être passé par le code du portail
+// "/access/bet-learning" -
 // re-vérifié côté serveur à chaque chargement (signature + expiration du token),
 // sinon n'importe qui pourrait poser une valeur arbitraire dans sessionStorage pour bypasser.
 const RequireGateAccess = ({ children }) => {
@@ -24,7 +25,7 @@ const RequireGateAccess = ({ children }) => {
   if (status === 'checking') return null;
   if (status === 'invalid') {
     sessionStorage.removeItem('bet_gate_token');
-    return <Navigate to="/access" replace />;
+    return <Navigate to="/access/bet-learning" replace />;
   }
   return children;
 };

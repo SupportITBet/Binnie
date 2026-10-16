@@ -13,9 +13,10 @@ import './App.css';
 
 // Pages Auth
 import Login             from './pages/auth/Login';
-import PortailConnexion  from './pages/auth/PortailConnexion';
-import LoginAdmin        from './pages/auth/LoginAdmin';
-import LoginProfesseur   from './pages/auth/LoginProfesseur';
+// `LoginAdmin` n'est plus routé : la porte du personnel sert désormais `Login`, la page
+// qui REGROUPE TOUS LES PROFILS. Le fichier est conservé, il reste la variante « identifiant
+// sans choix de profil » si on veut la remonter un jour.
+// import LoginAdmin        from './pages/auth/LoginAdmin';
 import LoginApprenant    from './pages/auth/LoginApprenant';
 import LoginParent       from './pages/auth/LoginParent';
 import LoginEntreprise   from './pages/auth/LoginEntreprise';
@@ -52,6 +53,7 @@ import { seedLocalStorageIfNeeded } from './mock/seedLocalStorage';
 import PageMessages             from './pages/shared/PageMessages';
 import PageNotifications        from './pages/shared/PageNotifications';
 import TestNiveau               from './pages/shared/TestNiveau';
+import PageIntrouvable         from './pages/shared/PageIntrouvable';
 import LevelTest                from './pages/shared/LevelTest';
 
 installerInterceptionSession();
@@ -89,8 +91,8 @@ function RoutePrivee({ children, rolesAutorises }) {
   if (loading) return <Chargement />;
   if (!profile) {
     const loginPage = rolesAutorises?.length === 1
-      ? (pageConnexionDe(rolesAutorises[0]) || '/connexion')
-      : '/connexion';
+      ? (pageConnexionDe(rolesAutorises[0]) || '/access/bet-learning')
+      : '/access/bet-learning';
     return <Navigate to={loginPage} replace />;
   }
 
@@ -104,17 +106,24 @@ function RoutePrivee({ children, rolesAutorises }) {
      qu'aucun accès n'est perdu. Restreindre une route à un seul rôle reste possible : il
      suffit d'y nommer ce rôle, qui n'est la famille de personne d'autre. */
   if (rolesAutorises && !estRole(profile.role, rolesAutorises)) {
-    return <Navigate to={pageAccueilDe(profile.role) || '/connexion'} replace />;
+    return <Navigate to={pageAccueilDe(profile.role) || '/access/bet-learning'} replace />;
   }
 
   return children;
 }
 
+/* LA RACINE NE MÈNE PLUS À LA CONNEXION. Taper le domaine seul renvoyait vers `/connexion`,
+   donc vers l'écran du personnel : la porte se trouvait sans rien chercher. Un visiteur non
+   connecté reçoit désormais la page « introuvable », exactement comme pour une adresse
+   inventée — c'est le fonctionnement de dash, dont la route `/` est commentée et tombe sur
+   son 404.
+   Un utilisateur DÉJÀ CONNECTÉ garde son raccourci vers son tableau de bord : il est
+   authentifié, lui renvoyer un 404 ne protégerait rien et casserait un favori. */
 function RedirectRacine() {
   const { profile, loading } = useAuth();
   if (loading) return <Chargement />;
-  if (!profile) return <Navigate to="/connexion" replace />;
-  return <Navigate to={pageAccueilDe(profile.role) || '/connexion'} replace />;
+  if (!profile) return <PageIntrouvable />;
+  return <Navigate to={pageAccueilDe(profile.role) || '/access/bet-learning'} replace />;
 }
 
 /* ADMIS SUR LES ROUTES /admin/* — un nom par métier, plus les anciens noms de façade.
@@ -145,17 +154,32 @@ function AppRoutes() {
   return (
     <Routes>
       {/* ── Pages de connexion ── */}
-      <Route path="/connexion"             element={<Login />} />
-      <Route path="/connexion/portail"     element={<PortailConnexion />} />
+      {/* TROIS ADRESSES SUPPRIMÉES, et aucune n'a de remplaçante publique.
+          `/connexion` servait la page de connexion GROUPÉE DU PERSONNEL sur l'adresse la plus
+          devinable du site ; `/connexion/portail` affichait la liste de TOUS les espaces, donc
+          la carte de l'administration ; `/connexion/professeur` était la porte des coachs.
+          Les coachs font partie du personnel (`ROLES_STAFF`) et entrent par le même chemin que
+          lui — le code d'accès, puis la page groupée. Le repli générique des redirections est
+          désormais le portail d'accès lui-même : il ne montre rien sans le code. */}
       {/* ── LA PORTE D'ACCÈS DU STAFF ──
           Même page et même code que dash : les deux interrogent `/api/access-gate/verify`,
           qui lit l'unique ligne de `access_gate_config`. Le Super Admin change le code une
           fois et il vaut des deux côtés. Voir `pages/auth/AccessGate.jsx`.
           Seules les connexions STAFF sont protégées, comme sur dash — un apprenant, un parent
-          ou un coach n'a pas à connaître le code du personnel. */}
-      <Route path="/access"                element={<AccessGate />} />
-      <Route path="/connexion/admin"       element={<RequireGateAccess><LoginAdmin /></RequireGateAccess>} />
-      <Route path="/connexion/professeur"  element={<LoginProfesseur />} />
+          ou un coach n'a pas à connaître le code du personnel.
+
+          DEUX ADRESSES QUI NE SE DEVINENT PAS, et c'est tout leur intérêt. Elles étaient
+          `/access` et `/connexion/admin` : la seconde se tapait au hasard, ce qui donnait à
+          n'importe quel visiteur le formulaire de connexion du personnel — le code du
+          portail le protégeait, mais autant ne pas exposer la porte. Elles suivent
+          désormais la logique de dash (`/access` → `/bet-staff-access`), en nommant la
+          plateforme.
+
+          AUCUNE REDIRECTION DEPUIS LES ANCIENNES ADRESSES, volontairement : en renvoyer une
+          vers la nouvelle révélerait précisément ce qu'on vient de cacher. Les anciennes
+          tombent donc sur la page « introuvable », comme n'importe quelle URL inventée. */}
+      <Route path="/access/bet-learning"      element={<AccessGate />} />
+      <Route path="/e-learning-staff-access"  element={<RequireGateAccess><Login /></RequireGateAccess>} />
       <Route path="/connexion/apprenant"   element={<LoginApprenant />} />
       <Route path="/connexion/parent"      element={<LoginParent />} />
       <Route path="/connexion/entreprise"  element={<LoginEntreprise />} />
@@ -452,11 +476,16 @@ function AppRoutes() {
       {/* Test de niveau multi-format (nouveau modèle, réplique dash) - route publique */}
       <Route path="/level-test/:testId" element={<LevelTest />} />
 
-      {/* Racine - redirect selon rôle */}
+      {/* Racine - le tableau de bord si l'on est connecté, 404 sinon (cf. RedirectRacine) */}
       <Route path="/" element={<RedirectRacine />} />
 
-      {/* 404 → connexion */}
-      <Route path="*" element={<Navigate to="/connexion" replace />} />
+      {/* ── 404 ──
+          Ces deux routes renvoyaient vers `/connexion` : taper n'importe quoi après le
+          domaine affichait donc l'écran de connexion du personnel, et la racine seule
+          suffisait a le trouver. Elles rendent desormais une vraie page « introuvable »,
+          sans aucun lien de retour - la meme reponse que pour une adresse inventee, ce
+          qui est bien ce qu'elles sont. dash fonctionne ainsi depuis toujours. */}
+      <Route path="*" element={<PageIntrouvable />} />
     </Routes>
   );
 }

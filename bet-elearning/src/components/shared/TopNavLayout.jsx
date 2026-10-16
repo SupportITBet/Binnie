@@ -680,7 +680,7 @@ export default function TopNavLayout({ children, stats, menusSec, menuRole, sous
     // d'âge, `coach` au lieu de `professeur_titulaire`) ne renvoie plus au portail générique
     // faute de clé exacte dans la table.
     const role = profile?.role || (menuRole?.startsWith('apprenant') ? 'apprenant' : null);
-    const destination = pageConnexionDe(role) || '/connexion';
+    const destination = pageConnexionDe(role) || '/access/bet-learning';
     // On attend la fin complète de la déconnexion avant de naviguer, pour éviter toute course
     // avec le listener onAuthStateChange / RedirectRacine qui pourrait rediriger entre-temps.
     seDeconnecter().finally(() => navigate(destination, { replace: true }));

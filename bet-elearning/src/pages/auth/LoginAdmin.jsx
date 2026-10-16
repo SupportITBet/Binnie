@@ -298,7 +298,7 @@ export default function LoginAdmin() {
           </div>
 
           <button
-            onClick={() => navigate('/connexion')}
+            onClick={() => navigate('/access/bet-learning')}
             style={{ marginTop:40, display:'inline-flex', alignItems:'center', gap:6, background:'none', border:'none', color:'rgba(255,255,255,0.4)', fontSize:12, cursor:'pointer', padding:0, fontFamily:'inherit' }}
           >
             ← Retour au portail

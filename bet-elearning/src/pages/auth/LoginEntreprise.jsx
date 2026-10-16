@@ -282,7 +282,7 @@ export default function LoginEntreprise() {
 
 
           <div style={{ textAlign:'center', marginTop:20 }}>
-            <button onClick={() => navigate('/connexion')}
+            <button onClick={() => navigate('/access/bet-learning')}
               style={{ background:'none', border:'none', fontSize:12, color:GRIS,
                 cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
               ← Retour au portail principal

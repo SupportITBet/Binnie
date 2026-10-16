@@ -28,7 +28,7 @@ const formatCountdown = (ms) => {
  * l'autre. Le code est commun, le passage se fait une fois par plateforme — et c'est le
  * comportement correct : un jeton transférable d'une origine à l'autre serait une faille.
  *
- * SEULE DIFFÉRENCE AVEC DASH : la destination après succès, `/connexion/admin` au lieu de
+ * SEULE DIFFÉRENCE AVEC DASH : la destination après succès, `/e-learning-staff-access` au lieu de
  * `/bet-staff-access`. Tout le reste — l'écran, les trois tentatives, le verrou de 15 minutes,
  * le message d'inactivité — est identique, volontairement : c'est la même porte, les deux
  * plateformes ne doivent pas se présenter différemment au même agent.
@@ -96,7 +96,7 @@ const AccessGate = () => {
         localStorage.removeItem(LS_ATTEMPTS);
         localStorage.removeItem(LS_LOCK_UNTIL);
         sessionStorage.setItem('bet_gate_token', data.token);
-        navigate('/connexion/admin', { replace: true });
+        navigate('/e-learning-staff-access', { replace: true });
         return;
       }
       registerFailure();

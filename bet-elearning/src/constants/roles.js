@@ -244,25 +244,43 @@ export const ROLE_REDIRECT = {
 };
 
 
+/* LA PORTE UNIQUE DU PERSONNEL — coachs compris.
+   `/connexion`, `/connexion/portail` et `/connexion/professeur` ont été supprimées : la
+   première exposait la page groupée du personnel sur l'adresse la plus devinable du site,
+   la deuxième listait tous les espaces dont celui de l'administration, la troisième était
+   la porte des coachs. Il ne reste qu'une entrée pour tout le personnel, derrière le code
+   d'accès. Les coachs appartiennent à `ROLES_STAFF` : ils l'empruntent aussi. */
+export const ROUTE_ACCES_STAFF = '/e-learning-staff-access';
+
 export const ROLE_LOGIN = {
   apprenant:             '/connexion/apprenant',
   parent:                '/connexion/parent',
   client_entreprise:     '/connexion/entreprise',
-  // Les coachs (professeur_titulaire/remplaçant) passent par le portail unique /connexion,
-  // pas de page de connexion dédiée - volontaire, cf. demande explicite.
+  // Le personnel et les coachs n'ont pas d'entrée ici : `pageConnexionDe` les résout
+  // vers `ROUTE_ACCES_STAFF`, ce qui évite d'y recopier vingt-et-un rôles.
 };
 
 /* ── DEUX LECTURES QUI PASSENT PAR LA FAMILLE ──
    `ROLE_LOGIN[role]` et `ROLE_REDIRECT[role]` sont indexées par nom de FAMILLE. Lues en
    direct avec le rôle d'un compte, elles rendent `undefined` dès que ce rôle est une
    variante (un apprenant par tranche d'âge, un `coach` plutôt qu'un
-   `professeur_titulaire`), et le `|| '/connexion'` des appelants renvoie alors au portail
+   `professeur_titulaire`), et le repli des appelants renvoie alors au portail
    générique — un repli silencieux qui ressemble à un bug d'authentification alors que
    c'est une clé manquante.
 
    Ces deux fonctions résolvent la famille d'abord. Le repli reste possible et explicite
    pour qui n'a vraiment pas de page dédiée (les coachs, par choix). */
-export const pageConnexionDe = (role) => ROLE_LOGIN[role] || ROLE_LOGIN[familleDe(role)] || null;
+/* LE PERSONNEL N'AVAIT AUCUNE PAGE DE CONNEXION RÉSOLUE, et c'est ce qui renvoyait tout le
+   monde sur le repli générique : `ROLE_LOGIN` ne contient que l'apprenant, le parent et le
+   client entreprise, si bien qu'un superviseur dont la session expirait atterrissait sur le
+   portail générique au lieu de sa propre porte. Un rôle du personnel sans entrée explicite
+   est désormais résolu vers le portail d'accès du staff. */
+export const pageConnexionDe = (role) => {
+  const directe = ROLE_LOGIN[role] || ROLE_LOGIN[familleDe(role)];
+  if (directe) return directe;
+  if (estStaff(role) || estStaff(familleDe(role))) return ROUTE_ACCES_STAFF;
+  return null;
+};
 export const pageAccueilDe   = (role) => ROLE_REDIRECT[role] || ROLE_REDIRECT[familleDe(role)] || null;
 
 /* Le libellé affiché dans l'en-tête. Il doit dire le MÉTIER, pas la famille d'écrans :

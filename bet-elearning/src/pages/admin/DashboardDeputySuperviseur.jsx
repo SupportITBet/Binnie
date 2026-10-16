@@ -814,7 +814,7 @@ export default function DashboardDeputySuperviseur() {
       titre="Deputy Superviseur"
       initiales={initiales}
       nomComplet={[prenom, nom].filter(Boolean).join(' ') || 'Deputy Superviseur'}
-      onDeconnexion={async () => { await seDeconnecter(); navigate('/connexion/admin'); }}
+      onDeconnexion={async () => { await seDeconnecter(); navigate('/e-learning-staff-access'); }}
       couleurAccent={VIOLET}
     >
       <div style={{ flex: 1, padding: 32, overflowY: 'auto' }}>

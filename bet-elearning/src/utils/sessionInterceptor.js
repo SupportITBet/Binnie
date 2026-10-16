@@ -168,7 +168,7 @@ export function installerInterceptionSession() {
          Les deux stockages ne servent plus qu'au cas où ce module vient d'être rechargé :
          `bet_profil_mock` est propre à l'onglet, `admin_profil` ne l'est pas — il est donc
          lu en DERNIER, et c'est bien ce qu'il est, un dernier recours. */
-      let pageConnexion = '/connexion';
+      let pageConnexion = '/access/bet-learning';
       const sources = [
         () => (roleCourant ? JSON.stringify({ role: roleCourant }) : null),
         () => sessionStorage.getItem('bet_profil_mock'),

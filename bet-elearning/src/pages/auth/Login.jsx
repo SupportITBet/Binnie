@@ -55,7 +55,7 @@ const PROFILS_BET = [
   { id: 'commercial',           label: 'Commerciale',          emoji: '🤝', color: '#0284C7', bg: '#E0F2FE', desc: 'Inscriptions, classes & paiements' },
   /* Assistante SAV, Assistant Marketing et Gestionnaire NE SONT PAS PROPOSÉS ICI, volontairement.
      Leurs rôles existent et leurs comptes fonctionnent — ils passent par la porte du personnel
-     (`/connexion/admin`), qui demande un identifiant sans choix de profil. Retirer la carte ne
+     (`/e-learning-staff-access`), qui demande un identifiant sans choix de profil. Retirer la carte ne
      retire donc aucun accès : cette liste est purement visuelle, c'est le rôle renvoyé par le
      serveur qui décide du menu et de la redirection. */
   { id: 'admin_elearning',      label: 'Assistant E-Learning', emoji: '💻', color: '#7C3AED', bg: '#F5F3FF', desc: 'Gestion de la plateforme e-learning', roles: ['E-Learning'] },
@@ -283,7 +283,7 @@ export default function Login() {
     const ok = valider2FA(codeStr);
     if (ok) {
       const p = JSON.parse(sessionStorage.getItem('bet_profil_mock') || 'null');
-      if (p) navigate(ROLE_REDIRECT[p.role] || '/connexion');
+      if (p) navigate(ROLE_REDIRECT[p.role] || '/access/bet-learning');
     } else {
       setTentatives(t => t + 1);
       setErreur2FA(`Code incorrect. ${2 - tentatives} essai${tentatives < 2 ? 's' : ''} restant.`);
