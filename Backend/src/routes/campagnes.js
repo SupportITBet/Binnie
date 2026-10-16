@@ -1,4 +1,5 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
 import supabase from "../config/supabase.js";
 import { authenticateAdmin } from "../middlewares/requireAdmin.js";
 import { sendNewsletterCampaign } from "../services/emailService.js";
@@ -347,8 +348,24 @@ router.put("/formulaires/:id/champs", authenticateAdmin, requireCampagnes, async
     const { error: eSuppr } = await suppr;
     if (eSuppr) throw eSuppr;
 
+    /* CHAQUE LIGNE PORTE UN `id`, Y COMPRIS LES NOUVELLES, et ce n'est pas un détail :
+       PostgREST écrit UN SEUL insert pour tout le lot, avec l'union des colonnes
+       rencontrées. Dès qu'une seule question existante apporte `id`, les nouvelles — qui
+       n'en avaient pas — se voyaient affecter `id: NULL` explicitement, ce qui ÉCRASE le
+       DEFAULT de la colonne :
+
+           null value in column "id" of relation "campagne_formulaire_champs"
+           violates not-null constraint
+
+       Résultat : ajouter une question à un formulaire qui en avait déjà rendait un 500, et
+       « Enregistrer les questions » ne faisait rien. Modifier les questions existantes
+       passait, puisque toutes portaient alors leur identifiant. Constaté le 16/10/2026 sur
+       « Dernier Challenge 2026 ».
+
+       On génère donc l'identifiant ici plutôt que de le laisser à la base : le lot devient
+       homogène, et la route reste juste même si le DEFAULT venait à disparaître. */
     const lignes = champs.map((c, i) => ({
-      ...(c.id ? { id: c.id } : {}),
+      id: c.id || randomUUID(),
       formulaire_id: req.params.id,
       ordre: i,
       libelle: (c.libelle || "").trim() || "Question",
