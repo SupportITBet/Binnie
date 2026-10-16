@@ -1912,6 +1912,68 @@ router.get("/mon-espace", async (req, res) => {
         coachInfo = c || null;
       }
 
+      /* ── SON ENTREPRISE ET SON RÉFÉRENT RH ────────────────────────────────────────────
+         Une formation e-learning est achetée par une entreprise, et l'apprenant n'avait
+         aucun moyen de savoir qui la suit de son côté : ni le nom de son entreprise, ni à
+         qui s'adresser pour une absence, une licence ou une attestation. Son espace lui
+         proposait le contact BET, qui n'est pas le bon interlocuteur pour ces questions.
+
+         LE LIEN PASSE PAR LA CLASSE, pas par l'apprenant. `utilisateurs.entreprise_id`
+         existe mais n'est renseigné sur AUCUN apprenant (vérifié le 16/10/2026 : zéro
+         ligne) ; c'est `classes_elearning.entreprise_id` qui porte le rattachement réel.
+         Lire l'apprenant aurait rendu `null` pour tout le monde.
+
+         UNE CLASSE SANS ENTREPRISE EST NORMALE — ce sont les classes « particuliers ».
+         On rend `null`, et l'écran n'affiche simplement pas le bloc. */
+      let entrepriseInfo = null;
+      if (classe?.entreprise_id) {
+        const { data: ent } = await supabase
+          .from("comptes_entreprises")
+          .select("id, nom, logo_url, couleur, initiales, secteur, ville, referent_rh_nom, referent_rh_email, referent_rh_telephone")
+          .eq("id", classe.entreprise_id)
+          .maybeSingle();
+
+        if (ent) {
+          /* Le compte RH porte le nom COMPLET (prénom + nom), là où `referent_rh_nom` ne
+             garde souvent que le nom de famille — « Sy » au lieu de « Savane Sy ». On
+             préfère donc le compte quand il existe, et on retombe sur la fiche entreprise
+             sinon : toutes les entreprises n'ont pas de compte RH ouvert. */
+          const { data: comptesRh } = await supabase
+            .from("utilisateurs")
+            .select("nom, prenom, email, telephone")
+            .eq("role", "client_entreprise")
+            .eq("entreprise_id", ent.id)
+            .eq("actif", true);
+
+          const parEmail = (comptesRh || []).find(
+            c => c.email && ent.referent_rh_email &&
+                 c.email.toLowerCase() === ent.referent_rh_email.toLowerCase());
+          const compte = parEmail || (comptesRh || [])[0] || null;
+
+          const nomRh = compte
+            ? `${compte.prenom || ""} ${compte.nom || ""}`.trim()
+            : (ent.referent_rh_nom || "").trim();
+
+          /* LE CONTRAT NE SORT PAS D'ICI : montant, nombre de licences et dates d'échéance
+             regardent l'entreprise, pas l'apprenant. Il lui faut un nom et un moyen de
+             joindre quelqu'un, rien de plus. */
+          entrepriseInfo = {
+            id: ent.id,
+            nom: ent.nom,
+            logo_url: ent.logo_url || null,
+            couleur: ent.couleur || null,
+            initiales: ent.initiales || null,
+            secteur: ent.secteur || null,
+            ville: ent.ville || null,
+            rh: (nomRh || ent.referent_rh_email || ent.referent_rh_telephone) ? {
+              nom:       nomRh || null,
+              email:     compte?.email || ent.referent_rh_email || null,
+              telephone: compte?.telephone || ent.referent_rh_telephone || null,
+            } : null,
+          };
+        }
+      }
+
       /* `classes_elearning_apprenants` ne porte PAS de date de sortie, et la classe close se
          lit sur son statut. On ne fabrique donc pas de `formation_arretee` sur une donnée qui
          n'existe pas : l'inventer afficherait un arrêt de formation à qui n'en a pas eu. */
@@ -1941,6 +2003,7 @@ router.get("/mon-espace", async (req, res) => {
           } : null,
         },
         coach: coachInfo,
+        entreprise: entrepriseInfo,
         /* Le parcours et les paiements sont des notions du coaching BET : une formation
            e-learning est financée par l'entreprise, pas par l'apprenant. On rend des valeurs
            vides plutôt que d'en inventer — l'écran « Paiement » affichera son état vide, ce
@@ -2871,6 +2934,166 @@ router.get("/mes-presences", async (req, res) => {
 
 // GET /api/apprenants/mes-evaluations
 // Retourne les évaluations publiées du groupe de l'apprenant + ses résultats
+/* ══════════════════════════════════════════════════════════════════════════════
+   GET /api/apprenants/mes-devoirs - les devoirs de l'apprenant, avec son rendu
+══════════════════════════════════════════════════════════════════════════════
+   POURQUOI CETTE ROUTE EXISTE. Il n'y en avait AUCUNE : l'espace web lit
+   `devoirs_elearning` et `devoirs_rendus_elearning` directement par le client
+   Supabase, et l'application mobile - qui passe par cette API - n'avait donc aucun
+   moyen d'afficher un devoir. Son ecran Examens interrogeait `/mes-evaluations`,
+   qui ne rend que les CORRECTIONS deja saisies : ni l'enonce, ni la date limite, ni
+   ce que l'apprenant a depose. D'ou trois ecrans vides.
+
+   CE QU'ELLE AJOUTE A UNE SIMPLE LECTURE DE TABLE, et qui justifie de ne pas
+   recopier la requete du web :
+
+     · `classe_ids` AUTANT QUE `classe_id`. Un devoir peut viser plusieurs classes ;
+       ne lire que `classe_id` en perdrait une partie, exactement comme pour les
+       contenus de la mediatheque.
+     · L'ETAT CALCULE : ouvert, expire, rendu, corrige. Les trois ecrans mobiles en
+       ont besoin et le recalculer de leur cote creerait une seconde regle, qui
+       divergerait de celle que `POST /devoirs/:id/rendre` applique a l'ecriture.
+     · `modifiable` : vrai tant que le coach n'a pas corrige ET que la date limite
+       n'est pas passee. C'est EXACTEMENT la regle de la route de rendu, rendue
+       lisible pour que l'ecran puisse l'annoncer AVANT que l'apprenant compose,
+       plutot que de lui opposer un 403 apres coup.
+     · LE BAREME N'EST PAS DEVOILE : `questions` et les reponses attendues des blocs
+       ne sortent pas d'ici. Un apprenant qui lit la reponse dans la reponse reseau
+       n'a plus de devoir a faire.
+*/
+router.get("/mes-devoirs", async (req, res) => {
+  try {
+    const bearer = req.headers.authorization?.replace("Bearer ", "").trim();
+    if (!bearer) return res.status(401).json({ error: "Non authentifié" });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(bearer);
+    if (authErr || !user) return res.status(401).json({ error: "Non authentifié" });
+
+    /* Les devoirs n'existent que cote bet-elearning : `devoirs_elearning` n'a pas
+       d'equivalent dans le presentiel, ou le suivi passe par `evaluations_groupes`.
+       Un appel sans l'en-tete recoit donc une liste vide, et non une erreur. */
+    if (!estElearning(req)) return res.json({ devoirs: [] });
+
+    const inscriptions = await inscriptionsElearningDe({ id: user.id, email: user.email });
+    const inscrIds = inscriptions.map(i => i.id);
+    const classeIds = classeIdsDe(inscriptions);
+    if (!classeIds.length) return res.json({ devoirs: [] });
+
+    /* DEUX LECTURES PLUTOT QU'UN `or()`. La syntaxe `classe_ids.cs.{uuid}` de
+       PostgREST echoue en silence des que l'identifiant contient des tirets non
+       echappes - constate le 16/10/2026, la requete rendait zero devoir sur une
+       classe qui en avait deux. Deux requetes simples et une fusion par `id` ne
+       laissent pas ce piege. */
+    const [parClasse, parListe] = await Promise.all([
+      supabase.from("devoirs_elearning").select("*").in("classe_id", classeIds).eq("statut", "publie"),
+      supabase.from("devoirs_elearning").select("*").overlaps("classe_ids", classeIds).eq("statut", "publie"),
+    ]);
+    if (parClasse.error) throw parClasse.error;
+
+    const parId = new Map();
+    for (const d of [...(parClasse.data || []), ...(parListe.data || [])]) parId.set(d.id, d);
+    const devoirs = [...parId.values()];
+    if (!devoirs.length) return res.json({ devoirs: [] });
+
+    const { data: rendus, error: errR } = await supabase
+      .from("devoirs_rendus_elearning").select("*")
+      .in("devoir_id", devoirs.map(d => d.id))
+      .in("inscription_id", inscrIds.length ? inscrIds : ["-"]);
+    if (errR) throw errR;
+    const rendüParDevoir = Object.fromEntries((rendus || []).map(r => [r.devoir_id, r]));
+
+    const correcteurIds = [...new Set((rendus || []).map(r => r.corrige_par).filter(Boolean))];
+    const { data: correcteurs } = correcteurIds.length
+      ? await supabase.from("utilisateurs").select("id, nom, prenom").in("id", correcteurIds)
+      : { data: [] };
+    const nomCorrecteur = Object.fromEntries(
+      (correcteurs || []).map(c => [c.id, `${c.prenom || ""} ${c.nom || ""}`.trim()]));
+
+    const maintenant = new Date();
+    const limiteDe = (d) => d.date_limite
+      ? new Date(`${d.date_limite}T${(d.heure_limite || "23:59").slice(0, 5)}:00`) : null;
+    const ouvertureDe = (d) => d.date_ouverture
+      ? new Date(`${d.date_ouverture}T${(d.heure_ouverture || "00:00").slice(0, 5)}:00`) : null;
+
+    const sortie = devoirs.map(d => {
+      const r = rendüParDevoir[d.id] || null;
+      const ouv = ouvertureDe(d);
+      const lim = limiteDe(d);
+      const ouvert = !ouv || maintenant >= ouv;
+      const expire = !!lim && maintenant > lim;
+      const corrige = r?.statut === "corrige";
+      /* `inscription_id` est RENVOYE : la route de rendu l'exige dans son corps, et
+         l'ecran ne peut pas le deviner - il depend de la classe du devoir. */
+      const inscription = inscriptions.find(i => classeIdsDe([i]).includes(d.classe_id))
+                        || inscriptions[0] || null;
+      return {
+        id: d.id,
+        titre: d.titre,
+        instructions: d.instructions || null,
+        categorie: d.categorie || null,
+        format_type: d.format_type || null,
+        type_rendu: d.type_rendu || "texte",
+        ressource_url: d.ressource_url || null,
+        blocs: Array.isArray(d.blocs) ? d.blocs : [],
+        duree_min: d.duree_min || null,
+        /* LE MINUTEUR, CALCULÉ ICI ET PAS SUR LE TÉLÉPHONE. `estChronometre` ne retient que
+           les devoirs EN TEXTE avec une durée : un dépôt de fichier n'est jamais chronométré,
+           et l'écran n'a pas à connaître cette subtilité. L'échéance découle de `commence_at`,
+           que seule la route `commencer` sait poser — un compte à rebours parti d'un calcul
+           local redémarrerait à chaque ouverture, ce qui viderait la règle de son sens. */
+        chronometre: estChronometre(d),
+        echeance_composition: r?.commence_at ? echeanceComposition(d, r.commence_at)?.toISOString() || null : null,
+        composition_expiree: r?.commence_at ? compositionExpiree(d, r.commence_at) : false,
+        date_ouverture: d.date_ouverture, heure_ouverture: d.heure_ouverture,
+        date_limite: d.date_limite, heure_limite: d.heure_limite,
+        classe_id: d.classe_id,
+        inscription_id: inscription?.id || null,
+        ouvert,
+        expire,
+        /* OUVRIR N'EST PAS RENDRE. Démarrer le chrono d'une composition CRÉE la ligne de
+           rendu (statut `en_cours`, pour que le balayage des copies expirées la retrouve) :
+           se fier à la seule existence de cette ligne faisait basculer le devoir en
+           « Rendu » dès que l'apprenant l'avait simplement ouvert, sans avoir rien écrit.
+           Constaté le 16/10/2026 en testant le minuteur. Une copie n'est rendue que
+           lorsqu'elle a été soumise — `rendu_at`, ou un statut qui n'est plus `en_cours`. */
+        etat: corrige ? "corrige"
+            : (r && (r.statut !== "en_cours" || r.rendu_at)) ? "rendu"
+            : expire ? "expire" : "a_faire",
+        /* Un temps de composition écoulé ferme le rendu aussi sûrement qu'une date limite :
+           le serveur refuse alors l'envoi (403 COMPOSITION_EXPIREE), sauf le dépôt
+           automatique du minuteur. L'inclure ici évite d'afficher un formulaire condamné. */
+        modifiable: !corrige && !expire && ouvert
+                    && !(r?.commence_at && compositionExpiree(d, r.commence_at)),
+        rendu: r ? {
+          id: r.id,
+          type_soumission: r.type_soumission,
+          contenu_texte: r.contenu_texte || null,
+          fichier_url: r.fichier_url || null,
+          fichier_nom: r.fichier_nom || null,
+          reponses_blocs: r.reponses_blocs || null,
+          statut: r.statut,
+          note: r.note, note_max: r.note_max,
+          commentaire_coach: r.commentaire_coach || null,
+          corrige_at: r.corrige_at || null,
+          correcteur_nom: r.corrige_par ? (nomCorrecteur[r.corrige_par] || null) : null,
+          rendu_at: r.rendu_at || null,
+          commence_at: r.commence_at || null,
+        } : null,
+      };
+    });
+
+    /* Ce qui reste a faire d'abord, puis le plus recent. C'est l'ordre dans lequel
+       l'ecran les presente, et le calculer ici evite que chaque client le refasse. */
+    const rang = { a_faire: 0, rendu: 1, expire: 2, corrige: 3 };
+    sortie.sort((a, b) => (rang[a.etat] - rang[b.etat])
+      || String(b.date_limite || "").localeCompare(String(a.date_limite || "")));
+
+    res.json({ devoirs: sortie });
+  } catch (err) {
+    console.error("[mes-devoirs]", err.message || err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/mes-evaluations", async (req, res) => {
   try {
     const bearer = req.headers.authorization?.replace("Bearer ", "").trim();

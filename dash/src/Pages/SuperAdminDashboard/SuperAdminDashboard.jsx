@@ -6064,8 +6064,12 @@ export default function SuperAdminDashboard() {
     }
   }, [nlApprenants]); // eslint-disable-line
 
-  const fetchNlCampagnes = async (page = 1) => {
-    setNlCampagnesLoading(true);
+  /* `silencieux` sert au rafraîchissement automatique plus bas : il relit la liste sans
+     allumer le voile de chargement ni afficher un toast d'erreur. Un rappel de fond qui
+     fait clignoter le tableau toutes les 30 secondes, ou qui crie à la moindre coupure
+     réseau, est plus pénible que le problème qu'il résout. */
+  const fetchNlCampagnes = async (page = 1, silencieux = false) => {
+    if (!silencieux) setNlCampagnesLoading(true);
     try {
       const params = new URLSearchParams({ page, limit: 10 });
       if (nlFiltreDateDebut) params.set("date_debut", nlFiltreDateDebut);
@@ -6079,13 +6083,32 @@ export default function SuperAdminDashboard() {
       setNlTotalCampagnes(d.total || 0);
       setNlPage(d.page || page);
       setNlKpis(d.kpis || null);
-    } catch { toast.error("Erreur chargement des campagnes"); }
-    finally { setNlCampagnesLoading(false); }
+    } catch { if (!silencieux) toast.error("Erreur chargement des campagnes"); }
+    finally { if (!silencieux) setNlCampagnesLoading(false); }
   };
 
   useEffect(() => {
     if (activeTab === "campagnes_nl" && campNlSubTab === "newsletter") fetchNlCampagnes(1);
   }, [activeTab, platformSubTab, nlFiltreDateDebut, nlFiltreDateFin, nlFiltreStatut]); // eslint-disable-line
+
+  /* ── LE TABLEAU SE MET À JOUR TOUT SEUL TANT QU'UNE CAMPAGNE ATTEND SON HEURE ──────────
+     L'envoi des campagnes programmées se fait CÔTÉ SERVEUR (job `envoyerCampagnesProgrammees`,
+     balayage toutes les 60 s) : une campagne part sans que le navigateur en soit informé.
+     Cette liste, elle, gardait l'état chargé à l'ouverture de l'onglet — une campagne partie
+     restait donc affichée « Programmée » indéfiniment, et on en concluait que l'envoi
+     automatique ne marchait pas. Constaté le 16/10/2026 : campagne « Nouveau cours » envoyée
+     à 22:16:42, encore affichée en attente plusieurs minutes plus tard.
+
+     LE RAPPEL S'ARRÊTE DE LUI-MÊME. Il n'existe que tant qu'au moins une campagne est
+     « programmee » : dès que la dernière est partie, `aDesProgrammees` passe à faux et
+     l'intervalle est démonté. Un onglet laissé ouvert toute la journée n'interroge donc pas
+     le serveur pour rien. */
+  const aDesProgrammees = nlCampagnes.some(c => c.statut === "programmee");
+  useEffect(() => {
+    if (activeTab !== "campagnes_nl" || campNlSubTab !== "newsletter" || !aDesProgrammees) return;
+    const rappel = setInterval(() => fetchNlCampagnes(nlPage, true), 30000);
+    return () => clearInterval(rappel);
+  }, [activeTab, campNlSubTab, aDesProgrammees, nlPage]); // eslint-disable-line
 
   const nlOuvrirDetail = async (id) => {
     setNlDetailLoading(true);
@@ -19108,10 +19131,30 @@ export default function SuperAdminDashboard() {
               const currentVal = editingUser._onboardingId !== undefined
                 ? editingUser._onboardingId
                 : (ass?.onboarding_id || "");
+              /* SANS OBJET POUR LE PRÉSENTIEL ET LE B2B, et il faut le DIRE.
+                 Le formulaire de création masque déjà ce bloc dans ces deux cas
+                 (`type_cours !== "presentiel" && profil_assistante !== "b2b"`) ; celui de
+                 modification, lui, l'affichait toujours. On pouvait donc assigner une
+                 onboarding à une assistante présentiel — une liaison qui n'a pas de sens
+                 pour elle et que rien ne lit ensuite.
+                 GRISÉ PLUTÔT QUE MASQUÉ : un bloc qui disparaît d'un écran à l'autre se lit
+                 comme un défaut d'affichage. Grisé avec son motif, il apprend la règle. */
+              const sansOnboarding = ass?.type_cours === "presentiel" || ass?.profil === "b2b";
+              const motifSansOnboarding = ass?.type_cours === "presentiel"
+                ? "Une assistante présentiel suit ses inscriptions depuis son centre : aucune onboarding ne lui est assignée."
+                : "Les dossiers B2B sont suivis par la commerciale entreprise, sans passage par l'onboarding.";
+
               return (
-                <div style={{ marginBottom:16, padding:"14px 16px", borderRadius:10, background:"#f0fdf4", border:"1.5px solid #86efac" }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#166534", marginBottom:8 }}>🎯 Assistante Onboarding assignée</div>
-                  {assistantesLoading ? (
+                <div style={{ marginBottom:16, padding:"14px 16px", borderRadius:10,
+                  background: sansOnboarding ? "#f8fafc" : "#f0fdf4",
+                  border:`1.5px solid ${sansOnboarding ? "#e2e8f0" : "#86efac"}` }}>
+                  <div style={{ fontSize:12, fontWeight:700, color: sansOnboarding ? "#94a3b8" : "#166534", marginBottom:8 }}>
+                    🎯 Assistante Onboarding assignée
+                    {sansOnboarding && <span style={{ fontWeight:600 }}> — sans objet</span>}
+                  </div>
+                  {sansOnboarding ? (
+                    <div style={{ fontSize:11.5, color:"#64748b", lineHeight:1.6 }}>{motifSansOnboarding}</div>
+                  ) : assistantesLoading ? (
                     <div style={{ fontSize:11, color:"#9ca3af" }}>Chargement…</div>
                   ) : !assistanteId ? (
                     <div style={{ padding:"8px 12px", borderRadius:8, background:"#fff7ed", border:"1px solid #fed7aa", fontSize:11, color:"#92400e" }}>

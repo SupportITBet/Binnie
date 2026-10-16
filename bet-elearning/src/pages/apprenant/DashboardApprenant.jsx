@@ -1444,7 +1444,27 @@ export default function DashboardApprenant() {
       commentaire: d.rendu.commentaire_coach || '',
       created_at: d.rendu.corrige_at || d.rendu.rendu_at,
     }));
-  const toutesNotes = [...notesApp, ...notesDeDevoirs]
+  /* ── LE DOUBLON ENTRE LES DEUX SOURCES ────────────────────────────────────────────────
+     Corriger un devoir écrit AUSSI une ligne dans `resultats_elearning` — c'est ce que fait
+     la correction automatique des QCM, qui y recopie le titre du devoir et sa note. La même
+     note arrivait donc par les deux chemins : une fois par `notesApp`, une fois par
+     `notesDeDevoirs`. Constaté le 16/10/2026 sur « Devoir Maison 2 » (12/20), affiché deux
+     fois dans la liste ET compté deux fois dans la moyenne — 13.7/20 au lieu de 14.5/20.
+
+     Le bulletin PDF lit cette même liste : sa moyenne et son tableau d'évaluations étaient
+     faux de la même façon.
+
+     AUCUNE COLONNE NE RELIE LES DEUX TABLES : `resultats_elearning` ne porte pas de
+     `devoir_id`. On rapproche donc sur ce qui leur est réellement commun — le titre, la note
+     et le barème. Deux évaluations distinctes portant le même titre ET exactement la même
+     note seraient confondues ; c'est le prix assumé, bien plus faible que celui d'une
+     moyenne fausse. La version DEVOIR l'emporte : elle porte la date de correction. */
+  /* `Number()` sur les deux membres : une colonne `numeric` peut remonter en chaîne selon le
+     chemin emprunté, et « 12 » ne vaudrait alors pas « 12.00 » dans la clé. */
+  const cleNote = (n) =>
+    `${String(n.competence || '').trim().toLowerCase()}|${Number(n.note)}|${Number(n.note_max) || 20}`;
+  const clesDevoirs = new Set(notesDeDevoirs.map(cleNote));
+  const toutesNotes = [...notesDeDevoirs, ...notesApp.filter(n => !clesDevoirs.has(cleNote(n)))]
     .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 
   const moyenneNotes = toutesNotes.length > 0

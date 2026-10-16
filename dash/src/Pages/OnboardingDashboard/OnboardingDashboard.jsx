@@ -6672,10 +6672,40 @@ export default function OnboardingDashboard() {
                         </div>
                         <div>
                           <label style={lbl}>Filière</label>
-                          <select style={inp} value={groupeForm.filiere} onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))}>
-                            <option value="">- Sélectionner -</option>
-                            {["Anglais Général","Business","TOEIC","IELTS","TOEFL","Enfants","Autre"].map(f=><option key={f} value={f}>{f}</option>)}
-                          </select>
+                          {/* LE CATALOGUE, ET NON UNE LISTE ÉCRITE EN DUR.
+                              Ce select proposait sept libellés figés — « Anglais Général »,
+                              « Business », « TOEIC »… — dont aucun n'existe forcément au
+                              catalogue réel. Or `inscription_offre` dérive de la filière de la
+                              classe : c'est la clé qui relie un dossier à son offre dans
+                              « Offres & Formations ». Modifier un groupe par cet écran lui
+                              posait donc un libellé hors catalogue, et le chiffre d'affaires
+                              de ses inscriptions sortait des statistiques en silence.
+                              Le formulaire de CRÉATION lit déjà le catalogue ; seul celui-ci
+                              était resté en arrière. Voir `utils/catalogueOffres.js`. */}
+                          {filieresCatalogue.length > 0 ? (
+                            <select style={inp} value={groupeForm.filiere} onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))}>
+                              <option value="">- Sélectionner -</option>
+                              {filieresCatalogue.map(f=><option key={f} value={f}>{f}</option>)}
+                              {/* LA VALEUR ACTUELLE SURVIT, même absente du catalogue. Les
+                                  groupes créés avant cette correction en portent une : sans
+                                  cette option, le select s'afficherait vide et le premier
+                                  enregistrement EFFACERAIT la filière sans rien demander. */}
+                              {groupeForm.filiere && !filieresCatalogue.includes(groupeForm.filiere) && (
+                                <option value={groupeForm.filiere}>
+                                  {groupeForm.filiere} — hors catalogue
+                                </option>
+                              )}
+                            </select>
+                          ) : (
+                            <>
+                              <input style={inp} value={groupeForm.filiere} placeholder="Libellé exact de l'offre"
+                                onChange={e=>setGroupeForm(f=>({...f,filiere:e.target.value}))} />
+                              <div style={{ fontSize:10, color:"#b45309", marginTop:3 }}>
+                                Catalogue indisponible - saisissez le libellé exact d'une offre, sinon les
+                                inscriptions de ce groupe seront exclues des statistiques.
+                              </div>
+                            </>
+                          )}
                         </div>
                         <div>
                           <label style={lbl}>Type de cours</label>
