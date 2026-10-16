@@ -18,7 +18,7 @@ const SENDER_NAME     = process.env.BREVO_SENDER_NAME  || "Binnie's English Trai
    rien ne signale l'erreur. Les vraies adresses sont celles que les applications se
    donnent entre elles (`REACT_APP_DASH_URL` du site public, `REACT_APP_FRONTEND_URL` du
    tableau de bord). Un repli doit être une valeur juste, pas un pense-bête. */
-const DASH_URL  = process.env.DASHBOARD_URL || "https://app.binnie.purepro-technologie.ci";
+const DASH_URL  = process.env.DASHBOARD_URL || "https://app.binniesenglish.net";
 const FRONT_URL = process.env.FRONTEND_URL  || "https://binniesenglish.net";
 /* BET E-LEARNING EST UNE AUTRE APPLICATION, sur un autre domaine. Un apprenant inscrit en
    e-learning qui recevait le lien de `DASH_URL` atterrissait sur la page de connexion du

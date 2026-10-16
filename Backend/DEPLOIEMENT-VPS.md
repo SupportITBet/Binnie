@@ -105,9 +105,9 @@ SMTP_USER=               SMTP_PASS=
 BREVO_SENDER_EMAIL=      BREVO_SENDER_NAME=
 CINETPAY_APIKEY=         CINETPAY_SITE_ID=
 FRONTEND_URL=https://binniesenglish.net
-DASHBOARD_URL=https://app.binnie.purepro-technologie.ci
+DASHBOARD_URL=https://app.binniesenglish.net
 BACKEND_URL=https://api.binniesenglish.net
-ALLOWED_ORIGINS=https://binniesenglish.net,https://app.binnie.purepro-technologie.ci,https://e-learning.purepro-technologie.ci
+ALLOWED_ORIGINS=https://binniesenglish.net,https://app.binniesenglish.net,https://e-learning.binniesenglish.net
 CRON_SECRET=<une longue chaîne aléatoire, la même que dans les crons plus bas>
 PORT=5001
 ```
@@ -241,8 +241,8 @@ curl -s https://api.binniesenglish.net/api/equipe-photos/defilement   # attendu 
 Enfin, le contrôle qui ne se voit qu'au navigateur — CORS, depuis les trois origines :
 
 ```bash
-for O in https://binniesenglish.net https://app.binnie.purepro-technologie.ci \
-         https://e-learning.purepro-technologie.ci; do
+for O in https://binniesenglish.net https://app.binniesenglish.net \
+         https://e-learning.binniesenglish.net; do
   printf "%-46s " "$O"
   curl -s -X OPTIONS -D - -o /dev/null -H "Origin: $O" \
        -H "Access-Control-Request-Method: POST" \
