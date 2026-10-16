@@ -18,6 +18,7 @@ import { contenusAnnotesEl, contexteMarquageEl, MOTIF_EL } from "../services/lec
 import { estChronometre, echeanceComposition, compositionExpiree, dureeComposition } from "../services/minuteurDevoir.js";
 import { utilisateurDuJeton } from "../services/cacheAuth.js";
 import { estElearning, inscriptionsElearningDe, inscriptionCourante, classeIdsDe } from "../services/plateformeApprenant.js";
+import { entrepriseDeLaClasse } from "../services/entrepriseApprenant.js";
 import { photoValide } from "../utils/photoUrl.js";
 
 cloudinary.config({
@@ -1912,67 +1913,9 @@ router.get("/mon-espace", async (req, res) => {
         coachInfo = c || null;
       }
 
-      /* ── SON ENTREPRISE ET SON RÉFÉRENT RH ────────────────────────────────────────────
-         Une formation e-learning est achetée par une entreprise, et l'apprenant n'avait
-         aucun moyen de savoir qui la suit de son côté : ni le nom de son entreprise, ni à
-         qui s'adresser pour une absence, une licence ou une attestation. Son espace lui
-         proposait le contact BET, qui n'est pas le bon interlocuteur pour ces questions.
-
-         LE LIEN PASSE PAR LA CLASSE, pas par l'apprenant. `utilisateurs.entreprise_id`
-         existe mais n'est renseigné sur AUCUN apprenant (vérifié le 16/10/2026 : zéro
-         ligne) ; c'est `classes_elearning.entreprise_id` qui porte le rattachement réel.
-         Lire l'apprenant aurait rendu `null` pour tout le monde.
-
-         UNE CLASSE SANS ENTREPRISE EST NORMALE — ce sont les classes « particuliers ».
-         On rend `null`, et l'écran n'affiche simplement pas le bloc. */
-      let entrepriseInfo = null;
-      if (classe?.entreprise_id) {
-        const { data: ent } = await supabase
-          .from("comptes_entreprises")
-          .select("id, nom, logo_url, couleur, initiales, secteur, ville, referent_rh_nom, referent_rh_email, referent_rh_telephone")
-          .eq("id", classe.entreprise_id)
-          .maybeSingle();
-
-        if (ent) {
-          /* Le compte RH porte le nom COMPLET (prénom + nom), là où `referent_rh_nom` ne
-             garde souvent que le nom de famille — « Sy » au lieu de « Savane Sy ». On
-             préfère donc le compte quand il existe, et on retombe sur la fiche entreprise
-             sinon : toutes les entreprises n'ont pas de compte RH ouvert. */
-          const { data: comptesRh } = await supabase
-            .from("utilisateurs")
-            .select("nom, prenom, email, telephone")
-            .eq("role", "client_entreprise")
-            .eq("entreprise_id", ent.id)
-            .eq("actif", true);
-
-          const parEmail = (comptesRh || []).find(
-            c => c.email && ent.referent_rh_email &&
-                 c.email.toLowerCase() === ent.referent_rh_email.toLowerCase());
-          const compte = parEmail || (comptesRh || [])[0] || null;
-
-          const nomRh = compte
-            ? `${compte.prenom || ""} ${compte.nom || ""}`.trim()
-            : (ent.referent_rh_nom || "").trim();
-
-          /* LE CONTRAT NE SORT PAS D'ICI : montant, nombre de licences et dates d'échéance
-             regardent l'entreprise, pas l'apprenant. Il lui faut un nom et un moyen de
-             joindre quelqu'un, rien de plus. */
-          entrepriseInfo = {
-            id: ent.id,
-            nom: ent.nom,
-            logo_url: ent.logo_url || null,
-            couleur: ent.couleur || null,
-            initiales: ent.initiales || null,
-            secteur: ent.secteur || null,
-            ville: ent.ville || null,
-            rh: (nomRh || ent.referent_rh_email || ent.referent_rh_telephone) ? {
-              nom:       nomRh || null,
-              email:     compte?.email || ent.referent_rh_email || null,
-              telephone: compte?.telephone || ent.referent_rh_telephone || null,
-            } : null,
-          };
-        }
-      }
+      /* Son entreprise et son référent RH. Extrait dans un service parce que
+         `/mon-espace/profil` en a besoin aussi — deux copies auraient fini par diverger. */
+      const entrepriseInfo = await entrepriseDeLaClasse(classe?.id || courante.classe_id);
 
       /* `classes_elearning_apprenants` ne porte PAS de date de sortie, et la classe close se
          lit sur son statut. On ne fabrique donc pas de `formation_arretee` sur une donnée qui

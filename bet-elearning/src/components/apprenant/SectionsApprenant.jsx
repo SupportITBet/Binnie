@@ -86,25 +86,71 @@ export function SectionMonProfil({ couleur }) {
 
   if (!profil) return <Vide icone="👤" titre="Profil indisponible" detail="Impossible de charger votre fiche pour le moment." />;
 
-  const lignes = [
-    ['Prénom', profil.prenom || '-'],
-    ['Nom', profil.nom || '-'],
-    ['Adresse e-mail', profil.email || '-'],
-  ];
+  const d = profil.dossier || {};
+  const ent = profil.entreprise || null;
+  const jour = (v) => v ? new Date(v).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
+
+  /* CHAQUE CARTE NE GARDE QUE SES LIGNES RENSEIGNÉES. Un dossier incomplet est la norme —
+     une classe « particuliers » n'a pas d'entreprise, un apprenant importé par fichier n'a
+     ni poste ni département. Afficher « - » partout donnerait l'impression d'une fiche vide
+     alors que c'est la donnée qui manque, et noierait au passage ce qui est réellement là. */
+  const garder = (paires) => paires.filter(([, v]) => v !== null && v !== undefined && v !== '');
+
+  const identite = garder([
+    ['Prénom', profil.prenom],
+    ['Nom', profil.nom],
+    ['Adresse e-mail', profil.email],
+    ['Téléphone', profil.telephone],
+    ['Profil', d.profil_type],
+  ]);
+
+  const formation = garder([
+    ['Classe', d.classe_nom],
+    ['Coach', d.coach_nom],
+    ['Niveau', d.niveau_detecte],
+    ['Test de niveau passé le', jour(d.date_test)],
+    ['Inscrit(e) depuis le', jour(d.date_assignation)],
+    ['Langue', d.langue_souhaitee],
+    ['Mon objectif', d.objectif_client ? d.objectif_client.trim() : null],
+  ]);
+
+  const entreprise = !ent ? [] : garder([
+    ['Entreprise', ent.nom],
+    ['Mon poste', d.poste],
+    ['Département', d.departement],
+    ['Secteur', ent.secteur],
+    ['Référent RH', ent.rh?.nom],
+    ['Son e-mail', ent.rh?.email],
+    ['Son téléphone', ent.rh?.telephone],
+  ]);
+
+  const Bloc = ({ icone, titre, paires }) => !paires.length ? null : (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: COULEURS.navy, marginBottom: 10 }}>
+        {icone} {titre}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 14 }}>
+        {paires.map(([l, v]) => (
+          <div key={l} style={{ background: COULEURS.gris50, borderRadius: 10, padding: '12px 15px' }}>
+            <div style={label}>{l}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy, wordBreak: 'break-word' }}>{v}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div>
       <Entete icone="👤" titre="Mon profil"
         soustitre="Votre identité telle qu'elle figure sur votre dossier d'inscription." />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 14, marginBottom: 22 }}>
-        {lignes.map(([l, v]) => (
-          <div key={l} style={{ background: COULEURS.gris50, borderRadius: 10, padding: '12px 15px' }}>
-            <div style={label}>{l}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: COULEURS.navy }}>{v}</div>
-          </div>
-        ))}
-      </div>
+      <Bloc icone="👤" titre="Mon identité"  paires={identite} />
+      <Bloc icone="🎓" titre="Ma formation"  paires={formation} />
+      {/* L'entreprise et le référent RH : l'apprenant ne savait pas à qui s'adresser pour une
+          absence, une licence ou une attestation — on ne lui proposait que le contact BET,
+          qui n'est pas l'interlocuteur de ces questions-là. */}
+      <Bloc icone="🏢" titre="Mon entreprise" paires={entreprise} />
 
       <div style={{ background: COULEURS.blanc, border: `1px solid ${COULEURS.gris200}`, borderRadius: 14, padding: '20px 22px', maxWidth: 520 }}>
         <label style={label} htmlFor="surnom-apprenant">Comment souhaitez-vous qu'on vous appelle ?</label>

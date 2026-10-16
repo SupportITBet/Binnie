@@ -2,7 +2,8 @@ import express from "express";
 import supabase from "../config/supabase.js";
 import { bornerAFenetre, annoterFenetre } from "../services/lectureSequentielle.js";
 import { classesDeLApprenantEl } from "../services/lectureSequentielleElearning.js";
-import { estElearning, inscriptionsElearningDe, classeIdsDe } from "../services/plateformeApprenant.js";
+import { estElearning, inscriptionsElearningDe, classeIdsDe, inscriptionCourante } from "../services/plateformeApprenant.js";
+import { entrepriseDeLaClasse } from "../services/entrepriseApprenant.js";
 import { emailAutorise } from "../services/accesApprenant.js";
 import { authenticateUser } from "../middlewares/auth.js";
 import { historiqueTestsDe } from "./levelTest.js";
@@ -45,16 +46,89 @@ router.patch("/profil", authenticateUser, async (req, res) => {
   }
 });
 
-/** GET /api/mon-espace/profil - le surnom courant, pour amorcer l'écran. */
+/**
+ * GET /api/mon-espace/profil — la fiche de l'apprenant.
+ *
+ * ──────────────────────────────────────────────────────────────────────────────────────────
+ * POURQUOI ELLE NE RENDAIT PRESQUE RIEN. Cette route ne lisait que `utilisateurs` : nom,
+ * prénom, e-mail, surnom. Or pour un apprenant E-LEARNING cette table est quasi vide — son
+ * dossier vit dans `inscriptions_elearning`. L'onglet « Mon profil » affichait donc trois
+ * lignes à quelqu'un dont la base connaît le téléphone, le poste, le département,
+ * l'entreprise, la langue visée, le niveau détecté, la classe et l'objectif.
+ *
+ * LA DATE DE NAISSANCE N'EST PAS RENDUE, VOLONTAIREMENT. `date_naissance` vaut la date du
+ * test pour les dossiers créés par l'onboarding manuel (constaté le 16/10/2026 : naissance
+ * et test au 11/10/2026). L'afficher dirait à l'apprenant qu'il est né cette semaine. Elle
+ * reviendra ici le jour où elle sera réellement saisie.
+ *
+ * RIEN DE CECI N'EST MODIFIABLE depuis l'écran — seul le surnom l'est (PATCH ci-dessus). Le
+ * dossier sert de référence à la facturation et aux attestations.
+ * ──────────────────────────────────────────────────────────────────────────────────────────
+ */
 router.get("/profil", authenticateUser, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("utilisateurs")
-      .select("id, nom, prenom, surnom, email, role, avatar_url")
+      .select("id, nom, prenom, surnom, email, telephone, role, avatar_url")
       .eq("id", req.user.id)
       .maybeSingle();
     if (error) throw error;
-    res.json({ profil: data || null });
+    if (!data) return res.json({ profil: null });
+
+    if (!estElearning(req)) return res.json({ profil: data });
+
+    const inscriptions = await inscriptionsElearningDe({ id: req.user.id, email: req.user.email });
+    const insc = inscriptionCourante(inscriptions) || inscriptions[0] || null;
+    if (!insc) return res.json({ profil: data });
+
+    const classe = insc.classe || null;
+    let coachNom = null;
+    if (classe?.coach_id) {
+      const { data: c } = await supabase
+        .from("utilisateurs").select("nom, prenom").eq("id", classe.coach_id).maybeSingle();
+      if (c) coachNom = `${c.prenom || ""} ${c.nom || ""}`.trim() || null;
+    }
+
+    /* DEUX TABLES, DEUX RÔLES, et c'est ce qui rendait la fiche vide.
+       `classes_elearning_apprenants` (ci-dessus) dit DANS QUELLE CLASSE il est.
+       `inscriptions_elearning` porte son DOSSIER : poste, département, langue visée, date du
+       test. Les deux n'ont même pas le même identifiant pour la même personne — lire la
+       première en espérant y trouver le second rendait `null` sur tout.
+       La jointure se fait par e-mail : c'est la seule colonne commune et fiable, un dossier
+       d'onboarding étant créé avant que le compte existe. */
+    const { data: dossierRows } = await supabase
+      .from("inscriptions_elearning")
+      .select("poste, departement, langue_souhaitee, profil_type, objectif_client, niveau_detecte, date_test, date_assignation, classe_nom, telephone")
+      .ilike("email", (req.user.email || "").trim())
+      .order("created_at", { ascending: false });
+    /* Celui de la classe courante d'abord : un apprenant peut avoir plusieurs dossiers
+       (changement de niveau, nouvelle session), et le plus récent n'est pas toujours celui
+       de la classe où il travaille aujourd'hui. */
+    const dos = (dossierRows || []).find(d => d.classe_nom && d.classe_nom === classe?.nom)
+             || (dossierRows || [])[0] || {};
+
+    res.json({
+      profil: {
+        ...data,
+        /* Le téléphone du dossier l'emporte sur celui du compte : c'est celui que
+           l'apprenant a donné à l'inscription, et le compte est souvent créé sans. */
+        telephone: dos.telephone || insc.telephone || data.telephone || null,
+        dossier: {
+          poste:            dos.poste || null,
+          departement:      dos.departement || null,
+          langue_souhaitee: dos.langue_souhaitee || null,
+          profil_type:      dos.profil_type || insc.profil_type || null,
+          objectif_client:  dos.objectif_client || insc.objectif_client || null,
+          niveau_detecte:   insc.niveau_cecr || dos.niveau_detecte || null,
+          date_test:        dos.date_test || null,
+          classe_nom:       classe?.nom || dos.classe_nom || null,
+          coach_nom:        coachNom,
+          date_assignation: dos.date_assignation || insc.date_inscription || insc.date_ajout || null,
+          statut:           insc.statut || null,
+        },
+        entreprise: await entrepriseDeLaClasse(insc.classe_id),
+      },
+    });
   } catch (err) {
     console.error("[GET /mon-espace/profil]", err.message || err);
     res.status(500).json({ error: "Lecture impossible" });
