@@ -306,6 +306,9 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
 
   /* ── Actions ─────────────────────────────────────────────────── */
   const creerCampagne = async (v) => {
+    if (!(await confirm("La campagne sera créée et pourra recevoir des formulaires.",
+      { titre: "Créer cette campagne ?", confirmLabel: "Créer", danger: false }))) return;
+
     const r = await fetch(`${apiUrl}/api/campagnes`, {
       method: "POST", headers: hdr(),
       body: JSON.stringify({ ...v, nom: (v.nom || "").trim(), statut: "active" }),
@@ -319,6 +322,9 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
      écran ne l'appelait. Le même modal sert à créer et à éditer - un second, presque
      identique, aurait divergé du premier à la première correction. */
   const enregistrerCampagne = async (v) => {
+    if (!(await confirm("Les modifications de cette campagne seront enregistrées.",
+      { titre: "Enregistrer cette campagne ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     if (!v.id) return creerCampagne(v);
     const r = await fetch(`${apiUrl}/api/campagnes/${v.id}`, {
       method: "PATCH", headers: hdr(),
@@ -358,6 +364,9 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
   };
 
   const creerFormulaire = async (v) => {
+    if (!(await confirm("Le formulaire sera créé, en brouillon : il ne sera public qu’une fois publié.",
+      { titre: "Créer ce formulaire ?", confirmLabel: "Créer", danger: false }))) return;
+
     const r = await fetch(`${apiUrl}/api/campagnes/formulaires`, {
       method: "POST", headers: hdr(),
       body: JSON.stringify({ titre: (v.titre || "").trim(), campagne_id: v.campagne_id || null, description: v.description || null }),
@@ -372,7 +381,13 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
     ouvrirFormulaire(d.formulaire.id);
   };
 
-  const majFormulaire = async (maj) => {
+  /* `dejaConfirme` existe parce que ce même enregistrement sert à DEUX gestes : les
+     réglages, et le bouton Publier/Fermer qui pose déjà sa propre question — plus précise,
+     puisqu'elle parle du QR code. Sans ce drapeau, publier demanderait deux confirmations
+     d'affilée, ce qui apprend surtout à cliquer sans lire. */
+  const majFormulaire = async (maj, dejaConfirme = false) => {
+    if (!dejaConfirme && !(await confirm("Les réglages de ce formulaire seront enregistrés.",
+      { titre: "Enregistrer les réglages ?", confirmLabel: "Enregistrer", danger: false }))) return false;
     const r = await fetch(`${apiUrl}/api/campagnes/formulaires/${formOuvert.formulaire.id}`, {
       method: "PATCH", headers: hdr(), body: JSON.stringify(maj),
     });
@@ -384,6 +399,11 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
   };
 
   const enregistrerChamps = async () => {
+    /* L’éditeur de questions est l’endroit où l’on enchaîne le plus de sauvegardes ;
+       la confirmation y a donc été ajoutée en connaissance de cause, sur demande. */
+    if (!(await confirm("Les questions de ce formulaire seront remplacées par celles affichées à l’écran.",
+      { titre: "Enregistrer les questions ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     const r = await fetch(`${apiUrl}/api/campagnes/formulaires/${formOuvert.formulaire.id}/champs`, {
       method: "PUT", headers: hdr(), body: JSON.stringify({ champs: formOuvert.champs }),
     });
@@ -394,6 +414,9 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
   };
 
   const ajouterDiffusion = async (payload) => {
+    if (!(await confirm("Un canal et son code de suivi seront créés : c’est lui qui dira d’où viennent les inscriptions.",
+      { titre: "Créer ce canal ?", confirmLabel: "Créer", danger: false }))) return;
+
     const r = await fetch(`${apiUrl}/api/campagnes/formulaires/${formOuvert.formulaire.id}/diffusions`, {
       method: "POST", headers: hdr(), body: JSON.stringify(payload),
     });
@@ -694,7 +717,7 @@ export default function CampagnesCollecte({ apiUrl, accent = "#db2777" }) {
                     : "Le QR code et le lien deviendront actifs : n'importe qui pourra répondre.",
                   { titre: publie ? "Fermer ce formulaire ?" : "Publier ce formulaire ?",
                     confirmLabel: publie ? "Fermer" : "Publier", danger: publie }))) return;
-                const ok = await majFormulaire({ statut: publie ? "ferme" : "publie" });
+                const ok = await majFormulaire({ statut: publie ? "ferme" : "publie" }, true);
                 if (ok) toast.success(publie ? "Formulaire fermé" : "Formulaire publié - le QR est actif ✓");
               }} style={bouton(publie ? "#b45309" : "#15803d")}>
                 {publie ? "Fermer" : "Publier"}

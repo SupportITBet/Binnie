@@ -4280,6 +4280,9 @@ export default function SuperAdminDashboard() {
   }, []); // eslint-disable-line
 
   const saveContactConfig = async () => {
+    if (!(await confirm("Les coordonnées affichées sur le site public seront remplacées.",
+      { titre: "Enregistrer les coordonnées ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     setContactConfigSave(true);
     try {
       const token = localStorage.getItem("admin_token");
@@ -4320,6 +4323,9 @@ export default function SuperAdminDashboard() {
   };
 
   const saveAccessGateCode = async () => {
+    if (!(await confirm("Le code d’accès au portail du personnel sera remplacé : celles et ceux qui utilisaient l’ancien ne pourront plus entrer.",
+      { titre: "Changer le code d’accès ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     if (!accessGateNewCode.trim() || accessGateNewCode.trim().length < 4) {
       toast.error("Le code doit contenir au moins 4 caractères");
       return;
@@ -4372,6 +4378,9 @@ export default function SuperAdminDashboard() {
 
   // Sauvegarder un seul centre (l'état complet est écrit en base pour rester cohérent)
   const saveWACentre = async (cIdx) => {
+    if (!(await confirm("Le numéro WhatsApp de ce centre sera mis à jour sur le site public.",
+      { titre: "Enregistrer ce numéro ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     setWaSavingIdx(cIdx);
     try {
       await savePlateformeConfig("centres_wa", waCenters);
@@ -4386,6 +4395,9 @@ export default function SuperAdminDashboard() {
   };
 
   const resetWACentre = async (cIdx) => {
+    if (!(await confirm("Le numéro WhatsApp de ce centre reviendra à sa valeur par défaut.",
+      { titre: "Réinitialiser ce numéro ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     const updated = waCenters.map((c, i) => i === cIdx ? WA_DEFAULTS[cIdx] : c);
     setWaCenters(updated);
     try {
@@ -6414,6 +6426,9 @@ export default function SuperAdminDashboard() {
   }, [applyPeData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePeConfig = async () => {
+    if (!(await confirm("La configuration du parcours entreprise sera appliquée au site public.",
+      { titre: "Enregistrer cette configuration ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     setPeSaving(true); setPeSaveErr(""); setPeSaveOk(false);
     try {
       const valeur = {
@@ -6843,6 +6858,9 @@ export default function SuperAdminDashboard() {
   };
 
   const saveOffresEnLigne  = async (data) => {
+    if (!(await confirm("Les offres en ligne seront mises à jour sur le site public.",
+      { titre: "Enregistrer les offres en ligne ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     localStorage.setItem("bet_offres_en_ligne", JSON.stringify(data));
     window.dispatchEvent(new StorageEvent("storage", { key:"bet_offres_en_ligne", newValue:JSON.stringify(data) }));
     try {
@@ -6851,6 +6869,9 @@ export default function SuperAdminDashboard() {
     } catch(e) { console.error("offres_en_ligne:", e); }
   };
   const saveOffresDomicile = async (data) => {
+    if (!(await confirm("Les offres à domicile seront mises à jour sur le site public.",
+      { titre: "Enregistrer les offres à domicile ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     localStorage.setItem("bet_offres_domicile", JSON.stringify(data));
     window.dispatchEvent(new StorageEvent("storage", { key:"bet_offres_domicile", newValue:JSON.stringify(data) }));
     try {
@@ -6915,11 +6936,17 @@ export default function SuperAdminDashboard() {
   const readServiceInterp = () => { try { const s=localStorage.getItem("bet_service_interpretariat"); return s ? JSON.parse(s) : DEFAULT_SERVICE_INTERP; } catch { return DEFAULT_SERVICE_INTERP; } };
   const readServiceTrad   = () => { try { const s=localStorage.getItem("bet_service_traduction");    return s ? JSON.parse(s) : DEFAULT_SERVICE_TRAD;  } catch { return DEFAULT_SERVICE_TRAD;  } };
   const saveServiceInterp = async (data) => {
+    if (!(await confirm("La fiche du service d’interprétariat sera mise à jour sur le site public.",
+      { titre: "Enregistrer ce service ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     localStorage.setItem("bet_service_interpretariat", JSON.stringify(data));
     window.dispatchEvent(new StorageEvent("storage", { key:"bet_service_interpretariat", newValue:JSON.stringify(data) }));
     try { await savePlateformeConfig("service_interpretariat", data); } catch(e) { console.error("service_interpretariat:", e); }
   };
   const saveServiceTrad = async (data) => {
+    if (!(await confirm("La fiche du service de traduction sera mise à jour sur le site public.",
+      { titre: "Enregistrer ce service ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     localStorage.setItem("bet_service_traduction", JSON.stringify(data));
     window.dispatchEvent(new StorageEvent("storage", { key:"bet_service_traduction", newValue:JSON.stringify(data) }));
     try { await savePlateformeConfig("service_traduction", data); } catch(e) { console.error("service_traduction:", e); }
@@ -6941,6 +6968,11 @@ export default function SuperAdminDashboard() {
   };
 
   const handleCataloguePdfUpload = async (file) => {
+    /* La SUPPRESSION du catalogue était déjà confirmée, pas son remplacement — qui écrase
+       pourtant le fichier que les prospects téléchargent depuis le site. */
+    if (!(await confirm("Ce fichier remplacera le catalogue que les prospects téléchargent depuis le site.",
+      { titre: "Remplacer le catalogue PDF ?", confirmLabel: "Remplacer", danger: false }))) return;
+
     if (!file) return;
     if (file.type !== "application/pdf") { setCataloguePdfMsg({ type:"error", text:"Seuls les fichiers PDF sont acceptés." }); return; }
     if (file.size > maxMoPour("document", file.type) * 1024 * 1024) { setCataloguePdfMsg({ type:"error", text:"❌ Fichier trop volumineux - taille maximale autorisée : 50 Mo." }); return; }
@@ -7010,6 +7042,9 @@ export default function SuperAdminDashboard() {
   const [courseApercuSection,   setCourseApercuSection]   = useState("general");
   const readCertifConfig = () => { try { const s=localStorage.getItem("bet_certifications_config"); return s ? JSON.parse(s) : DEFAULT_CERTIF_CONFIG; } catch { return DEFAULT_CERTIF_CONFIG; } };
   const saveCertifConfig = async (data) => {
+    if (!(await confirm("L’affichage des certifications sera mis à jour sur le site public.",
+      { titre: "Enregistrer les certifications ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     setCertifConfig(data);
     localStorage.setItem("bet_certifications_config", JSON.stringify(data));
     window.dispatchEvent(new StorageEvent("storage", { key:"bet_certifications_config", newValue:JSON.stringify(data) }));
@@ -7237,6 +7272,9 @@ export default function SuperAdminDashboard() {
   }, []);
 
   const enregistrerDefilement = async () => {
+    if (!(await confirm("Les réglages du défilement seront appliqués au site public.",
+      { titre: "Enregistrer le défilement ?", confirmLabel: "Enregistrer", danger: false }))) return;
+
     setDefilementSaving(true);
     try {
       const res = await fetch(`${API_URL}/api/equipe-photos/defilement`, {
@@ -7462,6 +7500,11 @@ export default function SuperAdminDashboard() {
   };
 
   const moveCarouselSlide = async (slideId, direction) => {
+    /* L’ordre est celui que voient les visiteurs. La confirmation est demandée à chaque
+       déplacement : c’est le choix assumé de ne rien écrire sans accord explicite. */
+    if (!(await confirm("L’ordre d’affichage des visuels du carrousel sera modifié sur le site public.",
+      { titre: "Déplacer cet élément ?", confirmLabel: "Déplacer", danger: false }))) return;
+
     const idx = carouselSlides.findIndex(s => s.id === slideId);
     const targetIdx = direction === "up" ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= carouselSlides.length) return;
@@ -7583,6 +7626,11 @@ export default function SuperAdminDashboard() {
   };
 
   const moveOffreMedia = async (itemId, direction) => {
+    /* L’ordre est celui que voient les visiteurs. La confirmation est demandée à chaque
+       déplacement : c’est le choix assumé de ne rien écrire sans accord explicite. */
+    if (!(await confirm("L’ordre d’affichage des offres média sera modifié sur le site public.",
+      { titre: "Déplacer cet élément ?", confirmLabel: "Déplacer", danger: false }))) return;
+
     const list = [...offreMediaList];
     const idx  = list.findIndex(s => s.id === itemId);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
