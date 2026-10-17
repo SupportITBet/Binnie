@@ -391,6 +391,16 @@ export function AuthProvider({ children }) {
     });
     if (authErr) throw new Error('Email ou mot de passe incorrect');
 
+    return finaliserSession(authData);
+  }
+
+  /* ══ CE QUI SE PASSE APRÈS L'AUTHENTIFICATION, QUEL QUE SOIT LE CHEMIN ════════════════
+     Extrait de `seConnecter` pour que la connexion Google emprunte EXACTEMENT la même
+     barrière : contrôle d'éligibilité, nettoyage des clés `admin_*`, profil de session.
+     En écrire une seconde version pour Google aurait fini par laisser entrer, par un
+     chemin, quelqu'un que l'autre refuse — et c'est précisément le genre d'écart qu'on ne
+     découvre qu'une fois le compte ouvert. */
+  async function finaliserSession(authData) {
     const token = authData.session?.access_token;
     const user  = authData.user;
     const appMeta  = user?.app_metadata  || {};
@@ -445,6 +455,33 @@ export function AuthProvider({ children }) {
     setProfile(profilMinimal);
 
     return { besoin2FA: false };
+  }
+
+  /* ══ CONNEXION AVEC GOOGLE ═════════════════════════════════════════════════════════
+     Des apprenants créent leur compte avec Google et n'ont donc aucun mot de passe à
+     saisir sur l'écran de connexion.
+
+     `signInWithOAuth` quitte l'application : le navigateur part chez Google et revient sur
+     `redirectTo`. Rien de ce qui suit cet appel ne s'exécute — la suite se joue au retour,
+     dans `finaliserOAuth`. */
+  async function seConnecterGoogle(redirectTo) {
+    if (!SUPABASE_ACTIF) throw new Error('Connexion Google indisponible.');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: redirectTo || `${window.location.origin}/connexion/apprenant` },
+    });
+    /* Le fournisseur doit être activé côté Supabase. Tant qu'il ne l'est pas, l'appel rend
+       « Unsupported provider » : on remonte le message tel quel plutôt qu'un « erreur »
+       muet, qui enverrait chercher la panne du mauvais côté. */
+    if (error) throw new Error('Connexion Google impossible : ' + error.message);
+  }
+
+  /* AU RETOUR DE GOOGLE la session existe déjà : personne n'a encore vérifié que ce compte
+     a le droit d'entrer. On lui applique la même barrière qu'au mot de passe. */
+  async function finaliserOAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) throw new Error('Session Google introuvable.');
+    return finaliserSession({ session, user: session.user });
   }
 
   // Connexion directe parent (via téléphone) - role forcé à 'parent', pas de check-eligibilite
@@ -556,7 +593,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       profile, loading, delegation, delegationsSortantes, delegationsRecues,
       profilEnAttente2FA,
-      seConnecter, seConnecterParent, seDeconnecter,
+      seConnecter, seConnecterParent, seConnecterGoogle, finaliserOAuth, seDeconnecter,
       valider2FA, annuler2FA, activer2FA,
       reinitMDP, connexionReel,
     }}>

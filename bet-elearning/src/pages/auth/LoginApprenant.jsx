@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { ROLE_REDIRECT } from '../../constants/roles';
@@ -26,7 +26,7 @@ const STATS = [
 ];
 
 export default function LoginApprenant() {
-  const { seConnecter } = useAuth();
+  const { seConnecter, seConnecterGoogle, finaliserOAuth } = useAuth();
   const navigate = useNavigate();
 
   const [email,    setEmail]    = useState('');
@@ -45,6 +45,49 @@ export default function LoginApprenant() {
       setErreur(err.message || 'Identifiants incorrects. Contactez votre responsable BET.');
     } finally { setLoading(false); }
   }
+
+  async function gererGoogle() {
+    setErreur(''); setLoading(true);
+    try {
+      /* ON REVIENT SUR CETTE PAGE, pas sur le tableau de bord : un compte Google valide ne
+         donne pas le droit d'entrer, et c'est ici qu'on applique la règle au retour. */
+      await seConnecterGoogle(`${window.location.origin}/connexion/apprenant`);
+    } catch (err) {
+      setErreur(err.message || 'Connexion Google impossible.');
+      setLoading(false);
+    }
+  }
+
+  /* LE RETOUR DE GOOGLE. La page se remonte avec une session déjà posée par Supabase, sans
+     que `gererConnexion` ait été appelée — donc sans qu'aucun contrôle ait eu lieu.
+     `finaliserOAuth` rejoue exactement la barrière du mot de passe : éligibilité, nettoyage
+     des clés `admin_*`, profil de session.
+
+     On ne se déclenche que sur les marqueurs laissés par Supabase dans l'URL : sans cela, le
+     contrôle serait rejoué à chaque ouverture de la page par quelqu'un qui a une session
+     dormante. */
+  useEffect(() => {
+    const retour = window.location.hash.includes('access_token')
+                || new URLSearchParams(window.location.search).has('code');
+    if (!retour) return;
+    let vivant = true;
+    (async () => {
+      setLoading(true);
+      try {
+        await finaliserOAuth();
+        /* L'URL est nettoyée de ses jetons avant toute navigation : un `access_token` laissé
+           dans la barre d'adresse part dans l'historique et dans tout lien copié. */
+        window.history.replaceState({}, '', '/connexion/apprenant');
+        const p = JSON.parse(sessionStorage.getItem('bet_profil_mock') || 'null');
+        if (vivant && p) navigate(ROLE_REDIRECT[p.role] || '/access/bet-learning');
+      } catch (err) {
+        if (vivant) setErreur(err.message || 'Connexion Google impossible.');
+      } finally {
+        if (vivant) setLoading(false);
+      }
+    })();
+    return () => { vivant = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ display:'flex', height:'100vh', width:'100vw',
@@ -217,6 +260,30 @@ export default function LoginApprenant() {
                 <><div style={{ width:17, height:17, border:'2px solid rgba(255,255,255,0.35)',
                   borderTopColor:BLANC, borderRadius:'50%', animation:'appSpin .7s linear infinite' }}/> Connexion…</>
               ) : 'Accéder à mes cours →'}
+            </button>
+
+            {/* « ou » plutôt que « autre méthode » : ce sont deux chemins vers LE MÊME
+                compte, pas deux comptes. C'est la confusion à éviter ici. */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, margin:'4px 0' }}>
+              <div style={{ flex:1, height:1, background:'#E2E8F0' }} />
+              <span style={{ fontSize:12, color:GRIS, fontWeight:600 }}>ou</span>
+              <div style={{ flex:1, height:1, background:'#E2E8F0' }} />
+            </div>
+
+            <button type="button" onClick={gererGoogle} disabled={loading}
+              style={{ padding:'13px', borderRadius:10, border:'1.5px solid #E2E8F0',
+                background:BLANC, color:NAVY, fontSize:14.5, fontWeight:600,
+                cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'inherit',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+              {/* Logo en SVG inline : un <img> vers un CDN laisserait un carré vide le jour
+                  où le réseau de l'apprenant bloque ce domaine. */}
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+                <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+                <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+                <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+              </svg>
+              Continuer avec Google
             </button>
           </form>
 

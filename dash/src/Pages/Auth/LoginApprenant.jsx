@@ -121,6 +121,72 @@ export default function LoginApprenant() {
     }
   };
 
+  /* ══ CONNEXION AVEC GOOGLE ═════════════════════════════════════════════════════════
+     POURQUOI ICI. Des apprenants créent leur compte sur le site public avec Google ; sans
+     ce bouton, ils arrivent sur cet écran sans mot de passe à saisir — leur compte n'en a
+     jamais eu.
+
+     ON REVIENT SUR CETTE PAGE, pas directement sur l'espace apprenant, et c'est tout
+     l'enjeu : un compte Google valide ne donne PAS le droit d'entrer. Les mêmes contrôles
+     que le mot de passe doivent s'appliquer — suspension globale, puis classe et coach via
+     `verifierAcces`. Rediriger Google droit sur `/espace-apprenant` les contournerait tous.
+
+     LE FOURNISSEUR DOIT ÊTRE ACTIVÉ CÔTÉ SUPABASE. Tant qu'il ne l'est pas, l'appel rend
+     « Unsupported provider » — on l'affiche tel quel plutôt que d'un « erreur » muet. */
+  const handleGoogle = async () => {
+    setError("");
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/connexion/apprenant` },
+    });
+    if (err) setError("Connexion Google impossible : " + err.message);
+  };
+
+  /* AU RETOUR DE GOOGLE, la session existe déjà quand cette page se monte : il n'y a pas eu
+     d'appel à `handleSubmit`, donc personne n'a encore vérifié quoi que ce soit. On reprend
+     exactement le chemin du mot de passe à partir du jeton.
+
+     `_retourOAuth` évite de rejouer ce contrôle à chaque montage pour quelqu'un qui arrive
+     simplement sur la page avec une session dormante — seul un retour d'OAuth laisse les
+     marqueurs de Supabase dans l'URL. */
+  useEffect(() => {
+    const marqueurs = window.location.hash.includes("access_token")
+                   || new URLSearchParams(window.location.search).has("code");
+    if (!marqueurs) return;
+    let vivant = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!vivant || !session) return;
+        if (session.user?.app_metadata?.acces_bloque === true) {
+          const motif = session.user.app_metadata.blocage_message;
+          await supabase.auth.signOut();
+          setError(motif || "Vos accès sont momentanément bloqués. Veuillez contacter votre assistante commerciale.");
+          return;
+        }
+        const token = session.access_token;
+        localStorage.setItem("user_token",   token);
+        localStorage.setItem("user_refresh", session.refresh_token);
+        localStorage.setItem("user", JSON.stringify({
+          id:     session.user.id,
+          email:  session.user.email,
+          nom:    session.user.user_metadata?.nom    || "",
+          prenom: session.user.user_metadata?.prenom || "",
+        }));
+        /* L'URL est nettoyée de ses jetons : laisser un `access_token` dans la barre
+           d'adresse, c'est le laisser dans l'historique et dans tout lien copié. */
+        window.history.replaceState({}, "", "/connexion/apprenant");
+        await verifierAcces(token);
+      } catch {
+        setError(T("err_server"));
+      } finally {
+        if (vivant) setLoading(false);
+      }
+    })();
+    return () => { vivant = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const verifierAcces = async (token) => {
     // Vérifier la suspension globale (couvre le chemin téléphone)
     try {
@@ -375,6 +441,30 @@ export default function LoginApprenant() {
                 {loading
                   ? <><div className="app-spinner" /> {loading ? "Vérification en cours…" : T("logging_in")}</>
                   : <>{T("login_btn")}</>}
+              </button>
+
+              {/* Le séparateur dit que ce sont DEUX chemins vers le même compte, et non
+                  deux comptes différents — c'est la confusion qu'il faut éviter ici. */}
+              <div style={{ display:"flex", alignItems:"center", gap:10, margin:"16px 0 12px" }}>
+                <div style={{ flex:1, height:1, background:"#e2e8f0" }} />
+                <span style={{ fontSize:12, color:"#94a3b8", fontWeight:600 }}>ou</span>
+                <div style={{ flex:1, height:1, background:"#e2e8f0" }} />
+              </div>
+
+              <button type="button" onClick={handleGoogle} disabled={loading}
+                style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center",
+                  gap:10, padding:"12px 16px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                  background:"#fff", color:"#1e293b", fontSize:14.5, fontWeight:600,
+                  fontFamily:"inherit", cursor: loading ? "default" : "pointer" }}>
+                {/* Le logo en SVG inline : un <img> vers un CDN laisserait un carré vide le
+                    jour où le réseau de l'apprenant bloque ce domaine. */}
+                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+                  <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+                  <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+                  <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+                </svg>
+                Continuer avec Google
               </button>
             </form>
           </div>
